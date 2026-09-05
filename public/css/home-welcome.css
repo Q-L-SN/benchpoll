@@ -1,0 +1,361 @@
+.bp-welcome-overlay {
+    position: fixed;
+    z-index: 12000;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    padding: 20px;
+    overflow: auto;
+    background: rgba(24, 29, 57, 0.3);
+    backdrop-filter: blur(6px) saturate(0.94);
+    opacity: 0;
+    transition: opacity 180ms ease-out;
+}
+
+.bp-welcome-overlay.is-open {
+    opacity: 1;
+}
+
+.bp-welcome-dialog {
+    position: relative;
+    width: min(640px, 100%);
+    max-height: min(760px, calc(100vh - 40px));
+    padding: 29px 30px 27px;
+    overflow: auto;
+    border: 1px solid #e0e3ee;
+    border-radius: 8px;
+    background: #fff;
+    box-shadow:
+        0 2px 5px rgba(25, 32, 64, 0.06),
+        0 22px 58px rgba(45, 50, 92, 0.18);
+    color: var(--bp-text, #1d294d);
+    transform: translateY(10px) scale(0.985);
+    transition: transform 220ms var(--bp-ease-soft, cubic-bezier(0.22, 1, 0.36, 1));
+}
+
+.bp-welcome-overlay.is-open .bp-welcome-dialog {
+    transform: translateY(0) scale(1);
+}
+
+body.bp-home .bp-welcome-dialog:focus,
+body.bp-home .bp-welcome-dialog:focus-visible {
+    outline: none;
+}
+
+.bp-welcome-dialog::before {
+    position: absolute;
+    top: 0;
+    left: 30px;
+    width: 72px;
+    height: 3px;
+    background: #6d5ce7;
+    content: "";
+}
+
+.bp-welcome-close {
+    position: absolute;
+    top: 17px;
+    right: 17px;
+    display: grid;
+    width: 34px;
+    height: 34px;
+    place-items: center;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: #747d98;
+    cursor: pointer;
+    transition: background-color 150ms ease, color 150ms ease;
+}
+
+.bp-welcome-close:hover {
+    background: #f3f2fb;
+    color: #2b3458;
+}
+
+.bp-welcome-brand {
+    display: flex;
+    align-items: center;
+    min-height: 31px;
+    margin: 0 46px 21px 0;
+}
+
+.bp-welcome-brand-art {
+    position: relative;
+    display: block;
+    width: 145px;
+    height: 29px;
+    overflow: hidden;
+}
+
+.bp-welcome-brand-art img {
+    position: absolute;
+    top: -30.8px;
+    left: -22.5px;
+    display: block;
+    width: 182px;
+    max-width: none;
+    height: auto;
+    filter: contrast(1.04);
+}
+
+.bp-welcome-eyebrow {
+    margin: 0 0 8px;
+    color: #6656df;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.4;
+    text-transform: uppercase;
+}
+
+.bp-welcome-dialog h2 {
+    max-width: 560px;
+    margin: 0;
+    color: #111a3d;
+    font-family: "Segoe UI Variable Display", "Segoe UI", Inter, Arial, sans-serif;
+    font-size: 30px;
+    font-weight: 720;
+    line-height: 1.16;
+    letter-spacing: 0;
+}
+
+.bp-welcome-description {
+    max-width: 570px;
+    margin: 13px 0 0;
+    color: #626c89;
+    font-size: 15px;
+    line-height: 1.6;
+}
+
+.bp-welcome-weight-preview {
+    margin: 23px 0 0;
+    padding: 15px 0 17px;
+    border-top: 1px solid #eceef5;
+    border-bottom: 1px solid #eceef5;
+}
+
+.bp-welcome-weight-caption {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 18px;
+    margin-bottom: 9px;
+    color: #66708d;
+    font-size: 12px;
+}
+
+.bp-welcome-weight-caption strong {
+    flex: 0 0 auto;
+    color: #30395e;
+    font-weight: 650;
+}
+
+.bp-welcome-weight-track {
+    display: flex;
+    width: 100%;
+    height: 9px;
+    gap: 3px;
+    overflow: hidden;
+    border-radius: 5px;
+    background: #f0f1f6;
+}
+
+.bp-welcome-weight-segment {
+    display: block;
+    min-width: 7px;
+    height: 100%;
+}
+
+.bp-welcome-weight-segment.is-purple {
+    flex: 42;
+    background: #7a68e8;
+}
+
+.bp-welcome-weight-segment.is-blue {
+    flex: 27;
+    background: #6fa6eb;
+}
+
+.bp-welcome-weight-segment.is-teal {
+    flex: 19;
+    background: #75cec8;
+}
+
+.bp-welcome-weight-segment.is-yellow {
+    flex: 12;
+    background: #f1cf69;
+}
+
+.bp-welcome-signals {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px 20px;
+    margin: 18px 0 0;
+    padding: 0;
+    color: #343e62;
+    list-style: none;
+}
+
+.bp-welcome-signals li {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 8px;
+    font-size: 12.5px;
+    font-weight: 600;
+}
+
+.bp-welcome-signals i {
+    width: 17px;
+    flex: 0 0 17px;
+    color: #6d5ce7;
+    text-align: center;
+}
+
+.bp-welcome-actions {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    margin-top: 25px;
+}
+
+.bp-welcome-primary {
+    display: inline-flex;
+    min-height: 42px;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 0 18px;
+    border: 1px solid #6656df;
+    border-radius: 6px;
+    background: #6656df;
+    box-shadow: 0 5px 14px rgba(87, 71, 201, 0.16);
+    color: #fff !important;
+    font-weight: 650;
+    cursor: pointer;
+    transition: background-color 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.bp-welcome-primary:hover {
+    border-color: #5949d3;
+    background: #5949d3;
+    box-shadow: 0 7px 18px rgba(87, 71, 201, 0.21);
+}
+
+.bp-welcome-primary i {
+    font-size: 12px;
+}
+
+.bp-welcome-methodology {
+    padding: 7px 0 5px;
+    border-bottom: 1px solid #c9c3f4;
+    color: #5f51ce !important;
+    font-size: 13px;
+    font-weight: 620;
+    text-decoration: none;
+    transition: border-color 150ms ease, color 150ms ease;
+}
+
+.bp-welcome-methodology:hover {
+    border-color: #6555dd;
+    color: #4f42bc !important;
+}
+
+body.bp-welcome-open {
+    overflow: hidden;
+}
+
+@media (max-width: 640px) {
+    .bp-welcome-overlay {
+        align-items: end;
+        padding: 12px;
+    }
+
+    .bp-welcome-dialog {
+        width: 100%;
+        max-height: calc(100vh - 24px);
+        padding: 25px 20px 22px;
+        transform: translateY(18px);
+    }
+
+    .bp-welcome-dialog::before {
+        left: 20px;
+        width: 58px;
+    }
+
+    .bp-welcome-close {
+        top: 13px;
+        right: 13px;
+    }
+
+    .bp-welcome-brand {
+        margin-bottom: 18px;
+    }
+
+    .bp-welcome-dialog h2 {
+        padding-right: 4px;
+        font-size: 25px;
+        line-height: 1.2;
+    }
+
+    .bp-welcome-description {
+        font-size: 14px;
+        line-height: 1.55;
+    }
+
+    .bp-welcome-weight-preview {
+        margin-top: 19px;
+        padding: 13px 0 15px;
+    }
+
+    .bp-welcome-signals {
+        grid-template-columns: 1fr;
+        gap: 10px;
+        margin-top: 16px;
+    }
+
+    .bp-welcome-actions {
+        align-items: stretch;
+        flex-direction: column;
+        gap: 8px;
+        margin-top: 21px;
+    }
+
+    .bp-welcome-primary {
+        width: 100%;
+    }
+
+    .bp-welcome-methodology {
+        align-self: center;
+        margin-top: 2px;
+    }
+}
+
+@media (max-height: 610px) {
+    .bp-welcome-brand {
+        margin-bottom: 12px;
+    }
+
+    .bp-welcome-description {
+        margin-top: 9px;
+    }
+
+    .bp-welcome-weight-preview {
+        display: none;
+    }
+
+    .bp-welcome-signals {
+        margin-top: 13px;
+    }
+
+    .bp-welcome-actions {
+        margin-top: 17px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .bp-welcome-overlay,
+    .bp-welcome-dialog {
+        transition: none;
+    }
+}

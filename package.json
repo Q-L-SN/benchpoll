@@ -4,21 +4,40 @@
   "description": "benchpoll",
   "main": "server.js",
   "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "lint": "eslint server.js ranking-service.js moderation-admin.js db.js scripts test",
+    "test": "node --test",
+    "check:ranking-integrity": "node scripts/check-ranking-integrity.mjs",
+    "migrate:session-integrity": "node scripts/migrate-session-integrity.mjs --apply",
+    "migrate:moderation-admin": "node scripts/migrate-moderation-admin.mjs --apply && node scripts/migrate-admin-messages.mjs --apply",
+    "migrate:admin-messages": "node scripts/migrate-admin-messages.mjs --apply",
+    "migrate:moderation-email": "node scripts/migrate-moderation-email-notifications.mjs --apply",
+    "migrate:reviewer-accounts": "node scripts/migrate-unified-reviewer-accounts.mjs --apply",
+    "migrate:strict-benchmark-schema": "node scripts/migrate-strict-benchmark-schema.mjs --apply",
+    "migrate:open-score-ranges": "node scripts/migrate-open-score-ranges.mjs --apply",
+    "migrate:required-score-ranges": "node scripts/migrate-required-score-ranges.mjs --apply",
+    "migrate:arena-score-ranges": "node scripts/migrate-arena-score-ranges.mjs --apply",
+    "migrate:literal-default-conditions": "node scripts/migrate-literal-default-conditions.mjs --apply",
+    "migrate:result-medians": "node scripts/migrate-result-medians.mjs --apply",
+    "migrate:context-free-results": "node scripts/migrate-context-free-results.mjs --apply",
+    "migrate:personal-fallback-rules": "node scripts/migrate-personal-fallback-rules.mjs --apply"
+  },
   "author": {
     "name": ""
   },
   "eslintConfig": {},
   "dependencies": {
-    "bcryptjs": "^3.0.3",
     "cookie-parser": "^1.4.7",
-    "dotenv": "^17.2.3",
-    "eslint": "^8.57.1",
+    "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "express-mysql-session": "^3.0.3",
-    "express-rate-limit": "^8.2.1",
-    "express-session": "^1.18.2",
-    "fast-levenshtein": "^3.0.0",
-    "mysql2": "^3.16.0",
-    "undici": "^8.0.2"
+    "express-session": "^1.19.0",
+    "mysql2": "^3.23.4",
+    "nodemailer": "^9.0.5",
+    "undici": "^8.10.0"
+  },
+  "devDependencies": {
+    "eslint": "^10.9.0"
   }
 }

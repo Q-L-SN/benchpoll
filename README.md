@@ -1,8 +1,8 @@
 # benchpoll
 
-benchpoll is a Node.js/Express web app for browsing and voting on ranked evaluation items, including benchmarks, arenas, and other evaluation methods. The app serves private HTML pages, public CSS/JS assets, GitHub OAuth login, session-backed user accounts, admin login, and ranking pages backed by a MySQL database.
+benchpoll is a Node.js/Express web app for browsing and weighting ranked evaluation items, including benchmarks, arenas, and other evaluation methods. The app serves private HTML pages, public CSS/JS assets, GitHub OAuth login, session-backed user accounts, role-based review access, and ranking pages backed by a MySQL database.
 
-Users can submit evaluation-item reports or propose new evaluation items through the contribution page. Admins review those submissions in the moderation queue before approved proposals are added to the `objects` table.
+Users can submit benchmark, model, score, category, and feedback contributions through the standard contribution forms. Reviewers use the same GitHub-backed accounts; authorization comes from `users.role`. A `senior` submission uses the same endpoint and payload as any other submission, but is validated, approved, applied, audited, and queued for an email decision within one server transaction.
 
 ## Current Stack
 
@@ -49,14 +49,23 @@ DB_PASSWORD
 SESSION_SECRET
 SESSION_CLEANUP_INTERVAL_MINUTES
 SESSION_MAX_AGE_DAYS
-RATE_LIMIT_WINDOW_MINUTES
-RATE_LIMIT_MAX_REQUESTS
 GITHUB_CLIENT_SECRET
 GITHUB_MIN_ACCOUNT_AGE_DAYS
 VOTES_PER_USER
 ```
 
 Do not commit secrets. Keep real values in `.env` or another ignored local file.
+
+Moderation-result email delivery uses the following optional SMTP group. Configure all values together; without them, review notifications remain queued in the database and are not reported as sent.
+
+```text
+BENCHPOLL_SMTP_HOST
+BENCHPOLL_SMTP_PORT
+BENCHPOLL_SMTP_SECURE
+BENCHPOLL_SMTP_USER
+BENCHPOLL_SMTP_PASSWORD
+BENCHPOLL_NOTIFICATION_FROM
+```
 
 ## Database
 
@@ -76,6 +85,15 @@ database: benchmarks
 
 The password is read from `DB_PASSWORD`.
 
+Apply the moderation schema, email outbox, and unified reviewer-account migrations before deployment. The final command takes the numeric ID of an existing GitHub-backed BenchPoll user:
+
+```powershell
+npm run migrate:moderation-admin
+npm run migrate:moderation-email
+npm run migrate:reviewer-accounts -- --senior-user-id=<github-user-id>
+npm run migrate:literal-default-conditions
+```
+
 Main table groups used by the code include:
 
 - `categories`
@@ -84,8 +102,9 @@ Main table groups used by the code include:
 - `votes`
 - `users`
 - `user_sessions`
-- `admin`
 - `moderation_logs`
+- `moderation_audit_logs`
+- `moderation_email_outbox`
 
 Template rankings are represented as repeated `categories` structure in the database. The backend derives `templatesList` from `categories.template` and `category_templates`, then the frontend uses the selected template path to refresh the object list.
 
@@ -97,10 +116,10 @@ npm install
 
 ## Run
 
-There is no npm script yet. Start the server directly:
+Start the server with:
 
 ```powershell
-node server.js
+npm start
 ```
 
 The app listens on:
@@ -118,7 +137,6 @@ Make sure local DNS/hosts and certificate setup match the domain you use in the 
 - `/login`
 - `/github_callback`
 - `/contribute`
-- `/adminlogin`
 - `/censor`
 - `/dialogPage`
 
@@ -132,9 +150,11 @@ Make sure local DNS/hosts and certificate setup match the domain you use in the 
 - `POST /api/get_device_count`
 - `POST /api/delete_account`
 - `POST /api/submit_contribution`
+- `POST /api/admin_capabilities`
 - `POST /api/list_moderation_logs`
+- `POST /api/preview_moderation_sql`
+- `POST /api/apply_moderation_log`
 - `POST /api/review_moderation_log`
-- `POST /api/admin_login`
 
 ## Development Notes
 
@@ -146,9 +166,9 @@ Make sure local DNS/hosts and certificate setup match the domain you use in the 
 
 # benchpoll 中文说明
 
-benchpoll 是一个基于 Node.js/Express 的网页应用，用于浏览、投票和展示评测项排行；评测项可以是 benchmark、arena 或其他评测方法。项目包含私有 HTML 页面、公开 CSS/JS 静态资源、GitHub OAuth 登录、基于 session 的用户账号、管理员登录，以及由 MySQL 数据库驱动的排行页面。
+benchpoll 是一个基于 Node.js/Express 的网页应用，用于浏览、设置权重和展示评测项排行；评测项可以是 benchmark、arena 或其他评测方法。项目包含私有 HTML 页面、公开 CSS/JS 静态资源、GitHub OAuth 登录、基于 session 的用户账号、基于角色的审核权限，以及由 MySQL 数据库驱动的排行页面。
 
-用户可以通过共创页面上报评测项信息问题，或提交新的评测项提案。管理员在审核队列中处理这些提交，审核通过的新提案会写入 `objects` 表。
+用户通过统一的贡献表单提交基准测试、模型、分数、分类和反馈。审核员继续使用普通的 GitHub 账号登录，权限由 `users.role` 决定。`senior` 提交时仍使用与普通用户完全相同的端点和数据结构，但服务器会在同一个事务内完成校验、批准、应用、审计和审核结果邮件入队。
 
 ## 当前技术栈
 
@@ -195,14 +215,23 @@ DB_PASSWORD
 SESSION_SECRET
 SESSION_CLEANUP_INTERVAL_MINUTES
 SESSION_MAX_AGE_DAYS
-RATE_LIMIT_WINDOW_MINUTES
-RATE_LIMIT_MAX_REQUESTS
 GITHUB_CLIENT_SECRET
 GITHUB_MIN_ACCOUNT_AGE_DAYS
 VOTES_PER_USER
 ```
 
 不要提交密钥。真实值应放在 `.env` 或其他已忽略的本地文件中。
+
+审核结果邮件使用以下可选 SMTP 配置组。必须一次配置完整；如果没有配置，通知会保留在数据库队列中，并且不会被标记为已经发送。
+
+```text
+BENCHPOLL_SMTP_HOST
+BENCHPOLL_SMTP_PORT
+BENCHPOLL_SMTP_SECURE
+BENCHPOLL_SMTP_USER
+BENCHPOLL_SMTP_PASSWORD
+BENCHPOLL_NOTIFICATION_FROM
+```
 
 ## 数据库
 
@@ -222,6 +251,15 @@ database: benchmarks
 
 数据库密码从 `DB_PASSWORD` 读取。
 
+部署前先应用审核结构、邮件发件箱和统一审核账号迁移。最后一条命令需要传入一个已经登录过 BenchPoll 的 GitHub 用户数字 ID：
+
+```powershell
+npm run migrate:moderation-admin
+npm run migrate:moderation-email
+npm run migrate:reviewer-accounts -- --senior-user-id=<github-user-id>
+npm run migrate:literal-default-conditions
+```
+
 当前代码涉及的主要表包括：
 
 - `categories`
@@ -230,8 +268,9 @@ database: benchmarks
 - `votes`
 - `users`
 - `user_sessions`
-- `admin`
 - `moderation_logs`
+- `moderation_audit_logs`
+- `moderation_email_outbox`
 
 模板排行通过数据库中重复的 `categories` 结构表达。后端根据 `categories.template` 和 `category_templates` 派生出 `templatesList`，前端再用选中的模板路径刷新对象列表。
 
@@ -243,10 +282,10 @@ npm install
 
 ## 运行
 
-项目目前还没有 npm script。直接启动服务器：
+使用以下命令启动服务器：
 
 ```powershell
-node server.js
+npm start
 ```
 
 应用监听地址：
@@ -264,7 +303,6 @@ https://benchpoll.com:1337
 - `/login`
 - `/github_callback`
 - `/contribute`
-- `/adminlogin`
 - `/censor`
 - `/dialogPage`
 
@@ -278,9 +316,11 @@ https://benchpoll.com:1337
 - `POST /api/get_device_count`
 - `POST /api/delete_account`
 - `POST /api/submit_contribution`
+- `POST /api/admin_capabilities`
 - `POST /api/list_moderation_logs`
+- `POST /api/preview_moderation_sql`
+- `POST /api/apply_moderation_log`
 - `POST /api/review_moderation_log`
-- `POST /api/admin_login`
 
 ## 开发注意事项
 

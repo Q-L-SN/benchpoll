@@ -1,15 +1,20 @@
-<html>
+<!DOCTYPE html>
+<html lang="en">
 <head>
     <meta charset="utf-8" />
-    <title></title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BenchPoll</title>
+    <link rel="icon" href="/favicon.ico?v=benchpoll-g-2" sizes="any">
+    <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png?v=benchpoll-g-2">
     <link rel="stylesheet" href="css/global.css" />
     <link rel="stylesheet" href="css/dialogPage.css" />
     <script src="js/dialogPage.js" type="module"></script>
 </head>
-<body>
+<body class="dialog-page">
     <global-header></global-header>
     <global-dialog id="code-1-dialog" hidden>
         <div slot="title">This page does not exist</div>
+        <div slot="body">The address may be incorrect, or the page may have moved.</div>
         <div slot="actions">
             <global-dialog-action class="dialog-close-button main">
                 Go Home
@@ -18,6 +23,7 @@
     </global-dialog>
     <global-dialog id="code-2-dialog" hidden>
         <div slot="title">Please log in to continue</div>
+        <div slot="body">Sign in with GitHub to return to the action you requested.</div>
         <div slot="actions">
             <global-dialog-action class="dialog-close-button">
                 Cancel
@@ -28,13 +34,11 @@
         </div>
     </global-dialog>
     <global-dialog id="code-3-dialog" hidden>
-        <div slot="title">Please log in to continue</div>
+        <div slot="title">Reviewer access required</div>
+        <div slot="body">Your BenchPoll account does not have permission to open the moderation workspace.</div>
         <div slot="actions">
-            <global-dialog-action class="dialog-close-button">
-                Cancel
-            </global-dialog-action>
-            <global-dialog-action class="dialog-login-button main">
-                Login
+            <global-dialog-action class="dialog-close-button main">
+                Return
             </global-dialog-action>
         </div>
     </global-dialog>

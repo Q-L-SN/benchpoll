@@ -5,10 +5,11 @@ var pool;
 // 配置连接池
 export function initPool(dbPassword) { 
   pool = mysql.createPool({
-    host: 'localhost',      // 数据库地址
-    user: 'root',           // 数据库用户名
-    password: dbPassword,   // 数据库密码
-    database: 'benchmarks',    // 数据库名称
+    host: process.env.BENCHPOLL_DB_HOST || 'localhost',
+    port: Number(process.env.BENCHPOLL_DB_PORT || 3306),
+    user: process.env.BENCHPOLL_DB_USER || 'root',
+    password: dbPassword,
+    database: process.env.BENCHPOLL_DB_NAME || 'benchmarks',
     waitForConnections: true,
     connectionLimit: 10,    // 最大连接数
     queueLimit: 0

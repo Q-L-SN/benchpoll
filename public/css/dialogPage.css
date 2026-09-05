@@ -1,12 +1,67 @@
-global-header {
-    border: none;
+body.dialog-page {
+    --bg-body: #fafbfe;
+    --bg-panel: #ffffff;
+    --text-primary: #111a3d;
+    --text-secondary: #69728f;
+    --text-muted: #8a91a8;
+    --accent-color: #6d5ce7;
+    --accent-strong: #5947d6;
+    --accent-soft: #f0edff;
+    --nav-height: 62px;
+    min-height: 100vh;
+    overflow: hidden;
+    background: #fafbfe;
 }
 
-global-dialog {
-    --dialog-overlay-display: none; /* 非模态 */
+body.dialog-page global-dialog {
+    --dialog-z-index: 1000;
+    --dialog-width: 510px;
+    --dialog-min-width: 340px;
+    --dialog-overlay-background: rgba(250, 251, 254, 0.94);
+    --dialog-overlay-backdrop-filter: blur(2px);
+}
+
+body.dialog-page global-dialog::part(stage) {
+    padding-top: calc(var(--nav-height) + 24px);
+}
+
+body.dialog-page global-dialog::part(content) {
+    width: min(510px, calc(100vw - 40px));
+    box-shadow: 0 1px 2px rgba(21, 31, 67, 0.04), 0 16px 42px rgba(43, 49, 88, 0.09);
+}
+
+body.dialog-page [slot="body"] a {
+    color: #5949d6;
+    text-decoration-color: #bcb5ed;
+    text-underline-offset: 3px;
+}
+
+body.dialog-page [slot="body"] p + p {
+    margin-top: 10px;
 }
 
 .dialog-login-button {
-    --button-background: var(--accent-color);
-    --button-hover-background: var(--accent-color);
+    --button-background: #6656e8;
+    --button-hover-background: #5949db;
+    --button-border-color: #6656e8;
+    --button-hover-border-color: #5949db;
+    --button-color: #ffffff;
+    --button-hover-color: #ffffff;
+}
+
+@media (max-width: 520px) {
+    body.dialog-page global-dialog {
+        --dialog-min-width: 0px;
+    }
+
+    body.dialog-page global-dialog::part(stage) {
+        align-items: flex-end;
+        padding-top: calc(var(--nav-height) + 16px);
+    }
+
+    body.dialog-page global-dialog::part(content) {
+        width: calc(100vw - 24px);
+        max-width: calc(100vw - 24px);
+        margin-bottom: 12px;
+    }
 }

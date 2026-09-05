@@ -1,44 +1,57 @@
 [hidden] {
-    display: none !important; /* [hidden]本身的优先级很低，会被display: flex;覆盖*/
+    display: none !important;
 }
 
 :root {
-    --bg-body: #0a0a0a;
-    --bg-panel: #141414;
-    --bg-hover: #1f1f1f;
-    --border-color: #333333;
-    
-    --text-primary: #e5e5e5;
-    --text-secondary: #a3a3a3;
-    --text-muted: #525252;
-    --text-danger: #ef4444;
-    
-    --accent-color: #3b82f6; 
-    --accent-vote: #22c55e;
-    --accent-down: #ef4444;
-    --accent-my-vote: #f59e0b; 
-    --accent-rank-first: gold;
-    --accent-rank-second: silver;
-    --accent-rank-third: #cd7f32;
+    color-scheme: light;
 
-    --nav-height: 60px;
+    --bg-body: #f3f6f2;
+    --bg-panel: #fffefc;
+    --bg-raised: #fafcf9;
+    --bg-hover: #edf3ec;
+    --bg-active: #e3ece3;
+    --bg-ink: #34443b;
+    --bg-ink-raised: #42534a;
+    --border-color: #d9e1d9;
+    --border-strong: #b8c5ba;
+
+    --text-primary: #2b352f;
+    --text-secondary: #606d64;
+    --text-muted: #89958d;
+    --text-on-ink: #f9fbf8;
+    --text-danger: #b94f49;
+
+    --accent-color: #df7062;
+    --accent-strong: #c85a4f;
+    --accent-soft: #fae9e5;
+    --accent-vote: #529873;
+    --accent-down: #d45f57;
+    --accent-my-vote: #6d8fcd;
+    --accent-rank-first: #d69a48;
+    --accent-rank-second: #7f9188;
+    --accent-rank-third: #b47a61;
+
+    --nav-height: 68px;
     --dialog-width: 520px;
-    --dialog-padding: 20px;
+    --dialog-padding: 24px;
     --dialog-gap: 16px;
-    --dialog-radius: 4px;
-    --dialog-background: var(--bg-panel);
-    --dialog-border-color: var(--border-color);
-    --dialog-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
+    --dialog-radius: 8px;
+    --dialog-background: #ffffff;
+    --dialog-border-color: #e2e5ef;
+    --dialog-shadow: 0 2px 5px rgba(25, 32, 64, 0.05), 0 18px 52px rgba(45, 50, 92, 0.14);
     --dialog-z-index: 10000;
     --dialog-overlay-display: block;
-    --dialog-overlay-background: rgba(10, 10, 10, 0.72);
-    --dialog-overlay-backdrop-filter: blur(2px);
-    --dialog-title-size: 15px;
-    --dialog-text-size: 13px;
-    --dialog-button-height: 36px;
-    --dialog-button-padding-inline: 16px;
-    --font-mono: 'SF Mono', 'Menlo', 'Monaco', 'Courier New', monospace;
-    --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --dialog-overlay-background: rgba(24, 29, 57, 0.28);
+    --dialog-overlay-backdrop-filter: blur(5px) saturate(0.94);
+    --dialog-title-color: #111a3d;
+    --dialog-text-color: #69728f;
+    --dialog-title-size: 20px;
+    --dialog-text-size: 14px;
+    --dialog-button-height: 40px;
+    --dialog-button-padding-inline: 17px;
+    --font-mono: "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
+    --font-sans: "Segoe UI Variable", "Segoe UI", "Aptos", Helvetica, Arial, sans-serif;
+    --font-display: "Segoe UI Variable Display", "Segoe UI", "Aptos Display", Helvetica, Arial, sans-serif;
 }
 
 * {
@@ -47,20 +60,90 @@
     padding: 0;
 }
 
+html {
+    background-color: var(--bg-body);
+}
+
 body {
+    min-width: 320px;
+    min-height: 100vh;
     background-color: var(--bg-body);
     color: var(--text-primary);
     font-family: var(--font-sans);
     font-size: 14px;
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+}
+
+button,
+input,
+select,
+textarea {
+    font: inherit;
+}
+
+button,
+a,
+input,
+select,
+textarea {
+    -webkit-tap-highlight-color: transparent;
+}
+
+::selection {
+    background-color: #e7e2ff;
+    color: var(--text-primary);
+}
+
+:focus-visible {
+    outline: 2px solid rgba(109, 92, 231, 0.52);
+    outline-offset: 2px;
+}
+
+* {
+    scrollbar-width: thin;
+    scrollbar-color: #d4d7e3 transparent;
+}
+
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    border: 3px solid transparent;
+    border-radius: 8px;
+    background-color: #d4d7e3;
+    background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background-color: #bbc0d1;
+}
+
+::-webkit-scrollbar-corner {
+    background: transparent;
 }
 
 global-dialog-action.main {
-    --button-background: var(--accent-color);
-    --button-hover-background: var(--accent-color);
+    --button-background: #6656e8;
+    --button-hover-background: #5949db;
+    --button-border-color: #6656e8;
+    --button-hover-border-color: #5949db;
+    --button-color: #ffffff;
+    --button-hover-color: #ffffff;
 }
+
 global-dialog-action.danger {
-    --button-background: var(--accent-down);
-    --button-hover-background: var(--accent-down);
+    --button-background: #d95f68;
+    --button-hover-background: #c9505a;
+    --button-border-color: #d95f68;
+    --button-hover-border-color: #c9505a;
+    --button-color: #ffffff;
+    --button-hover-color: #ffffff;
 }

@@ -1,0 +1,906 @@
+{
+  "generatedAt": "2026-07-07",
+  "criteria": "Recent AI evaluation objects released in 2025 or later, selected from official benchmark pages and arXiv records. Category assignments are pragmatic product categories for benchpoll navigation.",
+  "items": [
+    {
+      "name": "BrowseComp",
+      "categoryPath": "AI Evaluation/Web Search and Computer Use",
+      "releaseDate": "2025-04-10",
+      "url": "https://openai.com/index/browsecomp/",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": false
+    },
+    {
+      "name": "PaperBench",
+      "categoryPath": "AI Evaluation/Agentic Workflows and Tool Use",
+      "releaseDate": "2025-04-02",
+      "url": "https://openai.com/index/paperbench/",
+      "inputModality": "mixed",
+      "outputModality": "mixed",
+      "isRealtime": false
+    },
+    {
+      "name": "JudgeEval",
+      "categoryPath": "AI Evaluation/Judging and Evaluation Protocols",
+      "releaseDate": "2025-04-02",
+      "url": "https://openai.com/index/paperbench/",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": false
+    },
+    {
+      "name": "SWE-Lancer",
+      "categoryPath": "AI Evaluation/Coding and Software Engineering",
+      "releaseDate": "2025-02-18",
+      "url": "https://openai.com/index/swe-lancer/",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": false
+    },
+    {
+      "name": "HealthBench",
+      "categoryPath": "AI Evaluation/Medical and Life Sciences",
+      "releaseDate": "2025-05-12",
+      "url": "https://openai.com/index/healthbench/",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": false
+    },
+    {
+      "name": "GDPval",
+      "categoryPath": "AI Evaluation/Domain Expert Work",
+      "releaseDate": "2025-09-25",
+      "url": "https://openai.com/index/gdpval/",
+      "inputModality": "mixed",
+      "outputModality": "mixed",
+      "isRealtime": false
+    },
+    {
+      "name": "Humanity's Last Exam",
+      "categoryPath": "AI Evaluation/Reasoning Math and Knowledge",
+      "releaseDate": "2025-01-24",
+      "url": "https://arxiv.org/abs/2501.14249",
+      "inputModality": "mixed",
+      "outputModality": "text",
+      "isRealtime": false
+    },
+    {
+      "name": "ARC-AGI-2",
+      "categoryPath": "AI Evaluation/Reasoning Math and Knowledge",
+      "releaseDate": "2025",
+      "url": "https://arcprize.org/arc-agi/2",
+      "inputModality": "image",
+      "outputModality": "text",
+      "isRealtime": false
+    },
+    {
+      "name": "MultiChallenge",
+      "categoryPath": "AI Evaluation/Conversation and Instruction Following",
+      "releaseDate": "2025-01-29",
+      "url": "https://arxiv.org/abs/2501.17399",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": true
+    },
+    {
+      "name": "SimpleQA Verified",
+      "categoryPath": "AI Evaluation/Factuality and Hallucination",
+      "releaseDate": "2025-09-09",
+      "url": "https://arxiv.org/abs/2509.07968",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": false
+    },
+    {
+      "name": "AA-Omniscience",
+      "categoryPath": "AI Evaluation/Factuality and Hallucination",
+      "releaseDate": "2025-11-17",
+      "url": "https://arxiv.org/abs/2511.13029",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": false
+    },
+    {
+      "name": "Terminal-Bench 2.0",
+      "categoryPath": "AI Evaluation/Web Search and Computer Use",
+      "releaseDate": "2026-01",
+      "url": "https://arxiv.org/abs/2601.11868",
+      "inputModality": "action",
+      "outputModality": "action",
+      "isRealtime": true
+    },
+    {
+      "name": "Tau2-Bench",
+      "categoryPath": "AI Evaluation/Agentic Workflows and Tool Use",
+      "releaseDate": "2025-06",
+      "url": "https://arxiv.org/abs/2506.07982",
+      "inputModality": "text",
+      "outputModality": "action",
+      "isRealtime": true
+    },
+    {
+      "name": "LifeSciBench",
+      "categoryPath": "AI Evaluation/Medical and Life Sciences",
+      "releaseDate": "2026-06-17",
+      "url": "https://openai.com/index/introducing-life-sci-bench/",
+      "inputModality": "mixed",
+      "outputModality": "mixed",
+      "isRealtime": false
+    },
+    {
+      "name": "GeneBench-Pro",
+      "categoryPath": "AI Evaluation/Medical and Life Sciences",
+      "releaseDate": "2026-06-30",
+      "url": "https://openai.com/index/introducing-genebench-pro/",
+      "inputModality": "mixed",
+      "outputModality": "mixed",
+      "isRealtime": false
+    },
+    {
+      "name": "APeB",
+      "categoryPath": "AI Evaluation/Agentic Workflows and Tool Use",
+      "releaseDate": "2026-07-03",
+      "url": "https://arxiv.org/abs/2607.03162",
+      "inputModality": "text",
+      "outputModality": "action",
+      "isRealtime": true
+    },
+    {
+      "name": "PosterHarness",
+      "categoryPath": "AI Evaluation/Multimodal Vision and Video",
+      "releaseDate": "2026-07-03",
+      "url": "https://arxiv.org/abs/2607.03006",
+      "inputModality": "mixed",
+      "outputModality": "image",
+      "isRealtime": false
+    },
+    {
+      "name": "MatPhaseBench",
+      "categoryPath": "AI Evaluation/Domain Expert Work",
+      "releaseDate": "2026-07-03",
+      "url": "https://arxiv.org/abs/2607.02934",
+      "inputModality": "image",
+      "outputModality": "text",
+      "isRealtime": false
+    },
+    {
+      "name": "PPE-Bench",
+      "categoryPath": "AI Evaluation/Safety Security and Robustness",
+      "releaseDate": "2026-07-03",
+      "url": "https://arxiv.org/abs/2607.02897",
+      "inputModality": "mixed",
+      "outputModality": "text",
+      "isRealtime": false
+    },
+    {
+      "name": "JavaVulBench",
+      "categoryPath": "AI Evaluation/Coding and Software Engineering",
+      "releaseDate": "2026-07-02",
+      "url": "https://arxiv.org/abs/2607.02825",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": false
+    },
+    {
+      "name": "S-EMBER",
+      "categoryPath": "AI Evaluation/Long Context and Memory",
+      "releaseDate": "2026-07-02",
+      "url": "https://arxiv.org/abs/2607.02689",
+      "inputModality": "video",
+      "outputModality": "text",
+      "isRealtime": true
+    },
+    {
+      "name": "TestEvo-Bench",
+      "categoryPath": "AI Evaluation/Coding and Software Engineering",
+      "releaseDate": "2026-07-02",
+      "url": "https://arxiv.org/abs/2607.02469",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": true
+    },
+    {
+      "name": "AnyGroundBench",
+      "categoryPath": "AI Evaluation/Multimodal Vision and Video",
+      "releaseDate": "2026-07-02",
+      "url": "https://arxiv.org/abs/2607.02269",
+      "inputModality": "video",
+      "outputModality": "text",
+      "isRealtime": false
+    },
+    {
+      "name": "A2utoLPBench",
+      "categoryPath": "AI Evaluation/Reasoning Math and Knowledge",
+      "releaseDate": "2026-07-02",
+      "url": "https://arxiv.org/abs/2607.02141",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": false
+    },
+    {
+      "name": "Pre-Flight",
+      "categoryPath": "AI Evaluation/Domain Expert Work",
+      "releaseDate": "2026-07-02",
+      "url": "https://arxiv.org/abs/2607.01829",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": false
+    },
+    {
+      "name": "MMBench-Live",
+      "categoryPath": "AI Evaluation/Multimodal Vision and Video",
+      "releaseDate": "2026-07-02",
+      "url": "https://arxiv.org/abs/2607.01813",
+      "inputModality": "mixed",
+      "outputModality": "text",
+      "isRealtime": true
+    },
+    {
+      "name": "MedStreamBench",
+      "categoryPath": "AI Evaluation/Medical and Life Sciences",
+      "releaseDate": "2026-07-02",
+      "url": "https://arxiv.org/abs/2607.01751",
+      "inputModality": "video",
+      "outputModality": "text",
+      "isRealtime": true
+    },
+    {
+      "name": "AgenticDataBench",
+      "categoryPath": "AI Evaluation/Agentic Workflows and Tool Use",
+      "releaseDate": "2026-07-02",
+      "url": "https://arxiv.org/abs/2607.01647",
+      "inputModality": "mixed",
+      "outputModality": "mixed",
+      "isRealtime": true
+    },
+    {
+      "name": "IsoSci",
+      "categoryPath": "AI Evaluation/Reasoning Math and Knowledge",
+      "releaseDate": "2026-07-01",
+      "url": "https://arxiv.org/abs/2607.01431",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": false
+    },
+    {
+      "name": "Adversarial Pragmatics",
+      "categoryPath": "AI Evaluation/Safety Security and Robustness",
+      "releaseDate": "2026-07-01",
+      "url": "https://arxiv.org/abs/2607.01153",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": false
+    },
+    {
+      "name": "LongVQUBench",
+      "categoryPath": "AI Evaluation/Multimodal Vision and Video",
+      "releaseDate": "2026-07-01",
+      "url": "https://arxiv.org/abs/2607.01086",
+      "inputModality": "video",
+      "outputModality": "text",
+      "isRealtime": false
+    },
+    {
+      "name": "MemSyco-Bench",
+      "categoryPath": "AI Evaluation/Safety Security and Robustness",
+      "releaseDate": "2026-07-01",
+      "url": "https://arxiv.org/abs/2607.01071",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": true
+    },
+    {
+      "name": "LLVM-Bench",
+      "categoryPath": "AI Evaluation/Coding and Software Engineering",
+      "releaseDate": "2026-07-01",
+      "url": "https://arxiv.org/abs/2607.00700",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": false
+    },
+    {
+      "name": "EgoGapBench",
+      "categoryPath": "AI Evaluation/Embodied Robotics and World Models",
+      "releaseDate": "2026-07-01",
+      "url": "https://arxiv.org/abs/2607.00547",
+      "inputModality": "video",
+      "outputModality": "action",
+      "isRealtime": true
+    },
+    {
+      "name": "MindEdit-Bench",
+      "categoryPath": "AI Evaluation/Multimodal Vision and Video",
+      "releaseDate": "2026-07-01",
+      "url": "https://arxiv.org/abs/2607.00491",
+      "inputModality": "image",
+      "outputModality": "text",
+      "isRealtime": false
+    },
+    {
+      "name": "PHREEQC-MCQ-200",
+      "categoryPath": "AI Evaluation/Agentic Workflows and Tool Use",
+      "releaseDate": "2026-07-01",
+      "url": "https://arxiv.org/abs/2607.00436",
+      "inputModality": "text",
+      "outputModality": "action",
+      "isRealtime": false
+    },
+    {
+      "name": "EgoSafetyBench",
+      "categoryPath": "AI Evaluation/Safety Security and Robustness",
+      "releaseDate": "2026-06-30",
+      "url": "https://arxiv.org/abs/2607.00218",
+      "inputModality": "video",
+      "outputModality": "text",
+      "isRealtime": true
+    },
+    {
+      "name": "STEB Style Text Embedding Benchmark",
+      "categoryPath": "AI Evaluation/Embeddings and Retrieval",
+      "releaseDate": "2026-06-30",
+      "url": "https://arxiv.org/abs/2606.31741",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": false
+    },
+    {
+      "name": "Arena-T2I Hard",
+      "categoryPath": "AI Evaluation/Multimodal Vision and Video",
+      "releaseDate": "2026-06-30",
+      "url": "https://arxiv.org/abs/2606.31711",
+      "inputModality": "text",
+      "outputModality": "image",
+      "isRealtime": false
+    },
+    {
+      "name": "WorldOdysseyBench",
+      "categoryPath": "AI Evaluation/Embodied Robotics and World Models",
+      "releaseDate": "2026-06-30",
+      "url": "https://arxiv.org/abs/2606.31672",
+      "inputModality": "mixed",
+      "outputModality": "mixed",
+      "isRealtime": true
+    },
+    {
+      "name": "FinPersona-Bench",
+      "categoryPath": "AI Evaluation/Domain Expert Work",
+      "releaseDate": "2026-06-30",
+      "url": "https://arxiv.org/abs/2606.31522",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": true
+    },
+    {
+      "name": "AlgoBench",
+      "categoryPath": "AI Evaluation/Coding and Software Engineering",
+      "releaseDate": "2026-06-30",
+      "url": "https://arxiv.org/abs/2607.00062",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": false
+    },
+    {
+      "name": "HealthAgentBench",
+      "categoryPath": "AI Evaluation/Medical and Life Sciences",
+      "releaseDate": "2026-06-30",
+      "url": "https://arxiv.org/abs/2606.31179",
+      "inputModality": "mixed",
+      "outputModality": "action",
+      "isRealtime": true
+    },
+    {
+      "name": "ClawArena-Team",
+      "categoryPath": "AI Evaluation/Agentic Workflows and Tool Use",
+      "releaseDate": "2026-06-30",
+      "url": "https://arxiv.org/abs/2606.31174",
+      "inputModality": "text",
+      "outputModality": "action",
+      "isRealtime": true
+    },
+    {
+      "name": "PPT-Eval",
+      "categoryPath": "AI Evaluation/Web Search and Computer Use",
+      "releaseDate": "2026-06-30",
+      "url": "https://arxiv.org/abs/2606.31154",
+      "inputModality": "mixed",
+      "outputModality": "mixed",
+      "isRealtime": true
+    },
+    {
+      "name": "MultiUAV-Plat",
+      "categoryPath": "AI Evaluation/Embodied Robotics and World Models",
+      "releaseDate": "2026-06-30",
+      "url": "https://arxiv.org/abs/2606.31073",
+      "inputModality": "mixed",
+      "outputModality": "action",
+      "isRealtime": true
+    },
+    {
+      "name": "Indi-RomCoM",
+      "categoryPath": "AI Evaluation/Multilingual and Cultural",
+      "releaseDate": "2026-06-29",
+      "url": "https://arxiv.org/abs/2606.30790",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": false
+    },
+    {
+      "name": "EMPATH",
+      "categoryPath": "AI Evaluation/Safety Security and Robustness",
+      "releaseDate": "2026-06-29",
+      "url": "https://arxiv.org/abs/2606.30256",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": true
+    },
+    {
+      "name": "MuseBench",
+      "categoryPath": "AI Evaluation/Audio Speech and Music",
+      "releaseDate": "2026-06-29",
+      "url": "https://arxiv.org/abs/2606.30026",
+      "inputModality": "mixed",
+      "outputModality": "text",
+      "isRealtime": false
+    },
+    {
+      "name": "SABER-Math",
+      "categoryPath": "AI Evaluation/Reasoning Math and Knowledge",
+      "releaseDate": "2026-06-29",
+      "url": "https://arxiv.org/abs/2606.29894",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": false
+    },
+    {
+      "name": "SafePyramid",
+      "categoryPath": "AI Evaluation/Safety Security and Robustness",
+      "releaseDate": "2026-06-29",
+      "url": "https://arxiv.org/abs/2606.29887",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": false
+    },
+    {
+      "name": "CLQT",
+      "categoryPath": "AI Evaluation/Domain Expert Work",
+      "releaseDate": "2026-06-29",
+      "url": "https://arxiv.org/abs/2606.29771",
+      "inputModality": "text",
+      "outputModality": "action",
+      "isRealtime": true
+    },
+    {
+      "name": "SFBench",
+      "categoryPath": "AI Evaluation/Reasoning Math and Knowledge",
+      "releaseDate": "2026-06-28",
+      "url": "https://arxiv.org/abs/2606.29630",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": false
+    },
+    {
+      "name": "OSWorld2.0",
+      "categoryPath": "AI Evaluation/Web Search and Computer Use",
+      "releaseDate": "2026-06-28",
+      "url": "https://arxiv.org/abs/2606.29537",
+      "inputModality": "action",
+      "outputModality": "action",
+      "isRealtime": true
+    },
+    {
+      "name": "SAKE",
+      "categoryPath": "AI Evaluation/Coding and Software Engineering",
+      "releaseDate": "2026-06-28",
+      "url": "https://arxiv.org/abs/2606.29520",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": false
+    },
+    {
+      "name": "AgentCyberRange",
+      "categoryPath": "AI Evaluation/Safety Security and Robustness",
+      "releaseDate": "2026-06-12",
+      "url": "https://arxiv.org/abs/2606.14295",
+      "inputModality": "action",
+      "outputModality": "action",
+      "isRealtime": true
+    },
+    {
+      "name": "IMCBench",
+      "categoryPath": "AI Evaluation/Medical and Life Sciences",
+      "releaseDate": "2026-06-26",
+      "url": "https://arxiv.org/abs/2606.28556",
+      "inputModality": "image",
+      "outputModality": "text",
+      "isRealtime": true
+    },
+    {
+      "name": "GPTNT",
+      "categoryPath": "AI Evaluation/Audio Speech and Music",
+      "releaseDate": "2026-06-26",
+      "url": "https://arxiv.org/abs/2606.28514",
+      "inputModality": "mixed",
+      "outputModality": "action",
+      "isRealtime": true
+    },
+    {
+      "name": "TUA-Bench",
+      "categoryPath": "AI Evaluation/Web Search and Computer Use",
+      "releaseDate": "2026-06-26",
+      "url": "https://arxiv.org/abs/2606.28480",
+      "inputModality": "action",
+      "outputModality": "action",
+      "isRealtime": true
+    },
+    {
+      "name": "ToolPrivacyBench",
+      "categoryPath": "AI Evaluation/Safety Security and Robustness",
+      "releaseDate": "2026-06-26",
+      "url": "https://arxiv.org/abs/2606.28061",
+      "inputModality": "text",
+      "outputModality": "action",
+      "isRealtime": true
+    },
+    {
+      "name": "SpatialUAV",
+      "categoryPath": "AI Evaluation/Embodied Robotics and World Models",
+      "releaseDate": "2026-06-26",
+      "url": "https://arxiv.org/abs/2606.27876",
+      "inputModality": "mixed",
+      "outputModality": "action",
+      "isRealtime": true
+    },
+    {
+      "name": "NormAct",
+      "categoryPath": "AI Evaluation/Embodied Robotics and World Models",
+      "releaseDate": "2026-06-26",
+      "url": "https://arxiv.org/abs/2606.27826",
+      "inputModality": "text",
+      "outputModality": "action",
+      "isRealtime": true
+    },
+    {
+      "name": "NuclearQAv2",
+      "categoryPath": "AI Evaluation/Domain Expert Work",
+      "releaseDate": "2026-06-25",
+      "url": "https://arxiv.org/abs/2606.27047",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": false
+    },
+    {
+      "name": "scBench-Long",
+      "categoryPath": "AI Evaluation/Medical and Life Sciences",
+      "releaseDate": "2026-06-25",
+      "url": "https://arxiv.org/abs/2606.26563",
+      "inputModality": "mixed",
+      "outputModality": "text",
+      "isRealtime": false
+    },
+    {
+      "name": "MKG-RAG-Bench",
+      "categoryPath": "AI Evaluation/Embeddings and Retrieval",
+      "releaseDate": "2026-06-24",
+      "url": "https://arxiv.org/abs/2606.26458",
+      "inputModality": "mixed",
+      "outputModality": "text",
+      "isRealtime": false
+    },
+    {
+      "name": "WatchAct",
+      "categoryPath": "AI Evaluation/Embodied Robotics and World Models",
+      "releaseDate": "2026-06-24",
+      "url": "https://arxiv.org/abs/2606.26443",
+      "inputModality": "video",
+      "outputModality": "action",
+      "isRealtime": true
+    },
+    {
+      "name": "SpeechEQ",
+      "categoryPath": "AI Evaluation/Audio Speech and Music",
+      "releaseDate": "2026-06-24",
+      "url": "https://arxiv.org/abs/2606.25990",
+      "inputModality": "audio",
+      "outputModality": "text",
+      "isRealtime": true
+    },
+    {
+      "name": "InvestPhilBench",
+      "categoryPath": "AI Evaluation/Domain Expert Work",
+      "releaseDate": "2026-06-24",
+      "url": "https://arxiv.org/abs/2606.25984",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": true
+    },
+    {
+      "name": "HG-Bench",
+      "categoryPath": "AI Evaluation/Multimodal Vision and Video",
+      "releaseDate": "2026-06-24",
+      "url": "https://arxiv.org/abs/2606.25491",
+      "inputModality": "image",
+      "outputModality": "text",
+      "isRealtime": false
+    },
+    {
+      "name": "C3-Bench",
+      "categoryPath": "AI Evaluation/Multimodal Vision and Video",
+      "releaseDate": "2026-06-24",
+      "url": "https://arxiv.org/abs/2606.25445",
+      "inputModality": "image",
+      "outputModality": "text",
+      "isRealtime": false
+    },
+    {
+      "name": "TRAP",
+      "categoryPath": "AI Evaluation/Safety Security and Robustness",
+      "releaseDate": "2026-06-17",
+      "url": "https://arxiv.org/abs/2606.18996",
+      "inputModality": "text",
+      "outputModality": "action",
+      "isRealtime": true
+    },
+    {
+      "name": "G-IdiomAlign",
+      "categoryPath": "AI Evaluation/Multilingual and Cultural",
+      "releaseDate": "2026-06-17",
+      "url": "https://arxiv.org/abs/2606.18989",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": false
+    },
+    {
+      "name": "RTSGameBench",
+      "categoryPath": "AI Evaluation/Embodied Robotics and World Models",
+      "releaseDate": "2026-06-17",
+      "url": "https://arxiv.org/abs/2606.18950",
+      "inputModality": "mixed",
+      "outputModality": "action",
+      "isRealtime": true
+    },
+    {
+      "name": "SciRisk-Bench",
+      "categoryPath": "AI Evaluation/Safety Security and Robustness",
+      "releaseDate": "2026-06-17",
+      "url": "https://arxiv.org/abs/2606.18936",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": false
+    },
+    {
+      "name": "WorldLines",
+      "categoryPath": "AI Evaluation/Embodied Robotics and World Models",
+      "releaseDate": "2026-06-17",
+      "url": "https://arxiv.org/abs/2606.18847",
+      "inputModality": "mixed",
+      "outputModality": "action",
+      "isRealtime": true
+    },
+    {
+      "name": "ForecastBench-Sim",
+      "categoryPath": "AI Evaluation/Reasoning Math and Knowledge",
+      "releaseDate": "2026-06-17",
+      "url": "https://arxiv.org/abs/2606.18686",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": false
+    },
+    {
+      "name": "DeFAb",
+      "categoryPath": "AI Evaluation/Reasoning Math and Knowledge",
+      "releaseDate": "2026-06-17",
+      "url": "https://arxiv.org/abs/2606.18557",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": false
+    },
+    {
+      "name": "DRFLOW",
+      "categoryPath": "AI Evaluation/Agentic Workflows and Tool Use",
+      "releaseDate": "2026-06-16",
+      "url": "https://arxiv.org/abs/2606.18191",
+      "inputModality": "text",
+      "outputModality": "action",
+      "isRealtime": true
+    },
+    {
+      "name": "EComAgentBench",
+      "categoryPath": "AI Evaluation/Agentic Workflows and Tool Use",
+      "releaseDate": "2026-06-16",
+      "url": "https://arxiv.org/abs/2606.17698",
+      "inputModality": "text",
+      "outputModality": "action",
+      "isRealtime": true
+    },
+    {
+      "name": "MapSatisfyBench",
+      "categoryPath": "AI Evaluation/Embodied Robotics and World Models",
+      "releaseDate": "2026-06-16",
+      "url": "https://arxiv.org/abs/2606.17453",
+      "inputModality": "mixed",
+      "outputModality": "action",
+      "isRealtime": true
+    },
+    {
+      "name": "NarrativeWorldBench",
+      "categoryPath": "AI Evaluation/Audio Speech and Music",
+      "releaseDate": "2026-06-16",
+      "url": "https://arxiv.org/abs/2606.17391",
+      "inputModality": "audio",
+      "outputModality": "mixed",
+      "isRealtime": true
+    },
+    {
+      "name": "SpeechDx",
+      "categoryPath": "AI Evaluation/Medical and Life Sciences",
+      "releaseDate": "2026-06-15",
+      "url": "https://arxiv.org/abs/2606.17339",
+      "inputModality": "audio",
+      "outputModality": "text",
+      "isRealtime": false
+    },
+    {
+      "name": "ATOM-Bench",
+      "categoryPath": "AI Evaluation/Embodied Robotics and World Models",
+      "releaseDate": "2026-06-15",
+      "url": "https://arxiv.org/abs/2606.16826",
+      "inputModality": "mixed",
+      "outputModality": "action",
+      "isRealtime": true
+    },
+    {
+      "name": "LabOSBench",
+      "categoryPath": "AI Evaluation/Web Search and Computer Use",
+      "releaseDate": "2026-06-15",
+      "url": "https://arxiv.org/abs/2606.16802",
+      "inputModality": "action",
+      "outputModality": "action",
+      "isRealtime": true
+    },
+    {
+      "name": "P3B3",
+      "categoryPath": "AI Evaluation/Multilingual and Cultural",
+      "releaseDate": "2026-06-15",
+      "url": "https://arxiv.org/abs/2606.16753",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": true
+    },
+    {
+      "name": "CoffeeBench",
+      "categoryPath": "AI Evaluation/Agentic Workflows and Tool Use",
+      "releaseDate": "2026-06-15",
+      "url": "https://arxiv.org/abs/2606.16613",
+      "inputModality": "text",
+      "outputModality": "action",
+      "isRealtime": true
+    },
+    {
+      "name": "AuAu",
+      "categoryPath": "AI Evaluation/Safety Security and Robustness",
+      "releaseDate": "2026-06-15",
+      "url": "https://arxiv.org/abs/2606.16127",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": false
+    },
+    {
+      "name": "UrbanWell",
+      "categoryPath": "AI Evaluation/Domain Expert Work",
+      "releaseDate": "2026-06-14",
+      "url": "https://arxiv.org/abs/2606.15890",
+      "inputModality": "mixed",
+      "outputModality": "text",
+      "isRealtime": false
+    },
+    {
+      "name": "RetailBench",
+      "categoryPath": "AI Evaluation/Agentic Workflows and Tool Use",
+      "releaseDate": "2026-06-14",
+      "url": "https://arxiv.org/abs/2606.15862",
+      "inputModality": "text",
+      "outputModality": "action",
+      "isRealtime": true
+    },
+    {
+      "name": "OmniTraffic",
+      "categoryPath": "AI Evaluation/Embodied Robotics and World Models",
+      "releaseDate": "2026-06-14",
+      "url": "https://arxiv.org/abs/2606.15749",
+      "inputModality": "mixed",
+      "outputModality": "mixed",
+      "isRealtime": true
+    },
+    {
+      "name": "EHRNote-ChatQA",
+      "categoryPath": "AI Evaluation/Medical and Life Sciences",
+      "releaseDate": "2026-06-14",
+      "url": "https://arxiv.org/abs/2606.15735",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": true
+    },
+    {
+      "name": "ToolMenuBench",
+      "categoryPath": "AI Evaluation/Agentic Workflows and Tool Use",
+      "releaseDate": "2026-06-13",
+      "url": "https://arxiv.org/abs/2606.15508",
+      "inputModality": "text",
+      "outputModality": "action",
+      "isRealtime": true
+    },
+    {
+      "name": "OSGuard",
+      "categoryPath": "AI Evaluation/Safety Security and Robustness",
+      "releaseDate": "2026-06-13",
+      "url": "https://arxiv.org/abs/2606.15034",
+      "inputModality": "action",
+      "outputModality": "action",
+      "isRealtime": true
+    },
+    {
+      "name": "ClinHallu",
+      "categoryPath": "AI Evaluation/Medical and Life Sciences",
+      "releaseDate": "2026-06-12",
+      "url": "https://arxiv.org/abs/2606.14697",
+      "inputModality": "mixed",
+      "outputModality": "text",
+      "isRealtime": false
+    },
+    {
+      "name": "SIMMER",
+      "categoryPath": "AI Evaluation/Agentic Workflows and Tool Use",
+      "releaseDate": "2026-06-12",
+      "url": "https://arxiv.org/abs/2606.14574",
+      "inputModality": "text",
+      "outputModality": "action",
+      "isRealtime": true
+    },
+    {
+      "name": "DECOMPBENCH",
+      "categoryPath": "AI Evaluation/Safety Security and Robustness",
+      "releaseDate": "2026-06-12",
+      "url": "https://arxiv.org/abs/2606.13994",
+      "inputModality": "text",
+      "outputModality": "action",
+      "isRealtime": true
+    },
+    {
+      "name": "SkMTEB",
+      "categoryPath": "AI Evaluation/Multilingual and Cultural",
+      "releaseDate": "2026-06-11",
+      "url": "https://arxiv.org/abs/2606.13647",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": false
+    },
+    {
+      "name": "CloudCons",
+      "categoryPath": "AI Evaluation/Domain Expert Work",
+      "releaseDate": "2026-06-11",
+      "url": "https://arxiv.org/abs/2606.13513",
+      "inputModality": "mixed",
+      "outputModality": "action",
+      "isRealtime": false
+    },
+    {
+      "name": "SupraBench",
+      "categoryPath": "AI Evaluation/Domain Expert Work",
+      "releaseDate": "2026-06-11",
+      "url": "https://arxiv.org/abs/2606.13477",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": false
+    },
+    {
+      "name": "SciR",
+      "categoryPath": "AI Evaluation/Reasoning Math and Knowledge",
+      "releaseDate": "2026-06-11",
+      "url": "https://arxiv.org/abs/2606.13020",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": false
+    }
+  ]
+}

@@ -43,11 +43,7 @@ export function openCenterPopup(url, title, width, height) {  // 居中显示win
 }
 
 export function loginWithGitHub() {
-    const params = new URLSearchParams({
-        client_id: S.CLIENT_ID,
-        redirect_uri: window.location.origin + '/github_callback'
-    });
-    openCenterPopup('https://github.com/login/oauth/authorize?' + params.toString(), 'Login with GitHub', 600, 700);
+    openCenterPopup('/github_login', 'Login with GitHub', 600, 700);
 }
 
 export function listenStorageChange(key, callback) {
@@ -83,11 +79,7 @@ export async function checkErrorCodeInURL(response) {
         return; // No Content，表示成功但没有数据返回
     }
     if (response.status === 401) {
-        if ((await response.json()).isAdmin) {
-            editURL('/dialogPage?dialogCode=3&displayURL=' + encodeURIComponent(window.location.href), false, true);
-        } else {
-            editURL('/dialogPage?dialogCode=2&displayURL=' + encodeURIComponent(window.location.href), false, true);
-        }
+        editURL('/dialogPage?dialogCode=2&displayURL=' + encodeURIComponent(window.location.href), false, true);
         S.breakInThen();
     }
     if (response.status === 429) {
@@ -140,13 +132,10 @@ window.addEventListener('popstate', function(event) {
 class globalHeader extends HTMLElement { // 定义全局导航栏组件
     constructor() {
         super();
-        // 创建 Shadow DOM（封装样式和结构）
         const shadow = this.attachShadow({ mode: 'open' });
-        // 模板内容
         const template = document.createElement('template');
         template.innerHTML = `
             <style>
-                /* 默认样式，:host指向自身，外部可通过::part(名字)进行覆盖 */
                 :host {
                     position: fixed;
                     top: 0;
@@ -154,15 +143,16 @@ class globalHeader extends HTMLElement { // 定义全局导航栏组件
                     width: 100%;
                     max-width: 100%;
                     height: var(--nav-height);
-                    background-color: rgba(10, 10, 10, 0.9);
-                    backdrop-filter: blur(12px);
-                    border-bottom: 1px solid var(--border-color);
+                    background-color: rgba(255, 255, 255, 0.94);
+                    backdrop-filter: blur(18px) saturate(1.04);
+                    border-bottom: 1px solid #e7e9f1;
                     display: flex;
                     justify-content: flex-start;
                     align-items: center;
-                    gap: 24px;
-                    padding: 0 24px !important; /* 使用 !important 确保不被*{}覆盖，因为规定了外部优先级比内部更高 */
-                    z-index: 1002;
+                    gap: 22px;
+                    padding: 0 clamp(18px, 2.6vw, 40px) !important;
+                    box-shadow: 0 1px 2px rgba(21, 31, 67, 0.035), inset 0 -1px rgba(255, 255, 255, 0.9);
+                    z-index: 1100;
                 }
                 #logo-container {
                     flex: 0 0 auto;
@@ -179,15 +169,94 @@ class globalHeader extends HTMLElement { // 定义全局导航栏组件
                     justify-content: flex-end;
                 }
                 .logo {
-                    font-weight: 700;
-                    font-size: 18px;
-                    letter-spacing: 1px;
-                    color: var(--text-primary);
-                    text-decoration: none; /* 去掉默认的下划线 */
+                    display: inline-flex;
+                    align-items: center;
+                    color: #111a3d;
+                    text-decoration: none;
                     cursor: pointer;
                 }
+                .logo-art {
+                    position: relative;
+                    display: block;
+                    width: 145px;
+                    height: 29px;
+                    flex: 0 0 145px;
+                    overflow: hidden;
+                }
+                .logo-art img {
+                    position: absolute;
+                    top: -30.8px;
+                    left: -22.5px;
+                    display: block;
+                    width: 182px;
+                    max-width: none;
+                    height: auto;
+                    filter: contrast(1.04);
+                }
+                .logo-mark {
+                    position: relative;
+                    display: block;
+                    width: 28px;
+                    height: 28px;
+                    flex: 0 0 28px;
+                    overflow: hidden;
+                    border-radius: 50%;
+                    background: conic-gradient(from -90deg, #7059e9 0 24%, #69a8ea 24% 50%, #72d0cd 50% 75%, #5e8bdc 75% 100%);
+                    box-shadow: inset 0 0 0 1px rgba(38, 45, 91, 0.05), 0 2px 5px rgba(58, 73, 119, 0.08);
+                }
+                .logo-mark::before,
+                .logo-mark::after,
+                .logo-mark > span {
+                    position: absolute;
+                    z-index: 2;
+                    display: block;
+                    content: "";
+                    background: #fff;
+                }
+                .logo-mark::before {
+                    top: -2px;
+                    left: 12px;
+                    width: 3px;
+                    height: 18px;
+                }
+                .logo-mark::after {
+                    top: 12px;
+                    right: -2px;
+                    width: 18px;
+                    height: 3px;
+                }
+                .logo-mark > span {
+                    top: 7px;
+                    left: 12px;
+                    width: 12px;
+                    height: 12px;
+                    border-bottom: 3px solid #fff;
+                    border-left: 3px solid #fff;
+                    border-radius: 0 100% 0 0;
+                    background: transparent;
+                }
+                .brand-copy {
+                    display: flex;
+                    min-width: 0;
+                    flex-direction: column;
+                    gap: 2px;
+                }
+                .brand-name {
+                    color: #111a3d;
+                    font-family: var(--font-sans);
+                    font-size: 18px;
+                    font-weight: 740;
+                    line-height: 1;
+                }
                 .logo .highlight {
-                    color: var(--accent-color);
+                    color: inherit;
+                }
+                .brand-index {
+                    color: #8188a1;
+                    font-family: var(--font-sans);
+                    font-size: 8px;
+                    font-weight: 650;
+                    line-height: 1.2;
                 }
                 slot { /* 插槽 */
                     display: flex;
@@ -195,11 +264,24 @@ class globalHeader extends HTMLElement { // 定义全局导航栏组件
                     min-width: 0;
                     align-items: center;
                     justify-content: flex-end;
-                    gap: 32px;
+                    gap: 12px;
+                }
+                @media (max-width: 640px) {
+                    :host {
+                        gap: 12px;
+                        padding-inline: 14px !important;
+                    }
+                    slot {
+                        gap: 8px;
+                    }
                 }
             </style>
             <div id="logo-container">
-                <a href="/" class="logo">bench<span class="highlight">poll</span></a>
+                <a href="/" class="logo" aria-label="BenchPoll home">
+                    <span class="logo-art" aria-hidden="true">
+                        <img src="/assets/logo-archive/benchpoll-logo-approved-g-transparent.png" alt="" width="1774" height="887">
+                    </span>
+                </a>
             </div>
             <div class="header-slot">
                 <slot></slot>
@@ -210,6 +292,10 @@ class globalHeader extends HTMLElement { // 定义全局导航栏组件
 }
 
 class globalDialog extends HTMLElement { // 定义全局对话框组件
+    static get observedAttributes() {
+        return ['hidden'];
+    }
+
     constructor() {
         super();
         const shadow = this.attachShadow({ mode: 'open' });
@@ -235,9 +321,10 @@ class globalDialog extends HTMLElement { // 定义全局对话框组件
                     position: absolute;
                     inset: 0;
                     display: var(--dialog-overlay-display);
-                    background: color-mix(in srgb, var(--dialog-overlay-background) 68%, transparent);
-                    backdrop-filter: blur(1px);
+                    background: var(--dialog-overlay-background);
+                    backdrop-filter: var(--dialog-overlay-backdrop-filter);
                     pointer-events: auto;
+                    animation: dialog-overlay-in 180ms ease-out both;
                 }
                 .dialog-stage {
                     position: absolute;
@@ -249,6 +336,7 @@ class globalDialog extends HTMLElement { // 定义全局对话框组件
                     pointer-events: none;
                 }
                 .dialog-content {
+                    box-sizing: border-box;
                     width: fit-content;
                     min-width: min(var(--dialog-min-width, 240px), calc(100vw - 48px));
                     max-width: min(var(--dialog-width), calc(100vw - 48px));
@@ -257,18 +345,16 @@ class globalDialog extends HTMLElement { // 定义全局对话框组件
                     flex-direction: column;
                     gap: var(--dialog-gap);
                     padding: var(--dialog-padding);
-                    background:
-                        linear-gradient(180deg, rgba(59, 130, 246, 0.08) 0%, rgba(59, 130, 246, 0.02) 28%, transparent 100%),
-                        color-mix(in srgb, var(--dialog-background) 88%, var(--accent-color));
-                    border: 1px solid color-mix(in srgb, var(--dialog-border-color) 54%, var(--accent-color));
-                    border-radius: 0;
+                    background: var(--dialog-background);
+                    border: 1px solid var(--dialog-border-color);
+                    border-radius: var(--dialog-radius);
                     box-shadow:
                         var(--dialog-shadow),
-                        0 0 0 1px rgba(59, 130, 246, 0.14),
-                        0 12px 32px rgba(37, 99, 235, 0.12);
+                        inset 0 1px rgba(255, 255, 255, 0.92);
                     color: var(--text-primary);
                     pointer-events: auto;
                     overflow: auto;
+                    animation: dialog-content-in 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
                 }
                 .dialog-title {
                     display: flex;
@@ -276,16 +362,17 @@ class globalDialog extends HTMLElement { // 定义全局对话框组件
                     justify-content: flex-start;
                     min-height: 24px;
                     text-align: left;
-                    color: var(--text-primary);
+                    color: var(--dialog-title-color);
                     font-size: var(--dialog-title-size);
-                    font-weight: 600;
-                    letter-spacing: 0.2px;
+                    font-family: var(--font-display);
+                    font-weight: 700;
+                    letter-spacing: 0;
                 }
                 .dialog-body {
                     display: flex;
                     flex-direction: column;
                     gap: 12px;
-                    color: var(--text-secondary);
+                    color: var(--dialog-text-color);
                     font-size: var(--dialog-text-size);
                     line-height: 1.6;
                 }
@@ -306,7 +393,26 @@ class globalDialog extends HTMLElement { // 定义全局对话框组件
                     color: inherit;
                 }
                 ::slotted([slot="actions"]) {
+                    display: flex;
                     flex: 0 0 auto;
+                    align-items: center;
+                    justify-content: flex-end;
+                    gap: 10px;
+                    flex-wrap: wrap;
+                }
+                @keyframes dialog-overlay-in {
+                    from { opacity: 0; }
+                    to { opacity: 1; }
+                }
+                @keyframes dialog-content-in {
+                    from {
+                        opacity: 0;
+                        transform: translateY(8px) scale(0.985);
+                    }
+                    to {
+                        opacity: 1;
+                        transform: translateY(0) scale(1);
+                    }
                 }
                 @media (max-width: 640px) {
                     .dialog-stage {
@@ -321,6 +427,25 @@ class globalDialog extends HTMLElement { // 定义全局对话框组件
                     }
                     .dialog-actions {
                         gap: 8px;
+                    }
+                }
+                @media (max-width: 420px) {
+                    .dialog-content {
+                        width: calc(100vw - 32px);
+                    }
+                    .dialog-actions {
+                        align-items: stretch;
+                    }
+                    ::slotted([slot="actions"]) {
+                        width: 100%;
+                        align-items: stretch;
+                        flex-direction: column-reverse;
+                    }
+                }
+                @media (prefers-reduced-motion: reduce) {
+                    .dialog-overlay,
+                    .dialog-content {
+                        animation: none;
                     }
                 }
             </style>
@@ -343,6 +468,27 @@ class globalDialog extends HTMLElement { // 定义全局对话框组件
         `;
         shadow.appendChild(template.content.cloneNode(true));
     }
+
+    connectedCallback() {
+        if (!this.hidden) {
+            this.focusInitialAction();
+        }
+    }
+
+    attributeChangedCallback(name, oldValue, newValue) {
+        if (name === 'hidden' && oldValue !== newValue && !this.hidden) {
+            this.focusInitialAction();
+        }
+    }
+
+    focusInitialAction() {
+        requestAnimationFrame(() => {
+            const actions = [...this.querySelectorAll('global-dialog-action')]
+                .filter(action => !action.hidden && !action.hasAttribute('disabled'));
+            const preferredAction = actions.find(action => action.classList.contains('main')) ?? actions[0];
+            preferredAction?.focus();
+        });
+    }
 }
 
 class globalDialogAction extends HTMLElement { // 定义全局对话框操作按钮组件
@@ -357,29 +503,29 @@ class globalDialogAction extends HTMLElement { // 定义全局对话框操作按
         template.innerHTML = `
             <style>
                 :host {
-                    --button-color: var(--text-secondary);
-                    --button-background: transparent;
-                    --button-border-color: var(--border-color);
-                    --button-hover-background: var(--bg-hover);
-                    --button-hover-color: var(--text-primary);
-                    --button-hover-border-color: var(--text-secondary);
+                    --button-color: #263153;
+                    --button-background: #ffffff;
+                    --button-border-color: #dfe2ec;
+                    --button-hover-background: #f7f7fc;
+                    --button-hover-color: #111a3d;
+                    --button-hover-border-color: #c9cde0;
                     display: inline-flex;
                 }
                 :host([accent]) {
-                    --button-color: var(--accent-color);
-                    --button-background: rgba(59, 130, 246, 0.12);
-                    --button-border-color: rgba(59, 130, 246, 0.45);
-                    --button-hover-background: rgba(59, 130, 246, 0.18);
-                    --button-hover-color: #dbeafe;
-                    --button-hover-border-color: var(--accent-color);
+                    --button-color: #5949ce;
+                    --button-background: #f3f1ff;
+                    --button-border-color: #dcd7fa;
+                    --button-hover-background: #ebe7ff;
+                    --button-hover-color: #4c3dc2;
+                    --button-hover-border-color: #c9c1f5;
                 }
                 :host([danger]) {
-                    --button-color: var(--text-danger);
-                    --button-background: rgba(239, 68, 68, 0.1);
-                    --button-border-color: rgba(239, 68, 68, 0.35);
-                    --button-hover-background: rgba(239, 68, 68, 0.16);
-                    --button-hover-color: #fecaca;
-                    --button-hover-border-color: var(--text-danger);
+                    --button-color: #b34e57;
+                    --button-background: #fff1f2;
+                    --button-border-color: #eed0d3;
+                    --button-hover-background: #ffe8ea;
+                    --button-hover-color: #a13f48;
+                    --button-hover-border-color: #e3b8bc;
                 }
                 :host([disabled]) {
                     opacity: 0.5;
@@ -389,12 +535,12 @@ class globalDialogAction extends HTMLElement { // 定义全局对话框操作按
                     min-height: var(--dialog-button-height);
                     padding: 0 var(--dialog-button-padding-inline);
                     border: 1px solid var(--button-border-color);
-                    border-radius: 0;
+                    border-radius: 8px;
                     background-color: var(--button-background);
                     color: var(--button-color);
                     font-family: var(--font-sans);
                     font-size: 13px;
-                    font-weight: 500;
+                    font-weight: 650;
                     line-height: 1;
                     display: inline-flex;
                     align-items: center;
@@ -402,7 +548,8 @@ class globalDialogAction extends HTMLElement { // 定义全局对话框操作按
                     gap: 8px;
                     cursor: pointer;
                     user-select: none;
-                    transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+                    box-shadow: inset 0 1px rgba(255, 255, 255, 0.92), 0 2px 5px rgba(25, 32, 64, 0.055);
+                    transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease, box-shadow 180ms ease;
                 }
                 #button:disabled {
                     cursor: default;
@@ -411,11 +558,21 @@ class globalDialogAction extends HTMLElement { // 定义全局对话框操作按
                     background-color: var(--button-hover-background);
                     color: var(--button-hover-color);
                     border-color: var(--button-hover-border-color);
+                    box-shadow: inset 0 1px rgba(255, 255, 255, 0.94), 0 5px 12px rgba(35, 41, 77, 0.08);
+                }
+                #button:active:not(:disabled) {
+                    box-shadow: inset 0 1px 3px rgba(35, 41, 77, 0.1);
                 }
                 #button:focus-visible {
                     outline: none;
-                    border-color: var(--accent-color);
-                    box-shadow: 0 0 0 1px var(--accent-color) inset;
+                    border-color: #7b6cee;
+                    box-shadow: 0 0 0 3px rgba(109, 92, 231, 0.16);
+                }
+                @media (max-width: 420px) {
+                    :host,
+                    #button {
+                        width: 100%;
+                    }
                 }
             </style>
             <button id="button" part="button" type="button"><slot></slot></button>
@@ -441,6 +598,95 @@ class globalDialogAction extends HTMLElement { // 定义全局对话框操作按
         }
         button.disabled = this.hasAttribute('disabled');
     }
+
+    focus(options) {
+        this.shadowRoot?.getElementById('button')?.focus(options);
+    }
+}
+
+export function showDialog({
+    title,
+    message = '',
+    confirmLabel = 'OK',
+    cancelLabel = null,
+    tone = 'default'
+}) {
+    return new Promise(resolve => {
+        const previousFocus = document.activeElement;
+        const dialog = document.createElement('global-dialog');
+        dialog.className = 'global-system-dialog';
+        dialog.hidden = true;
+
+        const titleElement = document.createElement('div');
+        titleElement.slot = 'title';
+        titleElement.textContent = title;
+
+        const bodyElement = document.createElement('div');
+        bodyElement.slot = 'body';
+        bodyElement.textContent = message;
+
+        const actionsElement = document.createElement('div');
+        actionsElement.slot = 'actions';
+
+        let settled = false;
+        const finish = value => {
+            if (settled) {
+                return;
+            }
+            settled = true;
+            document.removeEventListener('keydown', handleKeydown);
+            dialog.remove();
+            if (previousFocus instanceof HTMLElement && previousFocus.isConnected) {
+                previousFocus.focus();
+            }
+            resolve(value);
+        };
+        const handleKeydown = event => {
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                finish(false);
+            }
+        };
+
+        if (cancelLabel) {
+            const cancelAction = document.createElement('global-dialog-action');
+            cancelAction.textContent = cancelLabel;
+            cancelAction.addEventListener('click', () => finish(false));
+            actionsElement.append(cancelAction);
+        }
+
+        const confirmAction = document.createElement('global-dialog-action');
+        confirmAction.className = tone === 'danger' ? 'danger' : 'main';
+        confirmAction.textContent = confirmLabel;
+        confirmAction.addEventListener('click', () => finish(true));
+        actionsElement.append(confirmAction);
+
+        dialog.append(titleElement, bodyElement, actionsElement);
+        document.body.append(dialog);
+        document.addEventListener('keydown', handleKeydown);
+        requestAnimationFrame(() => {
+            dialog.hidden = false;
+        });
+    });
+}
+
+export function showAlert(message, options = {}) {
+    return showDialog({
+        title: options.title ?? 'BenchPoll',
+        message,
+        confirmLabel: options.confirmLabel ?? 'OK',
+        tone: options.tone ?? 'default'
+    });
+}
+
+export function showConfirm(message, options = {}) {
+    return showDialog({
+        title: options.title ?? 'Confirm action',
+        message,
+        confirmLabel: options.confirmLabel ?? 'Confirm',
+        cancelLabel: options.cancelLabel ?? 'Cancel',
+        tone: options.tone ?? 'default'
+    });
 }
 
 customElements.define('global-header', globalHeader);

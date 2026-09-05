@@ -3,145 +3,188 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Contribute - benchpoll</title>
+    <title>Contribute - BenchPoll</title>
+    <link rel="icon" href="/favicon.ico?v=benchpoll-g-3" sizes="any">
+    <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png?v=benchpoll-g-3">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="/css/global.css">
-    <link rel="stylesheet" href="/css/contribute.css">
-    <script src="/js/contribute.js" type="module"></script>
+    <link rel="stylesheet" href="/css/home-v2.css?v=20260905-inline-fallback-1">
+    <link rel="stylesheet" href="/css/contribute.css?v=20260905-picker-validation-1">
+    <script src="/js/contribute.js?v=20260905-picker-validation-2" type="module"></script>
 </head>
-<body>
+<body class="bp-home bp-contribute">
     <global-dialog id="submit-success-dialog" hidden>
         <div slot="title">Submission received</div>
-        <div slot="body">Your contribution is now waiting for review.</div>
+        <div slot="body">Your contribution is waiting for review. We’ll email the verified address from your GitHub account when the review is complete.</div>
         <div slot="actions">
-            <global-dialog-action class="dialog-close-button main">OK</global-dialog-action>
+            <global-dialog-action class="dialog-close-button main">Done</global-dialog-action>
         </div>
     </global-dialog>
     <global-dialog id="submit-error-dialog" hidden>
         <div slot="title">Submission failed</div>
-        <div slot="body">Please check the highlighted fields and try again.</div>
+        <div id="submit-error-copy" slot="body">Check the highlighted details and try again.</div>
         <div slot="actions">
-            <global-dialog-action class="dialog-close-button main">OK</global-dialog-action>
+            <global-dialog-action class="dialog-close-button main">Close</global-dialog-action>
+        </div>
+    </global-dialog>
+    <global-dialog id="contribution-notice-dialog" hidden>
+        <div id="contribution-notice-title" slot="title">This item is locked</div>
+        <div id="contribution-notice-copy" slot="body"></div>
+        <div slot="actions">
+            <global-dialog-action class="dialog-close-button main">Got it</global-dialog-action>
+        </div>
+    </global-dialog>
+    <global-dialog id="contribution-account-dialog" class="bp-account-dialog" hidden>
+        <div slot="title">Your account</div>
+        <div slot="body" class="bp-account-dialog-body">
+            <div class="bp-account-summary">
+                <span id="contribution-account-picture" class="bp-account-dialog-picture" aria-hidden="true"></span>
+                <span class="bp-account-copy">
+                    <strong id="contribution-account-name"></strong>
+                    <small>Signed in with GitHub</small>
+                </span>
+            </div>
+            <div class="bp-account-operations">
+                <button id="contribution-account-logout" class="bp-account-action" type="button">
+                    <i class="fa-solid fa-arrow-right-from-bracket" aria-hidden="true"></i>
+                    <span>Log out</span>
+                </button>
+                <button id="contribution-account-delete" class="bp-account-action danger" type="button">
+                    <i class="fa-solid fa-user-xmark" aria-hidden="true"></i>
+                    <span>Delete account</span>
+                </button>
+            </div>
+        </div>
+        <div slot="actions">
+            <global-dialog-action class="dialog-close-button">Close</global-dialog-action>
+        </div>
+    </global-dialog>
+    <global-dialog id="contribution-logout-confirm-dialog" hidden>
+        <div slot="title">Log out of BenchPoll?</div>
+        <div slot="body">This will end the current session on this device.</div>
+        <div slot="actions">
+            <global-dialog-action class="dialog-close-button">Cancel</global-dialog-action>
+            <global-dialog-action id="contribution-logout-confirm" class="main">Log out</global-dialog-action>
+        </div>
+    </global-dialog>
+    <global-dialog id="contribution-delete-confirm-dialog" hidden>
+        <div slot="title">Delete your BenchPoll account?</div>
+        <div slot="body">This action cannot be undone.</div>
+        <div slot="actions">
+            <global-dialog-action class="dialog-close-button">Cancel</global-dialog-action>
+            <global-dialog-action id="contribution-delete-confirm" class="danger">Delete</global-dialog-action>
         </div>
     </global-dialog>
 
-    <global-header>
-        <a class="header-link" href="/">Rankings</a>
-    </global-header>
+    <div class="bp-shell">
+        <aside class="bp-sidebar contribution-sidebar" aria-label="Benchmark taxonomy">
+            <a class="bp-brand" href="/" aria-label="BenchPoll home">
+                <span class="bp-brand-art" aria-hidden="true">
+                    <img src="/assets/logo-archive/benchpoll-logo-approved-g-transparent.png" alt="" width="1774" height="887">
+                </span>
+            </a>
+            <button id="contribution-taxonomy-toggle" class="bp-taxonomy-toggle" type="button" aria-label="Open categories" aria-expanded="false">
+                <i class="fa-solid fa-bars" aria-hidden="true"></i>
+            </button>
+            <button id="contribution-taxonomy-close" class="bp-taxonomy-close" type="button" aria-label="Close categories">
+                <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+            </button>
 
-    <main class="contribute-page">
-        <section class="contribute-header">
-            <div>
-                <p class="eyebrow">CONTRIBUTE</p>
-                <h1>Improve benchpoll</h1>
+            <div class="contribution-tree-heading">
+                <span>Categories</span>
+                <small id="tree-mode-note">Reference only</small>
             </div>
-            <div class="mode-tabs" role="tablist" aria-label="Contribution type">
-                <button class="mode-tab selected" type="button" data-form-target="issue-form">
-                    <i class="fa-solid fa-flag"></i>
-                    <span>Report Issue</span>
-                </button>
-                <button class="mode-tab" type="button" data-form-target="evaluation-item-form">
-                    <i class="fa-solid fa-plus"></i>
-                    <span>New Evaluation Item</span>
-                </button>
-            </div>
-        </section>
+            <nav id="contribution-tree" class="bp-taxonomy contribution-tree" aria-label="Categories" aria-disabled="true">
+                <div class="tree-loading">Loading categories...</div>
+            </nav>
+            <section id="contribution-template-picker" class="contribution-template-picker" hidden aria-live="polite"></section>
 
-        <section class="form-surface">
-            <form id="issue-form" class="contribution-form" data-contribution-type="report_issue">
-                <div class="form-grid">
-                    <label class="field">
-                        <span>Issue Type</span>
-                        <select name="issueType" required>
-                            <option value="incorrect_info">Incorrect information</option>
-                            <option value="missing_source">Missing source</option>
-                            <option value="broken_link">Broken link</option>
-                            <option value="duplicate">Duplicate entry</option>
-                            <option value="other">Other</option>
-                        </select>
-                    </label>
-                    <label class="field">
-                        <span>Affected Item</span>
-                        <input name="targetName" type="text" maxlength="128" required>
-                    </label>
-                    <label class="field">
-                        <span>Page URL</span>
-                        <input name="pageURL" type="url" maxlength="512" placeholder="https://">
-                    </label>
-                    <label class="field">
-                        <span>Source URL</span>
-                        <input name="sourceURL" type="url" maxlength="512" placeholder="https://">
-                    </label>
-                    <label class="field wide">
-                        <span>Details</span>
-                        <textarea name="details" maxlength="2000" required></textarea>
-                    </label>
+            <div class="bp-sidebar-actions contribution-sidebar-actions">
+                <a class="bp-sidebar-action" href="/">
+                    <i class="fa-solid fa-arrow-left" aria-hidden="true"></i>
+                    <span>Back to workspace</span>
+                </a>
+                <button id="contribution-help" class="bp-sidebar-action" type="button">
+                    <i class="fa-regular fa-circle-question" aria-hidden="true"></i>
+                    <span>Contribution guide</span>
+                </button>
+                <a class="bp-sidebar-action" href="/contribute?mode=feedback">
+                    <i class="fa-regular fa-message" aria-hidden="true"></i>
+                    <span>Send feedback</span>
+                </a>
+            </div>
+
+            <div class="bp-sidebar-account contribution-account">
+                <button id="contribution-user" class="bp-user-profile" type="button" hidden aria-haspopup="dialog" aria-controls="contribution-account-dialog">
+                    <span id="contribution-user-picture" aria-hidden="true"></span>
+                    <span id="contribution-user-name"></span>
+                </button>
+                <button id="contribution-login" class="bp-login-button" type="button" hidden>
+                    <i class="fa-brands fa-github" aria-hidden="true"></i>
+                    <span>Login with GitHub</span>
+                </button>
+            </div>
+        </aside>
+        <button id="contribution-taxonomy-scrim" class="bp-taxonomy-scrim" type="button" aria-label="Close categories"></button>
+
+        <main class="contribution-workspace">
+            <header class="contribution-topbar">
+                <div class="contribution-heading-copy">
+                    <nav class="contribution-breadcrumb" aria-label="Breadcrumb">
+                        <a href="/">Contribute</a>
+                        <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
+                        <span id="contribute-breadcrumb-label">Contribution</span>
+                    </nav>
+                    <h1 id="contribute-title">Improve BenchPoll</h1>
+                    <p id="contribute-subtitle">Add evidence that can be reviewed and reproduced.</p>
                 </div>
-                <div class="form-actions">
-                    <button class="submit-button" type="submit">
-                        <i class="fa-solid fa-paper-plane"></i>
-                        <span>Submit Report</span>
+                <button id="contribution-page-help" class="quiet-button contribution-help-button" type="button">
+                    <i class="fa-regular fa-circle-question" aria-hidden="true"></i>
+                    <span>How contribution works</span>
+                </button>
+            </header>
+
+            <section id="entry-missing" class="contribution-message" hidden>
+                <i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i>
+                <div>
+                    <h2>Open a contribution entry point</h2>
+                    <p>Start from a category, benchmark, or model leaderboard so the right context is attached.</p>
+                    <a class="primary-button" href="/">Return to BenchPoll</a>
+                </div>
+            </section>
+
+            <section id="auth-missing" class="contribution-message" hidden>
+                <i class="fa-solid fa-lock" aria-hidden="true"></i>
+                <div>
+                    <h2>Log in to contribute</h2>
+                    <p>Your draft stays in this page. Sign in with GitHub to submit it for review.</p>
+                    <button id="auth-login-button" class="primary-button" type="button">
+                        <i class="fa-brands fa-github" aria-hidden="true"></i>
+                        <span>Login with GitHub</span>
                     </button>
                 </div>
-            </form>
+            </section>
 
-            <form id="evaluation-item-form" class="contribution-form" data-contribution-type="new_benchmark" hidden>
-                <div class="form-grid">
-                    <label class="field">
-                        <span>Evaluation Item Name</span>
-                        <input name="name" type="text" maxlength="128" required>
-                    </label>
-                    <label class="field">
-                        <span>Evaluation Item URL</span>
-                        <input name="url" type="url" maxlength="512" placeholder="https://">
-                    </label>
-                    <label class="field">
-                        <span>Input</span>
-                        <select name="inputModality">
-                            <option value="">Unknown</option>
-                            <option value="text">Text</option>
-                            <option value="image">Image</option>
-                            <option value="audio">Audio</option>
-                            <option value="video">Video</option>
-                            <option value="mixed">Mixed</option>
-                            <option value="action">Action</option>
-                            <option value="other">Other</option>
-                        </select>
-                    </label>
-                    <label class="field">
-                        <span>Output</span>
-                        <select name="outputModality">
-                            <option value="">Unknown</option>
-                            <option value="text">Text</option>
-                            <option value="image">Image</option>
-                            <option value="audio">Audio</option>
-                            <option value="video">Video</option>
-                            <option value="mixed">Mixed</option>
-                            <option value="action">Action</option>
-                            <option value="other">Other</option>
-                        </select>
-                    </label>
-                    <label class="field wide">
-                        <span>Suggested Category Path</span>
-                        <input name="categoryPath" type="text" maxlength="512">
-                    </label>
-                    <label class="field checkbox-field wide">
-                        <input name="isRealtime" type="checkbox">
-                        <span>Realtime evaluation</span>
-                    </label>
-                    <label class="field wide">
-                        <span>Evidence or Notes</span>
-                        <textarea name="details" maxlength="2000" required></textarea>
-                    </label>
-                </div>
-                <div class="form-actions">
-                    <button class="submit-button" type="submit">
-                        <i class="fa-solid fa-paper-plane"></i>
-                        <span>Submit Evaluation Item</span>
-                    </button>
-                </div>
-            </form>
-        </section>
-    </main>
+            <section id="form-surface" class="contribution-surface" hidden>
+                <form id="contribution-form" novalidate>
+                    <section id="contribution-step" class="contribution-step" aria-live="polite"></section>
+                    <aside class="submission-email-notice">
+                        <i class="fa-regular fa-envelope" aria-hidden="true"></i>
+                        <span>We’ll email the verified address from your GitHub account when the review is complete.</span>
+                    </aside>
+                    <footer class="contribution-navigation">
+                        <button id="submit-contribution" class="primary-button" type="submit">
+                            <span>Submit contribution</span>
+                            <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+                        </button>
+                    </footer>
+                </form>
+            </section>
+        </main>
+    </div>
+
+    <datalist id="known-tag-options"></datalist>
+    <datalist id="evaluation-name-options"></datalist>
+    <template id="empty-template"></template>
 </body>
 </html>

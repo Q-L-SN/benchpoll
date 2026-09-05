@@ -1,31 +1,398 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="censor-page-html">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Moderation - benchpoll</title>
+    <title>Moderation - BenchPoll</title>
+    <link rel="icon" href="/favicon.ico?v=benchpoll-g-2" sizes="any">
+    <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png?v=benchpoll-g-2">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="/css/global.css" />
-    <link rel="stylesheet" href="/css/censor.css" />
-    <script src="/js/censor.js" type="module"></script>
+    <link rel="stylesheet" href="/css/censor.css?v=20260826-senior-tools-2" />
+    <script src="/js/censor.js?v=20260827-email-notifications-1" type="module"></script>
 </head>
-<body>
+<body class="censor-page-body">
     <global-header>
-        <a class="header-link" href="/">Rankings</a>
-        <a class="header-link" href="/contribute">Contribute</a>
+        <a class="header-link" href="/">
+            <i class="fa-solid fa-list-ol"></i>
+            <span>Rankings</span>
+        </a>
+        <a class="header-link" href="/contribute?mode=new_benchmark">
+            <i class="fa-solid fa-file-pen"></i>
+            <span>Contribute</span>
+        </a>
     </global-header>
     <main class="censor-page">
         <section class="censor-header">
             <div>
-                <p class="eyebrow">MODERATION</p>
-                <h1>Contribution Queue</h1>
+                <p class="eyebrow">Moderation</p>
+                <h1>Moderation Workspace</h1>
+                <p class="censor-intro">Review contributions, inspect live catalog records, and trace every moderation decision.</p>
             </div>
-            <select id="status-filter">
-                <option value="pending">Pending</option>
-                <option value="approved">Approved</option>
-                <option value="rejected">Rejected</option>
-            </select>
+            <div class="censor-header-controls">
+                <button id="compose-message-button" class="toolbar-button" type="button">
+                    <i class="fa-regular fa-message" aria-hidden="true"></i>
+                    <span>Message senior reviewers</span>
+                </button>
+            </div>
         </section>
-        <section id="log-list" class="log-list"></section>
+
+        <nav class="workspace-tabs" aria-label="Moderation workspace views" role="tablist">
+            <button id="queue-tab" class="workspace-tab active" type="button" role="tab" aria-selected="true" aria-controls="queue-view" data-workspace-view="queue">
+                <i class="fa-solid fa-inbox" aria-hidden="true"></i>
+                <span>Review Queue</span>
+            </button>
+            <button id="explorer-tab" class="workspace-tab" type="button" role="tab" aria-selected="false" aria-controls="explorer-view" data-workspace-view="explorer">
+                <i class="fa-solid fa-database" aria-hidden="true"></i>
+                <span>Data Explorer</span>
+            </button>
+            <button id="audit-tab" class="workspace-tab" type="button" role="tab" aria-selected="false" aria-controls="audit-view" data-workspace-view="audit">
+                <i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i>
+                <span>Audit Log</span>
+            </button>
+            <button id="messages-tab" class="workspace-tab" type="button" role="tab" aria-selected="false" aria-controls="messages-view" data-workspace-view="messages" hidden>
+                <i class="fa-regular fa-message" aria-hidden="true"></i>
+                <span>Senior Messages</span>
+                <span id="message-unread-count" class="tab-count" hidden></span>
+            </button>
+        </nav>
+
+        <section id="queue-view" class="workspace-view" role="tabpanel" aria-labelledby="queue-tab">
+            <div class="workspace-toolbar queue-toolbar">
+                <div>
+                    <h2>Contribution queue</h2>
+                    <p>Approval and rejection are committed with an immutable audit record.</p>
+                </div>
+                <label class="toolbar-field compact-field">
+                    <span>Status</span>
+                    <select id="status-filter" aria-label="Moderation status">
+                        <option value="pending">Pending</option>
+                        <option value="escalated">Escalated</option>
+                        <option value="approved">Approved</option>
+                        <option value="rejected">Rejected</option>
+                    </select>
+                </label>
+            </div>
+            <section id="log-list" class="log-list" aria-live="polite"></section>
+        </section>
+
+        <section id="explorer-view" class="workspace-view" role="tabpanel" aria-labelledby="explorer-tab" hidden>
+            <div class="workspace-toolbar explorer-toolbar">
+                <div class="toolbar-heading">
+                    <div id="explorer-access-mark" class="readonly-mark" title="Read-only data access">
+                        <i class="fa-solid fa-lock" aria-hidden="true"></i>
+                    </div>
+                    <div>
+                        <h2>Live data explorer</h2>
+                        <p>Inspect approved business objects without exposing arbitrary database access.</p>
+                    </div>
+                </div>
+                <form id="explorer-filter" class="toolbar-form">
+                    <label class="toolbar-field">
+                        <span>Object type</span>
+                        <select id="explorer-entity" aria-label="Data object type">
+                            <option value="benchmarks">Benchmarks</option>
+                        </select>
+                    </label>
+                    <label class="toolbar-field search-field">
+                        <span>Search</span>
+                        <input id="explorer-search" type="search" maxlength="160" placeholder="Name, ID, or related object...">
+                    </label>
+                    <button class="toolbar-button" type="submit" title="Search data">
+                        <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+                        <span>Search</span>
+                    </button>
+                    <button id="explorer-add" class="toolbar-button senior-action" type="button" title="Add a record" hidden>
+                        <i class="fa-solid fa-plus" aria-hidden="true"></i>
+                        <span>Add</span>
+                    </button>
+                </form>
+            </div>
+            <div class="table-meta">
+                <span id="explorer-summary">Loading records...</span>
+                <span id="explorer-access-label">Read only</span>
+            </div>
+            <div class="admin-table-shell">
+                <table class="admin-table">
+                    <thead id="explorer-head"></thead>
+                    <tbody id="explorer-body"></tbody>
+                </table>
+            </div>
+            <div class="table-pagination" aria-label="Data explorer pagination">
+                <button id="explorer-prev" class="icon-page-button" type="button" title="Previous page" aria-label="Previous page">
+                    <i class="fa-solid fa-arrow-left" aria-hidden="true"></i>
+                </button>
+                <span id="explorer-page">Page 1 of 1</span>
+                <button id="explorer-next" class="icon-page-button" type="button" title="Next page" aria-label="Next page">
+                    <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+                </button>
+            </div>
+        </section>
+
+        <section id="audit-view" class="workspace-view" role="tabpanel" aria-labelledby="audit-tab" hidden>
+            <div class="workspace-toolbar audit-toolbar">
+                <div class="toolbar-heading">
+                    <div class="readonly-mark" title="Immutable audit history">
+                        <i class="fa-solid fa-shield-halved" aria-hidden="true"></i>
+                    </div>
+                    <div>
+                        <h2>Moderation audit log</h2>
+                        <p>Reviewer identity, request snapshots, executed SQL, and database responses.</p>
+                    </div>
+                </div>
+                <form id="audit-filter" class="toolbar-form">
+                    <label class="toolbar-field compact-field">
+                        <span>Action</span>
+                        <select id="audit-action" aria-label="Audit action">
+                            <option value="">All actions</option>
+                            <option value="approve">Approve</option>
+                            <option value="edit_and_approve">Edit &amp; approve</option>
+                            <option value="reject">Reject</option>
+                            <option value="escalate">Escalate</option>
+                            <option value="direct_create">Direct create</option>
+                            <option value="direct_update">Direct update</option>
+                            <option value="direct_delete">Direct delete</option>
+                            <option value="admin_message">Admin message</option>
+                        </select>
+                    </label>
+                    <label class="toolbar-field audit-id-field">
+                        <span>Contribution ID</span>
+                        <input id="audit-log-id" type="number" min="1" step="1" placeholder="Any">
+                    </label>
+                    <label class="toolbar-field search-field">
+                        <span>Search</span>
+                        <input id="audit-search" type="search" maxlength="160" placeholder="Reviewer, type, or summary...">
+                    </label>
+                    <button class="toolbar-button" type="submit" title="Filter audit log">
+                        <i class="fa-solid fa-filter" aria-hidden="true"></i>
+                        <span>Filter</span>
+                    </button>
+                </form>
+            </div>
+            <div class="table-meta">
+                <span id="audit-summary">Loading audit records...</span>
+                <span>Newest first</span>
+            </div>
+            <div class="admin-table-shell">
+                <table class="admin-table audit-table">
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Reviewer</th>
+                            <th>Action</th>
+                            <th>Subject</th>
+                            <th>Status</th>
+                            <th>Duration</th>
+                            <th><span class="visually-hidden">Inspect</span></th>
+                        </tr>
+                    </thead>
+                    <tbody id="audit-body"></tbody>
+                </table>
+            </div>
+            <div class="table-pagination" aria-label="Audit log pagination">
+                <button id="audit-prev" class="icon-page-button" type="button" title="Previous page" aria-label="Previous page">
+                    <i class="fa-solid fa-arrow-left" aria-hidden="true"></i>
+                </button>
+                <span id="audit-page">Page 1 of 1</span>
+                <button id="audit-next" class="icon-page-button" type="button" title="Next page" aria-label="Next page">
+                    <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+                </button>
+            </div>
+        </section>
+
+        <section id="messages-view" class="workspace-view" role="tabpanel" aria-labelledby="messages-tab" hidden>
+            <div class="workspace-toolbar">
+                <div class="toolbar-heading">
+                    <div class="readonly-mark" title="Senior reviewer inbox">
+                        <i class="fa-regular fa-message" aria-hidden="true"></i>
+                    </div>
+                    <div>
+                        <h2>Senior reviewer messages</h2>
+                        <p>Internal notes sent by moderators for decisions that are not tied to one contribution.</p>
+                    </div>
+                </div>
+                <button id="messages-refresh" class="toolbar-button" type="button">
+                    <i class="fa-solid fa-rotate" aria-hidden="true"></i>
+                    <span>Refresh</span>
+                </button>
+            </div>
+            <div id="message-list" class="message-list" aria-live="polite"></div>
+        </section>
     </main>
+
+    <div id="editor-overlay" class="moderation-overlay" hidden>
+        <section class="moderation-panel editor-panel" role="dialog" aria-modal="true" aria-labelledby="editor-title">
+            <header class="moderation-panel-header">
+                <div>
+                    <p class="eyebrow">Edit and apply</p>
+                    <h2 id="editor-title">Edit request</h2>
+                </div>
+                <button class="panel-close" type="button" data-close-overlay="editor-overlay" aria-label="Close editor">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </header>
+            <form id="request-editor">
+                <label class="editor-field">
+                    <span>Request Type</span>
+                    <select id="editor-type" name="type" disabled aria-describedby="editor-type-lock-note">
+                        <option value="new_benchmark">New Benchmark</option>
+                        <option value="new_model">New Model</option>
+                        <option value="new_category">New Category</option>
+                        <option value="benchmark_result">Benchmark Result</option>
+                        <option value="report_issue">Report Issue</option>
+                        <option value="feedback">Feedback</option>
+                    </select>
+                    <small id="editor-type-lock-note">The request type is fixed after submission.</small>
+                </label>
+                <div id="editor-fields" class="editor-fields"></div>
+                <div class="panel-actions">
+                    <button id="editor-preview" class="action-button preview" type="button">
+                        <i class="fa-solid fa-code"></i>
+                        <span>Preview SQL</span>
+                    </button>
+                    <button class="action-button" type="button" data-close-overlay="editor-overlay">Cancel</button>
+                    <button class="action-button approve" type="submit">
+                        <i class="fa-solid fa-wand-magic-sparkles"></i>
+                        <span>Apply Edited Request</span>
+                    </button>
+                </div>
+            </form>
+        </section>
+    </div>
+
+    <div id="escalate-overlay" class="moderation-overlay" hidden>
+        <section class="moderation-panel compact-panel" role="dialog" aria-modal="true" aria-labelledby="escalate-title">
+            <header class="moderation-panel-header">
+                <div>
+                    <p class="eyebrow">Escalate</p>
+                    <h2 id="escalate-title">Send to a superior</h2>
+                </div>
+                <button class="panel-close" type="button" data-close-overlay="escalate-overlay" aria-label="Close escalation panel">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </header>
+            <form id="escalate-form">
+                <label class="editor-field">
+                    <span>Moderator Opinion</span>
+                    <textarea id="escalate-note" maxlength="2000" required placeholder="Explain what needs a superior decision."></textarea>
+                </label>
+                <div class="panel-actions">
+                    <button class="action-button" type="button" data-close-overlay="escalate-overlay">Cancel</button>
+                    <button class="action-button escalate" type="submit">
+                        <i class="fa-solid fa-arrow-up-right-dots"></i>
+                        <span>Escalate Request</span>
+                    </button>
+                </div>
+            </form>
+        </section>
+    </div>
+
+    <div id="sql-overlay" class="moderation-overlay" hidden>
+        <section class="moderation-panel sql-panel" role="dialog" aria-modal="true" aria-labelledby="sql-title">
+            <header class="moderation-panel-header">
+                <div>
+                    <p class="eyebrow">Approval effect</p>
+                    <h2 id="sql-title">SQL preview</h2>
+                </div>
+                <button class="panel-close" type="button" data-close-overlay="sql-overlay" aria-label="Close SQL preview">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </header>
+            <pre id="sql-preview"></pre>
+            <div class="panel-actions">
+                <button class="action-button" type="button" data-close-overlay="sql-overlay">Close</button>
+            </div>
+        </section>
+    </div>
+
+    <div id="record-overlay" class="moderation-overlay" hidden>
+        <section class="moderation-panel record-panel" role="dialog" aria-modal="true" aria-labelledby="record-title">
+            <header class="moderation-panel-header">
+                <div>
+                    <p id="record-eyebrow" class="eyebrow">Data explorer</p>
+                    <h2 id="record-title">Record details</h2>
+                </div>
+                <button class="panel-close" type="button" data-close-overlay="record-overlay" aria-label="Close record details">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </header>
+            <div id="record-details" class="record-details"></div>
+            <div class="panel-actions">
+                <button id="record-delete" class="action-button reject senior-action" type="button" hidden>
+                    <i class="fa-regular fa-trash-can" aria-hidden="true"></i>
+                    <span>Delete</span>
+                </button>
+                <button id="record-edit" class="action-button edit senior-action" type="button" hidden>
+                    <i class="fa-regular fa-pen-to-square" aria-hidden="true"></i>
+                    <span>Edit</span>
+                </button>
+                <button class="action-button" type="button" data-close-overlay="record-overlay">Close</button>
+            </div>
+        </section>
+    </div>
+
+    <div id="message-compose-overlay" class="moderation-overlay" hidden>
+        <section class="moderation-panel compact-panel" role="dialog" aria-modal="true" aria-labelledby="message-compose-title">
+            <header class="moderation-panel-header">
+                <div>
+                    <p class="eyebrow">Internal message</p>
+                    <h2 id="message-compose-title">Message senior reviewers</h2>
+                    <p class="panel-meta">This message is visible to every senior reviewer and is recorded in the audit log.</p>
+                </div>
+                <button class="panel-close" type="button" data-close-overlay="message-compose-overlay" aria-label="Close message composer">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </header>
+            <form id="message-compose-form">
+                <label class="editor-field">
+                    <span>Message</span>
+                    <textarea id="message-compose-body" maxlength="4000" required placeholder="Explain the question, decision, or follow-up needed."></textarea>
+                </label>
+                <div class="panel-actions">
+                    <button class="action-button" type="button" data-close-overlay="message-compose-overlay">Cancel</button>
+                    <button class="action-button approve" type="submit">
+                        <i class="fa-regular fa-paper-plane" aria-hidden="true"></i>
+                        <span>Send message</span>
+                    </button>
+                </div>
+            </form>
+        </section>
+    </div>
+
+    <div id="audit-overlay" class="moderation-overlay" hidden>
+        <section class="moderation-panel audit-panel" role="dialog" aria-modal="true" aria-labelledby="audit-detail-title">
+            <header class="moderation-panel-header">
+                <div>
+                    <p class="eyebrow">Immutable moderation record</p>
+                    <h2 id="audit-detail-title">Audit details</h2>
+                    <p id="audit-detail-meta" class="panel-meta"></p>
+                </div>
+                <button class="panel-close" type="button" data-close-overlay="audit-overlay" aria-label="Close audit details">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </header>
+            <div class="audit-detail-sections">
+                <section>
+                    <h3>Request before</h3>
+                    <pre id="audit-request-before"></pre>
+                </section>
+                <section>
+                    <h3>Request after</h3>
+                    <pre id="audit-request-after"></pre>
+                </section>
+                <section class="wide-audit-section">
+                    <h3>Executed SQL</h3>
+                    <pre id="audit-sql"></pre>
+                </section>
+                <section class="wide-audit-section">
+                    <h3>Database response</h3>
+                    <pre id="audit-response"></pre>
+                </section>
+            </div>
+            <div class="panel-actions">
+                <button class="action-button" type="button" data-close-overlay="audit-overlay">Close</button>
+            </div>
+        </section>
+    </div>
 </body>
 </html>

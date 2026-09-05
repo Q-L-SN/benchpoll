@@ -2,9 +2,12 @@ node_modules/
 dist/
 build/
 *.log
+.tmp-*.png
 .env
 .env.*
 AGENTS.local.md
 db-credentials.local.md
+data/backups/
+github-contribution-secret.local
 server.key
 server.crt

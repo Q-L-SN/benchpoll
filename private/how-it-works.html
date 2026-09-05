@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Learn how BenchPoll turns personal benchmark priorities into public weights and uncertainty-aware AI model rankings.">
+    <title>How BenchPoll works</title>
+    <link rel="icon" href="/favicon.ico?v=benchpoll-g-2" sizes="any">
+    <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png?v=benchpoll-g-2">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="/css/global.css">
+    <link rel="stylesheet" href="/css/home-v2.css?v=20260901-condition-labels-2">
+    <link rel="stylesheet" href="/css/how-it-works.css?v=20260901-how-page-1">
+    <script src="/js/how-it-works.js?v=20260901-how-page-1" type="module"></script>
+</head>
+<body class="bp-how-page">
+    <div class="bp-shell bp-how-shell">
+        <aside class="bp-sidebar bp-how-sidebar" aria-label="BenchPoll methodology">
+            <a class="bp-brand" href="/" aria-label="BenchPoll home">
+                <span class="bp-brand-art" aria-hidden="true">
+                    <img src="/assets/logo-archive/benchpoll-logo-approved-g-transparent.png" alt="" width="1774" height="887">
+                </span>
+            </a>
+
+            <button id="taxonomy-toggle" class="bp-taxonomy-toggle" type="button" aria-label="Open guide navigation" aria-expanded="false">
+                <i class="fa-solid fa-bars" aria-hidden="true"></i>
+            </button>
+            <button id="taxonomy-close" class="bp-taxonomy-close" type="button" aria-label="Close guide navigation">
+                <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+            </button>
+
+            <div class="bp-how-sidebar-heading">
+                <span>Methodology</span>
+                <strong>How it works</strong>
+            </div>
+
+            <nav class="bp-taxonomy bp-how-nav" aria-label="Page sections">
+                <a class="is-active" href="#overview" data-how-link>
+                    <span>Overview</span>
+                </a>
+                <a href="#context" data-how-link>
+                    <span>Category and context</span>
+                </a>
+                <a href="#personal" data-how-link>
+                    <span>Personal weights</span>
+                </a>
+                <a href="#public" data-how-link>
+                    <span>Public weights</span>
+                </a>
+                <a href="#rankings" data-how-link>
+                    <span>Model rankings</span>
+                </a>
+                <a href="#trust" data-how-link>
+                    <span>Sources and review</span>
+                </a>
+            </nav>
+
+            <div class="bp-sidebar-actions">
+                <a class="bp-sidebar-action" href="/">
+                    <i class="fa-solid fa-arrow-left" aria-hidden="true"></i>
+                    <span>Back to rankings</span>
+                </a>
+            </div>
+
+            <footer class="bp-sidebar-footer">
+                <span>&copy; 2026 BenchPoll</span>
+                <nav aria-label="Social links">
+                    <a href="https://x.com/BenchPoll" target="_blank" rel="noopener" aria-label="BenchPoll on X">Official X</a>
+                </nav>
+            </footer>
+        </aside>
+
+        <button id="taxonomy-scrim" class="bp-taxonomy-scrim" type="button" aria-label="Close guide navigation"></button>
+
+        <main class="bp-how-main">
+            <article class="bp-how-content">
+                <header id="overview" class="bp-how-header" data-how-section>
+                    <span class="bp-how-eyebrow">BenchPoll methodology</span>
+                    <h1>How BenchPoll works</h1>
+                    <p class="bp-how-lede">Build your own benchmark mix for any category and context, compare it with Public Weights, and see the model leaderboard those public priorities produce.</p>
+                    <div class="bp-how-header-links">
+                        <a class="bp-how-primary-link" href="/">
+                            <span>Build your benchmark mix</span>
+                            <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+                        </a>
+                        <a class="bp-how-secondary-link" href="/contribute?mode=benchmark_result">Contribute sourced scores</a>
+                    </div>
+                </header>
+
+                <section class="bp-how-flow" aria-label="BenchPoll in three steps">
+                    <article>
+                        <span class="bp-how-flow-number">01</span>
+                        <div>
+                            <strong>Set priorities</strong>
+                            <p>Build a personal 100% benchmark allocation for one category and context.</p>
+                        </div>
+                    </article>
+                    <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+                    <article>
+                        <span class="bp-how-flow-number">02</span>
+                        <div>
+                            <strong>Average the community</strong>
+                            <p>Every valid personal allocation contributes equally to Public Weights.</p>
+                        </div>
+                    </article>
+                    <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+                    <article>
+                        <span class="bp-how-flow-number">03</span>
+                        <div>
+                            <strong>Rank with uncertainty</strong>
+                            <p>Published model results are normalized, weighted, and shown as score ranges.</p>
+                        </div>
+                    </article>
+                </section>
+
+                <section id="context" class="bp-how-section" data-how-section>
+                    <span class="bp-how-section-number">01</span>
+                    <div class="bp-how-section-body">
+                        <span class="bp-how-section-kicker">Scope</span>
+                        <h2>Every ranking begins with a specific question</h2>
+                        <p>A category identifies the capability being evaluated. Context selectors narrow the evaluation conditions, such as web access, code execution, or model scope. Each category-context combination has its own Personal Weights, Public Weights, and model ranking.</p>
+                        <div class="bp-how-context-example" aria-label="Example category path and context">
+                            <span>Coding</span>
+                            <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
+                            <span>Software Engineering</span>
+                            <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
+                            <span>Python</span>
+                            <span class="bp-how-context-value">Web access: Allowed</span>
+                        </div>
+                    </div>
+                    <aside class="bp-how-note">
+                        <i class="fa-regular fa-compass" aria-hidden="true"></i>
+                        <div>
+                            <strong>No universal weight set</strong>
+                            <p>A benchmark can be important for one capability and irrelevant to another. BenchPoll preserves that distinction.</p>
+                        </div>
+                    </aside>
+                </section>
+
+                <section id="personal" class="bp-how-section" data-how-section>
+                    <span class="bp-how-section-number">02</span>
+                    <div class="bp-how-section-body">
+                        <span class="bp-how-section-kicker">Your priorities</span>
+                        <h2>Personal Weights are a complete allocation</h2>
+                        <p>Your weights for a category and context are either empty or total exactly 100%. Increasing one benchmark necessarily reduces the share available to the others, so the result expresses tradeoffs rather than unlimited approval.</p>
+                        <ul class="bp-how-rule-list">
+                            <li><i class="fa-solid fa-check" aria-hidden="true"></i><span>Every benchmark test condition is a separate weightable object.</span></li>
+                            <li><i class="fa-solid fa-check" aria-hidden="true"></i><span>A benchmark omitted from your allocation contributes 0%.</span></li>
+                            <li><i class="fa-solid fa-check" aria-hidden="true"></i><span>You can give a weighted Fallback to a benchmark when a model has no direct score.</span></li>
+                            <li><i class="fa-solid fa-check" aria-hidden="true"></i><span>Your personal model ranking updates from your own weights.</span></li>
+                        </ul>
+                    </div>
+                    <aside class="bp-how-allocation" aria-label="Example personal weight allocation">
+                        <div class="bp-how-allocation-head">
+                            <span>Example allocation</span>
+                            <strong>100%</strong>
+                        </div>
+                        <div class="bp-how-allocation-bar" aria-hidden="true">
+                            <span style="--share: 42; --segment: #6f5de6"></span>
+                            <span style="--share: 33; --segment: #66a8ea"></span>
+                            <span style="--share: 25; --segment: #69c7af"></span>
+                        </div>
+                        <dl>
+                            <div><dt>Benchmark A</dt><dd>42%</dd></div>
+                            <div><dt>Benchmark B</dt><dd>33%</dd></div>
+                            <div><dt>Benchmark C</dt><dd>25%</dd></div>
+                        </dl>
+                    </aside>
+                </section>
+
+                <section id="public" class="bp-how-section" data-how-section>
+                    <span class="bp-how-section-number">03</span>
+                    <div class="bp-how-section-body">
+                        <span class="bp-how-section-kicker">Community aggregate</span>
+                        <h2>Public Weights average people, not raw clicks</h2>
+                        <p>BenchPoll averages every valid Personal Weight allocation in the selected category-context scope. A valid allocation is non-empty and totals 100%. Benchmarks absent from a person's allocation count as 0% for that person.</p>
+                        <div class="bp-how-formula" aria-label="Public weight formula">
+                            <span>Public weight of benchmark b</span>
+                            <strong>W<sub>b</sub> = (1 / N) &Sigma;<sub>u=1..N</sub> w<sub>u,b</sub></strong>
+                            <small>N is the number of valid Personal Weight allocations in scope.</small>
+                        </div>
+                    </div>
+                    <aside class="bp-how-facts">
+                        <div>
+                            <strong>Equal per person</strong>
+                            <p>Each valid allocation has the same total influence.</p>
+                        </div>
+                        <div>
+                            <strong>Subtree aware</strong>
+                            <p>The selected category includes matching descendant categories and contexts.</p>
+                        </div>
+                        <div>
+                            <strong>Sample weighted</strong>
+                            <p>A context contributes in proportion to its number of valid personal allocations.</p>
+                        </div>
+                    </aside>
+                </section>
+
+                <section id="rankings" class="bp-how-section" data-how-section>
+                    <span class="bp-how-section-number">04</span>
+                    <div class="bp-how-section-body">
+                        <span class="bp-how-section-kicker">Scores and uncertainty</span>
+                        <h2>Model rankings show what is known and what is missing</h2>
+                        <p>Accepted benchmark results are global evidence for one model condition and one benchmark condition. BenchPoll normalizes every accepted sample by that benchmark condition's scale and direction, uses the median when multiple samples exist, and then applies the Personal or Public Weight from the category and context you are viewing. Each model test condition is ranked separately.</p>
+                        <div class="bp-how-score-formula">
+                            <span>Weighted model score</span>
+                            <strong>S<sub>m</sub> = &Sigma;<sub>b</sub> W<sub>b</sub> x s<sub>m,b</sub></strong>
+                        </div>
+                        <p>When a result is missing, BenchPoll does not invent a point estimate. The lower bound treats that missing share as 0; the upper bound treats it as 100. Known normalized results remain visible even when custom-scale extrapolation places them outside the conventional 0-100 range.</p>
+                        <p>Fallback applies only to Personal Weights. A direct score for the primary benchmark always takes precedence; otherwise BenchPoll uses direct scores from its fallback mix. Any missing fallback share remains an uncertainty interval rather than becoming an invented zero.</p>
+                    </div>
+                    <aside class="bp-how-range-demo" aria-label="Example model score interval">
+                        <div class="bp-how-range-heading">
+                            <span>Example model</span>
+                            <strong>61-83</strong>
+                        </div>
+                        <div class="bp-how-range-track" aria-hidden="true">
+                            <span class="bp-how-range-known"></span>
+                            <span class="bp-how-range-unknown"></span>
+                        </div>
+                        <div class="bp-how-range-labels">
+                            <span>Lower bound</span>
+                            <span>Upper bound</span>
+                        </div>
+                        <p><i class="fa-solid fa-circle" aria-hidden="true"></i> Dark: supported by accepted results</p>
+                        <p><i class="fa-solid fa-circle" aria-hidden="true"></i> Light: unresolved because data is missing</p>
+                    </aside>
+                </section>
+
+                <section id="trust" class="bp-how-section bp-how-section-last" data-how-section>
+                    <span class="bp-how-section-number">05</span>
+                    <div class="bp-how-section-body">
+                        <span class="bp-how-section-kicker">Data integrity</span>
+                        <h2>Contributions are sourced, reviewed, and correctable</h2>
+                        <p>Community members can propose benchmarks, models, test conditions, categories, and model results. Score submissions require a source URL. Submissions enter review before they affect public data or rankings.</p>
+                        <ol class="bp-how-review-flow">
+                            <li><span>1</span><div><strong>Submit</strong><p>Provide structured data and an authoritative source.</p></div></li>
+                            <li><span>2</span><div><strong>Review</strong><p>A reviewer checks the object, source, and proposed database changes.</p></div></li>
+                            <li><span>3</span><div><strong>Apply</strong><p>Accepted changes are logged and become available to the ranking engine.</p></div></li>
+                        </ol>
+                    </div>
+                    <aside class="bp-how-note bp-how-note-trust">
+                        <i class="fa-solid fa-shield-halved" aria-hidden="true"></i>
+                        <div>
+                            <strong>Designed to be corrected</strong>
+                            <p>Existing objects and scores have dedicated change requests, so provenance is preserved instead of silently overwritten.</p>
+                        </div>
+                    </aside>
+                </section>
+
+                <footer class="bp-how-cta">
+                    <div>
+                        <span>Your mix and the public comparison, side by side.</span>
+                        <strong>Build Personal Weights, compare Public Weights, and view the resulting model ranking.</strong>
+                    </div>
+                    <a href="/">
+                        <span>Open BenchPoll</span>
+                        <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+                    </a>
+                </footer>
+            </article>
+        </main>
+    </div>
+</body>
+</html>

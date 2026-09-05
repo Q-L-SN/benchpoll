@@ -1,0 +1,1012 @@
+{
+  "generatedAt": "2026-07-08",
+  "criteria": "100 new evaluation items not already present in the local BenchPoll database. Candidates were gathered from arXiv title searches for Bench, Benchmark, Arena, and Eval with submitted dates from 2025-01-01 through 2026-07-08, then filtered to AI/software/ML-related categories.",
+  "sourceQueries": [
+    "https://export.arxiv.org/api/query?search_query=ti%3ABench%20AND%20submittedDate%3A%5B202501010000%20TO%20202607082359%5D&start=0&max_results=250&sortBy=submittedDate&sortOrder=descending",
+    "https://export.arxiv.org/api/query?search_query=ti%3ABenchmark%20AND%20submittedDate%3A%5B202501010000%20TO%20202607082359%5D&start=0&max_results=250&sortBy=submittedDate&sortOrder=descending",
+    "https://export.arxiv.org/api/query?search_query=ti%3AArena%20AND%20submittedDate%3A%5B202501010000%20TO%20202607082359%5D&start=0&max_results=250&sortBy=submittedDate&sortOrder=descending",
+    "https://export.arxiv.org/api/query?search_query=ti%3AEval%20AND%20submittedDate%3A%5B202501010000%20TO%20202607082359%5D&start=0&max_results=250&sortBy=submittedDate&sortOrder=descending"
+  ],
+  "items": [
+    {
+      "name": "SovereignPA-Bench",
+      "categoryPath": "AI Evaluation/Agentic Workflows and Tool Use",
+      "releaseDate": "2026-07-06",
+      "url": "https://arxiv.org/abs/2607.05363v1",
+      "inputModality": "action",
+      "outputModality": "action",
+      "isRealtime": false,
+      "sourceTitle": "SovereignPA-Bench: Evaluating User-Owned Personal Agents under Evolving Intent, Platform Mediation, and Consent Constraints"
+    },
+    {
+      "name": "HAS-Bench",
+      "categoryPath": "AI Evaluation/Agentic Workflows and Tool Use",
+      "releaseDate": "2026-07-05",
+      "url": "https://arxiv.org/abs/2607.04329v1",
+      "inputModality": "action",
+      "outputModality": "action",
+      "isRealtime": false,
+      "sourceTitle": "HAS-Bench: Evaluating LLM-Based Human-Agent Systems under Configurable Human Participation"
+    },
+    {
+      "name": "ClinOCR-Bench",
+      "categoryPath": "AI Evaluation/Medical and Life Sciences",
+      "releaseDate": "2026-07-04",
+      "url": "https://arxiv.org/abs/2607.03650v1",
+      "inputModality": "mixed",
+      "outputModality": "text",
+      "isRealtime": false,
+      "sourceTitle": "ClinOCR-Bench: A Comprehensive Clinical Scanned Document Dataset for Optical Character Recognition Model Evaluation"
+    },
+    {
+      "name": "IDEAL-Bench",
+      "categoryPath": "AI Evaluation/Multimodal Vision and Video",
+      "releaseDate": "2026-07-03",
+      "url": "https://arxiv.org/abs/2607.03614v1",
+      "inputModality": "mixed",
+      "outputModality": "text",
+      "isRealtime": false,
+      "sourceTitle": "IDEAL-Bench: Indoor Dataset and Evaluation suite for Analyzing 3D Layout reasoning"
+    },
+    {
+      "name": "SovereignNegotiation-Bench",
+      "categoryPath": "AI Evaluation/Safety Security and Robustness",
+      "releaseDate": "2026-07-02",
+      "url": "https://arxiv.org/abs/2607.02814v1",
+      "inputModality": "action",
+      "outputModality": "action",
+      "isRealtime": true,
+      "sourceTitle": "SovereignNegotiation-Bench: Evaluating User-Owned Personal Agents In Delegated Bargaining Under Privacy, Consent, Evidence, And Institutional Pressure"
+    },
+    {
+      "name": "K9-Bench",
+      "categoryPath": "AI Evaluation/Multimodal Vision and Video",
+      "releaseDate": "2026-07-02",
+      "url": "https://arxiv.org/abs/2607.02680v1",
+      "inputModality": "mixed",
+      "outputModality": "text",
+      "isRealtime": false,
+      "sourceTitle": "K9-Bench: Evaluating Multimodal LLMs on Canine-Centric Videos"
+    },
+    {
+      "name": "AGC-Bench",
+      "categoryPath": "AI Evaluation/Reasoning Math and Knowledge",
+      "releaseDate": "2026-07-01",
+      "url": "https://arxiv.org/abs/2607.01152v2",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": false,
+      "sourceTitle": "AGC-Bench: Measuring Artificial General Creativity"
+    },
+    {
+      "name": "YOMI-Bench",
+      "categoryPath": "AI Evaluation/Multilingual and Cultural",
+      "releaseDate": "2026-07-01",
+      "url": "https://arxiv.org/abs/2607.00664v1",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": false,
+      "sourceTitle": "YOMI-Bench: A Benchmark for Evaluating Kanji Reading and Phonological Understanding of LLMs for Japanese"
+    },
+    {
+      "name": "JETO-Bench",
+      "categoryPath": "AI Evaluation/Coding and Software Engineering",
+      "releaseDate": "2026-06-30",
+      "url": "https://arxiv.org/abs/2606.31767v1",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": true,
+      "sourceTitle": "JETO-Bench: A Reproducible Benchmark for Execution Time Improvement Patches in Java"
+    },
+    {
+      "name": "CDR-Bench",
+      "categoryPath": "AI Evaluation/Domain Expert Work",
+      "releaseDate": "2026-06-30",
+      "url": "https://arxiv.org/abs/2606.31435v1",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": false,
+      "sourceTitle": "CDR-Bench: Evaluating Faithful Execution of Compositional, Order-Sensitive Data Refinement Recipes"
+    },
+    {
+      "name": "MaDI-Bench",
+      "categoryPath": "AI Evaluation/Domain Expert Work",
+      "releaseDate": "2026-06-29",
+      "url": "https://arxiv.org/abs/2606.30371v1",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": false,
+      "sourceTitle": "MaDI-Bench: An End-to-End Data Integration Benchmark"
+    },
+    {
+      "name": "REPAIR-Bench",
+      "categoryPath": "AI Evaluation/Embodied Robotics and World Models",
+      "releaseDate": "2026-06-29",
+      "url": "https://arxiv.org/abs/2606.29937v1",
+      "inputModality": "action",
+      "outputModality": "action",
+      "isRealtime": false,
+      "sourceTitle": "REPAIR-Bench: A Benchmark for Robot Error Perception And Interaction Recovery"
+    },
+    {
+      "name": "SurgVLA-Bench",
+      "categoryPath": "AI Evaluation/Medical and Life Sciences",
+      "releaseDate": "2026-06-28",
+      "url": "https://arxiv.org/abs/2606.29247v1",
+      "inputModality": "action",
+      "outputModality": "action",
+      "isRealtime": false,
+      "sourceTitle": "SurgVLA-Bench: Towards Evaluating Vision-Language-Action Models for Laparoscopic Surgical Robotics"
+    },
+    {
+      "name": "DMV-Bench",
+      "categoryPath": "AI Evaluation/Multimodal Vision and Video",
+      "releaseDate": "2026-06-25",
+      "url": "https://arxiv.org/abs/2606.27499v1",
+      "inputModality": "action",
+      "outputModality": "action",
+      "isRealtime": false,
+      "sourceTitle": "DMV-Bench: Diagnosing Long-Horizon Multimodal Agents' Visual Memory with Incidental Cue Injection"
+    },
+    {
+      "name": "GeoT2V-Bench",
+      "categoryPath": "AI Evaluation/Multimodal Vision and Video",
+      "releaseDate": "2026-06-23",
+      "url": "https://arxiv.org/abs/2606.24829v1",
+      "inputModality": "text",
+      "outputModality": "video",
+      "isRealtime": true,
+      "sourceTitle": "GeoT2V-Bench: Benchmarking 3D Consistency in Text-to-Video Models via 3D Reconstruction"
+    },
+    {
+      "name": "CN-NewsTTS Bench",
+      "categoryPath": "AI Evaluation/Audio Speech and Music",
+      "releaseDate": "2026-06-23",
+      "url": "https://arxiv.org/abs/2606.24714v1",
+      "inputModality": "text",
+      "outputModality": "audio",
+      "isRealtime": false,
+      "sourceTitle": "CN-NewsTTS Bench: a target-level automatic benchmark for raw-input Chinese news TTS pronunciation"
+    },
+    {
+      "name": "MMed-Bench-IR",
+      "categoryPath": "AI Evaluation/Medical and Life Sciences",
+      "releaseDate": "2026-06-23",
+      "url": "https://arxiv.org/abs/2606.24200v1",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": false,
+      "sourceTitle": "MMed-Bench-IR: A Heterogeneous Benchmark for Multilingual Medical Information Retrieval"
+    },
+    {
+      "name": "T2D-Bench",
+      "categoryPath": "AI Evaluation/Medical and Life Sciences",
+      "releaseDate": "2026-06-23",
+      "url": "https://arxiv.org/abs/2606.24145v1",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": false,
+      "sourceTitle": "T2D-Bench: Evidence-Gated Evaluation of LLM Outputs for Type 2 Diabetes Using a Multi-Layer Clinical-Lifestyle Knowledge Graph"
+    },
+    {
+      "name": "RIFT-Bench",
+      "categoryPath": "AI Evaluation/Safety Security and Robustness",
+      "releaseDate": "2026-06-22",
+      "url": "https://arxiv.org/abs/2606.23927v1",
+      "inputModality": "action",
+      "outputModality": "action",
+      "isRealtime": true,
+      "sourceTitle": "RIFT-Bench: Dynamic Red-teaming For Agentic AI Systems"
+    },
+    {
+      "name": "GeoFidelity-Bench",
+      "categoryPath": "AI Evaluation/Multimodal Vision and Video",
+      "releaseDate": "2026-06-22",
+      "url": "https://arxiv.org/abs/2606.23669v1",
+      "inputModality": "text",
+      "outputModality": "image",
+      "isRealtime": false,
+      "sourceTitle": "GeoFidelity-Bench: Evaluating Segment-Level Geographic Fidelity in Text-to-Image Street-View Generation"
+    },
+    {
+      "name": "MSU-Bench",
+      "categoryPath": "AI Evaluation/Audio Speech and Music",
+      "releaseDate": "2026-06-22",
+      "url": "https://arxiv.org/abs/2606.22868v1",
+      "inputModality": "audio",
+      "outputModality": "text",
+      "isRealtime": false,
+      "sourceTitle": "MSU-Bench: Towards Speaker-Centric Understanding in Conversational Multi-Speaker Scenarios"
+    },
+    {
+      "name": "HAKARI-Bench",
+      "categoryPath": "AI Evaluation/Embeddings and Retrieval",
+      "releaseDate": "2026-06-22",
+      "url": "https://arxiv.org/abs/2606.22778v1",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": false,
+      "sourceTitle": "HAKARI-Bench: A Lightweight Benchmark for Comparing Retrieval Architectures and Efficiency Settings under Unified Conditions"
+    },
+    {
+      "name": "Inverse Turing Bench",
+      "categoryPath": "AI Evaluation/Judging and Evaluation Protocols",
+      "releaseDate": "2026-06-20",
+      "url": "https://arxiv.org/abs/2606.21844v1",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": true,
+      "sourceTitle": "Inverse Turing Bench: Evaluating Language Models as Judges of Human vs. AI Dialogue"
+    },
+    {
+      "name": "AOR-Bench",
+      "categoryPath": "AI Evaluation/Safety Security and Robustness",
+      "releaseDate": "2026-06-19",
+      "url": "https://arxiv.org/abs/2606.21147v1",
+      "inputModality": "audio",
+      "outputModality": "text",
+      "isRealtime": false,
+      "sourceTitle": "AOR-Bench: Do Large Audio Language Models Over-Refuse Pseudo-Harmful Queries?"
+    },
+    {
+      "name": "Chem2Gen-Bench",
+      "categoryPath": "AI Evaluation/Medical and Life Sciences",
+      "releaseDate": "2026-06-19",
+      "url": "https://arxiv.org/abs/2606.21109v1",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": false,
+      "sourceTitle": "Chem2Gen-Bench: Benchmarking Chemical-to-Genetic Translation in Perturbation Response Space"
+    },
+    {
+      "name": "NRT-Bench",
+      "categoryPath": "AI Evaluation/Safety Security and Robustness",
+      "releaseDate": "2026-06-18",
+      "url": "https://arxiv.org/abs/2606.20408v3",
+      "inputModality": "action",
+      "outputModality": "action",
+      "isRealtime": false,
+      "sourceTitle": "NRT-Bench: Benchmarking Multi-Turn Red-Teaming of LLM Operator Agents in Safety-Critical Control Rooms"
+    },
+    {
+      "name": "HT-Bench",
+      "categoryPath": "AI Evaluation/Multimodal Vision and Video",
+      "releaseDate": "2026-06-17",
+      "url": "https://arxiv.org/abs/2606.19161v1",
+      "inputModality": "mixed",
+      "outputModality": "text",
+      "isRealtime": false,
+      "sourceTitle": "HT-Bench: Benchmarking and Learning Dexterous Full-Hand Tactile Representations with Egocentric Vision"
+    },
+    {
+      "name": "MetaboNet-Bench",
+      "categoryPath": "AI Evaluation/Medical and Life Sciences",
+      "releaseDate": "2026-06-17",
+      "url": "https://arxiv.org/abs/2606.18640v2",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": false,
+      "sourceTitle": "MetaboNet-Bench: A Multi-modal Benchmark for Glucose Forecasting in Type 1 Diabetes"
+    },
+    {
+      "name": "CEO-Bench",
+      "categoryPath": "AI Evaluation/Agentic Workflows and Tool Use",
+      "releaseDate": "2026-06-16",
+      "url": "https://arxiv.org/abs/2606.18543v1",
+      "inputModality": "action",
+      "outputModality": "action",
+      "isRealtime": false,
+      "sourceTitle": "CEO-Bench: Can Agents Play the Long Game?"
+    },
+    {
+      "name": "GameCraft-Bench",
+      "categoryPath": "AI Evaluation/Embodied Robotics and World Models",
+      "releaseDate": "2026-06-16",
+      "url": "https://arxiv.org/abs/2606.17861v1",
+      "inputModality": "action",
+      "outputModality": "action",
+      "isRealtime": true,
+      "sourceTitle": "GameCraft-Bench: Can Agents Build Playable Games End-to-End in a Real Game Engine?"
+    },
+    {
+      "name": "PDAGENT-BENCH",
+      "categoryPath": "AI Evaluation/Multimodal Vision and Video",
+      "releaseDate": "2026-06-15",
+      "url": "https://arxiv.org/abs/2606.17253v4",
+      "inputModality": "action",
+      "outputModality": "action",
+      "isRealtime": false,
+      "sourceTitle": "PDAGENT-BENCH: Characterizing, Grounding, and Architecting LLM/VLM Agents for VLSI Physical Design"
+    },
+    {
+      "name": "PAL-Bench",
+      "categoryPath": "AI Evaluation/Multimodal Vision and Video",
+      "releaseDate": "2026-06-15",
+      "url": "https://arxiv.org/abs/2606.16175v1",
+      "inputModality": "mixed",
+      "outputModality": "text",
+      "isRealtime": false,
+      "sourceTitle": "PAL-Bench: Evidence-Grounded Profile Reconstruction from Longitudinal Personal Albums"
+    },
+    {
+      "name": "CODA-BENCH",
+      "categoryPath": "AI Evaluation/Coding and Software Engineering",
+      "releaseDate": "2026-06-13",
+      "url": "https://arxiv.org/abs/2606.15300v1",
+      "inputModality": "action",
+      "outputModality": "action",
+      "isRealtime": false,
+      "sourceTitle": "CODA-BENCH: Can Code Agents Handle Data-Intensive Tasks?"
+    },
+    {
+      "name": "EnvShip-Bench",
+      "categoryPath": "AI Evaluation/Embodied Robotics and World Models",
+      "releaseDate": "2026-06-13",
+      "url": "https://arxiv.org/abs/2606.15240v1",
+      "inputModality": "mixed",
+      "outputModality": "text",
+      "isRealtime": false,
+      "sourceTitle": "EnvShip-Bench: An Environment-Enhanced Benchmark for Short-Term Vessel Trajectory Prediction"
+    },
+    {
+      "name": "ReactSim-Bench",
+      "categoryPath": "AI Evaluation/Embodied Robotics and World Models",
+      "releaseDate": "2026-06-12",
+      "url": "https://arxiv.org/abs/2606.14058v1",
+      "inputModality": "action",
+      "outputModality": "action",
+      "isRealtime": false,
+      "sourceTitle": "ReactSim-Bench: Benchmarking Reactive Behavior World Model Simulation in Autonomous Driving"
+    },
+    {
+      "name": "Dialogue SWE-Bench",
+      "categoryPath": "AI Evaluation/Coding and Software Engineering",
+      "releaseDate": "2026-06-12",
+      "url": "https://arxiv.org/abs/2606.13995v1",
+      "inputModality": "action",
+      "outputModality": "action",
+      "isRealtime": false,
+      "sourceTitle": "Dialogue SWE-Bench: A Benchmark for Dialogue-Driven Coding Agents"
+    },
+    {
+      "name": "UOJ-Bench",
+      "categoryPath": "AI Evaluation/Coding and Software Engineering",
+      "releaseDate": "2026-06-11",
+      "url": "https://arxiv.org/abs/2606.12864v1",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": true,
+      "sourceTitle": "Beyond Problem Solving: UOJ-Bench for Evaluating Code Generation, Hacking, and Repair in Competitive Programming"
+    },
+    {
+      "name": "Shopping Reasoning Bench",
+      "categoryPath": "AI Evaluation/Domain Expert Work",
+      "releaseDate": "2026-06-10",
+      "url": "https://arxiv.org/abs/2606.12608v1",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": false,
+      "sourceTitle": "Shopping Reasoning Bench: An Expert-Authored Benchmark for Multi-Turn Conversational Shopping Assistants"
+    },
+    {
+      "name": "Claw-SWE-Bench",
+      "categoryPath": "AI Evaluation/Coding and Software Engineering",
+      "releaseDate": "2026-06-10",
+      "url": "https://arxiv.org/abs/2606.12344v1",
+      "inputModality": "action",
+      "outputModality": "action",
+      "isRealtime": false,
+      "sourceTitle": "Claw-SWE-Bench: A Benchmark for Evaluating OpenClaw-style Agent Harnesses on Coding Tasks"
+    },
+    {
+      "name": "CORE-Bench",
+      "categoryPath": "AI Evaluation/Coding and Software Engineering",
+      "releaseDate": "2026-06-10",
+      "url": "https://arxiv.org/abs/2606.11864v1",
+      "inputModality": "action",
+      "outputModality": "action",
+      "isRealtime": false,
+      "sourceTitle": "CORE-Bench: A Comprehensive Benchmark for Code Retrieval in the Era of Agentic Coding"
+    },
+    {
+      "name": "GraphInfer-Bench",
+      "categoryPath": "AI Evaluation/Reasoning Math and Knowledge",
+      "releaseDate": "2026-06-10",
+      "url": "https://arxiv.org/abs/2606.11562v1",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": true,
+      "sourceTitle": "GraphInfer-Bench: Benchmarking LLM's Inference Capability on Graphs"
+    },
+    {
+      "name": "MPC-Patch-Bench",
+      "categoryPath": "AI Evaluation/Safety Security and Robustness",
+      "releaseDate": "2026-06-09",
+      "url": "https://arxiv.org/abs/2606.11416v1",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": true,
+      "sourceTitle": "MPC-Patch-Bench: Security-Aware LLM Code Patch for Multi-Party Computation"
+    },
+    {
+      "name": "P3D-Bench",
+      "categoryPath": "AI Evaluation/Multimodal Vision and Video",
+      "releaseDate": "2026-06-09",
+      "url": "https://arxiv.org/abs/2606.11152v2",
+      "inputModality": "mixed",
+      "outputModality": "text",
+      "isRealtime": false,
+      "sourceTitle": "P3D-Bench: Benchmarking MLLMs for Parametric 3D Generation and Structural Reasoning"
+    },
+    {
+      "name": "ABC-Bench",
+      "categoryPath": "AI Evaluation/Safety Security and Robustness",
+      "releaseDate": "2026-06-09",
+      "url": "https://arxiv.org/abs/2606.11150v1",
+      "inputModality": "action",
+      "outputModality": "action",
+      "isRealtime": false,
+      "sourceTitle": "ABC-Bench: An Agentic Bio-Capabilities Benchmark for Biosecurity"
+    },
+    {
+      "name": "T1-Bench",
+      "categoryPath": "AI Evaluation/Agentic Workflows and Tool Use",
+      "releaseDate": "2026-06-09",
+      "url": "https://arxiv.org/abs/2606.11070v1",
+      "inputModality": "action",
+      "outputModality": "action",
+      "isRealtime": false,
+      "sourceTitle": "T1-Bench: Benchmarking Multi-Scenario Agents in Real-World Domains"
+    },
+    {
+      "name": "CIAware-Bench",
+      "categoryPath": "AI Evaluation/Safety Security and Robustness",
+      "releaseDate": "2026-06-09",
+      "url": "https://arxiv.org/abs/2606.11063v1",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": false,
+      "sourceTitle": "CIAware-Bench: Benchmarking Control Intervention Awareness Across Frontier LLMs"
+    },
+    {
+      "name": "IPSM-Bench",
+      "categoryPath": "AI Evaluation/Multimodal Vision and Video",
+      "releaseDate": "2026-06-09",
+      "url": "https://arxiv.org/abs/2606.11001v1",
+      "inputModality": "mixed",
+      "outputModality": "text",
+      "isRealtime": false,
+      "sourceTitle": "IPSM-Bench: A New Intermediate Phase Segmentation Benchmark in Microstructure Images of Zinc-Based Absorbable Biomaterials"
+    },
+    {
+      "name": "SkillResolve-Bench",
+      "categoryPath": "AI Evaluation/Agentic Workflows and Tool Use",
+      "releaseDate": "2026-06-09",
+      "url": "https://arxiv.org/abs/2606.10388v1",
+      "inputModality": "action",
+      "outputModality": "action",
+      "isRealtime": false,
+      "sourceTitle": "SkillResolve-Bench: Measuring and Resolving Same-Capability Ambiguity in Agent Skill Retrieval"
+    },
+    {
+      "name": "UMI-Bench 1.0",
+      "categoryPath": "AI Evaluation/Embodied Robotics and World Models",
+      "releaseDate": "2026-06-09",
+      "url": "https://arxiv.org/abs/2606.10382v1",
+      "inputModality": "action",
+      "outputModality": "action",
+      "isRealtime": false,
+      "sourceTitle": "UMI-Bench 1.0: An Open and Reproducible Real-World Benchmark for Tabletop Robotic Manipulation with UMI Data"
+    },
+    {
+      "name": "TRL-Bench",
+      "categoryPath": "AI Evaluation/Coding and Software Engineering",
+      "releaseDate": "2026-06-08",
+      "url": "https://arxiv.org/abs/2606.09323v1",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": false,
+      "sourceTitle": "TRL-Bench: Standardizing Cross-Paradigm Representation-Level Evaluation of Tabular Encoders"
+    },
+    {
+      "name": "IMUG-Bench",
+      "categoryPath": "AI Evaluation/Multimodal Vision and Video",
+      "releaseDate": "2026-06-08",
+      "url": "https://arxiv.org/abs/2606.09169v1",
+      "inputModality": "mixed",
+      "outputModality": "text",
+      "isRealtime": true,
+      "sourceTitle": "IMUG-Bench: Benchmarking Unified Multimodal Models on Interleaved Understanding and Generation"
+    },
+    {
+      "name": "IDP-Bench",
+      "categoryPath": "AI Evaluation/Safety Security and Robustness",
+      "releaseDate": "2026-06-06",
+      "url": "https://arxiv.org/abs/2606.09908v1",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": false,
+      "sourceTitle": "IDP-Bench: Benchmarking ability of LLMs to protect personal information in interdependent privacy contexts"
+    },
+    {
+      "name": "Phun-Bench",
+      "categoryPath": "AI Evaluation/Audio Speech and Music",
+      "releaseDate": "2026-06-05",
+      "url": "https://arxiv.org/abs/2606.07300v1",
+      "inputModality": "audio",
+      "outputModality": "text",
+      "isRealtime": false,
+      "sourceTitle": "Phun-Bench: Evaluating LLMs on Phonological Understanding in Chinese"
+    },
+    {
+      "name": "mmPISA-bench",
+      "categoryPath": "AI Evaluation/Multilingual and Cultural",
+      "releaseDate": "2026-06-05",
+      "url": "https://arxiv.org/abs/2606.07069v1",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": false,
+      "sourceTitle": "mmPISA-bench: Do LLMs Reason Equally Well Across 43 Languages?"
+    },
+    {
+      "name": "GlucoFM-Bench",
+      "categoryPath": "AI Evaluation/Medical and Life Sciences",
+      "releaseDate": "2026-06-05",
+      "url": "https://arxiv.org/abs/2606.06881v1",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": true,
+      "sourceTitle": "GlucoFM-Bench: Benchmarking Time-Series Foundation Models for Blood Glucose Forecasting"
+    },
+    {
+      "name": "Asuka-Bench",
+      "categoryPath": "AI Evaluation/Coding and Software Engineering",
+      "releaseDate": "2026-06-04",
+      "url": "https://arxiv.org/abs/2606.05920v1",
+      "inputModality": "action",
+      "outputModality": "action",
+      "isRealtime": false,
+      "sourceTitle": "Asuka-Bench: Benchmarking Code Agents on Underspecified User Intent and Multi-Round Refinement"
+    },
+    {
+      "name": "V2V-Bench",
+      "categoryPath": "AI Evaluation/Multimodal Vision and Video",
+      "releaseDate": "2026-06-04",
+      "url": "https://arxiv.org/abs/2606.05665v1",
+      "inputModality": "video",
+      "outputModality": "video",
+      "isRealtime": false,
+      "sourceTitle": "V2V-Bench: A Comprehensive Benchmark for Video-to-Video Generation Evaluation"
+    },
+    {
+      "name": "Continual Learning Bench",
+      "categoryPath": "AI Evaluation/Long Context and Memory",
+      "releaseDate": "2026-06-04",
+      "url": "https://arxiv.org/abs/2606.05661v1",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": true,
+      "sourceTitle": "Continual Learning Bench: Evaluating Frontier AI Systems in Real-World Stateful Environments"
+    },
+    {
+      "name": "LEVANTE-bench",
+      "categoryPath": "AI Evaluation/Multimodal Vision and Video",
+      "releaseDate": "2026-06-03",
+      "url": "https://arxiv.org/abs/2606.05497v1",
+      "inputModality": "mixed",
+      "outputModality": "text",
+      "isRealtime": false,
+      "sourceTitle": "LEVANTE-bench: Multi-Scale Comparison of VLMs to Children Using Cognitive Tasks (or, \"Is Your VLM Smarter Than a 5th Grader?\")"
+    },
+    {
+      "name": "PreAct-Bench",
+      "categoryPath": "AI Evaluation/Reasoning Math and Knowledge",
+      "releaseDate": "2026-06-03",
+      "url": "https://arxiv.org/abs/2606.09890v1",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": false,
+      "sourceTitle": "PreAct-Bench: Benchmarking Predictive Monitoring in LLMs"
+    },
+    {
+      "name": "QO-Bench",
+      "categoryPath": "AI Evaluation/Embeddings and Retrieval",
+      "releaseDate": "2026-06-03",
+      "url": "https://arxiv.org/abs/2606.04646v1",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": false,
+      "sourceTitle": "QO-Bench: Diagnosing Query-Operator-Preserving Retrieval over Typed Event Tuples"
+    },
+    {
+      "name": "GroupToM-Bench",
+      "categoryPath": "AI Evaluation/Multimodal Vision and Video",
+      "releaseDate": "2026-06-02",
+      "url": "https://arxiv.org/abs/2606.04184v2",
+      "inputModality": "mixed",
+      "outputModality": "text",
+      "isRealtime": true,
+      "sourceTitle": "GroupToM-Bench: Benchmarking Group Theory of Mind and Nonlinear Social Emergence in MLLMs"
+    },
+    {
+      "name": "Hedge-Bench",
+      "categoryPath": "AI Evaluation/Domain Expert Work",
+      "releaseDate": "2026-06-02",
+      "url": "https://arxiv.org/abs/2606.03918v1",
+      "inputModality": "action",
+      "outputModality": "action",
+      "isRealtime": false,
+      "sourceTitle": "Hedge-Bench: Benchmarking Agents on Hard, Realistic Tasks Pertaining to Financial Reasoning"
+    },
+    {
+      "name": "OVO-S-Bench",
+      "categoryPath": "AI Evaluation/Multimodal Vision and Video",
+      "releaseDate": "2026-06-02",
+      "url": "https://arxiv.org/abs/2606.03890v1",
+      "inputModality": "mixed",
+      "outputModality": "text",
+      "isRealtime": true,
+      "sourceTitle": "OVO-S-Bench: A Hierarchical Benchmark for Streaming Spatial Intelligence in Multimodal LLMs"
+    },
+    {
+      "name": "SynCred-Bench",
+      "categoryPath": "AI Evaluation/Safety Security and Robustness",
+      "releaseDate": "2026-06-02",
+      "url": "https://arxiv.org/abs/2606.03348v1",
+      "inputModality": "mixed",
+      "outputModality": "text",
+      "isRealtime": false,
+      "sourceTitle": "SynCred-Bench: Benchmarking Synthetic Credibility in AI-Generated Visual Misinformation"
+    },
+    {
+      "name": "MedCUA-Bench",
+      "categoryPath": "AI Evaluation/Medical and Life Sciences",
+      "releaseDate": "2026-06-02",
+      "url": "https://arxiv.org/abs/2606.03203v1",
+      "inputModality": "action",
+      "outputModality": "action",
+      "isRealtime": false,
+      "sourceTitle": "MedCUA-Bench: A Screenshot-Only Benchmark for Clinical Computer-Use Agents"
+    },
+    {
+      "name": "AVI-Bench",
+      "categoryPath": "AI Evaluation/Audio Speech and Music",
+      "releaseDate": "2026-06-01",
+      "url": "https://arxiv.org/abs/2606.07643v1",
+      "inputModality": "mixed",
+      "outputModality": "mixed",
+      "isRealtime": false,
+      "sourceTitle": "AVI-Bench: Toward Human-like Audio-Visual Intelligence of Omni-MLLMs"
+    },
+    {
+      "name": "GeoDrive-Bench",
+      "categoryPath": "AI Evaluation/Multimodal Vision and Video",
+      "releaseDate": "2026-06-01",
+      "url": "https://arxiv.org/abs/2606.02774v1",
+      "inputModality": "action",
+      "outputModality": "action",
+      "isRealtime": false,
+      "sourceTitle": "GeoDrive-Bench: Benchmarking Region-Specific Multimodal Reasoning in Autonomous Driving"
+    },
+    {
+      "name": "LL-Bench",
+      "categoryPath": "AI Evaluation/Multimodal Vision and Video",
+      "releaseDate": "2026-06-01",
+      "url": "https://arxiv.org/abs/2606.02535v1",
+      "inputModality": "mixed",
+      "outputModality": "text",
+      "isRealtime": false,
+      "sourceTitle": "LL-Bench: Rethinking Low-Level Vision Evaluation in the Era of Large-Scale Generative Models"
+    },
+    {
+      "name": "SPADE-Bench",
+      "categoryPath": "AI Evaluation/Safety Security and Robustness",
+      "releaseDate": "2026-06-01",
+      "url": "https://arxiv.org/abs/2606.02380v2",
+      "inputModality": "action",
+      "outputModality": "action",
+      "isRealtime": false,
+      "sourceTitle": "SPADE-Bench: Evaluating Spontaneous Strategic Deception in Agents via Plan-Action Divergence"
+    },
+    {
+      "name": "SMH-Bench",
+      "categoryPath": "AI Evaluation/Embodied Robotics and World Models",
+      "releaseDate": "2026-06-01",
+      "url": "https://arxiv.org/abs/2606.01912v1",
+      "inputModality": "action",
+      "outputModality": "action",
+      "isRealtime": false,
+      "sourceTitle": "SMH-Bench: Benchmarking LLM Agents for Environment-Grounded Reasoning and Action in Smart Homes"
+    },
+    {
+      "name": "WorldCoder-Bench",
+      "categoryPath": "AI Evaluation/Multimodal Vision and Video",
+      "releaseDate": "2026-06-01",
+      "url": "https://arxiv.org/abs/2606.01869v2",
+      "inputModality": "mixed",
+      "outputModality": "text",
+      "isRealtime": false,
+      "sourceTitle": "WorldCoder-Bench: Benchmarking Physically Grounded 3D World Synthesis"
+    },
+    {
+      "name": "CRAB-Bench",
+      "categoryPath": "AI Evaluation/Agentic Workflows and Tool Use",
+      "releaseDate": "2026-06-01",
+      "url": "https://arxiv.org/abs/2606.01815v1",
+      "inputModality": "action",
+      "outputModality": "action",
+      "isRealtime": false,
+      "sourceTitle": "CRAB-Bench: Evaluating LLM Agents under Complex Task Dependencies and Human-aligned User Simulation"
+    },
+    {
+      "name": "SafeGen-Bench",
+      "categoryPath": "AI Evaluation/Safety Security and Robustness",
+      "releaseDate": "2026-05-31",
+      "url": "https://arxiv.org/abs/2606.01481v1",
+      "inputModality": "text",
+      "outputModality": "video",
+      "isRealtime": false,
+      "sourceTitle": "SafeGen-Bench: Benchmarking Safety in Image-Conditioned Text-to-Video Generation"
+    },
+    {
+      "name": "MMDG-Bench",
+      "categoryPath": "AI Evaluation/Multimodal Vision and Video",
+      "releaseDate": "2026-05-30",
+      "url": "https://arxiv.org/abs/2606.00891v1",
+      "inputModality": "mixed",
+      "outputModality": "text",
+      "isRealtime": false,
+      "sourceTitle": "MMDG-Bench: A Benchmark for Multimodal Domain Generalization"
+    },
+    {
+      "name": "OmniEEG-Bench",
+      "categoryPath": "AI Evaluation/Medical and Life Sciences",
+      "releaseDate": "2026-05-30",
+      "url": "https://arxiv.org/abs/2606.00815v1",
+      "inputModality": "mixed",
+      "outputModality": "text",
+      "isRealtime": false,
+      "sourceTitle": "OmniEEG-Bench: A Standardized Evaluation Benchmark for EEG Foundation Models"
+    },
+    {
+      "name": "SafeVLA-Bench",
+      "categoryPath": "AI Evaluation/Safety Security and Robustness",
+      "releaseDate": "2026-05-30",
+      "url": "https://arxiv.org/abs/2606.00773v1",
+      "inputModality": "action",
+      "outputModality": "action",
+      "isRealtime": false,
+      "sourceTitle": "SafeVLA-Bench: A Benchmark for the Success-Safety Gap in Vision-Language-Action Models"
+    },
+    {
+      "name": "DEMM-Bench",
+      "categoryPath": "AI Evaluation/Safety Security and Robustness",
+      "releaseDate": "2026-05-30",
+      "url": "https://arxiv.org/abs/2606.20634v1",
+      "inputModality": "action",
+      "outputModality": "action",
+      "isRealtime": false,
+      "sourceTitle": "DEMM-Bench: A Cross-Regime Benchmark for Agent-Runtime Governance-Evidence Sufficiency"
+    },
+    {
+      "name": "SVI-Bench",
+      "categoryPath": "AI Evaluation/Multimodal Vision and Video",
+      "releaseDate": "2026-05-29",
+      "url": "https://arxiv.org/abs/2605.31529v2",
+      "inputModality": "mixed",
+      "outputModality": "text",
+      "isRealtime": true,
+      "sourceTitle": "SVI-Bench: A Dynamic Microworld for Strategic Video Intelligence"
+    },
+    {
+      "name": "FAM-Bench",
+      "categoryPath": "AI Evaluation/Medical and Life Sciences",
+      "releaseDate": "2026-05-29",
+      "url": "https://arxiv.org/abs/2605.31410v1",
+      "inputModality": "mixed",
+      "outputModality": "text",
+      "isRealtime": false,
+      "sourceTitle": "FAM-Bench: A Multimodal Benchmark for Condition-Aware Food-as-Medicine Reasoning"
+    },
+    {
+      "name": "TadA-Bench",
+      "categoryPath": "AI Evaluation/Medical and Life Sciences",
+      "releaseDate": "2026-05-29",
+      "url": "https://arxiv.org/abs/2606.02624v1",
+      "inputModality": "action",
+      "outputModality": "action",
+      "isRealtime": false,
+      "sourceTitle": "TadA-Bench: A Million-Variant Benchmark for Future-Round Discovery Toward Agentic Protein Engineering"
+    },
+    {
+      "name": "TSM-Bench",
+      "categoryPath": "AI Evaluation/Reasoning Math and Knowledge",
+      "releaseDate": "2026-05-29",
+      "url": "https://arxiv.org/abs/2605.31113v1",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": false,
+      "sourceTitle": "TSM-Bench: Detecting LLM-Generated Text in Real-World Wikipedia Editing Practices"
+    },
+    {
+      "name": "BilliardPhys-Bench",
+      "categoryPath": "AI Evaluation/Multimodal Vision and Video",
+      "releaseDate": "2026-05-29",
+      "url": "https://arxiv.org/abs/2605.30900v1",
+      "inputModality": "mixed",
+      "outputModality": "text",
+      "isRealtime": true,
+      "sourceTitle": "BilliardPhys-Bench: Benchmarking Physical Reasoning and Visual Dynamics of Multimodal LLMs"
+    },
+    {
+      "name": "LongDS-Bench",
+      "categoryPath": "AI Evaluation/Domain Expert Work",
+      "releaseDate": "2026-05-28",
+      "url": "https://arxiv.org/abs/2605.30434v1",
+      "inputModality": "action",
+      "outputModality": "action",
+      "isRealtime": false,
+      "sourceTitle": "LongDS-Bench: On the Failure of Long-Horizon Agentic Data Analysis"
+    },
+    {
+      "name": "HEART-Bench",
+      "categoryPath": "AI Evaluation/Agentic Workflows and Tool Use",
+      "releaseDate": "2026-05-28",
+      "url": "https://arxiv.org/abs/2605.30058v1",
+      "inputModality": "action",
+      "outputModality": "action",
+      "isRealtime": false,
+      "sourceTitle": "HEART-Bench: Do LLM Agents Exhibit Human-like Psychology?"
+    },
+    {
+      "name": "Cookie-Bench",
+      "categoryPath": "AI Evaluation/Agentic Workflows and Tool Use",
+      "releaseDate": "2026-05-28",
+      "url": "https://arxiv.org/abs/2605.30000v2",
+      "inputModality": "action",
+      "outputModality": "action",
+      "isRealtime": true,
+      "sourceTitle": "Cookie-Bench: Continuous On-screen Key Interaction Evaluation for Web Generation"
+    },
+    {
+      "name": "CodeGolf Bench",
+      "categoryPath": "AI Evaluation/Coding and Software Engineering",
+      "releaseDate": "2026-05-28",
+      "url": "https://arxiv.org/abs/2605.30394v1",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": true,
+      "sourceTitle": "CodeGolf Bench: A Multi-Language Benchmark for Evaluating Concise Code Generation Capabilities of Large Language Models"
+    },
+    {
+      "name": "Multi-Legal-Bench",
+      "categoryPath": "AI Evaluation/Domain Expert Work",
+      "releaseDate": "2026-05-28",
+      "url": "https://arxiv.org/abs/2605.29738v1",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": false,
+      "sourceTitle": "Multi-Legal-Bench: Evaluating LLMs on Legal Reasoning Across Jurisdictions, Languages, and Legal Traditions"
+    },
+    {
+      "name": "WF-Bench",
+      "categoryPath": "AI Evaluation/Domain Expert Work",
+      "releaseDate": "2026-05-28",
+      "url": "https://arxiv.org/abs/2605.29683v1",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": false,
+      "sourceTitle": "WF-Bench: A Benchmark for Neural Network WaveFunction Expressivity and Scaling Laws"
+    },
+    {
+      "name": "PTCG-Bench",
+      "categoryPath": "AI Evaluation/Embodied Robotics and World Models",
+      "releaseDate": "2026-05-28",
+      "url": "https://arxiv.org/abs/2605.29653v1",
+      "inputModality": "action",
+      "outputModality": "action",
+      "isRealtime": false,
+      "sourceTitle": "PTCG-Bench: Can LLM Agents Master Pokémon Trading Card Game?"
+    },
+    {
+      "name": "CrystalXRD-Bench",
+      "categoryPath": "AI Evaluation/Multimodal Vision and Video",
+      "releaseDate": "2026-05-28",
+      "url": "https://arxiv.org/abs/2605.29446v1",
+      "inputModality": "mixed",
+      "outputModality": "text",
+      "isRealtime": false,
+      "sourceTitle": "CrystalXRD-Bench: Benchmarking Vision-Language Models for XRD Peak Indexing Across Diverse Crystalline Materials"
+    },
+    {
+      "name": "Code-QA-Bench",
+      "categoryPath": "AI Evaluation/Coding and Software Engineering",
+      "releaseDate": "2026-05-28",
+      "url": "https://arxiv.org/abs/2605.29277v1",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": false,
+      "sourceTitle": "Code-QA-Bench: Separating Code Reasoning from Documentation Memorization in Repository-Level QA"
+    },
+    {
+      "name": "UA-Legal-Bench",
+      "categoryPath": "AI Evaluation/Domain Expert Work",
+      "releaseDate": "2026-05-27",
+      "url": "https://arxiv.org/abs/2605.29170v1",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": false,
+      "sourceTitle": "UA-Legal-Bench: A Benchmark for Evaluating Large Language Models on Ukrainian Legal Reasoning"
+    },
+    {
+      "name": "GEO-Bench",
+      "categoryPath": "AI Evaluation/Safety Security and Robustness",
+      "releaseDate": "2026-05-27",
+      "url": "https://arxiv.org/abs/2605.29107v2",
+      "inputModality": "text",
+      "outputModality": "text",
+      "isRealtime": false,
+      "sourceTitle": "GEO-Bench: Benchmarking Ranking Manipulation in Generative Engine Optimization"
+    },
+    {
+      "name": "PointQ-Bench",
+      "categoryPath": "AI Evaluation/Multimodal Vision and Video",
+      "releaseDate": "2026-05-27",
+      "url": "https://arxiv.org/abs/2605.28241v1",
+      "inputModality": "mixed",
+      "outputModality": "text",
+      "isRealtime": false,
+      "sourceTitle": "PointQ-Bench: Benchmarking Diagnostic and Interpretable Point Cloud Quality Assessment"
+    },
+    {
+      "name": "Qwen-Image-Bench",
+      "categoryPath": "AI Evaluation/Multimodal Vision and Video",
+      "releaseDate": "2026-05-27",
+      "url": "https://arxiv.org/abs/2605.28091v2",
+      "inputModality": "text",
+      "outputModality": "image",
+      "isRealtime": false,
+      "sourceTitle": "Qwen-Image-Bench: From Generation to Creation in Text-to-Image Evaluation"
+    },
+    {
+      "name": "MTAVG-Bench 2.0",
+      "categoryPath": "AI Evaluation/Audio Speech and Music",
+      "releaseDate": "2026-05-27",
+      "url": "https://arxiv.org/abs/2605.28035v1",
+      "inputModality": "mixed",
+      "outputModality": "mixed",
+      "isRealtime": false,
+      "sourceTitle": "MTAVG-Bench 2.0: Diagnosing Failure Modes of Cinematic Expressiveness in Multi-Talker Audio-Video Generation"
+    },
+    {
+      "name": "Harness-Bench",
+      "categoryPath": "AI Evaluation/Judging and Evaluation Protocols",
+      "releaseDate": "2026-05-27",
+      "url": "https://arxiv.org/abs/2605.27922v1",
+      "inputModality": "action",
+      "outputModality": "action",
+      "isRealtime": false,
+      "sourceTitle": "Harness-Bench: Measuring Harness Effects across Models in Realistic Agent Workflows"
+    },
+    {
+      "name": "ENPMR-Bench",
+      "categoryPath": "AI Evaluation/Long Context and Memory",
+      "releaseDate": "2026-05-26",
+      "url": "https://arxiv.org/abs/2605.27240v1",
+      "inputModality": "action",
+      "outputModality": "action",
+      "isRealtime": false,
+      "sourceTitle": "ENPMR-Bench: Benchmarking Proactive Memory Retrieval for Emotional Support Agents"
+    },
+    {
+      "name": "PashtoTTS-Bench",
+      "categoryPath": "AI Evaluation/Audio Speech and Music",
+      "releaseDate": "2026-05-26",
+      "url": "https://arxiv.org/abs/2605.26978v1",
+      "inputModality": "text",
+      "outputModality": "audio",
+      "isRealtime": false,
+      "sourceTitle": "PashtoTTS-Bench: automated screening for low-resource non-Latin-script text-to-speech"
+    }
+  ]
+}
