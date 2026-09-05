@@ -1,3 +1,4 @@
+import { workspaceChannel } from './shared/workspace-channel.js';
 import * as S from '/js/shared.js';
 import * as G from '/js/global.js';
 
@@ -70,9 +71,8 @@ async function postJSON(url, body = {}) {
 }
 
 async function prepareWorkspaceContextChange() {
-    if (typeof window.__benchpollBeforeWorkspaceChange !== 'function') return true;
     try {
-        return await window.__benchpollBeforeWorkspaceChange() !== false;
+        return await workspaceChannel.prepareChange();
     } catch (error) {
         console.error('[BenchPoll] Could not save the current personal weights.', error);
         return false;
@@ -85,8 +85,7 @@ function publishWorkspaceState() {
         categoryName: currentCategoryName,
         currentCategoryID
     };
-    window.__benchpollHomeState = detail;
-    window.dispatchEvent(new CustomEvent('benchpoll:workspace-state', { detail }));
+    workspaceChannel.publish(detail);
 }
 
 function updateContributionLinks() {

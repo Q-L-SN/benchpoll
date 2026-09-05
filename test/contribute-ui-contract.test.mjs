@@ -1,8 +1,9 @@
+import { frontendSource } from './helpers/frontend-source.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
 
-const source = fs.readFileSync(new URL('../public/js/contribute.js', import.meta.url), 'utf8');
+const source = frontendSource('public/js/contribute.js');
 const html = fs.readFileSync(new URL('../private/contribute.html', import.meta.url), 'utf8');
 const css = fs.readFileSync(new URL('../public/css/contribute.css', import.meta.url), 'utf8');
 
@@ -24,7 +25,7 @@ test('contribution forms are one-page forms without a progress stepper or review
 test('every contribution operation ends with a notes control', () => {
     const notesHelper = sourceBetween('function changeReviewNotesField(', 'function changeDeleteStep(');
     const deleteForm = sourceBetween('function changeDeleteStep(', 'function evaluationDetailsStep(');
-    const benchmarkForm = sourceBetween('function evaluationDetailsStep(', 'function normalizedSearch(');
+    const benchmarkForm = sourceBetween('function evaluationDetailsStep(', 'function vendorSuggestions(');
     const modelForm = sourceBetween('function subjectDetailsStep(', 'function renderResultModelSuggestions(');
     const scoreForm = sourceBetween('function resultsStep(', 'function categoryDetailsStep(');
     const categoryForm = sourceBetween('function categoryDetailsStep(', 'function contextOptionsEditor(');

@@ -1,10 +1,11 @@
+import { frontendSource } from './helpers/frontend-source.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
 
 const server = fs.readFileSync(new URL('../server.js', import.meta.url), 'utf8');
 const html = fs.readFileSync(new URL('../private/censor.html', import.meta.url), 'utf8');
-const client = fs.readFileSync(new URL('../public/js/censor.js', import.meta.url), 'utf8');
+const client = frontendSource('public/js/censor.js');
 const accountMigration = fs.readFileSync(
     new URL('../scripts/migrate-unified-reviewer-accounts.mjs', import.meta.url),
     'utf8'

@@ -1,3 +1,4 @@
+import { frontendSource, frontendStyles } from './helpers/frontend-source.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -9,8 +10,8 @@ const read = file => fs.readFileSync(path.join(root, file), 'utf8');
 
 test('homepage exposes compact edit entry points beside their objects', () => {
     const home = read('private/home.html');
-    const workspace = read('public/js/home-workspace.js');
-    const styles = read('public/css/home-v2.css');
+    const workspace = frontendSource('public/js/home-workspace.js');
+    const styles = frontendStyles('public/css/home-v2.css');
     const benchmarkToolbar = home.slice(
         home.indexOf('<div class="bp-benchmark-toolbar">'),
         home.indexOf('<div class="bp-benchmark-head"')
@@ -26,7 +27,7 @@ test('homepage exposes compact edit entry points beside their objects', () => {
 
 test('model score details load and group accepted samples for the selected model condition', () => {
     const server = read('server.js');
-    const workspace = read('public/js/home-workspace.js');
+    const workspace = frontendSource('public/js/home-workspace.js');
     const endpoint = server.slice(
         server.indexOf("API.post('/get_approved_benchmark_results'"),
         server.indexOf("API.post('/save_personal_pie'")
@@ -56,7 +57,7 @@ test('model score details load and group accepted samples for the selected model
 });
 
 test('model score dialog owns one scroll region and cannot clip its result list', () => {
-    const styles = read('public/css/home-v2.css');
+    const styles = frontendStyles('public/css/home-v2.css');
     assert.match(styles, /\.bp-model-scores-dialog::part\(content\)\s*\{[^}]*max-height:\s*calc\(100dvh - 32px\)[^}]*overflow:\s*hidden/s);
     assert.match(styles, /\.bp-model-scores-dialog::part\(body\)\s*\{[^}]*min-height:\s*0[^}]*overflow:\s*hidden/s);
     assert.match(styles, /\.bp-model-scores-body\s*\{[^}]*grid-template-rows:\s*auto minmax\(0, 1fr\)[^}]*min-height:\s*0[^}]*overflow:\s*hidden/s);
@@ -64,7 +65,7 @@ test('model score dialog owns one scroll region and cannot clip its result list'
 });
 
 test('workspace responses are validated before any response array is mapped', () => {
-    const workspace = read('public/js/home-workspace.js');
+    const workspace = frontendSource('public/js/home-workspace.js');
 
     assert.match(workspace, /function validateWorkspacePayload\(payload\)/);
     assert.match(workspace, /function requireWorkspaceConditionIdentity\(value, path\)/);
@@ -79,7 +80,7 @@ test('workspace responses are validated before any response array is mapped', ()
 });
 
 test('moderation cards show structured entity changes and reviewer-only notes', () => {
-    const censor = read('public/js/censor.js');
+    const censor = frontendSource('public/js/censor.js');
     assert.match(censor, /case 'entity_change':[\s\S]*return 'Object Change'/);
     assert.match(censor, /Requested Changes/);
     assert.match(censor, /Reviewer Notes/);

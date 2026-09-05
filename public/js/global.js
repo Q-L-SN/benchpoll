@@ -1,3 +1,4 @@
+import { PageHeader } from './shared/page-header.js';
 import * as S from '/js/shared.js';
 
 export const params = new URLSearchParams(location.search);
@@ -129,167 +130,7 @@ window.addEventListener('popstate', function(event) {
     }
 });
 
-class globalHeader extends HTMLElement { // 定义全局导航栏组件
-    constructor() {
-        super();
-        const shadow = this.attachShadow({ mode: 'open' });
-        const template = document.createElement('template');
-        template.innerHTML = `
-            <style>
-                :host {
-                    position: fixed;
-                    top: 0;
-                    left: 0;
-                    width: 100%;
-                    max-width: 100%;
-                    height: var(--nav-height);
-                    background-color: rgba(255, 255, 255, 0.94);
-                    backdrop-filter: blur(18px) saturate(1.04);
-                    border-bottom: 1px solid #e7e9f1;
-                    display: flex;
-                    justify-content: flex-start;
-                    align-items: center;
-                    gap: 22px;
-                    padding: 0 clamp(18px, 2.6vw, 40px) !important;
-                    box-shadow: 0 1px 2px rgba(21, 31, 67, 0.035), inset 0 -1px rgba(255, 255, 255, 0.9);
-                    z-index: 1100;
-                }
-                #logo-container {
-                    flex: 0 0 auto;
-                    min-width: 0;
-                    display: flex;
-                    align-items: center;
-                    justify-content: flex-start;
-                }
-                .header-slot {
-                    flex: 1 1 auto;
-                    min-width: 0;
-                    display: flex;
-                    align-items: center;
-                    justify-content: flex-end;
-                }
-                .logo {
-                    display: inline-flex;
-                    align-items: center;
-                    color: #111a3d;
-                    text-decoration: none;
-                    cursor: pointer;
-                }
-                .logo-art {
-                    position: relative;
-                    display: block;
-                    width: 145px;
-                    height: 29px;
-                    flex: 0 0 145px;
-                    overflow: hidden;
-                }
-                .logo-art img {
-                    position: absolute;
-                    top: -30.8px;
-                    left: -22.5px;
-                    display: block;
-                    width: 182px;
-                    max-width: none;
-                    height: auto;
-                    filter: contrast(1.04);
-                }
-                .logo-mark {
-                    position: relative;
-                    display: block;
-                    width: 28px;
-                    height: 28px;
-                    flex: 0 0 28px;
-                    overflow: hidden;
-                    border-radius: 50%;
-                    background: conic-gradient(from -90deg, #7059e9 0 24%, #69a8ea 24% 50%, #72d0cd 50% 75%, #5e8bdc 75% 100%);
-                    box-shadow: inset 0 0 0 1px rgba(38, 45, 91, 0.05), 0 2px 5px rgba(58, 73, 119, 0.08);
-                }
-                .logo-mark::before,
-                .logo-mark::after,
-                .logo-mark > span {
-                    position: absolute;
-                    z-index: 2;
-                    display: block;
-                    content: "";
-                    background: #fff;
-                }
-                .logo-mark::before {
-                    top: -2px;
-                    left: 12px;
-                    width: 3px;
-                    height: 18px;
-                }
-                .logo-mark::after {
-                    top: 12px;
-                    right: -2px;
-                    width: 18px;
-                    height: 3px;
-                }
-                .logo-mark > span {
-                    top: 7px;
-                    left: 12px;
-                    width: 12px;
-                    height: 12px;
-                    border-bottom: 3px solid #fff;
-                    border-left: 3px solid #fff;
-                    border-radius: 0 100% 0 0;
-                    background: transparent;
-                }
-                .brand-copy {
-                    display: flex;
-                    min-width: 0;
-                    flex-direction: column;
-                    gap: 2px;
-                }
-                .brand-name {
-                    color: #111a3d;
-                    font-family: var(--font-sans);
-                    font-size: 18px;
-                    font-weight: 740;
-                    line-height: 1;
-                }
-                .logo .highlight {
-                    color: inherit;
-                }
-                .brand-index {
-                    color: #8188a1;
-                    font-family: var(--font-sans);
-                    font-size: 8px;
-                    font-weight: 650;
-                    line-height: 1.2;
-                }
-                slot { /* 插槽 */
-                    display: flex;
-                    width: 100%;
-                    min-width: 0;
-                    align-items: center;
-                    justify-content: flex-end;
-                    gap: 12px;
-                }
-                @media (max-width: 640px) {
-                    :host {
-                        gap: 12px;
-                        padding-inline: 14px !important;
-                    }
-                    slot {
-                        gap: 8px;
-                    }
-                }
-            </style>
-            <div id="logo-container">
-                <a href="/" class="logo" aria-label="BenchPoll home">
-                    <span class="logo-art" aria-hidden="true">
-                        <img src="/assets/logo-archive/benchpoll-logo-approved-g-transparent.png" alt="" width="1774" height="887">
-                    </span>
-                </a>
-            </div>
-            <div class="header-slot">
-                <slot></slot>
-            </div>
-        `;
-        shadow.appendChild(template.content.cloneNode(true));
-    }
-}
+
 
 class globalDialog extends HTMLElement { // 定义全局对话框组件
     static get observedAttributes() {
@@ -689,6 +530,6 @@ export function showConfirm(message, options = {}) {
     });
 }
 
-customElements.define('global-header', globalHeader);
+customElements.define('global-header', PageHeader);
 customElements.define('global-dialog', globalDialog);
 customElements.define('global-dialog-action', globalDialogAction);

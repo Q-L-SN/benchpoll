@@ -158,6 +158,36 @@ Make sure local DNS/hosts and certificate setup match the domain you use in the 
 
 ## Development Notes
 
+### Frontend modules, preview and checks
+
+The browser uses native ES modules with no build step. `public/js/workspace/` owns
+allocation helpers, response contracts, and chart/result views; `contribution/`
+owns catalogue contracts and field conversion; `shared/` owns transport, page
+coordination and shell controls. Page entry modules retain workflow orchestration.
+`public/css/ui/` contains the common design tokens, navigation, workspace, Fallback
+and evidence styles. Font Awesome 6.4.0 is served locally from `public/vendor/`
+with its license, so page loading does not depend on a third-party icon CDN.
+
+```powershell
+npm run lint
+npm test
+npx playwright install chromium
+npm run test:frontend
+npm run preview:frontend
+```
+
+The preview runs at `http://127.0.0.1:1338` with synthetic in-memory records.
+It does not load credentials, connect to MySQL, send email or use GitHub OAuth.
+Browser checks write screenshots and `results.json` to ignored
+`artifacts/frontend/`. These checks cover UI behavior; real service integrations
+still require the normal application environment.
+
+The local pre-refactor snapshot is tagged `frontend-baseline-20260905`.
+The finished refactor is tagged `frontend-refactor-20260906`. With a clean working
+tree, `git revert frontend-refactor-20260906` rolls back the refactor as a new
+commit; run `npm ci` afterward to match the restored lockfile. See
+[frontend design, verification and rollback notes](docs/frontend-refactor.md).
+
 - Keep `.env`, certificates, local credential notes, and generated folders out of Git.
 - The frontend code is plain browser JavaScript under `public/js`.
 - Shared browser constants/helpers live in `public/js/shared.js` and `public/js/global.js`.
@@ -323,6 +353,33 @@ https://benchpoll.com:1337
 - `POST /api/review_moderation_log`
 
 ## 开发注意事项
+
+### 前端模块、预览与检查
+
+浏览器使用原生 ES 模块，无须构建。`public/js/workspace/` 负责权重辅助函数、
+响应校验及图表和结果视图；`contribution/` 负责目录校验和字段转换；`shared/`
+负责请求、页面协调和公共界面控件。页面入口模块保留工作流程编排。
+`public/css/ui/` 包含共享设计变量、导航、工作区、Fallback 和成绩证据样式。
+Font Awesome 6.4.0 及许可证保存在 `public/vendor/`，页面加载不再依赖外部图标 CDN。
+
+```powershell
+npm run lint
+npm test
+npx playwright install chromium
+npm run test:frontend
+npm run preview:frontend
+```
+
+预览地址为 `http://127.0.0.1:1338`，使用内存中的模拟数据。
+它不会加载凭据、连接 MySQL、发送邮件或调用 GitHub OAuth。
+浏览器检查的截图和 `results.json` 写入被 Git 忽略的 `artifacts/frontend/`。
+这些检查验证前端行为；真实服务集成仍需在正常应用环境中验证。
+
+重构前的本地快照标签为 `frontend-baseline-20260905`，完成版本标签为
+`frontend-refactor-20260906`。在工作区干净时，执行
+`git revert frontend-refactor-20260906` 会用一个新提交撤销本次重构；
+然后执行 `npm ci`，使依赖匹配恢复后的锁文件。详见
+[前端设计、验证及回滚说明](docs/frontend-refactor.md)。
 
 - 不要把 `.env`、证书、本地凭据说明和生成目录提交到 Git。
 - 前端代码是普通浏览器 JavaScript，位于 `public/js`。

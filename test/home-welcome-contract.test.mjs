@@ -1,3 +1,4 @@
+import { frontendStyles } from './helpers/frontend-source.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
@@ -7,7 +8,7 @@ function read(path) {
 }
 
 const home = read('private/home.html');
-const homeStyles = read('public/css/home-v2.css');
+const homeStyles = frontendStyles('public/css/home-v2.css');
 const styles = read('public/css/home-welcome.css');
 const script = read('public/js/home-welcome.js');
 
@@ -34,7 +35,7 @@ test('welcome is persisted per browser while the mission banner can explicitly r
     assert.match(script, /primaryButton\?\.addEventListener\('click', dismissWelcome\)/);
     assert.match(script, /methodologyLink\?\.addEventListener\('click', rememberWelcome\)/);
     assert.match(script, /missionWelcomeTrigger\?\.addEventListener\('click', \(\) => showWelcome\(\{ force: true \}\)\)/);
-    assert.match(homeStyles, /\.bp-mission-trigger\s*\{[^}]*border:\s*0[^}]*background:\s*transparent[^}]*cursor:\s*pointer/s);
+    assert.match(homeStyles, /\.bp-mission-trigger\s*\{[^}]*background:\s*none[^}]*border:\s*0[^}]*cursor:\s*pointer/s);
 });
 
 test('welcome supports keyboard, backdrop, responsive, and reduced-motion behavior', () => {

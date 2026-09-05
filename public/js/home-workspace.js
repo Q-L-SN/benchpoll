@@ -1,14 +1,23 @@
-const SVG_NS = 'http://www.w3.org/2000/svg';
-const SAVE_DEBOUNCE_MS = 420;
-const WEIGHT_STEP_BASIS_POINTS = 200;
-const MIN_WEIGHT_BASIS_POINTS = 100;
-const WHEEL_WEIGHT_COMMIT_IDLE_MS = 400;
-const PIE_WEIGHT_TRANSITION_MS = 210;
-const TOUCH_DRAG_THRESHOLD_PX = 4;
-const TOUCH_WEIGHT_BASIS_POINTS_PER_PIXEL = 12;
-const WORKSPACE_LOAD_RETRY_DELAYS_MS = [500, 1200];
-const FALLBACK_RULE_MODE = 'fallback_if_missing';
-const MAX_FALLBACK_COMPONENTS = 12;
+import { workspaceChannel } from './shared/workspace-channel.js';
+import { initializeMobilePanels } from './shared/mobile-panels.js';
+import {
+    PIE_GRADIENTS, SAVE_DEBOUNCE_MS, WEIGHT_STEP_BASIS_POINTS,
+    MIN_WEIGHT_BASIS_POINTS, WHEEL_WEIGHT_COMMIT_IDLE_MS, TOUCH_DRAG_THRESHOLD_PX,
+    TOUCH_WEIGHT_BASIS_POINTS_PER_PIXEL, WORKSPACE_LOAD_RETRY_DELAYS_MS, FALLBACK_RULE_MODE,
+    MAX_FALLBACK_COMPONENTS
+} from './workspace/constants.js';
+import { createWorkspaceState } from './workspace/state.js';
+import { validateWorkspacePayload } from './workspace/contracts.js';
+import {
+    cloneEntries, cloneFallbackRules, clonePersonalPieSnapshot,
+    clamp, humanizePathPart, benchmarkConditionLabel,
+    benchmarkAccessibleName, distributeToTarget
+} from './workspace/weights.js';
+import { postJSON } from './shared/http.js';
+import { buildBenchmarkEditURL } from './workspace/links.js';
+import { createModelScoresView } from './workspace/model-scores.js';
+import { createModelListView } from './workspace/model-list.js';
+import { createPieRenderer } from './workspace/pie-renderer.js';
 
 const pieSvg = document.getElementById('weight-pie');
 const breadcrumb = document.getElementById('bp-breadcrumb');
@@ -57,65 +66,14 @@ const inlineFallbackRemove = document.getElementById('inline-fallback-remove');
 const inlineFallbackGuide = document.getElementById('inline-fallback-guide');
 const inlineFallbackChart = document.getElementById('inline-fallback-chart');
 
-const PIE_GRADIENTS = [
-    ['#b7acf4', '#8170e4'],
-    ['#a7c9f4', '#6d9fe7'],
-    ['#a1dfdb', '#65c6c3'],
-    ['#fae99a', '#f4ce60'],
-    ['#ffd49d', '#f4ad65'],
-    ['#f7beda', '#e989bc'],
-    ['#c7b8ef', '#9a7bd8'],
-    ['#b6ddd2', '#77bfae']
-];
+const state = createWorkspaceState();
+initializeMobilePanels(document.querySelector('.bp-workspace'));
 
-const state = {
-    categoryID: null,
-    categoryPath: '',
-    selectedContextValues: {},
-    dimensions: [],
-    mode: 'public',
-    pinPersonalBenchmarks: false,
-    workspaceView: 'overview',
-    selectedObjectID: null,
-    authenticated: false,
-    personalRevision: 0,
-    personalIsDraft: true,
-    personalEntries: [],
-    personalFallbackRules: [],
-    publicEntries: [],
-    publicFallbackRules: [],
-    publicParticipantCount: 0,
-    publicIsFallback: false,
-    benchmarks: [],
-    modelLeaderboards: { personal: [], public: [] },
-    scoreScale: { min: 0, max: 100, higherIsBetter: true },
-    limits: { totalBasisPoints: 10000, maxPieItems: 24 },
-    undoSnapshot: null,
-    serverPersonalEntries: [],
-    serverPersonalFallbackRules: [],
-    saveTimer: null,
-    gestureTimer: null,
-    gestureOpen: false,
-    gestureSnapshot: null,
-    pieContextFingerprint: '',
-    pieOrderByObjectID: new Map(),
-    nextPieOrder: 0,
-    visualPieWeights: new Map(),
-    visualPieEntries: new Map(),
-    pieAnimationFrame: null,
-    saving: false,
-    savePromise: null,
-    persistPromise: null,
-    loadSequence: 0,
-    loading: false,
-    lastLoadTime: Date.now(),
-    statusMessage: ''
-};
 let touchPieGesture = null;
 let pendingWheelBasisPoints = 0;
 let wheelWeightCommitTimer = null;
 let wheelPreviewFrame = null;
-let modelScoresRequestSequence = 0;
+
 let selectedFallbackPrimaryID = null;
 let selectedFallbackComponentID = null;
 let fallbackDraftPrimaryID = null;
@@ -127,16 +85,22 @@ let fallbackWheelCommitTimer = null;
 let fallbackWheelPreviewFrame = null;
 let touchFallbackGesture = null;
 
-function cloneEntries(entries) {
-    return entries.map(entry => ({ ...entry }));
-}
-
-function cloneFallbackRules(rules) {
-    return rules.map(rule => ({
-        ...rule,
-        entries: rule.entries.map(entry => ({ ...entry }))
-    }));
-}
+const { openApprovedModelResults } = createModelScoresView({ state, modelScoresDialog, modelScoresTitle, modelScoresSummary, modelScoresList });
+const { renderModels } = createModelListView({ state, modelRows, openApprovedModelResults });
+const { renderPie } = createPieRenderer({
+    state, pieSvg, orderedPieEntries, currentPieEntries, selectedObjectIndex,
+    renderInlineFallback, fallbackRuleFor, publicFallbackRuleFor,
+    async onSelect(objectID) {
+        if (!await finishPendingWeightAdjustments()) return;
+        deactivateInlineFallbackTarget({ discardDraft: true });
+        expandedPublicFallbackPrimaryID = null;
+        selectedPublicFallbackComponentID = null;
+        state.selectedObjectID = objectID;
+        renderPie();
+        renderBenchmarks();
+        renderBenchmarkSummary();
+    }
+});
 
 function snapshotPersonalPie() {
     return {
@@ -145,147 +109,10 @@ function snapshotPersonalPie() {
     };
 }
 
-function clonePersonalPieSnapshot(snapshot) {
-    return {
-        entries: cloneEntries(snapshot?.entries ?? []),
-        fallbackRules: cloneFallbackRules(snapshot?.fallbackRules ?? [])
-    };
-}
-
 function restorePersonalPieSnapshot(snapshot) {
     const restored = clonePersonalPieSnapshot(snapshot);
     state.personalEntries = restored.entries;
     state.personalFallbackRules = restored.fallbackRules;
-}
-
-function invalidWorkspaceResponse(path, message) {
-    const error = new Error(`Invalid workspace response: ${path} ${message}`);
-    error.code = 'invalid_workspace_response';
-    // A response-shape error is deterministic and must not enter the network retry loop.
-    error.status = 422;
-    return error;
-}
-
-function requireWorkspaceObject(value, path) {
-    if (value === null || typeof value !== 'object' || Array.isArray(value)) {
-        throw invalidWorkspaceResponse(path, 'must be an object');
-    }
-    return value;
-}
-
-function requireWorkspaceArray(value, path) {
-    if (!Array.isArray(value)) {
-        throw invalidWorkspaceResponse(path, 'must be an array');
-    }
-    return value;
-}
-
-function requireWorkspaceConditionIdentity(value, path) {
-    const current = requireWorkspaceObject(value, path);
-    if (typeof current.conditionKey !== 'string' || current.conditionKey.trim() === '') {
-        throw invalidWorkspaceResponse(`${path}.conditionKey`, 'must be a non-empty string');
-    }
-    if (typeof current.conditionName !== 'string' || current.conditionName.trim() === '') {
-        throw invalidWorkspaceResponse(`${path}.conditionName`, 'must be a non-empty string');
-    }
-    if (typeof current.isDefaultCondition !== 'boolean') {
-        throw invalidWorkspaceResponse(`${path}.isDefaultCondition`, 'must be a boolean');
-    }
-    const literalDefault = current.conditionName.trim().toLocaleLowerCase('en-US') === 'default';
-    if (current.isDefaultCondition !== literalDefault
-        || (current.conditionKey === 'default') !== literalDefault) {
-        throw invalidWorkspaceResponse(path, 'has inconsistent default-condition identity');
-    }
-    return current;
-}
-
-function validateWorkspaceFallbackRules(value, pieEntries, piePath) {
-    const rulesPath = `${piePath}.fallbackRules`;
-    const rules = requireWorkspaceArray(value, rulesPath);
-    const pieConditionIDs = new Set(pieEntries.map(entry => Number(entry.conditionID)));
-    const primaryIDs = new Set();
-    rules.forEach((valueRule, ruleIndex) => {
-        const path = `${rulesPath}[${ruleIndex}]`;
-        const rule = requireWorkspaceObject(valueRule, path);
-        const primaryConditionID = Number(rule.primaryConditionID);
-        if (!Number.isSafeInteger(primaryConditionID)
-            || !pieConditionIDs.has(primaryConditionID)
-            || primaryIDs.has(primaryConditionID)
-            || rule.mode !== FALLBACK_RULE_MODE) {
-            throw invalidWorkspaceResponse(path, 'has an invalid primary or mode');
-        }
-        primaryIDs.add(primaryConditionID);
-        const componentIDs = new Set();
-        let totalBasisPoints = 0;
-        const entries = requireWorkspaceArray(rule.entries, `${path}.entries`);
-        if (entries.length === 0 || entries.length > MAX_FALLBACK_COMPONENTS) {
-            throw invalidWorkspaceResponse(`${path}.entries`, 'has an invalid size');
-        }
-        entries.forEach((valueEntry, entryIndex) => {
-            const entryPath = `${path}.entries[${entryIndex}]`;
-            const entry = requireWorkspaceConditionIdentity(valueEntry, entryPath);
-            const conditionID = Number(entry.conditionID);
-            const weightBasisPoints = Number(entry.weightBasisPoints);
-            if (!Number.isSafeInteger(conditionID)
-                || conditionID < 1
-                || conditionID === primaryConditionID
-                || componentIDs.has(conditionID)
-                || !Number.isSafeInteger(weightBasisPoints)
-                || weightBasisPoints < MIN_WEIGHT_BASIS_POINTS
-                || weightBasisPoints > 10000) {
-                throw invalidWorkspaceResponse(entryPath, 'has an invalid condition or weight');
-            }
-            componentIDs.add(conditionID);
-            totalBasisPoints += weightBasisPoints;
-        });
-        if (totalBasisPoints !== 10000) {
-            throw invalidWorkspaceResponse(`${path}.entries`, 'must total 100 percent');
-        }
-    });
-    return rules;
-}
-
-function validateWorkspacePayload(payload) {
-    const response = requireWorkspaceObject(payload, 'response');
-    const context = requireWorkspaceObject(response.context, 'context');
-    const dimensions = requireWorkspaceArray(context.dimensions, 'context.dimensions');
-    dimensions.forEach((dimension, index) => {
-        const current = requireWorkspaceObject(dimension, `context.dimensions[${index}]`);
-        requireWorkspaceArray(current.options, `context.dimensions[${index}].options`);
-    });
-    const personalPie = requireWorkspaceObject(response.personalPie, 'personalPie');
-    const personalEntries = requireWorkspaceArray(personalPie.entries, 'personalPie.entries');
-    personalEntries.forEach((entry, index) => {
-        requireWorkspaceConditionIdentity(entry, `personalPie.entries[${index}]`);
-    });
-    validateWorkspaceFallbackRules(personalPie.fallbackRules, personalEntries, 'personalPie');
-    const publicPie = requireWorkspaceObject(response.publicPie, 'publicPie');
-    const publicEntries = requireWorkspaceArray(publicPie.entries, 'publicPie.entries');
-    publicEntries.forEach((entry, index) => {
-        requireWorkspaceConditionIdentity(entry, `publicPie.entries[${index}]`);
-    });
-    validateWorkspaceFallbackRules(publicPie.fallbackRules, publicEntries, 'publicPie');
-    requireWorkspaceArray(response.benchmarks, 'benchmarks').forEach((entry, index) => {
-        requireWorkspaceConditionIdentity(entry, `benchmarks[${index}]`);
-    });
-    const modelLeaderboards = requireWorkspaceObject(response.modelLeaderboards, 'modelLeaderboards');
-    requireWorkspaceArray(modelLeaderboards.personal, 'modelLeaderboards.personal');
-    requireWorkspaceArray(modelLeaderboards.public, 'modelLeaderboards.public');
-    return response;
-}
-
-function clamp(value, min, max) {
-    return Math.min(max, Math.max(min, value));
-}
-
-function humanizePathPart(part) {
-    let decoded = String(part ?? '');
-    try {
-        decoded = decodeURIComponent(decoded.replace(/\+/g, ' '));
-    } catch {
-        // Keep the original text when a legacy path contains an incomplete escape.
-    }
-    return decoded.replace(/-/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
 function selectedObjectIndex(entries = currentPieEntries()) {
@@ -381,26 +208,6 @@ function syncContextValuesToURL() {
         url.searchParams.set(`context_${key}`, value);
     });
     window.history.replaceState(window.history.state, '', url);
-}
-
-async function postJSON(url, body) {
-    const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-    });
-    let payload = null;
-    if (response.status !== 204) {
-        const contentType = response.headers.get('content-type') ?? '';
-        payload = contentType.includes('application/json') ? await response.json() : null;
-    }
-    if (!response.ok) {
-        const error = new Error(payload?.error || `Request failed with status ${response.status}`);
-        error.status = response.status;
-        error.payload = payload;
-        throw error;
-    }
-    return payload;
 }
 
 function setStatus(message = '') {
@@ -602,341 +409,6 @@ function renderTemplateControls() {
         picker.append(control, menu);
         templateStrip.append(picker);
     });
-}
-
-function polarToCartesian(cx, cy, radius, angle) {
-    const radians = (angle - 90) * Math.PI / 180;
-    return { x: cx + radius * Math.cos(radians), y: cy + radius * Math.sin(radians) };
-}
-
-function describeArc(cx, cy, radius, startAngle, endAngle) {
-    if (endAngle - startAngle >= 359.999) {
-        const start = polarToCartesian(cx, cy, radius, startAngle);
-        const opposite = polarToCartesian(cx, cy, radius, startAngle + 180);
-        return [
-            `M ${start.x} ${start.y}`,
-            `A ${radius} ${radius} 0 1 0 ${opposite.x} ${opposite.y}`,
-            `A ${radius} ${radius} 0 1 0 ${start.x} ${start.y}`,
-            'Z'
-        ].join(' ');
-    }
-    const start = polarToCartesian(cx, cy, radius, endAngle);
-    const end = polarToCartesian(cx, cy, radius, startAngle);
-    const largeArcFlag = endAngle - startAngle <= 180 ? 0 : 1;
-    return [
-        `M ${cx} ${cy}`,
-        `L ${start.x} ${start.y}`,
-        `A ${radius} ${radius} 0 ${largeArcFlag} 0 ${end.x} ${end.y}`,
-        'Z'
-    ].join(' ');
-}
-
-function splitPieLabel(label) {
-    const words = String(label).trim().split(/\s+/).filter(Boolean);
-    if (words.length <= 1) {
-        return [words[0] || 'Other'];
-    }
-    if (words.length === 2) {
-        return words;
-    }
-    const midpoint = Math.ceil(words.length / 2);
-    return [words.slice(0, midpoint).join(' '), words.slice(midpoint).join(' ')];
-}
-
-function benchmarkConditionLabel(object) {
-    if (!object) {
-        return '';
-    }
-    const conditionName = String(object.conditionName ?? '').trim();
-    return conditionName.toLocaleLowerCase('en-US') === 'default' ? '' : conditionName;
-}
-
-function benchmarkAccessibleName(object) {
-    if (!object) {
-        return '';
-    }
-    const conditionLabel = benchmarkConditionLabel(object);
-    return conditionLabel ? `${object.name}, ${conditionLabel}` : object.name;
-}
-
-function createSvgElement(tag, attributes = {}) {
-    const element = document.createElementNS(SVG_NS, tag);
-    Object.entries(attributes).forEach(([key, value]) => element.setAttribute(key, String(value)));
-    return element;
-}
-
-function drawPie(entries) {
-    if (entries.length === 0) {
-        pieSvg.replaceChildren();
-        const empty = createSvgElement('text', { x: 180, y: 180, class: 'bp-pie-empty' });
-        empty.textContent = state.mode === 'personal'
-            ? 'Choose a benchmark on the right to begin'
-            : 'No public weights yet';
-        pieSvg.append(empty);
-        return;
-    }
-
-    pieSvg.querySelector('.bp-pie-empty')?.remove();
-    if (selectedObjectIndex(entries) < 0) {
-        state.selectedObjectID = entries[0].conditionID;
-    }
-    let defs = pieSvg.querySelector(':scope > defs[data-pie-defs]');
-    if (!defs) {
-        defs = createSvgElement('defs', { 'data-pie-defs': '' });
-        pieSvg.prepend(defs);
-    }
-    const desiredIDs = new Set(entries.map(entry => Number(entry.conditionID)));
-    pieSvg.querySelectorAll(':scope > g[data-object-id]').forEach(group => {
-        if (!desiredIDs.has(Number(group.dataset.objectId))) {
-            group.remove();
-        }
-    });
-    defs.querySelectorAll('linearGradient[data-object-id]').forEach(gradient => {
-        if (!desiredIDs.has(Number(gradient.dataset.objectId))) {
-            gradient.remove();
-        }
-    });
-
-    entries.forEach((entry, index) => {
-        const objectID = Number(entry.conditionID);
-        const colorIndex = state.pieOrderByObjectID.get(Number(entry.conditionID)) ?? index;
-        const [startColor, endColor] = PIE_GRADIENTS[colorIndex % PIE_GRADIENTS.length];
-        let gradient = defs.querySelector(`linearGradient[data-object-id="${objectID}"]`);
-        if (!gradient) {
-            gradient = createSvgElement('linearGradient', {
-                id: `bp-pie-gradient-${objectID}`,
-                'data-object-id': objectID,
-                x1: '0%', y1: '0%', x2: '100%', y2: '100%'
-            });
-            gradient.append(
-                createSvgElement('stop', { offset: '0%', 'stop-color': startColor }),
-                createSvgElement('stop', { offset: '100%', 'stop-color': endColor })
-            );
-            defs.append(gradient);
-        }
-    });
-
-    const cx = 180;
-    const cy = 180;
-    const radius = 160;
-    let startAngle = 7;
-    entries.forEach((entry, index) => {
-        const weight = Number(entry.weightBasisPoints) / state.limits.totalBasisPoints;
-        const angle = weight * 360;
-        const endAngle = startAngle + angle;
-        const middleAngle = startAngle + angle / 2;
-        const selected = Number(state.selectedObjectID) === Number(entry.conditionID);
-        const objectID = Number(entry.conditionID);
-        let group = pieSvg.querySelector(`:scope > g[data-object-id="${objectID}"]`);
-        if (!group) {
-            group = createSvgElement('g', {
-                role: 'button',
-                tabindex: '0',
-                'data-object-id': objectID
-            });
-            const liftLayer = createSvgElement('g', { class: 'bp-pie-slice-lift' });
-            const slice = createSvgElement('path', { class: 'bp-pie-slice' });
-            liftLayer.append(slice);
-            group.append(liftLayer);
-            const select = async () => {
-                if (!await finishPendingWeightAdjustments()) return;
-                deactivateInlineFallbackTarget({ discardDraft: true });
-                expandedPublicFallbackPrimaryID = null;
-                selectedPublicFallbackComponentID = null;
-                state.selectedObjectID = Number(group.dataset.objectId);
-                renderPie();
-                renderBenchmarks();
-                renderBenchmarkSummary();
-            };
-            group.addEventListener('mousedown', event => event.preventDefault());
-            group.addEventListener('click', () => void select());
-            group.addEventListener('keydown', event => {
-                if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault();
-                    void select();
-                }
-            });
-            pieSvg.append(group);
-        }
-        const hasFallback = state.mode === 'personal'
-            ? Boolean(fallbackRuleFor(objectID))
-            : Boolean(publicFallbackRuleFor(objectID));
-        group.setAttribute(
-            'aria-label',
-            `${benchmarkAccessibleName(entry)}: ${entry.weight.toFixed(2)}%${hasFallback ? '. Fallback enabled' : ''}`
-        );
-        const liftLayer = group.querySelector('.bp-pie-slice-lift');
-        const slice = group.querySelector('.bp-pie-slice');
-        slice.setAttribute('d', describeArc(cx, cy, radius, startAngle, endAngle));
-        slice.setAttribute('fill', `url(#bp-pie-gradient-${objectID})`);
-        slice.classList.toggle('selected', selected);
-
-        if (entry.weight >= 7) {
-            const labelPoint = polarToCartesian(cx, cy, radius * (entry.weight >= 24 ? 0.57 : 0.7), middleAngle);
-            let text = group.querySelector('.bp-pie-label');
-            const labelLines = splitPieLabel(entry.name).slice(0, 2);
-            const conditionLabel = benchmarkConditionLabel(entry);
-            const labelKey = [...labelLines, conditionLabel, hasFallback ? 'fallback' : ''].join('\n');
-            if (!text || text.dataset.labelKey !== labelKey) {
-                text?.remove();
-                text = createSvgElement('text', { class: 'bp-pie-label' });
-                text.dataset.labelKey = labelKey;
-                labelLines.forEach(line => {
-                    const tspan = createSvgElement('tspan', { 'data-label-line': '' });
-                    tspan.textContent = line.length > 18 ? `${line.slice(0, 16)}…` : line;
-                    text.append(tspan);
-                });
-                if (hasFallback) {
-                    const fallbackIcon = createSvgElement('tspan', {
-                        class: 'bp-pie-fallback-icon',
-                        dx: '4',
-                        'aria-hidden': 'true'
-                    });
-                    fallbackIcon.textContent = '\uf126';
-                    text.append(fallbackIcon);
-                }
-                if (conditionLabel) {
-                    const condition = createSvgElement('tspan', {
-                        class: 'bp-pie-condition',
-                        'data-label-condition': ''
-                    });
-                    condition.textContent = conditionLabel.length > 18
-                        ? `${conditionLabel.slice(0, 16)}…`
-                        : conditionLabel;
-                    text.append(condition);
-                }
-                text.append(createSvgElement('tspan', { 'data-label-percent': '' }));
-                liftLayer.append(text);
-            }
-            text.setAttribute('x', labelPoint.x);
-            const contentLineCount = labelLines.length + (conditionLabel ? 1 : 0);
-            text.setAttribute('y', labelPoint.y - Math.max(7, (contentLineCount - 1) * 8));
-            text.querySelectorAll('[data-label-line]').forEach((line, lineIndex) => {
-                line.setAttribute('x', labelPoint.x);
-                line.setAttribute('dy', lineIndex === 0 ? 0 : 17);
-            });
-            const condition = text.querySelector('[data-label-condition]');
-            if (condition) {
-                condition.setAttribute('x', labelPoint.x);
-                condition.setAttribute('dy', 17);
-            }
-            const percentage = text.querySelector('[data-label-percent]');
-            percentage.setAttribute('x', labelPoint.x);
-            percentage.setAttribute('dy', 18);
-            percentage.textContent = `${Math.round(entry.weight)}%`;
-        } else {
-            group.querySelector('.bp-pie-label')?.remove();
-        }
-        startAngle = endAngle;
-    });
-    const selectedGroup = pieSvg.querySelector(`:scope > g[data-object-id="${Number(state.selectedObjectID)}"]`);
-    if (selectedGroup) {
-        pieSvg.append(selectedGroup);
-    }
-    pieSvg.setAttribute('aria-label', state.mode === 'personal'
-        ? 'Personal benchmark weights'
-        : 'Public benchmark weights');
-}
-
-function renderPie({ animateWeights = false } = {}) {
-    const entries = orderedPieEntries(currentPieEntries());
-    if (selectedObjectIndex(entries) < 0) {
-        state.selectedObjectID = entries[0]?.conditionID ?? null;
-    }
-    renderInlineFallback();
-
-    const targetWeights = new Map(entries.map(entry => [
-        Number(entry.conditionID),
-        Number(entry.weightBasisPoints)
-    ]));
-    const canAnimate = animateWeights
-        && !window.matchMedia('(prefers-reduced-motion: reduce)').matches
-        && state.visualPieWeights.size > 0;
-
-    if (!canAnimate) {
-        if (state.pieAnimationFrame !== null) {
-            cancelAnimationFrame(state.pieAnimationFrame);
-            state.pieAnimationFrame = null;
-        }
-        state.visualPieWeights = targetWeights;
-        state.visualPieEntries = new Map(entries.map(entry => [Number(entry.conditionID), { ...entry }]));
-        drawPie(entries);
-        return;
-    }
-
-    const animationEntryMap = new Map(state.visualPieEntries);
-    entries.forEach(entry => animationEntryMap.set(Number(entry.conditionID), { ...entry }));
-    const animationEntries = orderedPieEntries(Array.from(animationEntryMap.values()));
-    const startWeights = new Map(animationEntries.map(entry => {
-        const objectID = Number(entry.conditionID);
-        return [objectID, Number(state.visualPieWeights.get(objectID) ?? 0)];
-    }));
-    const animationTargetWeights = new Map(animationEntries.map(entry => {
-        const objectID = Number(entry.conditionID);
-        return [objectID, Number(targetWeights.get(objectID) ?? 0)];
-    }));
-    if (state.pieAnimationFrame !== null) {
-        cancelAnimationFrame(state.pieAnimationFrame);
-    }
-    const startedAt = performance.now();
-    const animateFrame = now => {
-        const progress = clamp((now - startedAt) / PIE_WEIGHT_TRANSITION_MS, 0, 1);
-        const eased = 1 - Math.pow(1 - progress, 3);
-        const frameEntries = animationEntries.map(entry => {
-            const objectID = Number(entry.conditionID);
-            const start = startWeights.get(objectID);
-            const target = animationTargetWeights.get(objectID);
-            const weightBasisPoints = start + ((target - start) * eased);
-            return {
-                ...entry,
-                weightBasisPoints,
-                weight: weightBasisPoints / 100
-            };
-        });
-        state.visualPieWeights = new Map(frameEntries.map(entry => [
-            Number(entry.conditionID),
-            Number(entry.weightBasisPoints)
-        ]));
-        state.visualPieEntries = new Map(frameEntries.map(entry => [Number(entry.conditionID), { ...entry }]));
-        drawPie(frameEntries);
-        if (progress < 1) {
-            state.pieAnimationFrame = requestAnimationFrame(animateFrame);
-        } else {
-            state.pieAnimationFrame = null;
-            state.visualPieWeights = targetWeights;
-            state.visualPieEntries = new Map(entries.map(entry => [Number(entry.conditionID), { ...entry }]));
-            drawPie(entries);
-        }
-    };
-    state.pieAnimationFrame = requestAnimationFrame(animateFrame);
-}
-
-function distributeToTarget(entries, target, minimum = MIN_WEIGHT_BASIS_POINTS) {
-    if (entries.length === 0) {
-        return [];
-    }
-    const minimumTotal = entries.length * minimum;
-    const normalizedTarget = Math.max(minimumTotal, Math.round(target));
-    const distributable = normalizedTarget - minimumTotal;
-    const raw = entries.map(entry => Math.max(0, Number(entry.weightBasisPoints) - minimum));
-    const rawTotal = raw.reduce((sum, value) => sum + value, 0);
-    const exact = raw.map(value => distributable * (rawTotal > 0 ? value / rawTotal : 1 / entries.length));
-    const floors = exact.map(Math.floor);
-    let remaining = distributable - floors.reduce((sum, value) => sum + value, 0);
-    exact
-        .map((value, index) => ({ index, fraction: value - floors[index] }))
-        .sort((a, b) => (b.fraction - a.fraction) || (a.index - b.index))
-        .forEach(item => {
-            if (remaining > 0) {
-                floors[item.index] += 1;
-                remaining -= 1;
-            }
-        });
-    return entries.map((entry, index) => ({
-        ...entry,
-        weightBasisPoints: minimum + floors[index],
-        weight: (minimum + floors[index]) / 100
-    }));
 }
 
 function updateUndoState() {
@@ -1183,8 +655,7 @@ function renderBenchmarkSummary() {
 
 function applyWorkspaceView({ animate = false } = {}) {
     const update = () => {
-        const focus = state.workspaceView === 'focus';
-        if (pieCard.parentElement !== pieHomeSlot) {
+            if (pieCard.parentElement !== pieHomeSlot) {
             pieHomeSlot.append(pieCard);
         }
         pieCard.hidden = false;
@@ -1212,259 +683,6 @@ function setWorkspaceView(view, { animate = true } = {}) {
     renderModeState();
     renderBenchmarks();
     renderBenchmarkSummary();
-}
-
-function contributionEditURL(mode, values) {
-    const url = new URL('/contribute', window.location.origin);
-    url.searchParams.set('mode', mode);
-    Object.entries(values).forEach(([key, value]) => {
-        if (value !== null && value !== undefined && String(value) !== '') {
-            url.searchParams.set(key, String(value));
-        }
-    });
-    url.searchParams.set('pageURL', window.location.href);
-    return url.pathname + url.search;
-}
-
-function buildBenchmarkEditURL(object) {
-    return contributionEditURL('edit_benchmark', {
-        targetBenchmarkID: object.benchmarkID,
-        targetConditionID: object.ID
-    });
-}
-
-function buildModelEditURL(model) {
-    return contributionEditURL('edit_model', {
-        targetModelID: model.modelID,
-        targetConditionID: model.ID
-    });
-}
-
-function buildResultEditURL(result) {
-    return contributionEditURL('edit_result', { targetResultID: result.ID });
-}
-
-function invalidModelScoresResponse(path, message) {
-    const error = new Error(`Invalid model-score response: ${path} ${message}`);
-    error.code = 'invalid_model_scores_response';
-    error.status = 422;
-    return error;
-}
-
-function requireModelScoresObject(value, path) {
-    if (value === null || typeof value !== 'object' || Array.isArray(value)) {
-        throw invalidModelScoresResponse(path, 'must be an object');
-    }
-    return value;
-}
-
-function requireModelScoresArray(value, path) {
-    if (!Array.isArray(value)) {
-        throw invalidModelScoresResponse(path, 'must be an array');
-    }
-    return value;
-}
-
-function requireModelScoresNumber(value, path) {
-    if (typeof value !== 'number' || !Number.isFinite(value)) {
-        throw invalidModelScoresResponse(path, 'must be a finite number');
-    }
-    return value;
-}
-
-function validateApprovedModelResultsPayload(payload) {
-    const response = requireModelScoresObject(payload, 'response');
-    const model = requireModelScoresObject(response.model, 'model');
-    requireModelScoresNumber(model.modelID, 'model.modelID');
-    requireModelScoresNumber(model.modelConditionID, 'model.modelConditionID');
-    if (typeof model.modelName !== 'string'
-        || typeof model.vendorName !== 'string'
-        || typeof model.modelConditionName !== 'string') {
-        throw invalidModelScoresResponse('model', 'must include vendor, model, and condition names');
-    }
-    const scoreGroups = requireModelScoresArray(response.scoreGroups, 'scoreGroups');
-    scoreGroups.forEach((groupValue, groupIndex) => {
-        const group = requireModelScoresObject(groupValue, `scoreGroups[${groupIndex}]`);
-        requireModelScoresNumber(group.benchmarkConditionID, `scoreGroups[${groupIndex}].benchmarkConditionID`);
-        requireModelScoresNumber(group.medianRawScore, `scoreGroups[${groupIndex}].medianRawScore`);
-        requireModelScoresNumber(group.medianNormalizedScore, `scoreGroups[${groupIndex}].medianNormalizedScore`);
-        if (typeof group.benchmarkName !== 'string' || typeof group.benchmarkConditionName !== 'string') {
-            throw invalidModelScoresResponse(`scoreGroups[${groupIndex}]`, 'must include benchmark and condition names');
-        }
-        const samples = requireModelScoresArray(group.samples, `scoreGroups[${groupIndex}].samples`);
-        if (samples.length === 0 || group.sampleCount !== samples.length) {
-            throw invalidModelScoresResponse(`scoreGroups[${groupIndex}].sampleCount`, 'must match a non-empty samples array');
-        }
-        samples.forEach((sampleValue, sampleIndex) => {
-            const sample = requireModelScoresObject(sampleValue, `scoreGroups[${groupIndex}].samples[${sampleIndex}]`);
-            requireModelScoresNumber(sample.ID, `scoreGroups[${groupIndex}].samples[${sampleIndex}].ID`);
-            requireModelScoresNumber(sample.rawScore, `scoreGroups[${groupIndex}].samples[${sampleIndex}].rawScore`);
-            requireModelScoresNumber(sample.normalizedScore, `scoreGroups[${groupIndex}].samples[${sampleIndex}].normalizedScore`);
-            if (typeof sample.sourceURL !== 'string' || sample.sourceURL.trim() === '') {
-                throw invalidModelScoresResponse(`scoreGroups[${groupIndex}].samples[${sampleIndex}].sourceURL`, 'must be a non-empty string');
-            }
-        });
-    });
-    return response;
-}
-
-function approvedResultScore(rawScore, usesPercentageScale) {
-    const numericValue = Number(rawScore);
-    const displayValue = String(Number(numericValue.toFixed(usesPercentageScale ? 1 : 3)));
-    return `${displayValue}${usesPercentageScale ? '%' : ''}`;
-}
-
-function approvedResultSourceLabel(sample) {
-    if (typeof sample.sourceTitle === 'string' && sample.sourceTitle.trim()) {
-        return sample.sourceTitle.trim();
-    }
-    try {
-        return new URL(sample.sourceURL).hostname.replace(/^www\./, '');
-    } catch {
-        return 'Source';
-    }
-}
-
-function approvedResultDate(value) {
-    const date = new Date(value);
-    if (!Number.isFinite(date.getTime())) {
-        return '';
-    }
-    return new Intl.DateTimeFormat('en', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric'
-    }).format(date);
-}
-
-function renderApprovedModelResults(payload) {
-    modelScoresTitle.textContent = `${payload.model.modelName} · approved scores`;
-    const sampleCount = payload.scoreGroups.reduce((total, group) => total + group.sampleCount, 0);
-    modelScoresSummary.replaceChildren();
-    const vendor = document.createElement('span');
-    vendor.textContent = payload.model.vendorName;
-    const condition = document.createElement('span');
-    condition.className = 'bp-model-scores-condition';
-    const conditionLabel = document.createElement('small');
-    conditionLabel.textContent = 'Model condition';
-    const conditionName = document.createElement('strong');
-    conditionName.textContent = payload.model.modelConditionName;
-    condition.append(conditionLabel, conditionName);
-    const count = document.createElement('span');
-    count.textContent = `${payload.scoreGroups.length} benchmark ${payload.scoreGroups.length === 1 ? 'condition' : 'conditions'} · ${sampleCount} accepted source ${sampleCount === 1 ? 'score' : 'scores'}`;
-    modelScoresSummary.append(vendor, condition, count);
-    modelScoresList.replaceChildren();
-    if (payload.scoreGroups.length === 0) {
-        const empty = document.createElement('p');
-        empty.className = 'bp-model-scores-empty';
-        empty.textContent = 'No approved scores are available for this model condition.';
-        modelScoresList.append(empty);
-        return;
-    }
-    payload.scoreGroups.forEach(group => {
-        const row = document.createElement('article');
-        row.className = 'bp-model-score-detail-row';
-        const heading = document.createElement('header');
-        heading.className = 'bp-model-score-detail-heading';
-        const identity = document.createElement('div');
-        identity.className = 'bp-model-score-detail-identity';
-        const benchmarkTitle = document.createElement('div');
-        benchmarkTitle.className = 'bp-model-score-detail-benchmark';
-        const name = document.createElement('strong');
-        name.textContent = group.benchmarkName;
-        benchmarkTitle.append(name);
-        const benchmarkCondition = document.createElement('span');
-        benchmarkCondition.className = 'bp-benchmark-condition';
-        benchmarkCondition.textContent = group.benchmarkConditionIsDefault
-            ? 'Default benchmark condition'
-            : group.benchmarkConditionName;
-        benchmarkTitle.append(benchmarkCondition);
-        const sampleDescription = document.createElement('small');
-        sampleDescription.textContent = group.sampleCount === 1
-            ? '1 accepted source score'
-            : `Median of ${group.sampleCount} accepted source scores`;
-        identity.append(benchmarkTitle, sampleDescription);
-
-        const aggregate = document.createElement('div');
-        aggregate.className = 'bp-model-score-aggregate';
-        const aggregateLabel = document.createElement('small');
-        aggregateLabel.textContent = group.sampleCount === 1 ? 'Reported score' : 'Reported median';
-        const aggregateValue = document.createElement('strong');
-        aggregateValue.className = 'bp-model-score-detail-value';
-        aggregateValue.textContent = approvedResultScore(group.medianRawScore, group.usesPercentageScale);
-        const normalized = document.createElement('span');
-        normalized.textContent = `Ranking value ${Number(group.medianNormalizedScore).toFixed(2)} / 100`;
-        aggregate.append(aggregateLabel, aggregateValue, normalized);
-        heading.append(identity, aggregate);
-
-        const samples = document.createElement('div');
-        samples.className = 'bp-model-score-samples';
-        group.samples.forEach((sample, index) => {
-            const sampleRow = document.createElement('div');
-            sampleRow.className = 'bp-model-score-sample';
-            const sampleIndex = document.createElement('span');
-            sampleIndex.className = 'bp-model-score-sample-index';
-            sampleIndex.textContent = String(index + 1);
-            const sampleScore = document.createElement('strong');
-            sampleScore.className = 'bp-model-score-sample-value';
-            sampleScore.textContent = approvedResultScore(sample.rawScore, group.usesPercentageScale);
-            const source = document.createElement('a');
-            source.className = 'bp-model-score-source';
-            source.href = sample.sourceURL;
-            source.target = '_blank';
-            source.rel = 'noopener';
-            source.title = sample.sourceURL;
-            source.setAttribute('aria-label', `Open source for ${group.benchmarkName}`);
-            const sourceLabel = document.createElement('span');
-            sourceLabel.textContent = approvedResultSourceLabel(sample);
-            const sourceDate = document.createElement('small');
-            sourceDate.textContent = approvedResultDate(sample.createdAt);
-            source.append(sourceLabel, sourceDate, document.createElement('i'));
-            source.lastElementChild.className = 'fa-solid fa-arrow-up-right-from-square';
-            source.lastElementChild.setAttribute('aria-hidden', 'true');
-            const normalizedSample = document.createElement('span');
-            normalizedSample.className = 'bp-model-score-sample-normalized';
-            normalizedSample.textContent = `${Number(sample.normalizedScore).toFixed(2)} / 100`;
-            const edit = document.createElement('a');
-            edit.className = 'bp-row-edit-action bp-benchmark-edit';
-            edit.href = buildResultEditURL(sample);
-            edit.title = 'Change approved score';
-            edit.setAttribute('aria-label', `Change source score ${index + 1} for ${group.benchmarkName}`);
-            edit.innerHTML = '<i class="fa-solid fa-pencil" aria-hidden="true"></i>';
-            edit.hidden = !state.authenticated;
-            sampleRow.append(sampleIndex, sampleScore, source, normalizedSample, edit);
-            samples.append(sampleRow);
-        });
-        row.append(heading, samples);
-        modelScoresList.append(row);
-    });
-}
-
-async function openApprovedModelResults(model) {
-    const requestSequence = ++modelScoresRequestSequence;
-    modelScoresTitle.textContent = `${model.name} · approved scores`;
-    modelScoresSummary.textContent = 'Loading approved scores…';
-    modelScoresList.replaceChildren();
-    modelScoresDialog.hidden = false;
-    try {
-        const payload = validateApprovedModelResultsPayload(await postJSON('/api/get_approved_benchmark_results', {
-            modelID: Number(model.modelID),
-            modelConditionID: Number(model.ID)
-        }));
-        if (requestSequence !== modelScoresRequestSequence) return;
-        if (payload.model.modelID !== Number(model.modelID)
-            || payload.model.modelConditionID !== Number(model.ID)) {
-            throw invalidModelScoresResponse('model', 'does not match the requested model condition');
-        }
-        renderApprovedModelResults(payload);
-    } catch (error) {
-        if (requestSequence !== modelScoresRequestSequence) return;
-        modelScoresSummary.textContent = 'Approved scores could not be loaded.';
-        const message = document.createElement('p');
-        message.className = 'bp-model-scores-empty';
-        message.textContent = error?.payload?.error ?? 'Try again after refreshing the workspace.';
-        modelScoresList.replaceChildren(message);
-    }
 }
 
 function fallbackRuleFor(primaryConditionID) {
@@ -2261,136 +1479,6 @@ function renderBenchmarks() {
     });
 }
 
-function vendorMark(vendor) {
-    const key = String(vendor || 'openai').toLowerCase();
-    const mark = document.createElement('span');
-    mark.className = `bp-vendor-mark vendor-${key}`;
-    const assets = {
-        openai: 'openai.png', anthropic: 'anthropic.png', google: 'google.png',
-        meta: 'meta.png', mistral: 'mistral.png', amazon: 'amazon.png',
-        cohere: 'cohere.png', qwen: 'qwen.png', microsoft: 'microsoft.png',
-        xai: 'xai.png', deepseek: 'deepseek.png', zhipu: 'zhipu.png'
-    };
-    if (assets[key]) {
-        const image = document.createElement('img');
-        image.src = `/assets/vendors/${assets[key]}`;
-        image.alt = '';
-        image.setAttribute('aria-hidden', 'true');
-        image.addEventListener('error', () => {
-            mark.textContent = key.slice(0, 1).toUpperCase();
-        }, { once: true });
-        mark.append(image);
-    } else {
-        mark.textContent = key.slice(0, 1).toUpperCase();
-    }
-    return mark;
-}
-
-function renderModels() {
-    modelRows.replaceChildren();
-    if (state.loading) {
-        const loading = document.createElement('div');
-        loading.className = 'bp-loading-state';
-        loading.textContent = 'Calculating model ranges…';
-        modelRows.append(loading);
-        return;
-    }
-    const models = [...(state.modelLeaderboards[state.mode] ?? [])]
-        .sort((a, b) => (
-            Number(b.lower) - Number(a.lower)
-            || Number(b.coverage) - Number(a.coverage)
-            || a.name.localeCompare(b.name)
-        ));
-    if (models.length === 0) {
-        const empty = document.createElement('div');
-        empty.className = 'bp-empty-state';
-        empty.textContent = state.mode === 'personal'
-            ? 'Add benchmarks to Personal Weights to calculate a model ranking.'
-            : 'No public model ranking is available in this context yet.';
-        modelRows.append(empty);
-        return;
-    }
-    let previousScore = null;
-    let previousRank = 0;
-    models.forEach((model, index) => {
-        const selectedScore = Number(model.lower);
-        const rankValue = previousScore !== null && Math.abs(selectedScore - previousScore) < 0.0001
-            ? previousRank
-            : index + 1;
-        previousScore = selectedScore;
-        previousRank = rankValue;
-
-        const row = document.createElement('div');
-        row.className = 'bp-model-row';
-        row.title = `${model.lower.toFixed(2)}–${model.upper.toFixed(2)} · ${model.coverage.toFixed(2)}% benchmark coverage`;
-        row.tabIndex = 0;
-        row.setAttribute('role', 'button');
-        row.setAttribute('aria-label', `View approved scores for ${model.name}`);
-        const rank = document.createElement('span');
-        rank.className = 'bp-model-rank';
-        rank.textContent = String(rankValue);
-        const identity = document.createElement('span');
-        identity.className = 'bp-model-name-wrap';
-        const name = document.createElement('span');
-        name.className = 'bp-model-name';
-        name.textContent = model.name;
-        identity.append(vendorMark(model.logoKey || model.vendorSlug), name);
-        if (state.mode === 'personal' && Number(model.fallbackUsageCount) > 0) {
-            const fallbackBadge = document.createElement('span');
-            fallbackBadge.className = 'bp-model-fallback-badge';
-            fallbackBadge.title = `Fallback used for ${model.fallbackUsageCount} benchmark${Number(model.fallbackUsageCount) === 1 ? '' : 's'}`;
-            fallbackBadge.setAttribute('aria-label', fallbackBadge.title);
-            fallbackBadge.innerHTML = `<i class="fa-solid fa-code-branch" aria-hidden="true"></i><span>${Number(model.fallbackUsageCount)}</span>`;
-            identity.append(fallbackBadge);
-            row.title += ` · ${fallbackBadge.title}`;
-        }
-
-        const track = document.createElement('span');
-        track.className = 'bp-score-track';
-        track.setAttribute('aria-label', `Verified lower bound ${model.lower.toFixed(2)}, possible upper bound ${model.upper.toFixed(2)}`);
-        const known = document.createElement('span');
-        known.className = 'bp-score-known';
-        known.style.width = `${clamp(Number(model.lower), 0, 100)}%`;
-        const uncertain = document.createElement('span');
-        uncertain.className = 'bp-score-uncertain';
-        uncertain.style.left = `${clamp(Number(model.lower), 0, 100)}%`;
-        uncertain.style.width = `${clamp(Number(model.upper) - Number(model.lower), 0, 100)}%`;
-        track.append(known, uncertain);
-
-        const score = document.createElement('span');
-        score.className = 'bp-model-score';
-        score.textContent = selectedScore.toFixed(2);
-        const actionCell = document.createElement('span');
-        actionCell.className = 'bp-model-action-cell';
-        if (state.authenticated) {
-            const edit = document.createElement('a');
-            edit.className = 'bp-row-edit-action bp-benchmark-edit';
-            edit.href = buildModelEditURL(model);
-            edit.title = 'Change model';
-            edit.setAttribute('aria-label', `Change ${model.name}`);
-            edit.innerHTML = '<i class="fa-solid fa-pencil" aria-hidden="true"></i>';
-            edit.addEventListener('click', event => event.stopPropagation());
-            actionCell.append(edit);
-        }
-        const activate = event => {
-            if (event.target.closest('a, button')) {
-                return;
-            }
-            if (event.type === 'keydown' && event.key !== 'Enter' && event.key !== ' ') {
-                return;
-            }
-            if (event.type === 'keydown') {
-                event.preventDefault();
-            }
-            void openApprovedModelResults(model);
-        };
-        row.addEventListener('click', activate);
-        row.addEventListener('keydown', activate);
-        row.append(rank, identity, track, score, actionCell);
-        modelRows.append(row);
-    });
-}
-
 function renderModeState() {
     const personal = state.mode === 'personal';
     const hasPersonalWeights = state.personalEntries.length > 0;
@@ -3126,10 +2214,10 @@ refreshButton.addEventListener('click', async () => {
     await loadWeightedWorkspace();
 });
 
-window.__benchpollBeforeWorkspaceChange = async () => {
+workspaceChannel.beforeChange(async () => {
     if (!await finishPendingWeightAdjustments()) return false;
     return flushPendingPersonalPieSave();
-};
+});
 
 missionDismiss.addEventListener('click', () => {
     missionBanner.hidden = true;
@@ -3140,24 +2228,6 @@ termsButton.addEventListener('click', () => {
     termsDialog.hidden = false;
 });
 
-window.addEventListener('benchpoll:workspace-state', event => {
-    void applyWorkspaceState(event.detail);
+workspaceChannel.subscribe(detail => {
+    void applyWorkspaceState(detail);
 });
-
-const existingState = window.__benchpollHomeState;
-if (existingState) {
-    void applyWorkspaceState(existingState);
-} else {
-    void loadWeightedWorkspace();
-}
-
-const treeObserver = new MutationObserver(() => {
-    const firstFolder = document.querySelector('#tree-content > .tree-group:not(.expanded) > .tree-root-item .icon-folder');
-    if (firstFolder) {
-        treeObserver.disconnect();
-        firstFolder.click();
-    }
-});
-treeObserver.observe(document.getElementById('tree-content'), { childList: true, subtree: true });
-
-window.setInterval(updateLastUpdated, 30000);

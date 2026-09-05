@@ -6,7 +6,7 @@
     place-items: center;
     padding: 20px;
     overflow: auto;
-    background: rgba(24, 29, 57, 0.3);
+    background: rgba(32, 49, 41, 0.3);
     backdrop-filter: blur(6px) saturate(0.94);
     opacity: 0;
     transition: opacity 180ms ease-out;
@@ -22,13 +22,13 @@
     max-height: min(760px, calc(100vh - 40px));
     padding: 29px 30px 27px;
     overflow: auto;
-    border: 1px solid #e0e3ee;
+    border: 1px solid #e2ece7;
     border-radius: 8px;
     background: #fff;
     box-shadow:
-        0 2px 5px rgba(25, 32, 64, 0.06),
-        0 22px 58px rgba(45, 50, 92, 0.18);
-    color: var(--bp-text, #1d294d);
+        0 2px 5px rgba(35, 54, 45, 0.06),
+        0 22px 58px rgba(53, 84, 69, 0.18);
+    color: var(--bp-text, #293b36);
     transform: translateY(10px) scale(0.985);
     transition: transform 220ms var(--bp-ease-soft, cubic-bezier(0.22, 1, 0.36, 1));
 }
@@ -48,7 +48,7 @@ body.bp-home .bp-welcome-dialog:focus-visible {
     left: 30px;
     width: 72px;
     height: 3px;
-    background: #6d5ce7;
+    background: #246650;
     content: "";
 }
 
@@ -63,17 +63,20 @@ body.bp-home .bp-welcome-dialog:focus-visible {
     border: 0;
     border-radius: 6px;
     background: transparent;
-    color: #747d98;
+    color: #587465;
     cursor: pointer;
     transition: background-color 150ms ease, color 150ms ease;
 }
 
 .bp-welcome-close:hover {
-    background: #f3f2fb;
-    color: #2b3458;
+    background: #f5f8f6;
+    color: #335042;
 }
 
 .bp-welcome-brand {
+    gap: 10px;
+    font-size: 23px;
+    font-weight: 700;
     display: flex;
     align-items: center;
     min-height: 31px;
@@ -101,7 +104,7 @@ body.bp-home .bp-welcome-dialog:focus-visible {
 
 .bp-welcome-eyebrow {
     margin: 0 0 8px;
-    color: #6656df;
+    color: #296a4a;
     font-size: 12px;
     font-weight: 700;
     line-height: 1.4;
@@ -111,7 +114,7 @@ body.bp-home .bp-welcome-dialog:focus-visible {
 .bp-welcome-dialog h2 {
     max-width: 560px;
     margin: 0;
-    color: #111a3d;
+    color: #172d28;
     font-family: "Segoe UI Variable Display", "Segoe UI", Inter, Arial, sans-serif;
     font-size: 30px;
     font-weight: 720;
@@ -122,7 +125,7 @@ body.bp-home .bp-welcome-dialog:focus-visible {
 .bp-welcome-description {
     max-width: 570px;
     margin: 13px 0 0;
-    color: #626c89;
+    color: #567866;
     font-size: 15px;
     line-height: 1.6;
 }
@@ -130,8 +133,8 @@ body.bp-home .bp-welcome-dialog:focus-visible {
 .bp-welcome-weight-preview {
     margin: 23px 0 0;
     padding: 15px 0 17px;
-    border-top: 1px solid #eceef5;
-    border-bottom: 1px solid #eceef5;
+    border-top: 1px solid #edf4f1;
+    border-bottom: 1px solid #edf4f1;
 }
 
 .bp-welcome-weight-caption {
@@ -140,13 +143,13 @@ body.bp-home .bp-welcome-dialog:focus-visible {
     justify-content: space-between;
     gap: 18px;
     margin-bottom: 9px;
-    color: #66708d;
+    color: #567766;
     font-size: 12px;
 }
 
 .bp-welcome-weight-caption strong {
     flex: 0 0 auto;
-    color: #30395e;
+    color: #375747;
     font-weight: 650;
 }
 
@@ -157,7 +160,7 @@ body.bp-home .bp-welcome-dialog:focus-visible {
     gap: 3px;
     overflow: hidden;
     border-radius: 5px;
-    background: #f0f1f6;
+    background: #f0f6f3;
 }
 
 .bp-welcome-weight-segment {
@@ -168,12 +171,12 @@ body.bp-home .bp-welcome-dialog:focus-visible {
 
 .bp-welcome-weight-segment.is-purple {
     flex: 42;
-    background: #7a68e8;
+    background: #296a4a;
 }
 
 .bp-welcome-weight-segment.is-blue {
     flex: 27;
-    background: #6fa6eb;
+    background: #296a4a;
 }
 
 .bp-welcome-weight-segment.is-teal {
@@ -192,7 +195,7 @@ body.bp-home .bp-welcome-dialog:focus-visible {
     gap: 12px 20px;
     margin: 18px 0 0;
     padding: 0;
-    color: #343e62;
+    color: #3b5c4b;
     list-style: none;
 }
 
@@ -208,7 +211,7 @@ body.bp-home .bp-welcome-dialog:focus-visible {
 .bp-welcome-signals i {
     width: 17px;
     flex: 0 0 17px;
-    color: #6d5ce7;
+    color: #246650;
     text-align: center;
 }
 
@@ -226,10 +229,10 @@ body.bp-home .bp-welcome-dialog:focus-visible {
     justify-content: center;
     gap: 10px;
     padding: 0 18px;
-    border: 1px solid #6656df;
+    border: 1px solid #296a4a;
     border-radius: 6px;
-    background: #6656df;
-    box-shadow: 0 5px 14px rgba(87, 71, 201, 0.16);
+    background: #296a4a;
+    box-shadow: 0 5px 14px rgba(41, 106, 74, 0.16);
     color: #fff !important;
     font-weight: 650;
     cursor: pointer;
@@ -237,9 +240,9 @@ body.bp-home .bp-welcome-dialog:focus-visible {
 }
 
 .bp-welcome-primary:hover {
-    border-color: #5949d3;
-    background: #5949d3;
-    box-shadow: 0 7px 18px rgba(87, 71, 201, 0.21);
+    border-color: #296a4a;
+    background: #296a4a;
+    box-shadow: 0 7px 18px rgba(41, 106, 74, 0.21);
 }
 
 .bp-welcome-primary i {
@@ -248,8 +251,8 @@ body.bp-home .bp-welcome-dialog:focus-visible {
 
 .bp-welcome-methodology {
     padding: 7px 0 5px;
-    border-bottom: 1px solid #c9c3f4;
-    color: #5f51ce !important;
+    border-bottom: 1px solid #d4e3dc;
+    color: #296a4a !important;
     font-size: 13px;
     font-weight: 620;
     text-decoration: none;
@@ -257,8 +260,8 @@ body.bp-home .bp-welcome-dialog:focus-visible {
 }
 
 .bp-welcome-methodology:hover {
-    border-color: #6555dd;
-    color: #4f42bc !important;
+    border-color: #296a4a;
+    color: #296a4a !important;
 }
 
 body.bp-welcome-open {

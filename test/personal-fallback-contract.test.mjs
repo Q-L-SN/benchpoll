@@ -1,3 +1,4 @@
+import { frontendSource, frontendStyles } from './helpers/frontend-source.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
@@ -8,8 +9,8 @@ const integrity = read('scripts/check-ranking-integrity.mjs');
 const ranking = read('ranking-service.js');
 const server = read('server.js');
 const home = read('private/home.html');
-const workspace = read('public/js/home-workspace.js');
-const styles = read('public/css/home-v2.css');
+const workspace = frontendSource('public/js/home-workspace.js');
+const styles = frontendStyles('public/css/home-v2.css');
 
 test('personal OR fallback schema is strict and tied to an existing personal pie weight', () => {
     assert.match(migration, /022_personal_fallback_rules/);

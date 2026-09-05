@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "lint": "eslint server.js ranking-service.js moderation-admin.js db.js scripts test",
+    "lint": "eslint server.js ranking-service.js moderation-admin.js db.js public/js scripts test",
     "test": "node --test",
     "check:ranking-integrity": "node scripts/check-ranking-integrity.mjs",
     "migrate:session-integrity": "node scripts/migrate-session-integrity.mjs --apply",
@@ -21,7 +21,9 @@
     "migrate:literal-default-conditions": "node scripts/migrate-literal-default-conditions.mjs --apply",
     "migrate:result-medians": "node scripts/migrate-result-medians.mjs --apply",
     "migrate:context-free-results": "node scripts/migrate-context-free-results.mjs --apply",
-    "migrate:personal-fallback-rules": "node scripts/migrate-personal-fallback-rules.mjs --apply"
+    "migrate:personal-fallback-rules": "node scripts/migrate-personal-fallback-rules.mjs --apply",
+    "test:frontend": "node scripts/frontend/verify.mjs",
+    "preview:frontend": "node scripts/frontend/preview.mjs"
   },
   "author": {
     "name": ""
@@ -38,6 +40,7 @@
     "undici": "^8.10.0"
   },
   "devDependencies": {
-    "eslint": "^10.9.0"
+    "eslint": "^10.9.0",
+    "playwright": "1.62.1"
   }
 }

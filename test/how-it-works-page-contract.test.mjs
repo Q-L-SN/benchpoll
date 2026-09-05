@@ -1,3 +1,4 @@
+import { frontendSource } from './helpers/frontend-source.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
@@ -10,7 +11,7 @@ const home = read('private/home.html');
 const guide = read('private/how-it-works.html');
 const guideStyles = read('public/css/how-it-works.css');
 const guideScript = read('public/js/how-it-works.js');
-const workspace = read('public/js/home-workspace.js');
+const workspace = frontendSource('public/js/home-workspace.js');
 const server = read('server.js');
 
 test('homepage How it works control navigates to a page instead of opening a dialog', () => {
@@ -41,7 +42,7 @@ test('methodology page documents the complete ranking pipeline', () => {
 
 test('methodology page follows the homepage sidebar and responsive visual system', () => {
     assert.match(guide, /class="bp-sidebar bp-how-sidebar"/);
-    assert.match(guide, /benchpoll-logo-approved-g-transparent\.png/);
+    assert.match(guide, /class="bp-brand-symbol"/);
     assert.match(guideStyles, /\.bp-how-header\s*\{[^}]*border-radius:\s*8px[^}]*box-shadow:/s);
     assert.match(guideStyles, /\.bp-how-section\s*\{[^}]*border-bottom:/s);
     assert.match(guideStyles, /\.bp-how-nav a\.is-active/);

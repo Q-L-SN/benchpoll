@@ -1,4 +1,4 @@
-import * as S from '/js/shared.js';
+import '/js/shared.js';
 import * as G from '/js/global.js';
 
 const requestedDialogCode = Number(G.params.get('dialogCode') || 1);

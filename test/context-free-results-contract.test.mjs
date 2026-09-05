@@ -1,3 +1,4 @@
+import { frontendSource } from './helpers/frontend-source.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
@@ -16,7 +17,7 @@ function between(source, startMarker, endMarker) {
 
 const server = read('server.js');
 const ranking = read('ranking-service.js');
-const contributionClient = read('public/js/contribute.js');
+const contributionClient = frontendSource('public/js/contribute.js');
 const strictSchema = read('scripts/migrate-strict-benchmark-schema.mjs');
 const migration = read('scripts/migrate-context-free-results.mjs');
 

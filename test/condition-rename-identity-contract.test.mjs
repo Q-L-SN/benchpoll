@@ -1,3 +1,4 @@
+import { frontendSource } from './helpers/frontend-source.mjs';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -5,8 +6,8 @@ import test from 'node:test';
 import vm from 'node:vm';
 
 const server = fs.readFileSync(new URL('../server.js', import.meta.url), 'utf8');
-const client = fs.readFileSync(new URL('../public/js/contribute.js', import.meta.url), 'utf8');
-const reviewerClient = fs.readFileSync(new URL('../public/js/censor.js', import.meta.url), 'utf8');
+const client = frontendSource('public/js/contribute.js');
+const reviewerClient = frontendSource('public/js/censor.js');
 
 function between(source, startMarker, endMarker) {
     const start = source.indexOf(startMarker);

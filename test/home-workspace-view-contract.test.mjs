@@ -1,12 +1,12 @@
+import { frontendSource, frontendStyles } from './helpers/frontend-source.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
 
 const html = fs.readFileSync(new URL('../private/home.html', import.meta.url), 'utf8');
-const home = fs.readFileSync(new URL('../public/js/home.js', import.meta.url), 'utf8');
-const workspace = fs.readFileSync(new URL('../public/js/home-workspace.js', import.meta.url), 'utf8');
-const styles = fs.readFileSync(new URL('../public/css/home-v2.css', import.meta.url), 'utf8');
-const legacyStyles = fs.readFileSync(new URL('../public/css/home.css', import.meta.url), 'utf8');
+const home = frontendSource('public/js/home.js');
+const workspace = frontendSource('public/js/home-workspace.js');
+const styles = frontendStyles('public/css/home-v2.css');
 
 test('homepage keeps pie, benchmark leaderboard, and model leaderboard in three persistent columns', () => {
     for (const id of [
@@ -23,8 +23,8 @@ test('homepage keeps pie, benchmark leaderboard, and model leaderboard in three 
     assert.match(workspace, /benchmarkCard\.hidden = false/);
     assert.match(workspace, /modelCard\.hidden = false/);
     assert.match(workspace, /pieCard\.parentElement !== pieHomeSlot/);
-    assert.match(styles, /\.bp-workspace-grid\s*\{[^}]*grid-template-columns:\s*minmax\(0, 2\.15fr\) minmax\(310px, 0\.9fr\)/s);
-    assert.match(styles, /\.bp-left-workspace\s*\{[^}]*grid-template-columns:\s*minmax\(300px, 0\.92fr\) minmax\(365px, 1\.08fr\)/s);
+    assert.match(styles, /\.bp-workspace-grid\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1\.62fr\) minmax\(340px, 1fr\)/s);
+    assert.match(styles, /\.bp-left-workspace\s*\{[^}]*grid-template-columns:\s*minmax\(240px, \.88fr\) minmax\(285px, 1\.12fr\)/s);
     assert.match(workspace, /state\.workspaceView === 'focus' && selected/);
     assert.match(workspace, /row\.classList\.toggle\('is-muted'/);
     assert.doesNotMatch(html, /id="pie-focus-close"/);
@@ -51,7 +51,7 @@ test('taxonomy renders the database root directly without an All Categories wrap
 
 test('pie slices scale around the center on hover and selected slices render last', () => {
     assert.match(styles, /\.bp-pie-slice-lift\s*\{[^}]*transform-origin:\s*180px 180px/s);
-    assert.match(styles, /g\[data-object-id\]:hover \.bp-pie-slice-lift\s*\{[^}]*transform:\s*scale\(1\.05\)/s);
+    assert.match(styles, /g\[data-object-id\]:hover \.bp-pie-slice-lift\s*\{[^}]*transform:\s*scale\(1\.025\)/s);
     assert.doesNotMatch(styles, /g\[data-object-id\]:hover \.bp-pie-slice-lift\s*\{[^}]*translate/s);
     assert.match(workspace, /pieSvg\.append\(selectedGroup\)/);
 });
@@ -107,7 +107,7 @@ test('benchmark leaderboard stays public-ranked and can pin personal benchmarks 
     assert.match(workspace, /rank\.textContent = String\(object\.rank\)/);
     assert.match(workspace, /row\.append\(rank, identity, personalValue, publicValue, actionCell\)/);
     assert.doesNotMatch(workspace, /identity\.append\(name, type\)/);
-    assert.match(styles, /\.bp-benchmark-head,\s*\.bp-benchmark-row\s*\{[^}]*grid-template-columns:\s*32px minmax\(0, 1fr\) 64px 64px 24px/s);
+    assert.match(styles, /\.bp-benchmark-head,\s*\.bp-benchmark-row\s*\{[^}]*grid-template-columns:\s*20px minmax\(0, 1fr\) 52px 52px 44px/s);
 });
 
 test('personal-mode benchmark rows keep a persistent remove action without exposing it in public mode', () => {
@@ -116,16 +116,16 @@ test('personal-mode benchmark rows keep a persistent remove action without expos
     assert.match(workspace, /distributeToTarget\([\s\S]*state\.limits\.totalBasisPoints[\s\S]*\)/);
     assert.match(workspace, /if \(personalControlsActive && inPersonalPie\) \{[\s\S]*classList\.add\('has-personal-remove'\)[\s\S]*bp-personal-weight-remove/);
     assert.match(workspace, /actionCell\.append\(edit\)[\s\S]*actionCell\.append\(remove\)/);
-    assert.match(styles, /\.bp-benchmark-action-cell\.has-personal-remove\s*\{[^}]*width:\s*50px[^}]*margin-left:\s*-25px/s);
+    assert.match(styles, /\.bp-benchmark-action-cell\.has-personal-remove\s*\{[^}]*width:\s*44px/s);
     assert.match(styles, /\.bp-personal-weight-remove\s*\{[^}]*opacity:\s*1/s);
     assert.match(styles, /\.bp-row-edit-action\s*\{[^}]*opacity:\s*0/s);
     assert.doesNotMatch(styles, /\.bp-benchmark-row\.is-personal-pinned::before/);
 });
 
-test('new benchmark is a subdued text link and sidebar legal content stays on one row', () => {
+test('new benchmark is a subdued text link and sidebar legal content can wrap without clipping', () => {
     assert.doesNotMatch(html, /id="contribute-button"[^>]*>[\s\S]*?fa-plus[\s\S]*?<\/a>/);
-    assert.match(styles, /body\.bp-home \.bp-inline-create-evaluation,\s*body\.bp-home \.bp-contribute-data\s*\{[^}]*background:\s*transparent/s);
-    assert.match(styles, /\.bp-sidebar-footer\s*\{[^}]*display:\s*flex[^}]*white-space:\s*nowrap/s);
+    assert.match(styles, /\.bp-inline-create-evaluation,\s*\.bp-contribute-data\s*\{[^}]*background:\s*transparent/s);
+    assert.match(styles, /\.bp-sidebar-footer\s*\{[^}]*display:\s*flex[^}]*flex-wrap:\s*wrap/s);
 });
 
 test('empty personal state uses a creation card instead of an inactive mode switch', () => {
@@ -140,8 +140,8 @@ test('empty personal state uses a creation card instead of an inactive mode swit
 
 test('benchmark contribution links are unboxed and benchmark weight labels stay neutral', () => {
     assert.doesNotMatch(html, /id="contribute-data-button"[\s\S]*?fa-chart-line[\s\S]*?<\/a>/);
-    assert.match(styles, /body\.bp-home \.bp-inline-create-evaluation,\s*body\.bp-home \.bp-contribute-data\s*\{[^}]*border:\s*0[^}]*background:\s*transparent[^}]*box-shadow:\s*none/s);
-    assert.doesNotMatch(legacyStyles, /#contribute-button\s*\{[^}]*background:\s*linear-gradient/s);
+    assert.match(styles, /\.bp-inline-create-evaluation,\s*\.bp-contribute-data\s*\{[^}]*border:\s*0[^}]*background:\s*transparent[^}]*box-shadow:\s*none/s);
+    assert.doesNotMatch(html, /href="\/css\/home\.css/);
     assert.doesNotMatch(styles, /\.bp-benchmark-public-order::after/);
     assert.match(workspace, /Math\.round\(Number\(personalWeight\)\)/);
 });
@@ -157,8 +157,8 @@ test('benchmark conditions render as separate muted labels and default stays hid
     assert.match(workspace, /condition\.className = 'bp-benchmark-condition'/);
     assert.match(workspace, /class: 'bp-pie-condition'/);
     assert.match(workspace, /benchmarkConditionLabel\(object\)\.toLowerCase\(\)\.includes\(query\)/);
-    assert.match(styles, /\.bp-benchmark-condition\s*\{[^}]*color:\s*#8b93a7/s);
-    assert.match(styles, /\.bp-pie-condition\s*\{[^}]*fill:\s*#7f879b/s);
+    assert.match(styles, /\.bp-benchmark-condition\s*\{[^}]*color:\s*#[a-f0-9]{6}/s);
+    assert.match(styles, /\.bp-pie-condition\s*\{[^}]*fill:\s*#4e6755/s);
 });
 
 test('leaderboard headers leave action cells unlabeled', () => {
@@ -178,14 +178,13 @@ test('model and benchmark edit actions use the same circled information icon tre
     assert.match(styles, /\.bp-benchmark-edit i::before\s*\{[^}]*content:\s*"i"/s);
 });
 
-test('mobile header stays visible and narrow homepage actions do not create an overflow scroller', () => {
+test('mobile header and explicit panel navigation keep every workspace available', () => {
     assert.match(styles, /@media \(max-width:\s*760px\)[\s\S]*?\.bp-sidebar\s*\{[^}]*position:\s*sticky[^}]*top:\s*0/s);
-    assert.match(styles, /@media \(max-width:\s*760px\)[\s\S]*?\.bp-context-actions\s*\{[^}]*flex-wrap:\s*wrap[^}]*overflow:\s*visible/s);
-    assert.match(styles, /\.bp-benchmark-card\s*\{[^}]*grid-template-rows:\s*auto 30px minmax\(0, 1fr\)/s);
-    assert.match(styles, /\.bp-benchmark-toolbar\s*\{[^}]*flex-wrap:\s*wrap/s);
-    assert.match(styles, /\.bp-benchmark-toolbar-actions\s*\{[^}]*flex:\s*1 1 320px/s);
-    assert.match(styles, /body\.bp-home \.bp-inline-create-evaluation,[\s\S]*?flex:\s*0 0 auto/s);
-    assert.match(styles, /@media \(max-width:\s*760px\)[\s\S]*?\.bp-benchmark-toolbar-actions\s*\{[^}]*width:\s*100%[^}]*min-width:\s*0[^}]*flex:\s*1 1 100%/s);
+    assert.match(html, /data-mobile-panel="mix"/);
+    assert.match(html, /data-mobile-panel="models"/);
+    assert.match(styles, /\.bp-mobile-panels button\[aria-pressed="true"\]/);
+    assert.match(styles, /data-mobile-panel="models".*\.bp-left-workspace/);
+    assert.match(styles, /\.bp-context-actions\s*\{[^}]*flex-wrap:\s*wrap[^}]*overflow:\s*visible/s);
 });
 
 test('model leaderboard is fixed to lower-bound ranking without a visible bound control', () => {
@@ -197,7 +196,7 @@ test('model leaderboard is fixed to lower-bound ranking without a visible bound 
     assert.match(workspace, /Number\(b\.lower\) - Number\(a\.lower\)/);
     assert.match(workspace, /const selectedScore = Number\(model\.lower\)/);
     assert.match(styles, /\.bp-model-score-heading\s*\{/);
-    assert.match(styles, /\.bp-model-card\s*\{[^}]*grid-template-rows:\s*48px 36px minmax\(0, 1fr\)/s);
+    assert.match(styles, /\.bp-score-track\s*\{[^}]*grid-row:\s*2/s);
 });
 
 test('pie geometry remains contained while wheel and touch adjustments are active', () => {

@@ -1,3 +1,12 @@
+import { validateContributionCatalog } from './contribution/contracts.js';
+import {
+    escapeHTML, option, finiteOrNull,
+    integerOrNull, entityKey, sameEntityID,
+    entityLocator, pendingBadge, evaluationScoreBounds,
+    evaluationDisplayScoreBounds, evaluationStoredTargetValue, normalizedConditionName,
+    isLiteralDefaultCondition, normalizedIdentifierKey, normalizedSearch,
+    rankedMatches
+} from './contribution/fields.js';
 import * as G from '/js/global.js';
 
 const params = new URLSearchParams(window.location.search);
@@ -125,121 +134,6 @@ function isChangeMode(candidate = mode) {
 
 function param(name) {
     return String(params.get(name) ?? '').trim();
-}
-
-function escapeHTML(value) {
-    return String(value ?? '')
-        .replaceAll('&', '&amp;')
-        .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;')
-        .replaceAll('"', '&quot;')
-        .replaceAll("'", '&#039;');
-}
-
-function option(value, label, selectedValue) {
-    return `<option value="${escapeHTML(value)}"${String(value) === String(selectedValue) ? ' selected' : ''}>${escapeHTML(label)}</option>`;
-}
-
-function invalidContributionResponse(path, message) {
-    const error = new Error(`Invalid contribution response: ${path} ${message}`);
-    error.code = 'invalid_contribution_response';
-    error.status = 422;
-    return error;
-}
-
-function requireContributionObject(value, path) {
-    if (value === null || typeof value !== 'object' || Array.isArray(value)) {
-        throw invalidContributionResponse(path, 'must be an object');
-    }
-    return value;
-}
-
-function requireContributionArray(value, path) {
-    if (!Array.isArray(value)) {
-        throw invalidContributionResponse(path, 'must be an array');
-    }
-    return value;
-}
-
-function validateContributionCatalog(payload) {
-    const response = requireContributionObject(payload, 'response');
-    const arrayFields = [
-        'benchmarks', 'models', 'vendors', 'categories', 'knownTags', 'rankingDimensions'
-    ];
-    arrayFields.forEach(field => requireContributionArray(response[field], field));
-    response.benchmarks.forEach((benchmark, index) => {
-        const current = requireContributionObject(benchmark, `benchmarks[${index}]`);
-        requireContributionArray(current.conditions, `benchmarks[${index}].conditions`);
-        requireContributionArray(current.tags, `benchmarks[${index}].tags`);
-    });
-    response.models.forEach((model, index) => {
-        const current = requireContributionObject(model, `models[${index}]`);
-        requireContributionArray(current.conditions, `models[${index}].conditions`);
-    });
-    response.rankingDimensions.forEach((dimension, index) => {
-        const current = requireContributionObject(dimension, `rankingDimensions[${index}]`);
-        requireContributionArray(current.options, `rankingDimensions[${index}].options`);
-    });
-    return response;
-}
-
-function finiteOrNull(value) {
-    if (value === '' || value === null || value === undefined) {
-        return null;
-    }
-    const number = Number(value);
-    return Number.isFinite(number) ? number : null;
-}
-
-function integerOrNull(value) {
-    const number = finiteOrNull(value);
-    return number !== null && Number.isInteger(number) && number > 0 ? number : null;
-}
-
-function entityKey(value) {
-    return value === null || value === undefined ? '' : String(value);
-}
-
-function sameEntityID(left, right) {
-    return entityKey(left) !== '' && entityKey(left) === entityKey(right);
-}
-
-function entityLocator(entity, idField, referenceField) {
-    return entity?.reference
-        ? { [idField]: null, [referenceField]: entity.reference }
-        : { [idField]: entity ? Number(entity.ID) : null, [referenceField]: null };
-}
-
-function pendingBadge(entity) {
-    return entity?.pending ? '<span class="pending-entity-badge">Pending review</span>' : '';
-}
-
-function evaluationScoreBounds(evaluation) {
-    if (evaluation.usesPercentageScale) {
-        return { min: null, max: null };
-    }
-    return {
-        min: finiteOrNull(evaluation.scoreMin),
-        max: finiteOrNull(evaluation.scoreMax)
-    };
-}
-
-function evaluationDisplayScoreBounds(evaluation) {
-    if (evaluation.usesPercentageScale) {
-        return { min: 0, max: 100 };
-    }
-    return evaluationScoreBounds(evaluation);
-}
-
-function evaluationStoredTargetValue(evaluation) {
-    if (evaluation.scoreDirection !== 'closer_to_target') {
-        return null;
-    }
-    const targetValue = finiteOrNull(evaluation.targetValue);
-    if (targetValue === null) {
-        return null;
-    }
-    return targetValue;
 }
 
 function makeProfile(index = 0) {
@@ -447,7 +341,7 @@ function renderCategoryTree() {
             : 'Locked';
     contributionTree.setAttribute('aria-disabled', String(!editable));
     contributionTree.classList.toggle('selection-active', categorySelectionActive);
-    taxonomyToggle.disabled = !editable;
+    // Category editing can be locked while account/help navigation stays available.
     const childrenByParent = new Map();
     catalog.categories.forEach(category => {
         const key = category.parentID === null ? 'root' : String(category.parentID);
@@ -712,25 +606,6 @@ function commitTag(evaluationIndex, value) {
     });
 }
 
-function normalizedConditionName(value) {
-    return String(value ?? '').trim().replace(/\s+/g, ' ').toLocaleLowerCase('en-US');
-}
-
-function isLiteralDefaultCondition(value) {
-    return normalizedConditionName(value) === 'default';
-}
-
-function normalizedIdentifierKey(value) {
-    const normalized = String(value ?? '')
-        .normalize('NFKD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .toLocaleLowerCase('en-US')
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-+|-+$/g, '')
-        .slice(0, 80);
-    return normalized || `text:${normalizedConditionName(value)}`;
-}
-
 function selectedEvaluation() {
     return draft.benchmarks[0];
 }
@@ -924,30 +799,6 @@ function evaluationDetailsStep() {
     </div></section>`;
 }
 
-function normalizedSearch(value) {
-    return String(value ?? '').trim().replace(/\s+/g, ' ').toLocaleLowerCase('en-US');
-}
-
-function rankedMatches(items, query, label) {
-    const normalizedQuery = normalizedSearch(query);
-    return items
-        .map(item => {
-            const itemLabel = label(item);
-            const normalizedLabel = normalizedSearch(itemLabel);
-            const matchIndex = normalizedQuery ? normalizedLabel.indexOf(normalizedQuery) : 0;
-            return { item, itemLabel, normalizedLabel, matchIndex, startsWith: normalizedLabel.startsWith(normalizedQuery) };
-        })
-        .filter(candidate => candidate.matchIndex >= 0)
-        .sort((left, right) => (
-            Number(right.startsWith) - Number(left.startsWith)
-            || left.matchIndex - right.matchIndex
-            || left.itemLabel.length - right.itemLabel.length
-            || left.itemLabel.localeCompare(right.itemLabel)
-        ))
-        .slice(0, 8)
-        .map(candidate => candidate.item);
-}
-
 function vendorSuggestions(query) {
     return rankedMatches(catalog.vendors, query, vendor => vendor.name);
 }
@@ -1006,7 +857,6 @@ function subjectVendorPicker() {
 }
 
 function renderSubjectModelSuggestions(query) {
-    const subject = draft.subject;
     const suggestions = subjectModelSuggestions(query);
     if (!String(query ?? '').trim() || suggestions.length === 0) {
         return '';
@@ -1268,7 +1118,6 @@ function profileUsesPercentage(profile) {
 }
 
 function resultStoredScore(result) {
-    const profile = getBenchmarkCondition(result.benchmarkConditionID)?.profile;
     const displayScore = finiteOrNull(result.rawScore);
     if (displayScore === null) {
         return null;
@@ -2515,7 +2364,6 @@ function hydrateResultChange(form) {
     const result = makeResult(0);
     const model = getModel(form.result.modelID);
     const object = getBenchmark(form.result.benchmarkID);
-    const profile = getBenchmarkCondition(form.result.benchmarkConditionID)?.profile;
     result.modelID = form.result.modelID;
     result.modelQuery = model ? modelInputValue(model) : '';
     result.modelConditionID = form.result.modelConditionID;
@@ -2636,9 +2484,6 @@ contributionTree.addEventListener('click', event => {
 });
 
 taxonomyToggle.addEventListener('click', () => {
-    if (taxonomyToggle.disabled) {
-        return;
-    }
     setTaxonomyOpen(!document.body.classList.contains('taxonomy-open'));
 });
 function closeTaxonomy() {

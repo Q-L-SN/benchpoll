@@ -1,4 +1,7 @@
 import * as G from '/js/global.js';
+import { initializeOverlays } from './shared/overlays.js';
+
+initializeOverlays([...document.querySelectorAll('.moderation-overlay')]);
 
 const statusFilter = document.getElementById('status-filter');
 const logList = document.getElementById('log-list');

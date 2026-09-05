@@ -37,14 +37,14 @@ body.bp-how-page button {
 }
 
 .bp-how-sidebar-heading span {
-    color: #9299ad;
+    color: #60736a;
     font-size: 10.5px;
     font-weight: 600;
     text-transform: uppercase;
 }
 
 .bp-how-sidebar-heading strong {
-    color: #1a2448;
+    color: #263c31;
     font-size: 15px;
     font-weight: 650;
 }
@@ -63,7 +63,7 @@ body.bp-how-page button {
     min-height: 35px;
     padding: 6px 10px 6px 13px;
     border-radius: 6px;
-    color: #5d6783;
+    color: #547764;
     font-size: 13px;
     text-decoration: none;
     transition: color 180ms var(--bp-ease-soft), background-color 180ms var(--bp-ease-soft);
@@ -82,18 +82,18 @@ body.bp-how-page button {
 }
 
 .bp-how-nav a:hover {
-    background: #f7f8fc;
-    color: #4f42cd;
+    background: #f8fbfa;
+    color: #296a4a;
 }
 
 .bp-how-nav a.is-active {
-    background: #f2efff;
-    color: #5543da;
+    background: #f5f9f7;
+    color: #296a4a;
     font-weight: 600;
 }
 
 .bp-how-nav a.is-active::before {
-    background: #6c59e6;
+    background: #296a4a;
 }
 
 .bp-how-main {
@@ -116,10 +116,10 @@ body.bp-how-page button {
     position: relative;
     padding: 24px 30px 27px;
     overflow: hidden;
-    border: 1px solid #e5e5f2;
+    border: 1px solid #e7f0ec;
     border-radius: 8px;
-    background: #fbfbff;
-    box-shadow: 0 1px 2px rgba(26, 35, 72, 0.035), 0 12px 34px rgba(54, 61, 104, 0.045);
+    background: #fdfdfd;
+    box-shadow: 0 1px 2px rgba(38, 60, 49, 0.035), 0 12px 34px rgba(62, 96, 79, 0.045);
 }
 
 .bp-how-header::before {
@@ -128,14 +128,14 @@ body.bp-how-page button {
     bottom: 0;
     left: 0;
     width: 4px;
-    background: #6b59e6;
+    background: #296a4a;
     content: "";
 }
 
 .bp-how-eyebrow,
 .bp-how-section-kicker {
     display: block;
-    color: #6d5ce7;
+    color: #246650;
     font-size: 10.5px;
     font-weight: 650;
     text-transform: uppercase;
@@ -143,7 +143,7 @@ body.bp-how-page button {
 
 .bp-how-header h1 {
     margin-top: 7px;
-    color: #10193c;
+    color: #1e2e26;
     font-family: var(--font-display);
     font-size: 32px;
     font-weight: 690;
@@ -153,7 +153,7 @@ body.bp-how-page button {
 .bp-how-lede {
     max-width: 780px;
     margin-top: 10px;
-    color: #5e6887;
+    color: #527663;
     font-size: 15px;
     line-height: 1.62;
 }
@@ -169,7 +169,7 @@ body.bp-how-page button {
 .bp-how-secondary-link {
     display: inline-flex;
     align-items: center;
-    color: #5946d7;
+    color: #296a4a;
     font-size: 13px;
     font-weight: 600;
     text-decoration: none;
@@ -189,15 +189,15 @@ body.bp-how-page button {
 }
 
 .bp-how-secondary-link {
-    color: #65708d;
+    color: #557765;
     text-decoration: underline;
-    text-decoration-color: #d4d8e7;
+    text-decoration-color: #d6e5de;
     text-underline-offset: 4px;
 }
 
 .bp-how-primary-link:hover,
 .bp-how-secondary-link:hover {
-    color: #4f3bc9;
+    color: #296a4a;
 }
 
 .bp-how-flow {
@@ -206,14 +206,14 @@ body.bp-how-page button {
     align-items: center;
     margin-top: 18px;
     padding: 16px 18px;
-    border: 1px solid #e7e9f1;
+    border: 1px solid #dfe5df;
     border-radius: 8px;
     background: #ffffff;
     box-shadow: var(--bp-shadow);
 }
 
 .bp-how-flow > i {
-    color: #c3c7d7;
+    color: #66716c;
     font-size: 11px;
     text-align: center;
 }
@@ -232,22 +232,22 @@ body.bp-how-page button {
     width: 29px;
     height: 29px;
     border-radius: 50%;
-    background: #efecff;
-    color: #5c49da;
+    background: #f3f8f6;
+    color: #296a4a;
     font-size: 10px;
     font-weight: 700;
 }
 
 .bp-how-flow strong {
     display: block;
-    color: #202a4d;
+    color: #2b4236;
     font-size: 12.5px;
     font-weight: 650;
 }
 
 .bp-how-flow p {
     margin-top: 2px;
-    color: #7a829b;
+    color: #5c7669;
     font-size: 11.5px;
     line-height: 1.45;
 }
@@ -257,13 +257,13 @@ body.bp-how-page button {
     grid-template-columns: 48px minmax(0, 1fr) minmax(230px, 290px);
     gap: 24px;
     padding: 44px 4px 42px;
-    border-bottom: 1px solid #e9ebf2;
+    border-bottom: 1px solid #eaf1ee;
     scroll-margin-top: 20px;
 }
 
 .bp-how-section-number {
     padding-top: 3px;
-    color: #b0b6c8;
+    color: #617169;
     font-family: var(--font-mono);
     font-size: 11px;
     font-weight: 600;
@@ -275,7 +275,7 @@ body.bp-how-page button {
 
 .bp-how-section-body h2 {
     margin-top: 5px;
-    color: #151f43;
+    color: #22362c;
     font-family: var(--font-display);
     font-size: 22px;
     font-weight: 660;
@@ -285,7 +285,7 @@ body.bp-how-page button {
 .bp-how-section-body > p {
     max-width: 690px;
     margin-top: 10px;
-    color: #626c88;
+    color: #567765;
     font-size: 13.5px;
     line-height: 1.68;
 }
@@ -295,10 +295,10 @@ body.bp-how-page button {
 .bp-how-facts,
 .bp-how-range-demo {
     align-self: start;
-    border: 1px solid #e5e8f0;
+    border: 1px solid #e6efeb;
     border-radius: 8px;
     background: #fbfcfe;
-    box-shadow: 0 1px 2px rgba(30, 38, 70, 0.035), 0 9px 22px rgba(39, 47, 82, 0.035);
+    box-shadow: 0 1px 2px rgba(39, 61, 50, 0.035), 0 9px 22px rgba(47, 74, 61, 0.035);
 }
 
 .bp-how-note {
@@ -315,15 +315,15 @@ body.bp-how-page button {
     height: 30px;
     flex: 0 0 30px;
     border-radius: 7px;
-    background: #ece9ff;
-    color: #6250dd;
+    background: #f2f6f4;
+    color: #296a4a;
     font-size: 13px;
 }
 
 .bp-how-note strong,
 .bp-how-facts strong {
     display: block;
-    color: #283250;
+    color: #2f493c;
     font-size: 12px;
     font-weight: 650;
 }
@@ -331,7 +331,7 @@ body.bp-how-page button {
 .bp-how-note p,
 .bp-how-facts p {
     margin-top: 3px;
-    color: #7a8298;
+    color: #5c7468;
     font-size: 11.5px;
     line-height: 1.5;
 }
@@ -341,13 +341,13 @@ body.bp-how-page button {
     align-items: center;
     gap: 8px;
     margin-top: 18px;
-    color: #2c3659;
+    color: #345142;
     font-size: 12px;
     font-weight: 550;
 }
 
 .bp-how-context-example > i {
-    color: #b3b8ca;
+    color: #63726b;
     font-size: 8px;
 }
 
@@ -371,7 +371,7 @@ body.bp-how-page button {
     display: flex;
     align-items: flex-start;
     gap: 9px;
-    color: #4f5b7a;
+    color: #4f7a65;
     font-size: 12.5px;
 }
 
@@ -403,13 +403,13 @@ body.bp-how-page button {
 
 .bp-how-allocation-head span,
 .bp-how-range-heading span {
-    color: #6e7791;
+    color: #597668;
     font-size: 11px;
 }
 
 .bp-how-allocation-head strong,
 .bp-how-range-heading strong {
-    color: #202b4d;
+    color: #2b4236;
     font-size: 14px;
     font-weight: 660;
 }
@@ -421,7 +421,7 @@ body.bp-how-page button {
     margin-top: 12px;
     overflow: hidden;
     border-radius: 5px;
-    background: #eef0f5;
+    background: #eff4f2;
     gap: 2px;
 }
 
@@ -440,12 +440,12 @@ body.bp-how-page button {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    color: #6c7690;
+    color: #587566;
     font-size: 11px;
 }
 
 .bp-how-allocation dd {
-    color: #2d3859;
+    color: #345243;
     font-weight: 600;
 }
 
@@ -455,28 +455,28 @@ body.bp-how-page button {
     max-width: 610px;
     margin-top: 18px;
     padding: 14px 16px;
-    border-left: 3px solid #6c5ae5;
+    border-left: 3px solid #296a4a;
     border-radius: 0 7px 7px 0;
-    background: #f7f6ff;
+    background: #fafbfb;
     gap: 4px;
 }
 
 .bp-how-formula > span,
 .bp-how-score-formula > span {
-    color: #7c769e;
+    color: #567565;
     font-size: 10.5px;
 }
 
 .bp-how-formula strong,
 .bp-how-score-formula strong {
-    color: #30265d;
+    color: #335042;
     font-family: var(--font-mono);
     font-size: 14px;
     font-weight: 600;
 }
 
 .bp-how-formula small {
-    color: #8a8fa3;
+    color: #61756a;
     font-size: 10px;
 }
 
@@ -487,7 +487,7 @@ body.bp-how-page button {
 
 .bp-how-facts > div {
     padding: 12px 0;
-    border-bottom: 1px solid #e9ebf2;
+    border-bottom: 1px solid #eaf1ee;
 }
 
 .bp-how-facts > div:last-child {
@@ -496,8 +496,8 @@ body.bp-how-page button {
 
 .bp-how-score-formula {
     max-width: 470px;
-    border-left-color: #5d9fe0;
-    background: #f4f9fd;
+    border-left-color: #296a4a;
+    background: #f7faf9;
 }
 
 .bp-how-range-demo {
@@ -512,24 +512,24 @@ body.bp-how-page button {
     margin-top: 15px;
     overflow: hidden;
     border-radius: 6px;
-    background: #edf0f6;
+    background: #eff4f2;
 }
 
 .bp-how-range-known {
     width: 61%;
-    background: #6554dc;
+    background: #296a4a;
 }
 
 .bp-how-range-unknown {
     width: 22%;
-    background: #d9d4f6;
+    background: #dfebe5;
 }
 
 .bp-how-range-labels {
     display: flex;
     justify-content: space-between;
     margin-top: 6px;
-    color: #8d94a8;
+    color: #60746a;
     font-size: 9.5px;
 }
 
@@ -538,19 +538,19 @@ body.bp-how-page button {
     align-items: flex-start;
     gap: 7px;
     margin-top: 10px;
-    color: #747d96;
+    color: #5b7669;
     font-size: 10.5px;
     line-height: 1.45;
 }
 
 .bp-how-range-demo > p i {
     margin-top: 4px;
-    color: #6554dc;
+    color: #296a4a;
     font-size: 7px;
 }
 
 .bp-how-range-demo > p:last-child i {
-    color: #d2cdef;
+    color: #d7e5de;
 }
 
 .bp-how-review-flow {
@@ -575,23 +575,23 @@ body.bp-how-page button {
     width: 22px;
     height: 22px;
     flex: 0 0 22px;
-    border: 1px solid #dfe2ed;
+    border: 1px solid #e1ebe6;
     border-radius: 50%;
-    color: #6453db;
+    color: #296a4a;
     font-size: 9px;
     font-weight: 700;
 }
 
 .bp-how-review-flow strong {
     display: block;
-    color: #293452;
+    color: #304b3e;
     font-size: 11.5px;
     font-weight: 650;
 }
 
 .bp-how-review-flow p {
     margin-top: 2px;
-    color: #81899f;
+    color: #5e7569;
     font-size: 10.5px;
     line-height: 1.45;
 }
@@ -612,9 +612,9 @@ body.bp-how-page button {
     gap: 24px;
     margin-top: 6px;
     padding: 22px 24px;
-    border: 1px solid #e4e3f1;
+    border: 1px solid #e5efea;
     border-radius: 8px;
-    background: #faf9ff;
+    background: #fbfdfc;
 }
 
 .bp-how-cta div {
@@ -623,12 +623,12 @@ body.bp-how-page button {
 }
 
 .bp-how-cta div span {
-    color: #838aa0;
+    color: #5d7267;
     font-size: 11px;
 }
 
 .bp-how-cta div strong {
-    color: #202a4b;
+    color: #2a4136;
     font-size: 14px;
     font-weight: 650;
 }
@@ -638,7 +638,7 @@ body.bp-how-page button {
     align-items: center;
     flex: 0 0 auto;
     gap: 9px;
-    color: #5845d4;
+    color: #296a4a;
     font-size: 12.5px;
     font-weight: 650;
     text-decoration: none;

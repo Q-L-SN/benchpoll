@@ -1,0 +1,97 @@
+:root  {
+    color-scheme: light;
+    --bp-ink: #172d28;
+    --bp-text: #293b36;
+    --bp-muted: #69766f;
+    --bp-faint: #919b94;
+    --bp-line: #dfe5df;
+    --bp-line-strong: #c7d2c9;
+    --bp-surface: #fff;
+    --bp-surface-soft: #f5f6f2;
+    --bp-purple: #246650;
+    --bp-purple-dark: #164b39;
+    --bp-purple-soft: #e7f0e9;
+    --bp-blue: #88b7c1;
+    --bp-teal: #93b4a0;
+    --bp-green: #487d61;
+    --bp-sidebar-width: 216px;
+    --bp-ease-soft: cubic-bezier(.22, 1, .36, 1);
+    --bp-shadow: 0 2px 5px #192d2410;
+    --bp-control-shadow: 0 1px 2px #192d2408;
+    --bg-body: #f5f6f2;
+    --bg-panel: #fff;
+    --bg-hover: #f0f4ee;
+    --border-color: #dfe5df;
+    --border-strong: #c7d2c9;
+    --text-primary: #172d28;
+    --text-secondary: #56665e;
+    --text-muted: #69766f;
+    --accent-color: #246650;
+    --accent-strong: #164b39;
+    --accent-soft: #e7f0e9;
+    --dialog-background: #fff;
+    --dialog-border-color: #dfe5df;
+    --dialog-shadow: 0 24px 80px #182e2729;
+    --dialog-overlay-background: #172d284d;
+    --dialog-overlay-backdrop-filter: blur(4px);
+    --dialog-radius: 12px;
+    --dialog-title-color: #172d28;
+    --dialog-text-color: #56665e;
+}
+
+html  {
+    font-family: "Segoe UI Variable", "Segoe UI", Arial, sans-serif;
+}
+
+body  {
+    color: var(--bp-text);
+}
+
+button, input, select, textarea  {
+    font: inherit;
+}
+
+*, *::before, *::after  {
+    box-sizing: border-box;
+}
+
+[hidden]  {
+    display: none !important;
+}
+
+:focus-visible  {
+    outline: 2px solid var(--bp-purple);
+    outline-offset: 3px;
+}
+
+button, a  {
+    -webkit-tap-highlight-color: transparent;
+}
+
+button:disabled  {
+    cursor: not-allowed;
+    opacity: .45;
+}
+
+input, textarea, select  {
+    accent-color: var(--bp-purple);
+}
+
+::selection  {
+    background: #d3e5d7;
+    color: #172d28;
+}
+
+global-dialog-action.main  {
+    --button-background: #246650;
+    --button-hover-background: #164b39;
+    --button-border-color: #246650;
+}
+
+@media (prefers-reduced-motion: reduce)  {
+    *, *::before, *::after  {
+        animation-duration: .01ms !important;
+        transition-duration: .01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
