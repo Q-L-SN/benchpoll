@@ -2,13 +2,12 @@ const STORAGE_KEY = 'benchpoll-workspace-preferences-v1';
 
 function normalizeWorkspacePreferences(value) {
     const preferences = value && typeof value === 'object' ? value : {};
-    const fallbackVisible = preferences.fallbackVisible;
+    const publicFallbackVisible = typeof preferences.publicFallbackVisible === 'boolean'
+        ? preferences.publicFallbackVisible
+        : preferences.fallbackVisible?.public;
     return {
         mode: preferences.mode === 'personal' ? 'personal' : 'public',
-        fallbackVisible: {
-            personal: typeof fallbackVisible?.personal === 'boolean' ? fallbackVisible.personal : true,
-            public: typeof fallbackVisible?.public === 'boolean' ? fallbackVisible.public : false
-        }
+        publicFallbackVisible: typeof publicFallbackVisible === 'boolean' ? publicFallbackVisible : false
     };
 }
 

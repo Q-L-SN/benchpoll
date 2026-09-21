@@ -11,7 +11,6 @@
 .bp-inline-fallback-toolbar  {
     position: relative;
     display: flex;
-    flex-wrap: wrap;
     width: 100%;
     min-height: 32px;
     align-items: center;
@@ -123,14 +122,14 @@
     color: var(--bp-purple);
     padding: 6px;
     font-size: 12px;
-    white-space: nowrap;
     text-decoration: underline;
     text-underline-offset: 3px;
     cursor: pointer;
 }
 
 .bp-inline-fallback-remove  {
-    flex: 0 0 30px;
+    position: absolute;
+    right: 0;
     display: grid;
     width: 30px;
     height: 30px;

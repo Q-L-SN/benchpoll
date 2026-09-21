@@ -47,7 +47,7 @@ async function waitSaved(page, app, count) {
 async function noOverflow(page) {
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), true, 'Page overflows horizontally');
 }
-async function navigationFixture(page, { emptyPersonalContext = false } = {}) {
+async function navigationFixture(page, { emptyPersonalContext = false, personalFallbackRulesByContext } = {}) {
     // The real hierarchy includes a hidden root. Keep it in this fixture so the
     // Reasoning breadcrumb renders a real Language models navigation link.
     await page.route('**/api/get_page**', async route => {
@@ -62,6 +62,10 @@ async function navigationFixture(page, { emptyPersonalContext = false } = {}) {
         const response = await route.fetch();
         const data = await response.json();
         data.context.categoryPath = `All-Categories/${data.context.categoryPath}`;
+        if (personalFallbackRulesByContext) {
+            const key = `${data.context.categoryID}:${data.context.contextValues.budget}`;
+            data.personalPie.fallbackRules = structuredClone(personalFallbackRulesByContext.get(key) ?? []);
+        }
         if (emptyPersonalContext && data.context.categoryID === 2 && data.context.contextValues.budget === 'extended') {
             data.personalPie.entries = [];
             data.personalPie.fallbackRules = [];
@@ -69,6 +73,16 @@ async function navigationFixture(page, { emptyPersonalContext = false } = {}) {
         }
         await route.fulfill({ response, json: data });
     });
+    if (personalFallbackRulesByContext) {
+        await page.route('**/api/save_personal_pie', async route => {
+            const response = await route.fetch();
+            const data = await response.json();
+            const key = `${data.context.categoryID}:${data.context.contextValues.budget}`;
+            personalFallbackRulesByContext.set(key, structuredClone(data.personalPie.fallbackRules));
+            data.context.categoryPath = `All-Categories/${data.context.categoryPath}`;
+            await route.fulfill({ response, json: data });
+        });
+    }
 }
 async function navigationWorkspace(page, category, template = 'Standard') {
     await page.waitForFunction(({ category, template }) => (
@@ -550,81 +564,65 @@ try {
         }
         assert.equal(saves(app).length, 0);
     });
-    await check('fallback display preferences remain independent across modes and navigation', async ({ app, page }) => {
+    await check('public fallback visibility survives category template mode breadcrumb and reload navigation', async ({ app, page }) => {
         await navigationFixture(page);
         await home(page, app);
         const before = structuredClone({ entries: app.state.personalEntries, personal: app.state.fallbackRules, public: app.state.publicFallbackRules });
         const toggle = page.locator('#public-fallback-toggle');
         const chart = page.locator('#inline-fallback-chart');
-        const fallback = async (mode, expanded) => {
-            await pieMode(page, mode);
+        const publicFallback = async expanded => {
+            await pieMode(page, 'public');
             assert.equal(await toggle.isVisible(), true);
             assert.equal(await toggle.getAttribute('aria-expanded'), String(expanded));
             assert.equal(await toggle.innerText(), expanded ? 'Hide fallback' : 'Show fallback');
             assert.equal(await chart.isVisible(), expanded);
-            if (mode === 'personal') assert.equal(await page.locator('#inline-fallback-enabled').isChecked(), true, 'Hiding fallback must not disable its rule');
             if (expanded) {
-                const component = chart.locator(`.bp-inline-fallback-segment[data-condition-id="${mode === 'personal' ? 3 : 2}"]`);
+                const component = chart.locator('.bp-inline-fallback-segment[data-condition-id="2"]');
                 assert.equal(await component.count(), 1, 'Fallback contents came from the wrong mode or context');
-                assert.equal(await component.getAttribute('title'), mode === 'personal' ? 'Code generation: 100%' : 'Advanced reasoning: 75%');
+                assert.equal(await component.getAttribute('title'), 'Advanced reasoning: 75%');
             }
         };
+        const personalFallback = async () => {
+            await pieMode(page, 'personal');
+            assert.equal(await toggle.isVisible(), false, 'Personal mode must only expose its rule enable switch');
+            assert.equal(await page.locator('#inline-fallback-enabled').isChecked(), true);
+            assert.equal(await chart.isVisible(), true, 'Public visibility must not hide an enabled personal rule');
+            assert.equal(await chart.locator('.bp-inline-fallback-segment[data-condition-id="3"]').getAttribute('title'), 'Code generation: 100%');
+        };
         await page.locator('#weight-pie g[data-object-id="1"]').click();
-        await fallback('public', false);
-        await page.locator('#pie-mode-personal').click();
-        await fallback('personal', true);
-        await toggle.click();
-        await fallback('personal', false);
-        await page.locator('#pie-mode-public').click();
-        await fallback('public', false);
-        await toggle.click();
-        await fallback('public', true);
-
-        await page.locator('[data-category-id="2"]').click();
-        await navigationWorkspace(page, 'Reasoning');
-        await fallback('public', true);
-        await navigationTemplate(page, 'Extended');
-        await navigationWorkspace(page, 'Reasoning', 'Extended');
-        await fallback('public', true);
-        await page.locator('#pie-mode-personal').click();
-        await fallback('personal', false);
-        await page.locator('#pie-mode-public').click();
-        await fallback('public', true);
-        await parentBreadcrumb(page);
-        await fallback('public', true);
-        await page.locator('#pie-mode-personal').click();
-        await fallback('personal', false);
-        await page.reload();
-        await navigationWorkspace(page, 'Language models');
-        await fallback('personal', false);
-
-        await page.locator('#pie-mode-public').click();
-        await fallback('public', true);
-        await toggle.click();
-        await fallback('public', false);
-        await page.locator('#pie-mode-personal').click();
-        await fallback('personal', false);
-        await toggle.click();
-        await fallback('personal', true);
-        await page.locator('[data-category-id="3"]').click();
-        await navigationWorkspace(page, 'Coding');
-        await fallback('personal', true);
-        await navigationTemplate(page, 'Extended');
-        await navigationWorkspace(page, 'Coding', 'Extended');
-        await fallback('personal', true);
-        await page.locator('#pie-mode-public').click();
-        await fallback('public', false);
-        await page.locator('#pie-mode-personal').click();
-        await fallback('personal', true);
-        await parentBreadcrumb(page);
-        await fallback('personal', true);
-        await page.locator('#pie-mode-public').click();
-        await fallback('public', false);
-        await page.reload();
-        await navigationWorkspace(page, 'Language models');
-        await fallback('public', false);
-        await page.locator('#pie-mode-personal').click();
-        await fallback('personal', true);
+        await publicFallback(false);
+        for (const expanded of [true, false]) {
+            await toggle.click();
+            await publicFallback(expanded);
+            await page.locator('[data-category-id="2"]').click();
+            await navigationWorkspace(page, 'Reasoning');
+            await publicFallback(expanded);
+            await navigationTemplate(page, 'Extended');
+            await navigationWorkspace(page, 'Reasoning', 'Extended');
+            await publicFallback(expanded);
+            await page.locator('#pie-mode-personal').click();
+            await personalFallback();
+            await page.locator('[data-category-id="3"]').click();
+            await navigationWorkspace(page, 'Coding');
+            await personalFallback();
+            await navigationTemplate(page, 'Extended');
+            await navigationWorkspace(page, 'Coding', 'Extended');
+            await personalFallback();
+            await page.locator('#pie-mode-public').click();
+            await publicFallback(expanded);
+            await parentBreadcrumb(page);
+            await publicFallback(expanded);
+            await page.reload();
+            await navigationWorkspace(page, 'Language models');
+            await publicFallback(expanded);
+            await page.locator('#pie-mode-personal').click();
+            await personalFallback();
+            await page.reload();
+            await navigationWorkspace(page, 'Language models');
+            await personalFallback();
+            await page.locator('#pie-mode-public').click();
+            await publicFallback(expanded);
+        }
         assert.equal(saves(app).length, 0, 'Display preferences must not save personal weights');
         assert.deepEqual({ entries: app.state.personalEntries, personal: app.state.fallbackRules, public: app.state.publicFallbackRules }, before);
     }, {
@@ -632,29 +630,97 @@ try {
         publicFallbackRules: [{ primaryConditionID: 1, mode: 'fallback_if_missing', unconfiguredWeightBasisPoints: 2500,
             entries: weightedEntries([{ conditionID: 2, weightBasisPoints: 7500 }]) }]
     });
-    await check('hiding personal fallback ends editing without changing its rules', async ({ app, page }) => {
+    await check('personal fallback switches follow context rules and discard unsaved drafts', async ({ app, page }) => {
+        const rule = conditionID => [{ primaryConditionID: 1, mode: 'fallback_if_missing',
+            entries: weightedEntries([{ conditionID, weightBasisPoints: 10000 }]) }];
+        const rulesByContext = new Map([
+            ['1:standard', rule(3)], ['1:extended', rule(2)],
+            ['2:standard', []], ['2:extended', rule(4)],
+            ['3:standard', rule(2)], ['3:extended', []]
+        ]);
+        const before = structuredClone(rulesByContext);
+        await navigationFixture(page, { personalFallbackRulesByContext: rulesByContext });
+        await page.addInitScript(() => {
+            const key = 'benchpoll-workspace-preferences-v1';
+            if (!sessionStorage.getItem(key)) {
+                sessionStorage.setItem(key, JSON.stringify({ mode: 'personal', fallbackVisible: { personal: false, public: true } }));
+            }
+        });
         await home(page, app);
-        const before = structuredClone({ entries: app.state.personalEntries, rules: app.state.fallbackRules });
-        await page.locator('#pie-mode-personal').click();
+        const entriesBefore = structuredClone(app.state.personalEntries);
+        const chart = page.locator('#inline-fallback-chart');
+        const personalFallback = async (componentID, { draft = false } = {}) => {
+            const enabled = componentID !== null || draft;
+            await pieMode(page, 'personal');
+            assert.equal(await page.locator('#public-fallback-toggle').isVisible(), false);
+            assert.equal(await page.locator('#inline-fallback-personal-control').isVisible(), true);
+            assert.equal(await page.locator('#inline-fallback-enabled').isChecked(), enabled, 'Personal switch must reflect this context rule');
+            assert.equal(await chart.isVisible(), enabled);
+            if (componentID !== null) {
+                assert.equal(await chart.locator('.bp-inline-fallback-segment').count(), 1);
+                assert.equal(await chart.locator(`.bp-inline-fallback-segment[data-condition-id="${componentID}"]`).count(), 1);
+            } else if (draft) {
+                assert.equal(await chart.locator('.bp-inline-fallback-empty').isVisible(), true);
+            }
+            if (!draft) assert.equal(await page.locator('#benchmark-card').evaluate(element => element.classList.contains('is-fallback-target-active')), false);
+        };
         await page.locator('#weight-pie g[data-object-id="1"]').click();
-        await page.locator('#inline-fallback-chart .bp-inline-fallback-segment').click();
-        assert.equal(await page.locator('#benchmark-card').evaluate(element => element.classList.contains('is-fallback-target-active')), true);
-        await page.locator('#public-fallback-toggle').click();
-        assert.equal(await page.locator('#inline-fallback-chart').isVisible(), false);
-        assert.equal(await page.locator('#inline-fallback-enabled').isChecked(), true);
-        assert.equal(await page.locator('#benchmark-card').evaluate(element => element.classList.contains('is-fallback-target-active')), false);
-        const row = page.locator('.bp-benchmark-row').filter({ has: page.getByText('Advanced reasoning', { exact: true }) });
-        assert.doesNotMatch(await row.getAttribute('aria-label'), /Fallback/);
-        await row.locator('.bp-benchmark-name').click();
+        await personalFallback(3); // Ignore the obsolete personal display preference.
+        await page.locator('#pie-mode-public').click();
+        assert.equal(await page.locator('#public-fallback-toggle').getAttribute('aria-expanded'), 'true');
+        assert.equal(await chart.isVisible(), true, 'The previous public display preference should still load');
+        await page.locator('#pie-mode-personal').click();
+        await personalFallback(3);
         await page.locator('[data-category-id="2"]').click();
         await navigationWorkspace(page, 'Reasoning');
-        await page.locator('#weight-pie g[data-object-id="1"]').click();
-        assert.equal(await page.locator('#public-fallback-toggle').getAttribute('aria-expanded'), 'false');
-        await page.locator('#public-fallback-toggle').click();
-        assert.equal(await page.locator('#inline-fallback-chart .bp-inline-fallback-segment[data-condition-id="3"]').count(), 1);
-        assert.equal(saves(app).length, 0, 'A hidden fallback remained an editing target');
-        assert.deepEqual({ entries: app.state.personalEntries, rules: app.state.fallbackRules }, before);
-    }, { fallbackRules: [{ primaryConditionID: 1, mode: 'fallback_if_missing', entries: weightedEntries([{ conditionID: 3, weightBasisPoints: 10000 }]) }] });
+        await personalFallback(null);
+        await navigationTemplate(page, 'Extended');
+        await navigationWorkspace(page, 'Reasoning', 'Extended');
+        await personalFallback(4);
+        await navigationTemplate(page, 'Standard');
+        await navigationWorkspace(page, 'Reasoning');
+        await personalFallback(null);
+        await parentBreadcrumb(page);
+        await personalFallback(3);
+
+        await page.locator('.bp-fallback-switch').click();
+        await waitSaved(page, app, 1);
+        await personalFallback(null);
+        assert.equal(saves(app)[0].body.categoryID, 1);
+        assert.deepEqual(saves(app)[0].body.contextValues, { budget: 'standard' });
+        assert.deepEqual(saves(app)[0].body.fallbackRules, [], 'Disabling Personal must persist the rule removal');
+        await navigationTemplate(page, 'Extended');
+        await navigationWorkspace(page, 'Language models', 'Extended');
+        await personalFallback(2);
+        await page.locator('[data-category-id="3"]').click();
+        await navigationWorkspace(page, 'Coding');
+        await personalFallback(2);
+        await parentBreadcrumb(page);
+        await personalFallback(null);
+
+        await page.locator('.bp-fallback-switch').click();
+        await personalFallback(null, { draft: true });
+        await chart.click();
+        assert.equal(await page.locator('#benchmark-card').evaluate(element => element.classList.contains('is-fallback-target-active')), true);
+        await page.locator('[data-category-id="2"]').click();
+        await navigationWorkspace(page, 'Reasoning');
+        await personalFallback(null);
+        await parentBreadcrumb(page);
+        await personalFallback(null);
+        await page.locator('.bp-fallback-switch').click();
+        await personalFallback(null, { draft: true });
+        await chart.click();
+        await navigationTemplate(page, 'Extended');
+        await navigationWorkspace(page, 'Language models', 'Extended');
+        await personalFallback(2);
+        await navigationTemplate(page, 'Standard');
+        await navigationWorkspace(page, 'Language models');
+        await personalFallback(null);
+        assert.equal(saves(app).length, 1, 'Navigation and empty drafts must not change saved fallback rules');
+        before.set('1:standard', []);
+        assert.deepEqual(rulesByContext, before);
+        assert.deepEqual(app.state.personalEntries, entriesBefore);
+    });
     await check('desktop home and evidence', async ({ app, page }) => {
         await home(page, app);
         assert.equal(await page.locator('.bp-benchmark-row').count(), 8);

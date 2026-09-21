@@ -10,8 +10,8 @@ import {
     TOUCH_WEIGHT_BASIS_POINTS_PER_PIXEL, WORKSPACE_LOAD_RETRY_DELAYS_MS, FALLBACK_RULE_MODE,
     MAX_FALLBACK_COMPONENTS
 } from './workspace/constants.js';
-import { createWorkspaceState } from './workspace/state.js?v=workspace-preferences-20260921';
-import { readWorkspacePreferences, writeWorkspacePreferences } from './workspace/preferences.js';
+import { createWorkspaceState } from './workspace/state.js?v=public-fallback-preferences-20260921';
+import { readWorkspacePreferences, writeWorkspacePreferences } from './workspace/preferences.js?v=public-fallback-preferences-20260921';
 import { validateWorkspacePayload } from './workspace/contracts.js?v=model-parameters-20260912';
 import {
     cloneEntries, cloneFallbackRules, clonePersonalPieSnapshot,
@@ -726,7 +726,6 @@ function selectedPublicFallbackPrimary() {
 function isInlineFallbackTargetActive() {
     const primary = selectedInlineFallbackPrimary();
     return Boolean(primary)
-        && state.fallbackVisible.personal
         && fallbackIsEnabledFor(primary.ID)
         && Number(fallbackTargetPrimaryID) === Number(primary.ID);
 }
@@ -744,7 +743,7 @@ function deactivateInlineFallbackTarget({ discardDraft = false } = {}) {
 
 function activateInlineFallbackTarget(preferredComponentID = null) {
     const primary = selectedInlineFallbackPrimary();
-    if (!primary || !state.fallbackVisible.personal || !fallbackIsEnabledFor(primary.ID) || state.loading || state.saving) {
+    if (!primary || !fallbackIsEnabledFor(primary.ID) || state.loading || state.saving) {
         return false;
     }
     const rule = fallbackRuleFor(primary.ID);
@@ -784,17 +783,17 @@ function renderInlineFallback() {
     const personalRule = primary && personal ? fallbackRuleFor(primaryConditionID) : null;
     const publicRule = primary && !personal ? publicFallbackRuleFor(primaryConditionID) : null;
     const enabled = Boolean(primary) && personal && fallbackIsEnabledFor(primaryConditionID);
-    const chartVisible = Boolean(primary) && state.fallbackVisible[state.mode]
-        && (!personal || enabled);
+    const publicExpanded = Boolean(primary) && !personal && state.publicFallbackVisible;
+    const chartVisible = personal ? enabled : publicExpanded;
     const visible = Boolean(primary);
     inlineFallback.hidden = !visible;
     pieCard?.classList.toggle('has-inline-fallback', visible);
     inlineFallback.classList.toggle('is-readonly', !personal);
     inlineFallbackPersonalControl.hidden = !personal;
-    publicFallbackToggle.hidden = personal && !enabled;
+    publicFallbackToggle.hidden = personal;
     publicFallbackToggle.disabled = state.loading || state.saving;
-    publicFallbackToggle.textContent = chartVisible ? 'Hide fallback' : 'Show fallback';
-    publicFallbackToggle.setAttribute('aria-expanded', String(chartVisible));
+    publicFallbackToggle.textContent = publicExpanded ? 'Hide fallback' : 'Show fallback';
+    publicFallbackToggle.setAttribute('aria-expanded', String(publicExpanded));
     if (!primary) {
         deactivateInlineFallbackTarget({ discardDraft: personal });
         inlineFallbackEnabled.checked = false;
@@ -2222,21 +2221,12 @@ inlineFallbackEnabled.addEventListener('change', () => {
     }
     renderInlineFallback();
 });
-publicFallbackToggle.addEventListener('click', async () => {
-    if (state.loading || state.saving) return;
-    const mode = state.mode;
-    const contextFingerprint = state.pieContextFingerprint;
-    const primary = mode === 'personal' ? selectedInlineFallbackPrimary() : selectedPublicFallbackPrimary();
-    if (!primary || !await finishPendingWeightAdjustments()) return;
-    if (state.mode !== mode || state.pieContextFingerprint !== contextFingerprint) return;
-    state.fallbackVisible[mode] = !state.fallbackVisible[mode];
+publicFallbackToggle.addEventListener('click', () => {
+    if (state.mode !== 'public' || state.loading || state.saving || !selectedPublicFallbackPrimary()) return;
+    state.publicFallbackVisible = !state.publicFallbackVisible;
     writeWorkspacePreferences(state);
-    if (mode === 'personal' && !state.fallbackVisible.personal) {
-        deactivateInlineFallbackTarget();
-    }
     selectedPublicFallbackComponentID = null;
     renderInlineFallback();
-    renderBenchmarks();
 });
 inlineFallbackRemove.addEventListener('click', () => {
     removeSelectedFallbackComponent();
