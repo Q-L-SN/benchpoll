@@ -37,9 +37,9 @@ test('senior data changes open the existing contribution forms in a new tab', ()
     assert.match(html, /id="explorer-add"/);
     assert.doesNotMatch(html, /id="direct-editor-form"|id="direct-delete-id"/);
     assert.match(client, /EXPLORER_CONTRIBUTION_FORMS/);
-    assert.match(client, /mode=edit_benchmark&targetBenchmarkID=/);
-    assert.match(client, /mode=edit_model&targetModelID=/);
-    assert.match(client, /mode=edit_result&targetResultID=/);
+    assert.match(client, /buildContributionURL\('edit_benchmark', \{ targetBenchmarkID: row.id/);
+    assert.match(client, /buildContributionURL\('edit_model', \{ targetModelID: row.id/);
+    assert.match(client, /buildContributionURL\('edit_result', \{ targetResultID: row.id/);
     assert.match(client, /window\.open\(url, '_blank', 'noopener,noreferrer'\)/);
     assert.doesNotMatch(server, /API\.post\('\/admin_direct_mutation'/);
 });

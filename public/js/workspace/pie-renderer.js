@@ -52,8 +52,8 @@ export function createPieRenderer({ state, pieSvg, orderedPieEntries, currentPie
                     x1: '0%', y1: '0%', x2: '100%', y2: '100%'
                 });
                 gradient.append(
-                    createSvgElement('stop', { offset: '0%', 'stop-color': startColor }),
-                    createSvgElement('stop', { offset: '100%', 'stop-color': endColor })
+                    createSvgElement('stop', { offset: '0%', 'stop-color': `var(--bp-chart-${colorIndex % PIE_GRADIENTS.length}-start, ${startColor})` }),
+                    createSvgElement('stop', { offset: '100%', 'stop-color': `var(--bp-chart-${colorIndex % PIE_GRADIENTS.length}-end, ${endColor})` })
                 );
                 defs.append(gradient);
             }
@@ -95,6 +95,7 @@ export function createPieRenderer({ state, pieSvg, orderedPieEntries, currentPie
             const hasFallback = state.mode === 'personal'
                 ? Boolean(fallbackRuleFor(objectID))
                 : Boolean(publicFallbackRuleFor(objectID));
+            const showFallbackIcon = state.mode === 'personal' && hasFallback;
             group.setAttribute(
                 'aria-label',
                 `${benchmarkAccessibleName(entry)}: ${entry.weight.toFixed(2)}%${hasFallback ? '. Fallback enabled' : ''}`
@@ -110,7 +111,7 @@ export function createPieRenderer({ state, pieSvg, orderedPieEntries, currentPie
                 let text = group.querySelector('.bp-pie-label');
                 const labelLines = splitPieLabel(entry.name).slice(0, 2);
                 const conditionLabel = benchmarkConditionLabel(entry);
-                const labelKey = [...labelLines, conditionLabel, hasFallback ? 'fallback' : ''].join('\n');
+                const labelKey = [...labelLines, conditionLabel, showFallbackIcon ? 'fallback' : ''].join('\n');
                 if (!text || text.dataset.labelKey !== labelKey) {
                     text?.remove();
                     text = createSvgElement('text', { class: 'bp-pie-label' });
@@ -120,7 +121,7 @@ export function createPieRenderer({ state, pieSvg, orderedPieEntries, currentPie
                         tspan.textContent = line.length > 18 ? `${line.slice(0, 16)}…` : line;
                         text.append(tspan);
                     });
-                    if (hasFallback) {
+                    if (showFallbackIcon) {
                         const fallbackIcon = createSvgElement('tspan', {
                             class: 'bp-pie-fallback-icon',
                             dx: '4',

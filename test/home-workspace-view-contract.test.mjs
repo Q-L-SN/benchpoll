@@ -107,7 +107,7 @@ test('benchmark leaderboard stays public-ranked and can pin personal benchmarks 
     assert.match(workspace, /rank\.textContent = String\(object\.rank\)/);
     assert.match(workspace, /row\.append\(rank, identity, personalValue, publicValue, actionCell\)/);
     assert.doesNotMatch(workspace, /identity\.append\(name, type\)/);
-    assert.match(styles, /\.bp-benchmark-head,\s*\.bp-benchmark-row\s*\{[^}]*grid-template-columns:\s*20px minmax\(0, 1fr\) 52px 52px 44px/s);
+    assert.match(styles, /\.bp-benchmark-head,\s*\.bp-benchmark-row\s*\{[^}]*grid-template-columns:\s*20px minmax\(0, 1fr\) 52px 52px 68px/s);
 });
 
 test('personal-mode benchmark rows keep a persistent remove action without exposing it in public mode', () => {
@@ -116,7 +116,7 @@ test('personal-mode benchmark rows keep a persistent remove action without expos
     assert.match(workspace, /distributeToTarget\([\s\S]*state\.limits\.totalBasisPoints[\s\S]*\)/);
     assert.match(workspace, /if \(personalControlsActive && inPersonalPie\) \{[\s\S]*classList\.add\('has-personal-remove'\)[\s\S]*bp-personal-weight-remove/);
     assert.match(workspace, /actionCell\.append\(edit\)[\s\S]*actionCell\.append\(remove\)/);
-    assert.match(styles, /\.bp-benchmark-action-cell\.has-personal-remove\s*\{[^}]*width:\s*44px/s);
+    assert.match(styles, /\.bp-benchmark-action-cell\.has-personal-remove\s*\{[^}]*width:\s*68px/s);
     assert.match(styles, /\.bp-personal-weight-remove\s*\{[^}]*opacity:\s*1/s);
     assert.match(styles, /\.bp-row-edit-action\s*\{[^}]*opacity:\s*0/s);
     assert.doesNotMatch(styles, /\.bp-benchmark-row\.is-personal-pinned::before/);
@@ -130,7 +130,8 @@ test('new benchmark is a subdued text link and sidebar legal content can wrap wi
 
 test('empty personal state uses a creation card instead of an inactive mode switch', () => {
     assert.match(html, /id="personal-pie-create"[^>]*hidden/);
-    assert.match(html, /Build your benchmark mix and personal leaderboard/);
+    assert.match(html, /Create your benchmark mix/);
+    assert.match(html, /Your weights\. Your leaderboard\./);
     assert.match(html, /id="personal-empty-public-return"/);
     assert.match(workspace, /modeSwitch\.hidden = !hasPersonalWeights/);
     assert.match(workspace, /personalPieCreate\.hidden = !showCreatePersonal/);

@@ -1,4 +1,5 @@
-import { validateContributionCatalog } from './contribution/contracts.js';
+import { normalizeModelParameters, modelParameterLabel, parameterRowsToObject } from './shared/model-parameters.js';
+import { validateContributionCatalog } from './contribution/contracts.js?v=score-values-20260907';
 import {
     escapeHTML, option, finiteOrNull,
     integerOrNull, entityKey, sameEntityID,
@@ -8,8 +9,10 @@ import {
     rankedMatches
 } from './contribution/fields.js';
 import * as G from '/js/global.js';
+import { buildContributionURL, readContributionEntry } from './shared/contribution-navigation.js?v=object-notes-20260910';
 
-const params = new URLSearchParams(window.location.search);
+const contributionEntry = readContributionEntry();
+const params = contributionEntry.params;
 const formSurface = document.getElementById('form-surface');
 const entryMissing = document.getElementById('entry-missing');
 const authMissing = document.getElementById('auth-missing');
@@ -49,10 +52,15 @@ const knownTagOptions = document.getElementById('known-tag-options');
 const evaluationNameOptions = document.getElementById('evaluation-name-options');
 
 const MODE_DETAILS = {
+    report: {
+        label: 'Report content', title: 'Report a discussion post',
+        subtitle: 'Reports are private to reviewers. If upheld, the reported content will be hidden.',
+        categoryEditable: false
+    },
     new_benchmark: {
         label: 'New benchmark',
         title: 'Record a new benchmark',
-        subtitle: 'Create one benchmark and keep each reproducible test condition separate.',
+        subtitle: 'Check for an existing benchmark first. Add a new one only if it is not listed.',
         categoryEditable: false
     },
     new_model: {
@@ -70,13 +78,13 @@ const MODE_DETAILS = {
     edit_benchmark: {
         label: 'Change benchmark',
         title: 'Change benchmark',
-        subtitle: 'Update structured benchmark information or request removal. Every change is reviewed.',
+        subtitle: 'Correct details, add a test condition, or merge a duplicate benchmark. Changes take effect after approval.',
         categoryEditable: false
     },
     edit_model: {
         label: 'Change model',
         title: 'Change model',
-        subtitle: 'Update structured model information or request removal. Every change is reviewed.',
+        subtitle: 'Correct details, add a model configuration, or merge a duplicate. Changes take effect after approval.',
         categoryEditable: false
     },
     edit_result: {
@@ -166,6 +174,7 @@ function makeEvaluation(index = 0) {
 function makeConfiguration(index = 0) {
     return {
         clientRef: `model-condition-${Date.now()}-${index}`,
+        parameterRows: index === 0 ? [] : [{ key: '', value: '' }],
         name: index === 0 ? 'default' : '',
         isDefault: index === 0,
         isExisting: false
@@ -208,7 +217,7 @@ function makeResult(index = 0) {
         rawScore: '',
         sourceURL: '',
         sourceType: 'other',
-        sourceTitle: ''
+        sourceTitle: '',
     };
 }
 
@@ -235,11 +244,13 @@ const draft = {
         options: [makeContextOption(0), makeContextOption(1)]
     },
     report: {
+        postID: param('postID'),
+        reason: 'spam',
         sourceURL: '',
         details: ''
     },
     feedback: {
-        details: ''
+        details: param('details') || ''
     },
     context: {
         confirmed: false,
@@ -615,35 +626,6 @@ function selectedExistingObject() {
     return evaluation.existingBenchmarkID === null ? null : getBenchmark(evaluation.existingBenchmarkID);
 }
 
-function setEvaluationSelection(benchmarkID) {
-    const evaluation = selectedEvaluation();
-    const existing = getBenchmark(benchmarkID);
-    if (!existing) {
-        return;
-    }
-    evaluation.existingBenchmarkID = existing.ID;
-    evaluation.existingBenchmarkRef = existing.reference ?? null;
-    evaluation.name = existing.name;
-    evaluation.introductionURL = existing.introductionURL ?? '';
-    evaluation.tags = (existing.tags ?? []).map(tag => tag.name);
-    const existingProfile = existing.conditions.find(profile => profile.isDefault) ?? existing.conditions[0];
-    evaluation.scoreDirection = existingProfile?.scoreDirection ?? 'higher';
-    evaluation.scoreMin = existingProfile?.scoreMin === null || existingProfile?.scoreMin === undefined
-        ? ''
-        : String(existingProfile.scoreMin);
-    evaluation.scoreMax = existingProfile?.scoreMax === null || existingProfile?.scoreMax === undefined
-        ? ''
-        : String(existingProfile.scoreMax);
-    evaluation.usesPercentageScale = profileUsesPercentage(existingProfile);
-    evaluation.targetValue = existingProfile?.targetValue === null || existingProfile?.targetValue === undefined
-        ? ''
-        : String(existingProfile.targetValue);
-    const newProfile = makeProfile(1);
-    newProfile.name = '';
-    newProfile.isDefault = false;
-    evaluation.conditions = [newProfile];
-}
-
 function clearEvaluationSelection(name = '') {
     const evaluation = selectedEvaluation();
     const wasExisting = evaluation.existingBenchmarkID !== null;
@@ -678,9 +660,10 @@ function renderEvaluationSuggestions(query) {
         return '';
     }
     return `<div class="evaluation-suggestions" role="listbox" aria-label="Existing benchmarks">
+        <p class="duplicate-check-heading"><strong>Is your benchmark already listed?</strong><span>Do not submit it twice. Select a match to add a test condition instead.</span></p>
         ${suggestions.map((object, index) => `<button type="button" role="option" data-select-evaluation="${escapeHTML(object.ID)}">
             <span>${escapeHTML(object.name)}${pendingBadge(object)}</span>
-            <small>${index === 0 ? 'Tab · ' : ''}Existing benchmark</small>
+            <small>${object.pending ? 'Already submitted · pending review' : 'Add a test condition'}${index === 0 ? ' · Tab to focus' : ''}</small>
         </button>`).join('')}
     </div>`;
 }
@@ -721,30 +704,43 @@ function conditionRows(evaluation) {
 }
 
 function changeOperationSelector() {
-    const deleting = draft.change.operation === 'delete';
     return `<section class="change-operation-section">
-        <div><span class="section-eyebrow">Requested operation</span><strong>What should reviewers do?</strong></div>
+        <div><strong>What would you like to do?</strong></div>
         <div class="change-operation-switch" role="group" aria-label="Requested operation">
-            <button type="button" data-change-operation="update" class="${deleting ? '' : 'active'}">Change this object</button>
-            <button type="button" data-change-operation="delete" class="${deleting ? 'active danger' : ''}">Delete this object</button>
+            ${[['update', 'Change'], ['delete', 'Delete'], ['merge', 'Merge into another']].map(([value, label]) => `<button type="button" data-change-operation="${value}" aria-pressed="${draft.change.operation === value}" class="${draft.change.operation === value ? 'active' : ''}">${label}</button>`).join('')}
         </div>
     </section>`;
 }
 
+function requestMerge() {
+    const kind = draft.change.targetKind;
+    const name = draft.change.before?.name || `Score #${draft.change.targetID}`;
+    const details = [
+        'Merge request',
+        `Object to merge: ${name} (${kind} #${draft.change.targetID})`,
+        `Object page: ${location.origin}${location.pathname}`,
+        '',
+        'Object to keep (name, ID or URL): ',
+        '',
+        'Reason for merging and any details to preserve: '
+    ].join('\n');
+    location.assign(buildContributionURL('feedback', { details }));
+}
+
 function changeReviewNotesField({ required = false } = {}) {
     return `<section class="change-review-notes"><label class="field wide" data-final-notes>
-        <span>${required ? 'Reason and notes' : 'Notes for reviewers'} ${required ? '' : '<small>Optional</small>'}</span>
+        <span>${required ? 'Reason and notes' : 'Notes'} ${required ? '' : '<small>Optional</small>'}</span>
         <textarea data-bind="change" data-field="reviewNotes" maxlength="2000"${required ? ' required minlength="3"' : ''} placeholder="${required ? 'Explain why this object should be deleted.' : 'Add context that helps reviewers verify this change.'}">${escapeHTML(draft.change.reviewNotes)}</textarea>
     </label></section>`;
 }
 
 function reviewerNotesField({ binding, value, index = null, placeholder }) {
-    const activeBinding = isChangeMode() ? 'change' : binding;
-    const field = isChangeMode() ? 'reviewNotes' : 'reviewerNotes';
-    const activeValue = isChangeMode() ? draft.change.reviewNotes : value;
+    const activeBinding = binding;
+    const field = 'reviewerNotes';
+    const activeValue = value;
     const indexAttribute = index === null ? '' : ` data-index="${index}"`;
-    return `<label class="field wide" data-final-notes><span>Notes <small>Optional</small></span>
-        <textarea data-bind="${activeBinding}"${indexAttribute} data-field="${field}" placeholder="${escapeHTML(placeholder)}">${escapeHTML(activeValue)}</textarea>
+    return `<label class="field wide" data-final-notes${isChangeMode() && binding === 'resultBatch' ? ' data-change-path="resultNotes"' : ''}><span>Notes <small>Optional</small></span>
+        <textarea data-bind="${activeBinding}"${indexAttribute} data-field="${field}" maxlength="${binding === 'subject' ? 10000 : 2000}" placeholder="${escapeHTML(placeholder)}">${escapeHTML(activeValue)}</textarea>
     </label>`;
 }
 
@@ -795,7 +791,7 @@ function evaluationDetailsStep() {
         <label class="field wide"><span>Introduction URL <small>Optional</small></span><input type="url" data-bind="evaluation" data-index="0" data-field="introductionURL" value="${escapeHTML(evaluation.introductionURL)}" placeholder="https://paper-or-project.example"></label>
     </div></section>`}
     <section class="evaluation-request-fields final-notes-section"><div class="field-grid">
-        ${reviewerNotesField({ binding: 'evaluation', index: 0, value: evaluation.reviewerNotes, placeholder: 'Anything else reviewers should know.' })}
+        ${reviewerNotesField({ binding: 'evaluation', index: 0, value: evaluation.reviewerNotes, placeholder: 'Notes stored with this object after approval.' })}
     </div></section>`;
 }
 
@@ -949,12 +945,27 @@ function existingConfigurationRows(model) {
     </div>`).join('');
 }
 
+function configurationValues(configuration) {
+    const parameters = configuration.parameterRows === null ? null : parameterRowsToObject(configuration.parameterRows);
+    return { parameters, name: modelParameterLabel(parameters, configuration.ID).slice(0, 192),
+        isDefault: parameters !== null && Object.keys(parameters).length === 0 };
+}
+
 function configurationRows(subject) {
-    return subject.conditions.map((configuration, index) => `<div class="condition-row${normalizedConditionName(configuration.name) === 'default' ? ' is-default' : ''}">
-        <span class="condition-number">${index + 1}</span>
-        <label class="condition-name"><span class="sr-only">Model test condition ${index + 1}</span><input required data-bind="configuration" data-configuration-input data-index="${index}" data-field="name" value="${escapeHTML(configuration.name)}" placeholder="e.g. high reasoning"></label>
-        <button class="condition-delete" type="button" data-action="remove-configuration" data-index="${index}" aria-label="Remove configuration"><i class="fa-regular fa-trash-can" aria-hidden="true"></i></button>
-    </div>`).join('');
+    return subject.conditions.map((configuration, index) => {
+        const rows = configuration.parameterRows;
+        const path = configuration.ID ? ` data-change-path="subject.conditions[${configuration.ID}].parameterRows"` : '';
+        return `<div class="model-parameter-editor"${path}>
+            <div class="condition-section-heading"><strong>Configuration ${index + 1}</strong><button type="button" class="condition-delete" data-action="remove-configuration" data-index="${index}" aria-label="Remove configuration"><i class="fa-regular fa-trash-can" aria-hidden="true"></i></button></div>
+            ${rows === null ? '<p class="parameter-unknown">Unconfigured. Previous condition text is preserved in the model notes.</p>' : rows.length === 0 ? '<span class="parameter-unknown">default</span>' : rows.map((row, rowIndex) => `<div class="model-parameter-pair">
+                <label class="field"><input required aria-label="Parameter key" data-bind="modelParameter" data-field="key" data-index="${index}" data-row-index="${rowIndex}" value="${escapeHTML(row.key)}" placeholder="e.g. harness" maxlength="40"></label>
+                <label class="field"><input required aria-label="Parameter value" data-bind="modelParameter" data-field="value" data-index="${index}" data-row-index="${rowIndex}" value="${escapeHTML(row.value)}" placeholder="e.g. agent-v2" maxlength="160"></label>
+                <button type="button" class="condition-delete" data-action="remove-parameter" data-index="${index}" data-row-index="${rowIndex}" aria-label="Remove parameter"><i class="fa-solid fa-minus" aria-hidden="true"></i></button>
+            </div>`).join('')}
+            <button type="button" class="add-row-button" data-action="add-parameter" data-index="${index}"><i class="fa-solid fa-plus" aria-hidden="true"></i><span>Add parameter</span></button>
+            ${rows === null ? `<button type="button" class="add-row-button" data-action="configure-default" data-index="${index}">Declare default configuration</button>` : ''}
+        </div>`;
+    }).join('');
 }
 
 function subjectDetailsStep() {
@@ -973,14 +984,14 @@ function subjectDetailsStep() {
         </label>` : '<p class="dependent-field-hint"><i class="fa-solid fa-arrow-up" aria-hidden="true"></i><span>Choose or add a vendor to continue.</span></p>'}
     </section>
     <section class="condition-section">
-        <div class="condition-section-heading"><div><h3>Model test conditions</h3><p>Each model test condition is one short, single-line name.</p></div><button class="add-row-button" type="button" data-action="add-configuration"><i class="fa-solid fa-plus" aria-hidden="true"></i><span>Add condition</span></button></div>
-        <div class="condition-table" role="group" aria-label="Model test conditions"><div class="condition-table-head"><span>#</span><span>Condition name</span><span>Actions</span></div>${existing && !editing ? existingConfigurationRows(existing) : ''}${configurationRows(subject)}</div>
+        <div class="condition-section-heading"><div><h3>Model configurations</h3></div><button class="add-row-button" type="button" data-action="add-configuration"><i class="fa-solid fa-plus" aria-hidden="true"></i><span>Add condition</span></button></div>
+        <div class="model-configurations" role="group" aria-label="Model configurations">${existing && !editing ? existingConfigurationRows(existing) : ''}${configurationRows(subject)}</div>
     </section>
     ${existing && !editing ? '' : `<section class="evaluation-request-fields"><div class="field-grid">
         <label class="field wide"><span>Introduction URL <small>Optional</small></span><input type="url" data-bind="subject" data-field="introductionURL" value="${escapeHTML(subject.introductionURL)}" placeholder="https://model-card.example"></label>
     </div></section>`}
     <section class="evaluation-request-fields final-notes-section"><div class="field-grid">
-        ${reviewerNotesField({ binding: 'subject', value: subject.reviewerNotes, placeholder: 'Anything else reviewers should know.' })}
+        ${reviewerNotesField({ binding: 'subject', value: subject.reviewerNotes, placeholder: 'Notes stored with this object after approval.' })}
     </div></section>`;
 }
 
@@ -992,9 +1003,8 @@ function renderResultModelSuggestions(result, index) {
     const parts = result.modelQuery.split('/').map(part => part.trim()).filter(Boolean);
     const modelName = parts.length > 1 ? parts.at(-1) : result.modelQuery.trim();
     const vendorName = parts.length > 1 ? parts.slice(0, -1).join(' / ') : '';
-    const query = new URLSearchParams({ mode: 'new_model', modelName });
-    if (vendorName) query.set('vendorName', vendorName);
-    return `<div class="evaluation-suggestions model-suggestions" role="listbox" aria-label="Existing models">${suggestions.map((model, suggestionIndex) => `<button type="button" role="option" data-select-result-model="${escapeHTML(model.ID)}" data-index="${index}"><span class="model-suggestion-main">${vendorMark(getVendor(model.vendorID) ?? model)}<span>${escapeHTML(model.name)}${pendingBadge(model)}</span></span>${suggestionIndex === 0 ? '<small>Tab</small>' : ''}</button>`).join('')}<a class="picker-create-link suggestion-create-link" href="/contribute?${escapeHTML(query)}" target="_blank" rel="noopener"><i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i><span>Can’t find the model? Record a new model</span></a></div>`;
+    const query = buildContributionURL('new_model', { modelName, vendorName });
+    return `<div class="evaluation-suggestions model-suggestions" role="listbox" aria-label="Existing models">${suggestions.map((model, suggestionIndex) => `<button type="button" role="option" data-select-result-model="${escapeHTML(model.ID)}" data-index="${index}"><span class="model-suggestion-main">${vendorMark(getVendor(model.vendorID) ?? model)}<span>${escapeHTML(model.name)}${pendingBadge(model)}</span></span>${suggestionIndex === 0 ? '<small>Tab</small>' : ''}</button>`).join('')}<a class="picker-create-link suggestion-create-link" href="${escapeHTML(query)}" target="_blank" rel="noopener"><i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i><span>Can’t find the model? Record a new model</span></a></div>`;
 }
 
 function renderResultObjectSuggestions(result, index) {
@@ -1023,9 +1033,24 @@ function clearExistingChoiceValidity(input) {
     input.setCustomValidity('');
     input.removeAttribute('aria-invalid');
     input.closest('.evaluation-combobox')?.classList.remove('has-error');
+    input.closest('.field')?.querySelector('.field-validation-error')?.remove();
 }
 
-function validateExistingChoiceInput(input, { report = false } = {}) {
+function showFieldError(input, message) {
+    if (input instanceof HTMLInputElement || input instanceof HTMLSelectElement) input.setCustomValidity(message);
+    input.setAttribute('aria-invalid', 'true');
+    const field = input.closest('.field') || input.parentElement;
+    let error = field.querySelector('.field-validation-error');
+    if (!error) {
+        error = document.createElement('span');
+        error.className = 'field-validation-error';
+        error.setAttribute('role', 'status');
+        field.append(error);
+    }
+    error.textContent = message;
+}
+
+function validateExistingChoiceInput(input) {
     const index = Number(input.dataset.index);
     const result = draft.results[index];
     if (!result || !input.value.trim()) {
@@ -1055,9 +1080,8 @@ function validateExistingChoiceInput(input, { report = false } = {}) {
         input.setAttribute('aria-invalid', 'true');
     }
     input.closest('.evaluation-combobox')?.classList.toggle('has-error', !valid);
-    if (!valid && report) {
-        input.reportValidity();
-    }
+    if (!valid) showFieldError(input, message);
+    else clearExistingChoiceValidity(input);
     return valid;
 }
 
@@ -1067,6 +1091,97 @@ function validateRenderedExistingChoices() {
         valid = validateExistingChoiceInput(input) && valid;
     });
     return valid;
+}
+
+let conditionCheckQueue = Promise.resolve();
+const confirmedConditionNames = new Map();
+const confirmedParameterRows = new Map();
+
+async function confirmModelParameterChanges() {
+    if (mode !== 'edit_model' || draft.change.operation !== 'update') return true;
+    for (const configuration of draft.subject.conditions) {
+        if (!configuration.ID) continue;
+        const previousRows = confirmedParameterRows.has(configuration.ID)
+            ? confirmedParameterRows.get(configuration.ID)
+            : draft.change.baseline.subject.conditions.find(item => item.ID === configuration.ID).parameterRows;
+        if (sameClientValue(previousRows, configuration.parameterRows)) continue;
+        const before = configurationValues({ ...configuration, parameterRows: previousRows }).name;
+        const after = configurationValues(configuration).name;
+        if (!await confirmConditionMutation(configuration, 'parameters', before, after)) {
+            configuration.parameterRows = structuredClone(previousRows);
+            renderCurrentStep();
+            return false;
+        }
+        confirmedParameterRows.set(configuration.ID, structuredClone(configuration.parameterRows));
+    }
+    return true;
+}
+
+function editedCondition(input) {
+    return input.matches('[data-condition-input]')
+        ? selectedEvaluation().conditions[Number(input.dataset.profileIndex)]
+        : draft.subject.conditions[Number(input.dataset.index)];
+}
+
+async function confirmConditionMutation(condition, action, previousName, nextName = '') {
+    if (!isChangeMode() || !Number.isSafeInteger(condition.ID)) return true;
+    const response = await fetch('/api/get_condition_impact', { method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetKind: draft.change.targetKind, targetID: draft.change.targetID, conditionID: condition.ID }) });
+    if (!response.ok) throw Error('Could not check linked scores and weights. Please try again.');
+    const impact = await response.json();
+    if (![impact.resultCount, impact.pieCount].every(value => Number.isSafeInteger(value) && value >= 0)) {
+        throw Error('The dependency check returned invalid counts.');
+    }
+    const summary = `“${previousName}” is linked to ${impact.resultCount} score${impact.resultCount === 1 ? '' : 's'} and ${impact.pieCount} personal weight mix${impact.pieCount === 1 ? '' : 'es'}.`;
+    if (action === 'delete' && (impact.resultCount || impact.pieCount)) {
+        await G.showAlert(`${summary} It cannot be deleted while these references exist. Keep this condition or merge the duplicate object instead.`, { title: 'This condition is in use' });
+        return false;
+    }
+    return G.showConfirm(`${summary} ${action === 'delete'
+        ? 'Request deletion of this condition?'
+        : `${action === 'parameters' ? 'Update its parameters to' : 'Rename it to'} “${nextName}”? Its ID and linked records will be preserved; they will use the new name after approval.`}`,
+    { title: action === 'delete' ? 'Delete test condition?' : action === 'parameters' ? 'Change model parameters?' : 'Rename test condition?', confirmLabel: action === 'delete' ? 'Request deletion' : action === 'parameters' ? 'Confirm change' : 'Confirm rename' });
+}
+
+function queueConditionRename(input) {
+    const condition = editedCondition(input);
+    if (!isChangeMode() || !Number.isSafeInteger(condition?.ID)) return;
+    const nextName = input.value;
+    conditionCheckQueue = conditionCheckQueue.then(async () => {
+        const previousName = confirmedConditionNames.get(condition.ID)
+            ?? draft.change.before.conditions.find(item => item.ID === condition.ID)?.name;
+        if (previousName === undefined || previousName === nextName) return;
+        input.readOnly = true;
+        let confirmed = false;
+        try {
+            confirmed = await confirmConditionMutation(condition, 'rename', previousName, nextName);
+        } catch (error) { showFieldError(input, error.message); }
+        if (confirmed) confirmedConditionNames.set(condition.ID, nextName);
+        else {
+            condition.name = previousName;
+            condition.isDefault = isLiteralDefaultCondition(previousName);
+            input.value = previousName;
+            input.closest('.condition-row')?.classList.toggle('is-default', condition.isDefault);
+        }
+        input.readOnly = false;
+        decorateChangedFields();
+    });
+}
+
+function queueConditionDeletion(conditions, index, button) {
+    const condition = conditions[index];
+    conditionCheckQueue = conditionCheckQueue.then(async () => {
+        button.disabled = true;
+        try {
+            if (await confirmConditionMutation(condition, 'delete', condition.name)) {
+                const currentIndex = conditions.indexOf(condition);
+                if (currentIndex >= 0 && conditions.length > 1) conditions.splice(currentIndex, 1);
+                renderCurrentStep();
+            }
+        } catch (error) { showNotice('Could not check this condition', error.message); }
+        finally { button.disabled = false; }
+    });
 }
 
 function refreshSuggestionControl(input) {
@@ -1129,26 +1244,24 @@ function addConfigurationLink(model) {
     if (!model) {
         return '';
     }
-    const query = new URLSearchParams({
-        mode: 'new_model',
+    const values = {
         vendorName: model.vendorName,
         modelName: model.name
-    });
-    if (!model.reference) query.set('modelID', String(model.ID));
-    if (!getVendor(model.vendorID)?.reference) query.set('vendorID', String(model.vendorID));
-    return `/contribute?${query}`;
+    };
+    if (!model.reference) values.modelID = String(model.ID);
+    if (!getVendor(model.vendorID)?.reference) values.vendorID = String(model.vendorID);
+    return buildContributionURL('new_model', values);
 }
 
 function addProfileLink(object) {
     if (!object) {
         return '';
     }
-    const query = new URLSearchParams({
-        mode: 'new_benchmark',
+    const values = {
         benchmarkName: object.name
-    });
-    if (!object.reference) query.set('benchmarkID', String(object.ID));
-    return `/contribute?${query}`;
+    };
+    if (!object.reference) values.benchmarkID = String(object.ID);
+    return buildContributionURL('new_benchmark', values);
 }
 
 function renderResultConfigurationOptions(model, index) {
@@ -1264,7 +1377,7 @@ function resultsStep() {
     ${editing ? '' : '<div class="score-repeater-actions"><button class="add-row-button" type="button" data-action="add-result"><i class="fa-solid fa-plus" aria-hidden="true"></i><span>Add score</span></button></div>'}
     <section class="result-submission-notes"><div class="field-grid">
         <label class="field wide" data-change-path="${editing ? 'result.sourceURL' : ''}"><span>${sourceLabel}</span><input required type="url" data-bind="result" data-index="0" data-field="sourceURL" value="${escapeHTML(sharedSourceURL)}" placeholder="https://official-source.example/results"></label>
-        ${reviewerNotesField({ binding: 'resultBatch', value: draft.resultNotes, placeholder: 'Clarify shared caveats, table cells, or provenance details for this batch.' })}
+        ${reviewerNotesField({ binding: 'resultBatch', value: draft.resultNotes, placeholder: 'Notes stored with each score after approval.' })}
     </div></section>`;
 }
 
@@ -1336,6 +1449,16 @@ function feedbackDetailsStep() {
     </section>`;
 }
 
+function discussionReportStep() {
+    return `<div class="form-grid">
+        <label class="field wide"><span>Discussion post ID</span><input required inputmode="numeric" pattern="[1-9][0-9]*" data-bind="report" data-field="postID" value="${escapeHTML(draft.report.postID)}" placeholder="Post number"></label>
+        <label class="field wide"><span>Reason</span><select data-bind="report" data-field="reason">${[
+            ['spam', 'Spam or advertising'], ['harassment', 'Harassment or abuse'], ['misinformation', 'Misleading information'], ['other', 'Other']
+        ].map(([value, label]) => option(value, label, draft.report.reason)).join('')}</select></label>
+        <label class="field wide" data-final-notes><span>Reason and notes</span><textarea required minlength="10" maxlength="4000" data-bind="report" data-field="details" placeholder="Explain the problem and include supporting details.">${escapeHTML(draft.report.details)}</textarea></label>
+    </div>`;
+}
+
 function normalizedText(value) {
     return String(value ?? '').trim();
 }
@@ -1384,6 +1507,7 @@ function evaluationChangeProposal() {
     return {
         name: normalizedText(evaluation.name),
         introductionURL: normalizedText(evaluation.introductionURL),
+        notes: normalizedText(evaluation.reviewerNotes),
         tags: [...new Set(evaluation.tags.map(normalizedText).filter(Boolean))]
             .sort((left, right) => left.localeCompare(right)),
         conditions: evaluation.conditions.map(profile => (
@@ -1395,8 +1519,7 @@ function evaluationChangeProposal() {
 function modelConfigurationChangeProposal(configuration) {
     return {
         ID: integerOrNull(configuration.ID),
-        name: normalizedText(configuration.name),
-        isDefault: isLiteralDefaultCondition(configuration.name)
+        ...configurationValues(configuration)
     };
 }
 
@@ -1406,6 +1529,7 @@ function modelChangeProposal() {
         vendorID: Number(subject.vendorID),
         name: normalizedText(subject.name),
         introductionURL: normalizedText(subject.introductionURL),
+        notes: normalizedText(subject.reviewerNotes),
         conditions: subject.conditions.map(configuration => (
             modelConfigurationChangeProposal(configuration)
         ))
@@ -1423,6 +1547,7 @@ function resultChangeProposal() {
                 benchmarkID: result.benchmarkID,
                 benchmarkConditionID: result.benchmarkConditionID,
                 rawScore: result.rawScore,
+                notes: normalizedText(draft.resultNotes),
                 source: result.source
             };
         })()
@@ -1546,6 +1671,8 @@ function renderCurrentStep() {
         stepSurface.innerHTML = resultsStep();
     } else if (mode === 'new_category') {
         stepSurface.innerHTML = categoryDetailsStep();
+    } else if (mode === 'report') {
+        stepSurface.innerHTML = discussionReportStep();
     } else if (mode === 'feedback') {
         stepSurface.innerHTML = feedbackDetailsStep();
     } else {
@@ -1616,7 +1743,9 @@ function currentChangeDraftView() {
     return {
         evaluation: selectedEvaluation(),
         subject: draft.subject,
-        result: draft.results[0]
+        result: draft.results[0],
+        get resultNotes() { return draft.resultNotes; },
+        set resultNotes(value) { draft.resultNotes = value; }
     };
 }
 
@@ -1671,6 +1800,10 @@ function restoreChangePath(path) {
             return;
         }
     }
+    const restoredParameters = path.match(/\.conditions\[(\d+)\]\.parameterRows$/);
+    if (restoredParameters) confirmedParameterRows.delete(Number(restoredParameters[1]));
+    const restoredCondition = path.match(/\.conditions\[(\d+)\]\.name$/);
+    if (restoredCondition) confirmedConditionNames.delete(Number(restoredCondition[1]));
     renderCategoryTree();
     renderCurrentStep();
 }
@@ -1679,8 +1812,10 @@ function decorateChangedFields() {
     if (!isChangeMode() || !draft.change.baseline) {
         return;
     }
-    stepSurface.querySelectorAll('.field-restore-button').forEach(button => button.remove());
-    stepSurface.querySelectorAll('.is-modified').forEach(element => element.classList.remove('is-modified'));
+    // Keep focused buttons stable when blur/change follows pointerdown.
+    const existing = new Map([...stepSurface.querySelectorAll('.field-restore-button')]
+        .map(button => [button.dataset.restorePath, button]));
+    const modifiedContainers = new Set();
     const candidates = [
         ...stepSurface.querySelectorAll('[data-bind]'),
         ...stepSurface.querySelectorAll('[data-change-path]')
@@ -1703,6 +1838,10 @@ function decorateChangedFields() {
             continue;
         }
         container.classList.add('is-modified');
+        modifiedContainers.add(container);
+        decorated.add(path);
+        if (existing.get(path)?.parentElement === container) continue;
+        existing.get(path)?.remove();
         const restore = document.createElement('button');
         restore.type = 'button';
         restore.className = 'field-restore-button';
@@ -1711,8 +1850,13 @@ function decorateChangedFields() {
         restore.setAttribute('aria-label', `Restore ${changeFieldLabel(path)}`);
         restore.innerHTML = '<i class="fa-solid fa-rotate-left" aria-hidden="true"></i>';
         container.append(restore);
-        decorated.add(path);
     }
+    for (const [path, button] of existing) {
+        if (!decorated.has(path)) button.remove();
+    }
+    stepSurface.querySelectorAll('.is-modified').forEach(container => {
+        if (!modifiedContainers.has(container)) container.classList.remove('is-modified');
+    });
 }
 
 function updateBoundField(target) {
@@ -1732,6 +1876,11 @@ function updateBoundField(target) {
         );
     } else if (binding === 'subject') {
         setNested(draft.subject, field, value);
+    } else if (binding === 'modelParameter') {
+        const editor = target.closest('.model-parameter-editor');
+        editor.removeAttribute('aria-invalid');
+        editor.querySelector('.model-parameter-error')?.remove();
+        draft.subject.conditions[Number(target.dataset.index)].parameterRows[Number(target.dataset.rowIndex)][field] = value;
     } else if (binding === 'configuration') {
         setNested(draft.subject.conditions[Number(target.dataset.index)], field, value);
     } else if (binding === 'result') {
@@ -1785,7 +1934,9 @@ function validateEvaluationConditionNames() {
             object.name.toLocaleLowerCase('en-US') === evaluation.name.trim().toLocaleLowerCase('en-US')
         ));
         if (duplicateObject) {
-            showError('This benchmark already exists. Select it from the suggestions to add a new test condition.');
+            const input = stepSurface.querySelector('[data-evaluation-name]');
+            showFieldError(input, 'Already listed. Select the matching row above to add a test condition on its change form.');
+            input.focus();
             return false;
         }
     }
@@ -1825,40 +1976,25 @@ function validateSubjectConfigurationNames() {
                 showError('Add at least one new model test condition.');
         return false;
     }
-    const names = subject.conditions.map(configuration => normalizedConditionName(configuration.name));
-    if (names.some(name => name === '')) {
-        showError('Every new model test condition needs a name.');
-        return false;
-    }
-    if (new Set(names).size !== names.length) {
-        showError('Model test condition names must be unique, including default.');
-        return false;
-    }
-    const keys = subject.conditions.map(configuration => normalizedIdentifierKey(configuration.name));
-    if (new Set(keys).size !== keys.length) {
-        showError('Model test condition names must stay distinct after punctuation and spacing are normalized.');
-        return false;
-    }
-    const existing = getModel(subject.existingModelID);
-    if (existing && mode !== 'edit_model') {
-        const existingNames = new Set(existing.conditions.map(configuration => normalizedConditionName(configuration.name)));
-        const existingKeys = new Set(existing.conditions.map(configuration => normalizedIdentifierKey(configuration.name)));
-        const duplicate = names.find(name => existingNames.has(name));
-        const duplicateKeyIndex = keys.findIndex(key => existingKeys.has(key));
-        if (duplicate || duplicateKeyIndex >= 0) {
-            const duplicateName = duplicate || subject.conditions[duplicateKeyIndex].name;
-            showError(`The condition “${duplicateName}” already exists. Use the Change model information form to edit it.`);
-            return false;
-        }
-    } else if (mode !== 'edit_model') {
-        const duplicateModel = catalog.models.find(model => (
+    try {
+        const keys = subject.conditions.map(configuration => {
+            const values = configurationValues(configuration);
+            if (values.parameters === null && !(mode === 'edit_model' && configuration.ID)) throw Error('Configure every new model condition.');
+            return values.parameters === null ? `unconfigured-${configuration.ID}` : JSON.stringify(values.parameters);
+        });
+        if (new Set(keys).size !== keys.length) throw Error('Each configuration must have a distinct set of parameter values.');
+        const existing = getModel(subject.existingModelID);
+        if (existing && mode !== 'edit_model') {
+            const existingKeys = new Set(existing.conditions.filter(item => item.parameters !== null).map(item => JSON.stringify(normalizeModelParameters(item.parameters))));
+            if (keys.some(key => existingKeys.has(key))) throw Error('This configuration already exists. Change the existing configuration instead.');
+        } else if (mode !== 'edit_model' && catalog.models.some(model =>
             normalizedSearch(model.name) === normalizedSearch(subject.name)
-            && normalizedSearch(model.vendorName) === normalizedSearch(subject.vendor.name)
-        ));
-        if (duplicateModel) {
-            showError('This model already exists. Select it from the suggestions to add a new test condition.');
-            return false;
+            && normalizedSearch(model.vendorName) === normalizedSearch(subject.vendor.name))) {
+            throw Error('This model already exists. Select it from the suggestions.');
         }
+    } catch (error) {
+        showError(error.message);
+        return false;
     }
     return true;
 }
@@ -1906,7 +2042,7 @@ function validateContribution() {
         form.reportValidity();
         return false;
     }
-    if (isChangeMode() && draft.change.operation === 'delete') {
+    if (isChangeMode() && draft.change.operation !== 'update') {
         return validateChangeHasChanges();
     }
     if (mode === 'new_benchmark' || mode === 'edit_benchmark') {
@@ -2014,8 +2150,7 @@ function evaluationPayload() {
 function configurationPayload(configuration) {
     return {
         clientRef: configuration.clientRef,
-        name: configuration.name,
-        isDefault: isLiteralDefaultCondition(configuration.name)
+        ...configurationValues(configuration)
     };
 }
 
@@ -2118,6 +2253,10 @@ function submissionPayload() {
                 : []
         };
     }
+    if (mode === 'report') {
+        return { type: 'discussion_report', postID: Number(draft.report.postID), reason: draft.report.reason,
+            details: draft.report.details };
+    }
     if (mode === 'feedback') {
         return {
             type: 'feedback',
@@ -2151,6 +2290,10 @@ function showNotice(dialogTitle, message) {
 
 function contributionSubmissionError(error, status) {
     const messages = {
+        discussion_already_reported: 'You already have a pending report for this message.',
+        discussion_report_daily_limit: 'You have reached the daily report limit. Please try again tomorrow.',
+        discussion_post_unavailable: 'That discussion post could not be found. Check its post number.',
+        report_details_required: 'Explain the report in at least 10 characters.',
         benchmark_condition_in_use: 'This benchmark test condition already has scores or personal weights, so it cannot be removed. Keep the condition or request deletion of the whole benchmark.',
         model_condition_in_use: 'This model test condition already has scores, so it cannot be removed. Keep the condition or request deletion of the whole model.',
         change_request_has_no_changes: 'The submitted fields still match the published object. Reload the latest version and make the intended change again.',
@@ -2160,6 +2303,8 @@ function contributionSubmissionError(error, status) {
 }
 
 async function submitDraft() {
+    await conditionCheckQueue;
+    try { if (!await confirmModelParameterChanges()) return; } catch (error) { showError(error.message); return; }
     if (!validateContribution()) {
         return;
     }
@@ -2284,11 +2429,11 @@ async function loadCatalog() {
         setResultModel(0, requestedModel.ID);
     }
     if (requestedObject && mode === 'new_benchmark') {
-        setEvaluationSelection(requestedObject.ID);
+        selectedEvaluation().name = requestedObject.name;
     } else if (requestedEvaluationName && mode === 'new_benchmark') {
         const exactObject = catalog.benchmarks.find(object => object.name.toLocaleLowerCase('en-US') === requestedEvaluationName.toLocaleLowerCase('en-US'));
         if (exactObject) {
-            setEvaluationSelection(exactObject.ID);
+            selectedEvaluation().name = exactObject.name;
         } else {
             selectedEvaluation().name = requestedEvaluationName;
         }
@@ -2318,7 +2463,7 @@ function hydrateEvaluationChange(form) {
         usesPercentageScale,
         scoreMin: optionalNumberText(defaultProfile.scoreMin),
         scoreMax: optionalNumberText(defaultProfile.scoreMax),
-        reviewerNotes: '',
+        reviewerNotes: form.notes,
         conditions: form.conditions.map(profile => {
             return {
                 ...makeProfile(0),
@@ -2342,6 +2487,7 @@ function hydrateModelChange(form) {
         ...makeSubject(),
         existingModelID: draft.change.targetID,
         modelQuery: form.name,
+        reviewerNotes: form.notes,
         name: form.name,
         introductionURL: form.introductionURL ?? '',
         vendorID: Number(form.vendorID),
@@ -2353,6 +2499,7 @@ function hydrateModelChange(form) {
         conditions: form.conditions.map(configuration => ({
             ...makeConfiguration(0),
             ID: Number(configuration.ID),
+            parameterRows: configuration.parameters === null ? null : Object.entries(normalizeModelParameters(configuration.parameters)).map(([key, value]) => ({ key, value })),
             name: configuration.name,
             isDefault: Boolean(configuration.isDefault),
             isExisting: true
@@ -2375,7 +2522,7 @@ function hydrateResultChange(form) {
     result.sourceType = form.result.source.type;
     result.sourceTitle = form.result.source.title ?? '';
     draft.results = [result];
-    draft.resultNotes = '';
+    draft.resultNotes = form.result.notes;
 }
 
 function captureChangeDraft() {
@@ -2385,7 +2532,7 @@ function captureChangeDraft() {
     if (mode === 'edit_model') {
         return { subject: structuredClone(draft.subject) };
     }
-    return { result: structuredClone(draft.results[0]) };
+    return { result: structuredClone(draft.results[0]), resultNotes: draft.resultNotes };
 }
 
 async function loadChangeTarget() {
@@ -2424,6 +2571,13 @@ async function loadChangeTarget() {
     }
     draft.change.before = structuredClone(payload.form);
     draft.change.baseline = captureChangeDraft();
+    if (param('addCondition') === '1' && targetKind !== 'result') {
+        const conditions = targetKind === 'benchmark' ? selectedEvaluation().conditions : draft.subject.conditions;
+        const condition = targetKind === 'benchmark' ? makeProfile(conditions.length) : makeConfiguration(conditions.length);
+        condition.name = '';
+        condition.isDefault = false;
+        conditions.push(condition);
+    }
 }
 
 async function loadUser() {
@@ -2505,6 +2659,7 @@ document.addEventListener('keydown', event => {
 stepSurface.addEventListener('input', event => {
     const evaluationName = event.target.closest('[data-evaluation-name]');
     if (evaluationName) {
+        clearExistingChoiceValidity(evaluationName);
         const current = selectedEvaluation();
         if (current.existingBenchmarkID !== null && evaluationName.value !== selectedExistingObject()?.name) {
             clearEvaluationSelection(evaluationName.value);
@@ -2522,6 +2677,7 @@ stepSurface.addEventListener('input', event => {
     }
     const tagInput = event.target.closest('[data-tag-input]');
     if (tagInput) {
+        clearExistingChoiceValidity(tagInput);
         tagInput.setCustomValidity('');
         tagInput.removeAttribute('aria-invalid');
         tagInput.closest('[data-tag-editor-shell]')?.classList.remove('has-error');
@@ -2630,6 +2786,7 @@ stepSurface.addEventListener('input', event => {
     }
     const conditionInput = event.target.closest('[data-condition-input], [data-configuration-input]');
     if (conditionInput) {
+        clearExistingChoiceValidity(conditionInput);
         const row = conditionInput.closest('.condition-row');
         const isDefault = isLiteralDefaultCondition(conditionInput.value);
         if (conditionInput.matches('[data-condition-input]')) {
@@ -2656,6 +2813,9 @@ stepSurface.addEventListener('change', event => {
         return;
     }
     updateBoundField(event.target);
+    if (event.target.matches('[data-condition-input], [data-configuration-input]')) {
+        queueConditionRename(event.target);
+    }
     const percentageScale = event.target.closest('[data-score-percentage]');
     if (percentageScale) {
         const evaluation = selectedEvaluation();
@@ -2728,9 +2888,7 @@ stepSurface.addEventListener('keydown', event => {
         const closest = evaluationSuggestions(evaluationName.value)[0];
         if (closest) {
             event.preventDefault();
-            setEvaluationSelection(closest.ID);
-            renderCurrentStep();
-            requestAnimationFrame(() => stepSurface.querySelector('[data-evaluation-name]')?.focus());
+            stepSurface.querySelector('[data-select-evaluation]')?.focus();
         }
         return;
     }
@@ -2789,13 +2947,31 @@ stepSurface.addEventListener('pointerdown', event => {
 });
 
 stepSurface.addEventListener('focusout', event => {
+    const editor = event.target.closest('.model-parameter-editor');
+    if (editor && !editor.contains(event.relatedTarget)) {
+        conditionCheckQueue = conditionCheckQueue.then(async () => {
+            if (!editor.isConnected) return;
+            try { await confirmModelParameterChanges(); }
+            catch (error) {
+                editor.setAttribute('aria-invalid', 'true');
+                let message = editor.querySelector('.model-parameter-error');
+                if (!message) {
+                    message = document.createElement('p');
+                    message.className = 'model-parameter-error field-validation-error';
+                    message.setAttribute('role', 'alert');
+                    editor.append(message);
+                }
+                message.textContent = error.message;
+            }
+        });
+    }
     const evaluationCombobox = event.target.closest('.evaluation-combobox');
     if (evaluationCombobox) {
         setTimeout(() => {
             if (evaluationCombobox.isConnected && !evaluationCombobox.contains(document.activeElement)) {
                 const existingChoice = evaluationCombobox.querySelector('[data-existing-choice]');
                 if (existingChoice) {
-                    validateExistingChoiceInput(existingChoice, { report: true });
+                    validateExistingChoiceInput(existingChoice);
                 }
                 evaluationCombobox.querySelector('.evaluation-suggestions')?.remove();
                 evaluationCombobox.querySelector('[role="combobox"]')?.setAttribute('aria-expanded', 'false');
@@ -2814,7 +2990,7 @@ stepSurface.addEventListener('focusout', event => {
         input.setCustomValidity(message);
         input.setAttribute('aria-invalid', 'true');
         shell.classList.add('has-error');
-        showError(message);
+        showFieldError(input, message);
     }
     setTimeout(() => {
         if (shell.isConnected && !shell.contains(document.activeElement)) {
@@ -2832,6 +3008,10 @@ stepSurface.addEventListener('click', event => {
     }
     const changeOperation = event.target.closest('[data-change-operation]');
     if (changeOperation) {
+        if (changeOperation.dataset.changeOperation === 'merge') {
+            requestMerge();
+            return;
+        }
         draft.change.operation = changeOperation.dataset.changeOperation;
         renderCurrentStep();
         return;
@@ -2886,8 +3066,13 @@ stepSurface.addEventListener('click', event => {
     }
     const evaluationSuggestion = event.target.closest('[data-select-evaluation]');
     if (evaluationSuggestion) {
-        setEvaluationSelection(evaluationSuggestion.dataset.selectEvaluation);
-        renderCurrentStep();
+        const benchmark = getBenchmark(evaluationSuggestion.dataset.selectEvaluation);
+        if (benchmark?.pending) {
+            showFieldError(stepSurface.querySelector('[data-evaluation-name]'), 'This benchmark has already been submitted and is awaiting review.');
+        } else if (benchmark) {
+            const url = new URL(buildContributionURL('edit_benchmark', { targetBenchmarkID: benchmark.ID, addCondition: '1' }), location.origin);
+            location.assign(url.href);
+        }
         return;
     }
     const tagSuggestion = event.target.closest('[data-select-tag]');
@@ -2930,7 +3115,17 @@ stepSurface.addEventListener('click', event => {
                 return;
             }
             const profileIndex = Number(actionTarget.dataset.profileIndex);
-            evaluation.conditions.splice(profileIndex, 1);
+            queueConditionDeletion(evaluation.conditions, profileIndex, actionTarget);
+            return;
+        } else if (action === 'add-parameter') {
+            const configuration = draft.subject.conditions[Number(actionTarget.dataset.index)];
+            if (configuration.parameterRows === null) configuration.parameterRows = [];
+            if (configuration.parameterRows.length >= 16) return;
+            configuration.parameterRows.push({ key: '', value: '' });
+        } else if (action === 'remove-parameter') {
+            draft.subject.conditions[Number(actionTarget.dataset.index)].parameterRows.splice(Number(actionTarget.dataset.rowIndex), 1);
+        } else if (action === 'configure-default') {
+            draft.subject.conditions[Number(actionTarget.dataset.index)].parameterRows = [];
         } else if (action === 'add-configuration') {
             const configuration = makeConfiguration(draft.subject.conditions.length);
             configuration.name = '';
@@ -2942,7 +3137,8 @@ stepSurface.addEventListener('click', event => {
                 return;
             }
             const configurationIndex = Number(actionTarget.dataset.index);
-            draft.subject.conditions.splice(configurationIndex, 1);
+            queueConditionDeletion(draft.subject.conditions, configurationIndex, actionTarget);
+            return;
         } else if (action === 'move-context-up' || action === 'move-context-down') {
             const currentIndex = draft.category.contextOrder.findIndex(entry => entry.isNew);
             const nextIndex = action === 'move-context-up' ? currentIndex - 1 : currentIndex + 1;
@@ -3105,6 +3301,7 @@ document.getElementById('contribution-page-help').addEventListener('click', show
 
 async function initialize() {
     try {
+        if (contributionEntry.error) throw new Error(contributionEntry.error);
         await loadCatalog();
         const user = await loadUser();
         authenticated = Boolean(user);
@@ -3123,6 +3320,11 @@ async function initialize() {
         formSurface.hidden = false;
         authMissing.hidden = true;
         entryMissing.hidden = true;
+        if (param('addCondition') === '1') requestAnimationFrame(() => {
+            if (document.activeElement?.matches('input, textarea, select')) return;
+            const inputs = stepSurface.querySelectorAll('[data-condition-input], [data-configuration-input]');
+            inputs[inputs.length - 1]?.focus();
+        });
     } catch (error) {
         showError(error.message || 'The contribution page could not be loaded.');
     }

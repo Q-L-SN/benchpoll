@@ -42,7 +42,7 @@ test('methodology page documents the complete ranking pipeline', () => {
 
 test('methodology page follows the homepage sidebar and responsive visual system', () => {
     assert.match(guide, /class="bp-sidebar bp-how-sidebar"/);
-    assert.match(guide, /class="bp-brand-symbol"/);
+    assert.match(guide, /class="bp-brand-lockup"[^>]*src="\/assets\/benchpoll-logo\.svg"/);
     assert.match(guideStyles, /\.bp-how-header\s*\{[^}]*border-radius:\s*8px[^}]*box-shadow:/s);
     assert.match(guideStyles, /\.bp-how-section\s*\{[^}]*border-bottom:/s);
     assert.match(guideStyles, /\.bp-how-nav a\.is-active/);

@@ -1,0 +1,32 @@
+#!/bin/bash
+set -Eeuo pipefail
+umask 077
+
+readonly directory=/var/backups/benchpoll
+install -d -m 0700 -o root -g root "$directory"
+exec 9>"$directory/.lock"
+flock -n 9 || { printf '%s\n' 'Another database backup is running.' >&2; exit 1; }
+
+available=$(df -Pk "$directory" | awk 'NR==2 {print $4}')
+if [[ ! "$available" =~ ^[0-9]+$ ]] || (( available < 102400 )); then
+    printf '%s\n' 'Less than 100 MiB available; backup aborted.' >&2
+    exit 1
+fi
+
+temporary=$(mktemp "$directory/.backup-XXXXXXXX.sql.gz")
+trap 'rm -f -- "$temporary"' EXIT
+mysqldump --user=root --socket=/var/run/mysqld/mysqld.sock \
+    --single-transaction --quick --routines --events --triggers \
+    --hex-blob --no-tablespaces --set-gtid-purged=OFF \
+    --default-character-set=utf8mb4 benchmarks | gzip -9 > "$temporary"
+gzip -t "$temporary"
+destination="$directory/benchmarks-$(date -u +%Y%m%dT%H%M%S%NZ).sql.gz"
+mv -- "$temporary" "$destination"
+cd "$directory"
+sha256sum "${destination##*/}" > "${destination##*/}.sha256"
+
+# Prune only completed backups after a successful dump and integrity check.
+find "$directory" -maxdepth 1 -type f \
+    \( -name 'benchmarks-*.sql.gz' -o -name 'benchmarks-*.sql.gz.sha256' \) \
+    -mmin +20160 -delete
+printf 'Database backup completed: %s\n' "$destination"

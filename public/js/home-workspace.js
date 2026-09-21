@@ -1,4 +1,8 @@
+import { createComparisonControls } from './workspace/comparison-controls.js?v=comparison-recovery-20260912';
 import { workspaceChannel } from './shared/workspace-channel.js';
+import { readRankingContext, rankingContextURL } from './shared/ranking-url.js?v=short-20260908';
+import { categoryDiscussionURL, createDiscussionEntry } from './workspace/discussion-entry.js?v=compact-count-20260908';
+const updateDiscussionEntry = createDiscussionEntry(document.getElementById('discussion-entry'));
 import { initializeMobilePanels } from './shared/mobile-panels.js';
 import {
     PIE_GRADIENTS, SAVE_DEBOUNCE_MS, WEIGHT_STEP_BASIS_POINTS,
@@ -7,17 +11,17 @@ import {
     MAX_FALLBACK_COMPONENTS
 } from './workspace/constants.js';
 import { createWorkspaceState } from './workspace/state.js';
-import { validateWorkspacePayload } from './workspace/contracts.js';
+import { validateWorkspacePayload } from './workspace/contracts.js?v=model-parameters-20260912';
 import {
     cloneEntries, cloneFallbackRules, clonePersonalPieSnapshot,
     clamp, humanizePathPart, benchmarkConditionLabel,
     benchmarkAccessibleName, distributeToTarget
 } from './workspace/weights.js';
 import { postJSON } from './shared/http.js';
-import { buildBenchmarkEditURL } from './workspace/links.js';
-import { createModelScoresView } from './workspace/model-scores.js';
-import { createModelListView } from './workspace/model-list.js';
-import { createPieRenderer } from './workspace/pie-renderer.js';
+import { buildBenchmarkEditURL } from './workspace/links.js?v=clean-urls-20260908';
+import { createModelScoresView } from './workspace/model-scores.js?v=model-parameters-20260912';
+import { createModelListView } from './workspace/model-list.js?v=comparison-recovery-20260912';
+import { createPieRenderer } from './workspace/pie-renderer.js?v=personal-only-icon-20260907';
 
 const pieSvg = document.getElementById('weight-pie');
 const breadcrumb = document.getElementById('bp-breadcrumb');
@@ -37,8 +41,6 @@ const pieContextNote = document.getElementById('pie-context-note');
 const undoButton = document.getElementById('workspace-undo');
 const refreshButton = document.getElementById('workspace-refresh');
 const lastUpdated = document.getElementById('last-updated');
-const missionBanner = document.getElementById('mission-banner');
-const missionDismiss = document.getElementById('mission-dismiss');
 const termsButton = document.getElementById('terms-button');
 const termsDialog = document.getElementById('terms-dialog');
 const loginButton = document.getElementById('login-button');
@@ -67,6 +69,24 @@ const inlineFallbackGuide = document.getElementById('inline-fallback-guide');
 const inlineFallbackChart = document.getElementById('inline-fallback-chart');
 
 const state = createWorkspaceState();
+state.comparisonRequest = null;
+state.comparisonNeedsSelection = false;
+state.comparisonPending = false;
+state.comparisonError = '';
+const renderComparisonControls = createComparisonControls({ onChange(options) {
+    state.comparisonNeedsSelection = false;
+    state.comparisonError = '';
+    state.comparisonPending = true;
+    state.comparisonRequest = options;
+    renderModels();
+    void loadWeightedWorkspace({ preserveUndo: true, comparisonChange: true });
+}, onInvalid(message) {
+    state.comparisonNeedsSelection = true;
+    state.comparisonError = message;
+    state.comparisonPending = false;
+    state.comparisonRequest = null;
+    renderModels();
+} });
 initializeMobilePanels(document.querySelector('.bp-workspace'));
 
 let touchPieGesture = null;
@@ -175,24 +195,6 @@ function orderedPieEntries(entries) {
     });
 }
 
-function contextValuesFromURL() {
-    const params = new URLSearchParams(window.location.search);
-    const values = {};
-    for (const [key, value] of params.entries()) {
-        if (key.startsWith('context_') && value.trim() !== '') {
-            values[key.slice('context_'.length)] = value.trim();
-        }
-    }
-    return values;
-}
-
-function contextValuesForDimensions(dimensions, values = contextValuesFromURL()) {
-    const dimensionKeys = new Set(dimensions.map(dimension => String(dimension.key)));
-    return Object.fromEntries(
-        Object.entries(values).filter(([key]) => dimensionKeys.has(key))
-    );
-}
-
 function sameContextValues(left = {}, right = {}) {
     const leftEntries = Object.entries(left).sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey));
     const rightEntries = Object.entries(right).sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey));
@@ -200,13 +202,7 @@ function sameContextValues(left = {}, right = {}) {
 }
 
 function syncContextValuesToURL() {
-    const url = new URL(window.location.href);
-    Array.from(url.searchParams.keys())
-        .filter(key => key.startsWith('context_'))
-        .forEach(key => url.searchParams.delete(key));
-    Object.entries(state.selectedContextValues).forEach(([key, value]) => {
-        url.searchParams.set(`context_${key}`, value);
-    });
+    const url = rankingContextURL(window.location.href, state.dimensions, state.selectedContextValues);
     window.history.replaceState(window.history.state, '', url);
 }
 
@@ -768,6 +764,10 @@ function activateInlineFallbackTarget(preferredComponentID = null) {
     return true;
 }
 
+function publicFallbackPercent(weight) {
+    return weight > 0 && weight < 0.01 ? '<0.01%' : `${Number(weight.toFixed(2))}%`;
+}
+
 function renderInlineFallback() {
     if (!inlineFallback
         || !inlineFallbackPersonalControl
@@ -784,14 +784,14 @@ function renderInlineFallback() {
     const personalRule = primary && personal ? fallbackRuleFor(primaryConditionID) : null;
     const publicRule = primary && !personal ? publicFallbackRuleFor(primaryConditionID) : null;
     const enabled = Boolean(primary) && personal && fallbackIsEnabledFor(primaryConditionID);
-    const publicExpanded = Boolean(publicRule)
+    const publicExpanded = Boolean(primary) && !personal
         && Number(expandedPublicFallbackPrimaryID) === primaryConditionID;
-    const visible = Boolean(primary) && (personal || Boolean(publicRule));
+    const visible = Boolean(primary);
     inlineFallback.hidden = !visible;
     pieCard?.classList.toggle('has-inline-fallback', visible);
     inlineFallback.classList.toggle('is-readonly', !personal);
     inlineFallbackPersonalControl.hidden = !personal;
-    publicFallbackToggle.hidden = personal || !publicRule;
+    publicFallbackToggle.hidden = personal;
     publicFallbackToggle.textContent = publicExpanded ? 'Hide fallback' : 'Show fallback';
     publicFallbackToggle.setAttribute('aria-expanded', String(publicExpanded));
     if (!primary) {
@@ -831,7 +831,7 @@ function renderInlineFallback() {
     inlineFallbackGuide.hidden = !chartVisible;
     inlineFallbackGuide.textContent = personal
         ? 'Select the bar, add benchmarks from the leaderboard, then scroll to adjust.'
-        : `Community fallback mix for ${benchmarkAccessibleName(primary)}.`;
+        : `When a model has no score for ${benchmarkAccessibleName(primary)}, use this benchmark mix instead.`;
     inlineFallbackChart.hidden = !chartVisible;
     inlineFallbackChart.tabIndex = chartVisible && !interactionBusy ? 0 : -1;
     inlineFallbackChart.classList.toggle('is-target-active', targetActive);
@@ -856,7 +856,7 @@ function renderInlineFallback() {
         inlineFallbackChart.classList.add('is-empty');
         const empty = document.createElement('span');
         empty.className = 'bp-inline-fallback-empty';
-        empty.textContent = targetActive
+        empty.textContent = !personal ? 'No public fallback configured for this benchmark.' : targetActive
             ? 'Choose a benchmark from the leaderboard'
             : 'Select this bar to add benchmarks';
         inlineFallbackChart.replaceChildren(empty);
@@ -875,11 +875,14 @@ function renderInlineFallback() {
     }
     inlineFallbackChart.querySelector('.bp-inline-fallback-empty')?.remove();
     inlineFallbackChart.classList.remove('is-empty');
-    inlineFallbackChart.classList.toggle('has-single-component', rule.entries.length === 1);
+    inlineFallbackChart.classList.toggle('has-single-component', rule.entries.length === 1
+        && (personal || rule.unconfiguredWeightBasisPoints === 0));
+    inlineFallbackChart.querySelector('.bp-public-fallback-unconfigured')?.remove();
     const retainedSegments = new Set();
     rule.entries.forEach((entry, index) => {
         const conditionID = Number(entry.conditionID);
         const weight = Number(entry.weightBasisPoints) / 100;
+        const percentage = personal ? `${Math.round(weight)}%` : publicFallbackPercent(weight);
         const selected = personal
             ? targetActive && conditionID === Number(selectedFallbackComponentID)
             : conditionID === Number(selectedPublicFallbackComponentID);
@@ -911,15 +914,18 @@ function renderInlineFallback() {
         segment.dataset.primaryConditionId = String(primaryConditionID);
         segment.dataset.conditionId = String(conditionID);
         segment.style.setProperty('--bp-fallback-weight', `${weight}%`);
-        segment.style.setProperty('--bp-fallback-color-start', startColor);
-        segment.style.setProperty('--bp-fallback-color-end', endColor);
+        segment.style.setProperty('--bp-fallback-color-start', `var(--bp-chart-${index % PIE_GRADIENTS.length}-start, ${startColor})`);
+        segment.style.setProperty('--bp-fallback-color-end', `var(--bp-chart-${index % PIE_GRADIENTS.length}-end, ${endColor})`);
         segment.disabled = interactionBusy;
         segment.setAttribute('aria-pressed', String(selected));
         segment.setAttribute(
             'aria-label',
-            `${benchmarkAccessibleName(entry)}: ${Math.round(weight)} percent of the ${personal ? '' : 'public '}Fallback mix`
+            `${benchmarkAccessibleName(entry)}: ${percentage} of the ${personal ? '' : 'public '}Fallback mix`
         );
-        segment.title = `${benchmarkAccessibleName(entry)} · ${Math.round(weight)}%`;
+        segment.title = `${benchmarkAccessibleName(entry)}: ${percentage}`;
+        if (!personal && selected) {
+            inlineFallbackGuide.textContent = segment.title;
+        }
 
         const name = segment.querySelector('strong');
         name.textContent = entry.name;
@@ -928,7 +934,7 @@ function renderInlineFallback() {
         condition.hidden = !conditionLabel;
         condition.textContent = conditionLabel;
         const value = segment.querySelector('span');
-        value.textContent = `${Math.round(weight)}%`;
+        value.textContent = percentage;
         const currentAtIndex = inlineFallbackChart.children[index];
         if (currentAtIndex !== segment) {
             inlineFallbackChart.insertBefore(segment, currentAtIndex ?? null);
@@ -937,6 +943,23 @@ function renderInlineFallback() {
     inlineFallbackChart.querySelectorAll('.bp-inline-fallback-segment').forEach(segment => {
         if (!retainedSegments.has(segment)) segment.remove();
     });
+    if (!personal && rule.unconfiguredWeightBasisPoints > 0) {
+        const remainder = document.createElement('span');
+        const weight = rule.unconfiguredWeightBasisPoints / 100;
+        remainder.className = 'bp-public-fallback-unconfigured';
+        remainder.style.setProperty('--bp-fallback-weight', `${weight}%`);
+        const label = document.createElement('span');
+        label.textContent = 'No fallback';
+        const percentage = document.createElement('span');
+        percentage.textContent = publicFallbackPercent(weight);
+        remainder.append(label, percentage);
+        remainder.title = `No fallback ${percentage.textContent}`;
+        remainder.tabIndex = 0;
+        remainder.addEventListener('focus', () => {
+            inlineFallbackGuide.textContent = remainder.title;
+        });
+        inlineFallbackChart.append(remainder);
+    }
 }
 
 function adjustSelectedFallbackWeight(deltaBasisPoints) {
@@ -1409,6 +1432,14 @@ function renderBenchmarks() {
 
         const actionCell = document.createElement('span');
         actionCell.className = 'bp-benchmark-action-cell';
+        const discussion = document.createElement('a');
+        discussion.className = 'bp-row-edit-action bp-benchmark-discuss';
+        discussion.href = categoryDiscussionURL(state.categoryID, state.selectedContextValues, object.benchmarkID);
+        discussion.title = 'Discuss benchmark';
+        discussion.setAttribute('aria-label', `Discuss ${accessibleName}`);
+        discussion.innerHTML = '<i class="fa-regular fa-comment" aria-hidden="true"></i>';
+        discussion.addEventListener('click', event => event.stopPropagation());
+        actionCell.append(discussion);
         if (state.authenticated) {
             const edit = document.createElement('a');
             edit.className = 'bp-row-edit-action bp-benchmark-edit';
@@ -1591,6 +1622,7 @@ function applyServerWorkspace(payload, { preserveUndo = true } = {}) {
     state.categoryID = Number(payload.context.categoryID);
     state.categoryPath = String(payload.context.categoryPath || '');
     state.selectedContextValues = { ...payload.context.contextValues };
+    updateDiscussionEntry(state.categoryID, state.selectedContextValues);
     state.dimensions = payload.context.dimensions.map(dimension => ({
         ...dimension,
         options: dimension.options.map(option => ({ ...option }))
@@ -1606,6 +1638,13 @@ function applyServerWorkspace(payload, { preserveUndo = true } = {}) {
     state.publicParticipantCount = Number(payload.publicPie.participantCount) || 0;
     state.publicIsFallback = Boolean(payload.publicPie.isFallback);
     state.benchmarks = payload.benchmarks.map(object => ({ ...object }));
+    state.comparison = payload.comparison;
+    renderComparisonControls(payload.comparison);
+    const requestedComparison = state.comparisonRequest ?? { mode: 'best', keys: [] };
+    if (payload.comparison.mode === requestedComparison.mode
+        && JSON.stringify([...payload.comparison.keys].sort()) === JSON.stringify([...requestedComparison.keys].sort())) {
+        state.comparisonPending = false;
+    }
     state.modelLeaderboards = {
         personal: payload.modelLeaderboards.personal.map(model => ({ ...model })),
         public: payload.modelLeaderboards.public.map(model => ({ ...model }))
@@ -1663,12 +1702,14 @@ function renderLoadError(error) {
     setStatus(message);
 }
 
-async function loadWeightedWorkspace({ resetTemplates = false, retryAttempt = 0 } = {}) {
-    if (!await finishPendingWeightAdjustments()) return;
+async function loadWeightedWorkspace({ resetTemplates = false, retryAttempt = 0, preserveUndo = false, comparisonChange = false } = {}) {
+    const sequence = ++state.loadSequence;
+    const adjustmentsSaved = await finishPendingWeightAdjustments();
+    if (sequence !== state.loadSequence || (!adjustmentsSaved && !comparisonChange)) return;
     if (state.saving && state.savePromise) {
         await state.savePromise.catch(() => {});
     }
-    const sequence = ++state.loadSequence;
+    if (sequence !== state.loadSequence) return;
     state.loading = true;
     state.statusMessage = 'Updating…';
     renderAll();
@@ -1678,10 +1719,11 @@ async function loadWeightedWorkspace({ resetTemplates = false, retryAttempt = 0 
     try {
         let payload = validateWorkspacePayload(await postJSON('/api/get_weighted_workspace', {
             categoryID: state.categoryID,
-            contextValues: requestedContextValues
+            contextValues: requestedContextValues,
+            comparison: state.comparisonRequest
         }));
         if (!resetTemplates) {
-            const URLContextValues = contextValuesForDimensions(payload.context.dimensions);
+            const URLContextValues = readRankingContext(window.location.search, payload.context.dimensions);
             const resolvedContextValues = {
                 ...payload.context.contextValues,
                 ...URLContextValues,
@@ -1690,7 +1732,8 @@ async function loadWeightedWorkspace({ resetTemplates = false, retryAttempt = 0 
             if (!sameContextValues(resolvedContextValues, payload.context.contextValues)) {
                 payload = validateWorkspacePayload(await postJSON('/api/get_weighted_workspace', {
                     categoryID: state.categoryID,
-                    contextValues: resolvedContextValues
+                    contextValues: resolvedContextValues,
+                    comparison: state.comparisonRequest
                 }));
             }
         }
@@ -1698,10 +1741,18 @@ async function loadWeightedWorkspace({ resetTemplates = false, retryAttempt = 0 
             return;
         }
         state.loading = false;
-        applyServerWorkspace(payload, { preserveUndo: false });
+        applyServerWorkspace(payload, { preserveUndo });
         renderAll();
+        if (!adjustmentsSaved) setStatus('Your change was not saved');
     } catch (error) {
         if (sequence !== state.loadSequence) {
+            return;
+        }
+        if (error.status === 400 && error.payload?.error === 'comparison_keys_unavailable') {
+            renderComparisonControls(error.payload);
+            // Refresh weights and the key catalog, but keep model results hidden until
+            // the user explicitly resolves the unavailable comparison selection.
+            await loadWeightedWorkspace({ resetTemplates, preserveUndo, comparisonChange });
             return;
         }
         const retryDelay = WORKSPACE_LOAD_RETRY_DELAYS_MS[retryAttempt];
@@ -1710,7 +1761,7 @@ async function loadWeightedWorkspace({ resetTemplates = false, retryAttempt = 0 
             setStatus('Connection interrupted - retrying...');
             await new Promise(resolve => window.setTimeout(resolve, retryDelay));
             if (sequence === state.loadSequence) {
-                await loadWeightedWorkspace({ resetTemplates, retryAttempt: retryAttempt + 1 });
+                    await loadWeightedWorkspace({ resetTemplates, retryAttempt: retryAttempt + 1, preserveUndo, comparisonChange });
             }
             return;
         }
@@ -1749,6 +1800,7 @@ async function persistPersonalPie() {
         const expectedRevision = state.personalRevision;
         const contextFingerprint = workspaceContextFingerprint(categoryID, contextValues);
         let reloadAfterConflict = false;
+        let reloadAfterComparisonError = false;
         let saved = false;
         state.saving = true;
         setStatus('Saving your pie…');
@@ -1759,7 +1811,8 @@ async function persistPersonalPie() {
             contextValues,
             expectedRevision,
             entries,
-            fallbackRules
+            fallbackRules,
+            comparison: state.comparisonRequest
         });
         try {
             const payload = validateWorkspacePayload(await state.savePromise);
@@ -1783,6 +1836,10 @@ async function persistPersonalPie() {
             state.personalEntries = cloneEntries(state.serverPersonalEntries);
             state.personalFallbackRules = cloneFallbackRules(state.serverPersonalFallbackRules);
             state.undoSnapshot = null;
+            if (error.status === 400 && error.payload?.error === 'comparison_keys_unavailable') {
+                renderComparisonControls(error.payload);
+                reloadAfterComparisonError = true;
+            }
             if (error.status === 409 && error.payload?.error === 'pie_revision_conflict') {
                 reloadAfterConflict = true;
             } else {
@@ -1795,8 +1852,9 @@ async function persistPersonalPie() {
             updateUndoState();
             renderInlineFallback();
         }
-        if (reloadAfterConflict) {
+        if (reloadAfterConflict || reloadAfterComparisonError) {
             await loadWeightedWorkspace();
+            if (reloadAfterComparisonError) setStatus('Your change was not saved');
         }
         return saved;
     })();
@@ -2166,8 +2224,7 @@ inlineFallbackEnabled.addEventListener('change', () => {
 });
 publicFallbackToggle.addEventListener('click', () => {
     const primary = selectedPublicFallbackPrimary();
-    const rule = primary ? publicFallbackRuleFor(primary.ID) : null;
-    if (!primary || !rule) {
+    if (!primary) {
         expandedPublicFallbackPrimaryID = null;
         selectedPublicFallbackComponentID = null;
     } else if (Number(expandedPublicFallbackPrimaryID) === Number(primary.ID)) {
@@ -2217,11 +2274,6 @@ refreshButton.addEventListener('click', async () => {
 workspaceChannel.beforeChange(async () => {
     if (!await finishPendingWeightAdjustments()) return false;
     return flushPendingPersonalPieSave();
-});
-
-missionDismiss.addEventListener('click', () => {
-    missionBanner.hidden = true;
-    document.body.classList.add('bp-mission-hidden');
 });
 
 termsButton.addEventListener('click', () => {

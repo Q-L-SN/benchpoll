@@ -1,4 +1,9 @@
 import * as S from './public/js/shared.js';
+import { conditionImpact } from './condition-impact.js';
+import { normalizeModelParameters, modelParameterLabel } from './public/js/shared/model-parameters.js';
+import { scoreEvidenceKey, scoreValueKey } from './score-aggregation.js';
+import { createDiscussionPost, deleteDiscussionPost, voteDiscussion, listDiscussion, discussionSummary,
+    normalizeDiscussionReport, validateDiscussionReport, applyDiscussionReport, discussionID } from './discussion-service.js';
 import fs from 'fs';
 import https from 'https';
 import express from 'express'; //v5.2.1
@@ -104,6 +109,10 @@ const markErrorFrom = from => (req, res, next) => {
 };
 API.use(markErrorFrom('API'));
 page.use(markErrorFrom('page'));
+page.use((_req, res, next) => {
+    res.set('Cache-Control', 'no-store');
+    next();
+});
 API.use((req, _res, next) => {
     if (req.body === undefined) {
         req.body = {};
@@ -134,7 +143,16 @@ app.use(session({
         secure: 'auto'
     }
 }));
-app.use(express.static(currentDir + '/public'));
+app.use(express.static(currentDir + '/public', {
+    setHeaders(res, filePath) {
+        if (filePath.endsWith('.js') || filePath.endsWith('.css')) {
+            // Relative module imports also need revalidation after a UI deployment.
+            res.setHeader('Cache-Control', 'no-cache, max-age=0, must-revalidate');
+            res.setHeader('CDN-Cache-Control', 'no-store');
+            res.setHeader('Cloudflare-CDN-Cache-Control', 'no-store');
+        }
+    }
+}));
 app.use(express.json({ limit: '1mb', strict: true }));
 app.use(cookieParser());
 
@@ -320,6 +338,42 @@ page.get('/how-it-works', (req, res) => {
     res.sendFile(currentDir + '/private/how-it-works.html');
 });
 
+API.post('/get_discussion', async (req, res) => {
+    res.json(await listDiscussion(db, await activeSessionUserID(req), req.body));
+});
+API.post('/get_discussion_summary', async (req, res) => res.json(await discussionSummary(db, req.body)));
+API.post('/search_discussion_benchmarks', async (req, res) => {
+    const query = typeof req.body.query === 'string' ? req.body.query.trim() : '';
+    if (query.length > 128) throw { status: 400, body: { error: 'search_too_long' } };
+    const [rows] = await db.execute(`SELECT b.ID AS benchmarkID, b.name, c.ID AS conditionID, c.name AS conditionName
+        FROM benchmarks b JOIN benchmark_conditions c ON c.benchmark_ID = b.ID AND c.is_active = 1
+        WHERE b.is_active = 1 AND (LOCATE(?, b.name) > 0 OR LOCATE(?, c.name) > 0)
+        ORDER BY b.name, c.name LIMIT 25`, [query, query]);
+    res.json({ benchmarks: rows });
+});
+const discussionSameOrigin = (req, _res, next) => {
+    const origin = req.get('origin');
+    if (req.get('sec-fetch-site') === 'cross-site'
+        || (origin && origin !== publicOrigin && origin !== `${req.protocol}://${req.get('host')}`)) {
+        return next({ status: 403, body: { error: 'cross_origin_request' } });
+    }
+    next();
+};
+API.post('/create_discussion_post', discussionSameOrigin, requireAuthForAPI, async (req, res) => {
+    res.status(201).json(await createDiscussionPost(db, req.user.ID, req.body));
+});
+API.post('/vote_discussion', discussionSameOrigin, requireAuthForAPI, async (req, res) => {
+    res.json(await voteDiscussion(db, req.user.ID, req.body));
+});
+API.post('/delete_discussion_post', discussionSameOrigin, requireAuthForAPI, async (req, res) => {
+    res.json(await deleteDiscussionPost(db, req.user.ID, req.body));
+});
+API.post('/get_reported_discussion', requireReviewerAuthForAPI, async (req, res) => {
+    const [rows] = await db.execute('SELECT ID, category_ID, context_ID, author_ID, parent_ID, body, created_at, hidden_at FROM discussion_posts WHERE ID = ?', [discussionID(req.body.postID)]);
+    if (!rows.length) throw { status: 404, body: { error: 'discussion_post_unavailable' } };
+    res.json(rows[0]);
+});
+
 API.post('/get_user_profile', async (req, res, next) => {
     if (!await activeUserExists(req.session.userID)) {
         delete req.session.userID;
@@ -465,6 +519,7 @@ API.post('/get_weighted_workspace', async (req, res) => {
     const workspace = await getRankingWorkspace(db, {
         categoryID: req.body.categoryID,
         contextValues: req.body.contextValues,
+        comparison: req.body.comparison,
         userID
     });
     res.json(workspace);
@@ -481,7 +536,7 @@ API.post('/get_approved_benchmark_results', async (req, res) => {
                model_conditions.name AS modelConditionName,
                model_conditions.is_default AS modelConditionIsDefault
         FROM models
-        JOIN vendors ON vendors.ID = models.vendor_ID
+        JOIN organizations vendors ON vendors.ID = models.vendor_ID
         JOIN model_conditions ON model_conditions.model_ID = models.ID
         WHERE models.ID = ?
           AND model_conditions.ID = ?
@@ -494,6 +549,7 @@ API.post('/get_approved_benchmark_results', async (req, res) => {
     const [resultRows] = await db.execute(`
         SELECT benchmark_results.ID,
                benchmark_results.raw_score AS rawScore,
+               benchmark_results.notes,
                benchmark_results.source_url AS sourceURL,
                benchmark_results.source_type AS sourceType,
                benchmark_results.source_title AS sourceTitle,
@@ -511,6 +567,7 @@ API.post('/get_approved_benchmark_results', async (req, res) => {
                model_conditions.ID AS modelConditionID,
                model_conditions.name AS modelConditionName
         FROM benchmark_results
+        JOIN models ON models.ID = benchmark_results.model_ID
         JOIN model_conditions ON model_conditions.ID = benchmark_results.model_condition_ID
         JOIN benchmarks ON benchmarks.ID = benchmark_results.benchmark_ID
         JOIN benchmark_conditions ON benchmark_conditions.ID = benchmark_results.benchmark_condition_ID
@@ -523,10 +580,13 @@ API.post('/get_approved_benchmark_results', async (req, res) => {
                  benchmark_conditions.name, benchmark_results.ID`, [modelID, modelConditionID]);
 
     const scoreGroupsByCondition = new Map();
+    const evidence = new Set();
     for (const row of resultRows) {
+        const evidenceKey = scoreValueKey(modelConditionID, row.benchmarkConditionID, row.rawScore);
         const sample = {
             ID: Number(row.ID),
             rawScore: Number(row.rawScore),
+            excludedAsDuplicate: evidence.has(evidenceKey),
             sourceURL: row.sourceURL,
             sourceType: row.sourceType,
             sourceTitle: row.sourceTitle,
@@ -540,6 +600,7 @@ API.post('/get_approved_benchmark_results', async (req, res) => {
                 targetValue: row.targetValue
             })
         };
+        evidence.add(evidenceKey);
         if (sample.normalizedScore === null) {
             throw {
                 status: 409,
@@ -572,8 +633,9 @@ API.post('/get_approved_benchmark_results', async (req, res) => {
     const scoreGroups = Array.from(scoreGroupsByCondition.values(), group => ({
         ...group,
         sampleCount: group.samples.length,
-        medianRawScore: medianOfFiniteNumbers(group.samples.map(sample => sample.rawScore)),
-        medianNormalizedScore: medianOfFiniteNumbers(group.samples.map(sample => sample.normalizedScore))
+        distinctScoreCount: group.samples.filter(sample => !sample.excludedAsDuplicate).length,
+        medianRawScore: medianOfFiniteNumbers(group.samples.filter(sample => !sample.excludedAsDuplicate).map(sample => sample.rawScore)),
+        medianNormalizedScore: medianOfFiniteNumbers(group.samples.filter(sample => !sample.excludedAsDuplicate).map(sample => sample.normalizedScore))
     }));
     const model = modelRows[0];
     res.json({
@@ -594,7 +656,8 @@ API.post('/save_personal_pie', requireAuthForAPI, async (req, res) => {
         contextValues: req.body.contextValues,
         expectedRevision: req.body.expectedRevision,
         entries: req.body.entries,
-        fallbackRules: req.body.fallbackRules
+        fallbackRules: req.body.fallbackRules,
+        comparison: req.body.comparison
     });
     res.json(workspace);
 });
@@ -877,7 +940,7 @@ API.post('/delete_account', requireAuthForAPI, async (req, res, next) => {
     return next({ status: 204 });
 });
 
-page.get('/contribute', async (req, res) => {
+page.get(['/contribute', '/contribute/{*formPath}'], async (req, res) => {
     res.sendFile(currentDir + '/private/contribute.html');
 });
 
@@ -1253,23 +1316,22 @@ function normalizeBenchmarkBatch(body) {
     return { schemaVersion: 5, type: 'new_benchmark', benchmarks };
 }
 
+function modelConditionKey(condition) {
+    return condition.parameters === null ? `unconfigured-${condition.ID}`
+        : 'kv-' + crypto.createHash('sha256').update(JSON.stringify(normalizeModelParameters(condition.parameters))).digest('hex');
+}
+
 function normalizeModelCondition(condition) {
     requireRecord(condition, 'invalid_model_condition');
-    assertAllowedRecordKeys(
-        condition,
-        ['clientRef', 'name', 'isDefault'],
-        'unknown_model_condition_field'
-    );
-    const name = normalizeString(condition.name, 192, true);
-    return {
-        clientRef: normalizeClientRef(condition.clientRef),
-        name,
-        isDefault: normalizeConditionDefaultFlag(
-            name,
-            condition.isDefault,
-            'model_condition_default_mismatch'
-        )
-    };
+    assertAllowedRecordKeys(condition, ['clientRef', 'name', 'isDefault', 'parameters'], 'unknown_model_condition_field');
+    let parameters;
+    try { parameters = normalizeModelParameters(condition.parameters); }
+    catch (error) { throw { status: 400, body: { error: error.message } }; }
+    const name = modelParameterLabel(parameters).slice(0, 192);
+    if (condition.name !== name || condition.isDefault !== (Object.keys(parameters).length === 0)) {
+        throw { status: 400, body: { error: 'model_parameter_label_mismatch' } };
+    }
+    return { clientRef: normalizeClientRef(condition.clientRef), name, parameters, isDefault: Object.keys(parameters).length === 0 };
 }
 
 function normalizeModelBatch(body) {
@@ -1304,15 +1366,12 @@ function normalizeModelBatch(body) {
         }
         const conditions = conditionInput.map(normalizeModelCondition);
         assertUniqueClientRefs(conditions, 'duplicate_model_condition_client_ref');
-        const conditionNames = new Set();
         const conditionKeys = new Set();
         for (const condition of conditions) {
-            const name = condition.name.toLocaleLowerCase('en-US');
-            const key = slugifyIdentifier(condition.name, 'condition');
-            if (conditionNames.has(name) || conditionKeys.has(key)) {
+            const key = modelConditionKey(condition);
+            if (conditionKeys.has(key)) {
                 throw { status: 400, body: { error: 'duplicate_model_condition', name: condition.name } };
             }
-            conditionNames.add(name);
             conditionKeys.add(key);
         }
         const vendorInput = candidate.vendor && typeof candidate.vendor === 'object'
@@ -1347,7 +1406,7 @@ function normalizeModelBatch(body) {
             existingModelRef: existingModel.reference,
             name: normalizeString(candidate.name, 192, true),
             introductionURL: normalizeOptionalURL(candidate.introductionURL, 2048),
-            reviewerNotes: normalizeString(candidate.reviewerNotes, 2000),
+            reviewerNotes: normalizeString(candidate.reviewerNotes, 10000),
             vendor: !isExisting ? {
                 existingVendorID: vendorLocator.ID,
                 existingVendorRef: vendorLocator.reference,
@@ -1380,7 +1439,7 @@ function normalizeBenchmarkResultBatch(body) {
         assertAllowedRecordKeys(candidate, [
             'clientRef', 'modelID', 'modelRef', 'modelConditionID', 'modelConditionRef',
             'benchmarkID', 'benchmarkRef', 'benchmarkConditionID', 'benchmarkConditionRef',
-            'rawScore', 'source'
+            'rawScore', 'source', 'notes'
         ], 'unknown_benchmark_result_field');
         const model = normalizeEntityLocator(candidate.modelID, candidate.modelRef, 'model', { required: true });
         const modelCondition = normalizeEntityLocator(
@@ -1424,6 +1483,7 @@ function normalizeBenchmarkResultBatch(body) {
             benchmarkID: benchmark.ID,
             benchmarkRef: benchmark.reference,
             rawScore: normalizeFiniteNumber(candidate.rawScore),
+            notes: normalizeString(candidate.notes === undefined ? body.reviewerNotes : candidate.notes, 2000),
             source: {
                 type: sourceType,
                 url: normalizeRequiredURL(sourceInput.url, 2048),
@@ -1447,9 +1507,8 @@ function normalizeBenchmarkResultBatch(body) {
         resultIdentities.add(identity);
     }
     return {
-        schemaVersion: 6,
+        schemaVersion: 8,
         type: 'benchmark_result',
-        reviewerNotes: normalizeString(body.reviewerNotes, 2000),
         results
     };
 }
@@ -1638,9 +1697,9 @@ async function createCategoryFromSubmission(connection, content, metadata = {}) 
         );
         const [dimensionResult] = await connection.execute(`
             INSERT INTO ranking_dimensions
-                (scope_category_ID, dimension_key, name, position, is_active)
-            VALUES (?, ?, ?, ?, 1)`,
-        [parentID, dimensionKey, content.name, Number(positionRow.max_position) + 10]);
+                (scope_category_ID, dimension_key, name, position, notes, is_active)
+            VALUES (?, ?, ?, ?, ?, 1)`,
+        [parentID, dimensionKey, content.name, Number(positionRow.max_position) + 10, content.details]);
         const dimensionID = Number(dimensionResult.insertId);
         const optionValues = content.options.map(() => '(?, ?, ?, ?, ?, ?)').join(', ');
         const optionParams = content.options.flatMap((option, index) => [
@@ -1688,8 +1747,8 @@ async function createCategoryFromSubmission(connection, content, metadata = {}) 
         throw { status: 409, body: { error: 'category_exists' } };
     }
     await connection.execute(
-        'INSERT INTO categories (parent_ID, name) VALUES (?, ?)',
-        [parentID, content.name]
+        'INSERT INTO categories (parent_ID, name, notes) VALUES (?, ?, ?)',
+        [parentID, content.name, content.details]
     );
 }
 
@@ -1734,7 +1793,7 @@ function normalizeBenchmarkChangeState(proposed) {
     requireRecord(proposed, 'invalid_change_proposal');
     assertAllowedRecordKeys(
         proposed,
-        ['name', 'introductionURL', 'tags', 'conditions'],
+        ['name', 'introductionURL', 'notes', 'tags', 'conditions'],
         'unknown_change_proposal_field'
     );
     if (!Array.isArray(proposed.conditions)
@@ -1747,6 +1806,7 @@ function normalizeBenchmarkChangeState(proposed) {
     return {
         name: normalizeString(proposed.name, 192, true),
         introductionURL: normalizeOptionalURL(proposed.introductionURL, 2048),
+        notes: normalizeString(proposed.notes, 2000),
         tags: normalizeStringArray(proposed.tags)
             .sort((left, right) => left.localeCompare(right)),
         conditions
@@ -1755,28 +1815,25 @@ function normalizeBenchmarkChangeState(proposed) {
 
 function normalizeModelChangeCondition(condition, index) {
     requireRecord(condition, 'invalid_model_condition');
-    assertAllowedRecordKeys(
-        condition,
-        ['ID', 'name', 'isDefault'],
-        'unknown_model_condition_field'
-    );
-    const { ID, ...fields } = condition;
-    const normalized = normalizeModelCondition({
-        ...fields,
-        clientRef: `edited-model-condition-${index + 1}`
-    });
-    return {
-        ID: normalizeOptionalPositiveInteger(ID),
-        name: normalized.name,
-        isDefault: normalized.isDefault
-    };
+    assertAllowedRecordKeys(condition, ['ID', 'name', 'isDefault', 'parameters'], 'unknown_model_condition_field');
+    const ID = normalizeOptionalPositiveInteger(condition.ID);
+    if (condition.parameters === null) {
+        if (ID === null || condition.name !== modelParameterLabel(null, ID) || condition.isDefault !== false) {
+            throw { status: 400, body: { error: 'invalid_unconfigured_condition' } };
+        }
+        return { ID, name: condition.name, isDefault: false, parameters: null };
+    }
+    const { ID: ignored, ...fields } = condition;
+    void ignored;
+    const normalized = normalizeModelCondition({ ...fields, clientRef: `edited-model-condition-${index + 1}` });
+    return { ID, name: normalized.name, isDefault: normalized.isDefault, parameters: normalized.parameters };
 }
 
 function normalizeModelChangeState(proposed) {
     requireRecord(proposed, 'invalid_change_proposal');
     assertAllowedRecordKeys(
         proposed,
-        ['vendorID', 'name', 'introductionURL', 'conditions'],
+        ['vendorID', 'name', 'introductionURL', 'notes', 'conditions'],
         'unknown_change_proposal_field'
     );
     if (!Array.isArray(proposed.conditions)
@@ -1785,11 +1842,15 @@ function normalizeModelChangeState(proposed) {
         throw { status: 400, body: { error: 'model_condition_required' } };
     }
     const conditions = proposed.conditions.map(normalizeModelChangeCondition);
-    assertUniqueChangeConditionNames(conditions, 'duplicate_model_condition');
+    if (new Set(conditions.map(modelConditionKey)).size !== conditions.length
+        || new Set(conditions.filter(c => c.ID !== null).map(c => c.ID)).size !== conditions.filter(c => c.ID !== null).length) {
+        throw { status: 400, body: { error: 'duplicate_model_condition' } };
+    }
     return {
         vendorID: normalizeRequiredPositiveInteger(proposed.vendorID),
         name: normalizeString(proposed.name, 192, true),
         introductionURL: normalizeOptionalURL(proposed.introductionURL, 2048),
+        notes: normalizeString(proposed.notes, 10000),
         conditions
     };
 }
@@ -1820,6 +1881,7 @@ function normalizeResultChangeState(proposed) {
             benchmarkID: normalized.benchmarkID,
             benchmarkConditionID: normalized.benchmarkConditionID,
             rawScore: normalized.rawScore,
+            notes: normalized.notes,
             source: normalized.source
         }
     };
@@ -1846,7 +1908,7 @@ function normalizeEntityChangeProposal(targetKind, proposed) {
     if (targetKind === 'model') {
         assertAllowedRecordKeys(
             proposed,
-            ['name', 'introductionURL', 'vendor', 'conditions'],
+            ['name', 'introductionURL', 'notes', 'vendor', 'conditions'],
             'unknown_change_proposal_field'
         );
         requireRecord(proposed.vendor, 'invalid_model_vendor');
@@ -1868,6 +1930,7 @@ function normalizeEntityChangeProposal(targetKind, proposed) {
             vendorID: vendor.ID,
             name: proposed.name,
             introductionURL: proposed.introductionURL,
+            notes: proposed.notes,
             conditions: proposed.conditions
         });
     }
@@ -1906,9 +1969,9 @@ function normalizeEntityChange(body) {
     if (!new Set(['update', 'delete']).has(operation)) {
         throw { status: 400, body: { error: 'invalid_change_operation' } };
     }
-    const reviewNotes = normalizeString(body.reviewNotes, 2000, operation === 'delete');
+    const reviewNotes = normalizeString(body.reviewNotes, 2000, operation !== 'update');
     return {
-        schemaVersion: targetKind === 'result' ? 6 : 5,
+        schemaVersion: contributionSchemaVersion('entity_change', targetKind),
         type: 'entity_change',
         targetKind,
         targetID: normalizeRequiredPositiveInteger(body.targetID),
@@ -1927,6 +1990,7 @@ function buildContributionContent(body) {
         throw { status: 400, body: { error: 'invalid_submission' } };
     }
     const type = body.type;
+    if (type === 'discussion_report') return normalizeDiscussionReport(body);
     if (type === 'feedback') {
         assertAllowedRecordKeys(body, ['type', 'pageURL', 'details']);
         return {
@@ -2057,11 +2121,11 @@ function buildContributionContent(body) {
 }
 
 function contributionSchemaVersion(type, targetKind = null) {
-    if (type === 'feedback' || type === 'report_issue') {
+    if (type === 'feedback' || type === 'report_issue' || type === 'discussion_report') {
         return 1;
     }
     if (type === 'benchmark_result' || (type === 'entity_change' && targetKind === 'result')) {
-        return 6;
+        return 8;
     }
     if (new Set(['new_category', 'new_benchmark', 'new_model', 'entity_change']).has(type)) {
         return 5;
@@ -2153,7 +2217,7 @@ function normalizeCanonicalEntityChangeContent(
         targetKind,
         targetID: normalizeRequiredPositiveInteger(stored.targetID),
         operation,
-        reviewNotes: normalizeString(stored.reviewNotes, 2000, operation === 'delete'),
+        reviewNotes: normalizeString(stored.reviewNotes, 2000, operation !== 'update'),
         before,
         after,
         changes
@@ -2194,7 +2258,7 @@ function entityChangeLockClause(forUpdate) {
 
 async function loadBenchmarkChangeTarget(connection, targetID, { forUpdate = false } = {}) {
     const [benchmarks] = await connection.execute(`
-        SELECT ID, name, introduction_url AS introductionURL
+        SELECT ID, name, introduction_url AS introductionURL, notes
         FROM benchmarks
         WHERE ID = ? AND is_active = 1
         LIMIT 1${entityChangeLockClause(forUpdate)}`, [targetID]);
@@ -2221,6 +2285,7 @@ async function loadBenchmarkChangeTarget(connection, targetID, { forUpdate = fal
     return {
         name: benchmarks[0].name,
         introductionURL: benchmarks[0].introductionURL ?? '',
+        notes: benchmarks[0].notes ?? '',
         tags: tags.map(tag => tag.name),
         conditions: conditions.map(condition => ({
             ID: Number(condition.ID),
@@ -2237,7 +2302,7 @@ async function loadBenchmarkChangeTarget(connection, targetID, { forUpdate = fal
 
 async function loadModelChangeTarget(connection, targetID, { forUpdate = false } = {}) {
     const [models] = await connection.execute(`
-        SELECT ID, vendor_ID AS vendorID, name, introduction_url AS introductionURL
+        SELECT ID, vendor_ID AS vendorID, name, introduction_url AS introductionURL, notes
         FROM models
         WHERE ID = ? AND is_active = 1
         LIMIT 1${entityChangeLockClause(forUpdate)}`, [targetID]);
@@ -2245,7 +2310,7 @@ async function loadModelChangeTarget(connection, targetID, { forUpdate = false }
         throw { status: 404, body: { error: 'model_not_found' } };
     }
     const [conditions] = await connection.execute(`
-        SELECT ID, name, is_default AS isDefault
+        SELECT ID, name, is_default AS isDefault, parameters
         FROM model_conditions
         WHERE model_ID = ? AND is_active = 1
         ORDER BY is_default DESC, name, ID${entityChangeLockClause(forUpdate)}`, [targetID]);
@@ -2256,10 +2321,12 @@ async function loadModelChangeTarget(connection, targetID, { forUpdate = false }
         vendorID: Number(models[0].vendorID),
         name: models[0].name,
         introductionURL: models[0].introductionURL ?? '',
+        notes: models[0].notes ?? '',
         conditions: conditions.map(condition => ({
             ID: Number(condition.ID),
             name: condition.name,
-            isDefault: Boolean(condition.isDefault)
+            isDefault: Boolean(condition.isDefault),
+            parameters: parseJSONColumn(condition.parameters)
         }))
     };
 }
@@ -2272,6 +2339,7 @@ async function loadResultChangeTarget(connection, targetID, { forUpdate = false 
                benchmark_results.benchmark_ID AS benchmarkID,
                benchmark_results.benchmark_condition_ID AS benchmarkConditionID,
                benchmark_results.raw_score AS rawScore,
+               benchmark_results.notes,
                benchmark_results.source_type AS sourceType,
                benchmark_results.source_url AS sourceURL,
                benchmark_results.source_title AS sourceTitle
@@ -2289,6 +2357,7 @@ async function loadResultChangeTarget(connection, targetID, { forUpdate = false 
             benchmarkID: Number(row.benchmarkID),
             benchmarkConditionID: Number(row.benchmarkConditionID),
             rawScore: Number(row.rawScore),
+            notes: row.notes ?? '',
             source: {
                 type: row.sourceType,
                 url: row.sourceURL,
@@ -2455,7 +2524,9 @@ async function assertModelConditionSetCanChange(connection, targetID, before, af
     );
     const mutableIDs = new Set(before.conditions.map(condition => condition.ID));
     for (const condition of after.conditions) {
-        const desiredKey = slugifyIdentifier(condition.name, 'condition');
+        const desiredKey = modelConditionKey(condition);
+        const prior = before.conditions.find(item => item.ID === condition.ID);
+        if (condition.parameters === null && prior?.parameters !== null) throw { status: 400, body: { error: 'cannot_erase_model_parameters' } };
         const conflict = storedConditions.find(stored => (
             stored.conditionKey === desiredKey
             && Number(stored.ID) !== condition.ID
@@ -2491,7 +2562,7 @@ async function validateEntityChangeProposal(connection, content, before) {
         return;
     }
     if (content.operation !== 'update') {
-        return;
+        throw { status: 400, body: { error: 'invalid_change_operation' } };
     }
     if (content.targetKind === 'benchmark') {
         await assertBenchmarkConditionSetCanChange(
@@ -2516,7 +2587,7 @@ async function validateEntityChangeProposal(connection, content, before) {
             before,
             content.after
         );
-        const [vendors] = await connection.execute('SELECT ID FROM vendors WHERE ID = ? LIMIT 1', [content.after.vendorID]);
+        const [vendors] = await connection.execute('SELECT ID FROM organizations vendors WHERE ID = ? AND (is_active = 1 OR ID = ?) LIMIT 1 FOR SHARE', [content.after.vendorID, before.vendorID]);
         if (vendors.length === 0) {
             throw { status: 409, body: { error: 'vendor_not_found', vendorID: content.after.vendorID } };
         }
@@ -2530,7 +2601,7 @@ async function validateEntityChangeProposal(connection, content, before) {
         return;
     }
     const resultContent = {
-        schemaVersion: 6,
+        schemaVersion: 8,
         type: 'benchmark_result',
         reviewerNotes: '',
         results: [{
@@ -2975,13 +3046,10 @@ async function validateContributionEntitiesForSubmission(connection, content) {
                 'SELECT condition_key, name FROM model_conditions WHERE model_ID = ?',
                 [modelContent.existingModelID]
             );
-            const names = new Set(existingConditions.map(condition => (
-                condition.name.toLocaleLowerCase('en-US')
-            )));
             const keys = new Set(existingConditions.map(condition => condition.condition_key));
             for (const condition of modelContent.conditions) {
-                const key = slugifyIdentifier(condition.name, 'condition');
-                if (names.has(condition.name.toLocaleLowerCase('en-US')) || keys.has(key)) {
+                const key = modelConditionKey(condition);
+                if (keys.has(key)) {
                     throw {
                         status: 409,
                         body: { error: 'model_condition_exists', name: condition.name }
@@ -2998,7 +3066,7 @@ async function validateContributionEntitiesForSubmission(connection, content) {
         let vendorIdentity;
         if (modelContent.vendor.existingVendorID !== null) {
             const [vendors] = await connection.execute(
-                'SELECT ID, name FROM vendors WHERE ID = ? LIMIT 1',
+                'SELECT ID, name FROM organizations vendors WHERE ID = ? LIMIT 1',
                 [modelContent.vendor.existingVendorID]
             );
             if (vendors.length === 0) {
@@ -3022,7 +3090,7 @@ async function validateContributionEntitiesForSubmission(connection, content) {
             vendorIdentity = `ref:${contributionReferenceKey(modelContent.vendor.existingVendorRef)}`;
         } else {
             const [vendors] = await connection.execute(
-                'SELECT ID FROM vendors WHERE name = ? LIMIT 1',
+                'SELECT ID FROM organizations vendors WHERE name = ? LIMIT 1',
                 [modelContent.vendor.name]
             );
             if (vendors.length > 0) {
@@ -3230,7 +3298,7 @@ async function resolveApprovedEntityReference(connection, reference, userID, sta
             if (entry.existingVendorRef) {
                 return resolveApprovedEntityReference(connection, entry.existingVendorRef, userID, { cache, resolving });
             }
-            const [rows] = await connection.execute('SELECT ID FROM vendors WHERE name = ? LIMIT 1', [entry.name]);
+            const [rows] = await connection.execute('SELECT ID FROM organizations vendors WHERE name = ? LIMIT 1', [entry.name]);
             if (rows.length > 0) return Number(rows[0].ID);
         } else if (reference.entityType === 'model') {
             if (entry.existingModelID !== null && entry.existingModelID !== undefined) {
@@ -3262,7 +3330,7 @@ async function resolveApprovedEntityReference(connection, reference, userID, sta
             const modelID = await resolveApprovedEntityReference(connection, modelReference, userID, { cache, resolving });
             const [rows] = await connection.execute(
                 'SELECT ID FROM model_conditions WHERE model_ID = ? AND condition_key = ? AND is_active = 1 LIMIT 1',
-                [modelID, slugifyIdentifier(entry.name, 'condition')]
+                [modelID, modelConditionKey(entry)]
             );
             if (rows.length > 0) return Number(rows[0].ID);
         } else if (reference.entityType === 'category') {
@@ -3307,6 +3375,7 @@ async function materializeResultReferences(connection, result, userID) {
         ?? await resolveApprovedEntityReference(connection, result.benchmarkConditionRef, userID);
     return {
         ...result,
+        source: { ...result.source },
         modelID,
         modelConditionID,
         benchmarkID,
@@ -3364,7 +3433,8 @@ function modelConditionSnapshot(condition) {
     return {
         conditionID: Number(condition.ID),
         modelID: Number(condition.model_ID),
-        name: condition.name
+        name: condition.name,
+        parameters: parseJSONColumn(condition.parameters)
     };
 }
 
@@ -3501,8 +3571,8 @@ async function applyBenchmarkBatch(connection, content, metadata = {}) {
             throw { status: 409, body: { error: 'benchmark_exists', name: benchmark.name } };
         }
         const [benchmarkResult] = await connection.execute(`
-            INSERT INTO benchmarks (name, introduction_url, is_active)
-            VALUES (?, ?, 1)`, [benchmark.name, benchmark.introductionURL]);
+            INSERT INTO benchmarks (name, introduction_url, notes, is_active)
+            VALUES (?, ?, ?, 1)`, [benchmark.name, benchmark.introductionURL, benchmark.reviewerNotes]);
         const benchmarkID = Number(benchmarkResult.insertId);
 
         for (const tagName of benchmark.tags) {
@@ -3550,15 +3620,16 @@ async function applyBenchmarkBatch(connection, content, metadata = {}) {
 }
 
 async function insertSubmittedModelCondition(connection, modelID, condition, isDefault) {
-    const conditionKey = slugifyIdentifier(condition.name, 'condition');
+    const conditionKey = modelConditionKey(condition);
     await connection.execute(`
         INSERT INTO model_conditions
-            (model_ID, condition_key, name, is_default, is_active)
-        VALUES (?, ?, ?, ?, 1)`,
+            (model_ID, condition_key, name, parameters, is_default, is_active)
+        VALUES (?, ?, ?, ?, ?, 1)`,
     [
         modelID,
         conditionKey,
         condition.name,
+        JSON.stringify(condition.parameters),
         isDefault ? 1 : 0
     ]);
 }
@@ -3588,8 +3659,8 @@ async function applyModelBatch(connection, content, metadata = {}) {
             const names = new Set(existingConditions.map(condition => condition.name.toLocaleLowerCase('en-US')));
             const keys = new Set(existingConditions.map(condition => condition.condition_key));
             for (const condition of modelContent.conditions) {
-                const key = slugifyIdentifier(condition.name, 'condition');
-                if (names.has(condition.name.toLocaleLowerCase('en-US')) || keys.has(key)) {
+                const key = modelConditionKey(condition);
+                if (keys.has(key)) {
                     throw { status: 409, body: { error: 'model_condition_exists', name: condition.name } };
                 }
                 await insertSubmittedModelCondition(
@@ -3614,13 +3685,14 @@ async function applyModelBatch(connection, content, metadata = {}) {
                 : null);
         let vendorName = modelContent.vendor.name;
         if (vendorID !== null) {
-            const [vendors] = await connection.execute('SELECT ID, name FROM vendors WHERE ID = ? LIMIT 1', [vendorID]);
+            const [vendors] = await connection.execute('SELECT ID, name FROM organizations vendors WHERE ID = ? AND is_active = 1 LIMIT 1 FOR UPDATE', [vendorID]);
             if (vendors.length === 0) {
                 throw { status: 409, body: { error: 'vendor_not_found', vendorID } };
             }
             vendorName = vendors[0].name;
+            await connection.execute('UPDATE organizations SET is_model_vendor = 1 WHERE ID = ?', [vendorID]);
         } else {
-            const [vendors] = await connection.execute('SELECT ID, name FROM vendors WHERE name = ? LIMIT 1', [vendorName]);
+            const [vendors] = await connection.execute('SELECT ID, name FROM organizations vendors WHERE name = ? LIMIT 1', [vendorName]);
             if (vendors.length > 0) {
                 throw {
                     status: 409,
@@ -3628,12 +3700,12 @@ async function applyModelBatch(connection, content, metadata = {}) {
                 };
             }
             let vendorSlug = slugifyIdentifier(vendorName, 'vendor');
-            const [slugConflicts] = await connection.execute('SELECT ID FROM vendors WHERE slug = ? LIMIT 1', [vendorSlug]);
+            const [slugConflicts] = await connection.execute('SELECT ID FROM organizations vendors WHERE slug = ? LIMIT 1', [vendorSlug]);
             if (slugConflicts.length > 0) {
                 vendorSlug = `${vendorSlug}-${crypto.createHash('sha256').update(vendorName).digest('hex').slice(0, 8)}`;
             }
             const [vendorResult] = await connection.execute(
-                'INSERT INTO vendors (slug, name, logo_key) VALUES (?, ?, ?)',
+                'INSERT INTO organizations (slug, name, logo_key, is_model_vendor) VALUES (?, ?, ?, 1)',
                 [vendorSlug, vendorName, modelContent.vendor.logoKey || null]
             );
             vendorID = Number(vendorResult.insertId);
@@ -3652,8 +3724,8 @@ async function applyModelBatch(connection, content, metadata = {}) {
             modelSlug = `${modelSlug}-${crypto.createHash('sha256').update(`${vendorName}/${modelContent.name}`).digest('hex').slice(0, 8)}`;
         }
         const [modelResult] = await connection.execute(
-            'INSERT INTO models (vendor_ID, slug, name, introduction_url, is_active) VALUES (?, ?, ?, ?, 1)',
-            [vendorID, modelSlug, modelContent.name, modelContent.introductionURL]
+            'INSERT INTO models (vendor_ID, slug, name, introduction_url, notes, is_active) VALUES (?, ?, ?, ?, ?, 1)',
+            [vendorID, modelSlug, modelContent.name, modelContent.introductionURL, modelContent.reviewerNotes]
         );
         const modelID = Number(modelResult.insertId);
         for (const condition of modelContent.conditions) {
@@ -3730,10 +3802,11 @@ async function applyBenchmarkChange(connection, content) {
     const after = content.after;
     await connection.execute(`
         UPDATE benchmarks
-        SET name = ?, introduction_url = ?, updated_at = NOW()
+        SET name = ?, introduction_url = ?, notes = ?, updated_at = NOW()
         WHERE ID = ?`, [
         after.name,
         after.introductionURL,
+        after.notes,
         content.targetID
     ]);
     await syncBenchmarkTags(connection, content.targetID, after.tags);
@@ -3809,7 +3882,7 @@ async function applyModelChange(connection, content) {
     }
     const after = content.after;
     const [vendorRows] = await connection.execute(
-        'SELECT name FROM vendors WHERE ID = ? LIMIT 1',
+        'SELECT name FROM organizations vendors WHERE ID = ? LIMIT 1',
         [after.vendorID]
     );
     if (vendorRows.length === 0) {
@@ -3823,10 +3896,13 @@ async function applyModelChange(connection, content) {
     if (slugConflicts.length > 0) {
         slug = `${slug}-${content.targetID}`;
     }
+    if (after.vendorID !== current.vendorID) {
+        await connection.execute('UPDATE organizations SET is_model_vendor = 1 WHERE ID = ? AND is_active = 1', [after.vendorID]);
+    }
     await connection.execute(`
         UPDATE models
-        SET vendor_ID = ?, slug = ?, name = ?, introduction_url = ?, updated_at = NOW()
-        WHERE ID = ?`, [after.vendorID, slug, after.name, after.introductionURL || null, content.targetID]);
+        SET vendor_ID = ?, slug = ?, name = ?, introduction_url = ?, notes = ?, updated_at = NOW()
+        WHERE ID = ?`, [after.vendorID, slug, after.name, after.introductionURL || null, after.notes, content.targetID]);
     const retainedConditions = after.conditions.filter(condition => condition.ID !== null);
     const retainedConditionIDs = new Set(retainedConditions.map(condition => condition.ID));
     const removedConditions = current.conditions.filter(condition => (
@@ -3853,10 +3929,11 @@ async function applyModelChange(connection, content) {
     for (const condition of retainedConditions) {
         const [result] = await connection.execute(`
             UPDATE model_conditions
-            SET condition_key = ?, name = ?, is_default = ?, updated_at = NOW()
+            SET condition_key = ?, name = ?, parameters = ?, is_default = ?, updated_at = NOW()
             WHERE ID = ? AND model_ID = ?`, [
-            slugifyIdentifier(condition.name, 'condition'),
+            modelConditionKey(condition),
             condition.name,
+            condition.parameters === null ? null : JSON.stringify(condition.parameters),
             condition.isDefault ? 1 : 0,
             condition.ID,
             content.targetID
@@ -3875,7 +3952,7 @@ async function applyModelChange(connection, content) {
 
 function entityChangeResultContent(content) {
     return {
-        schemaVersion: 6,
+        schemaVersion: 8,
         type: 'benchmark_result',
         reviewerNotes: '',
         results: [{
@@ -3911,12 +3988,17 @@ async function applyResultChange(connection, content, metadata) {
     if (Number(superseded.affectedRows) !== 1) {
         throw { status: 409, body: { error: 'entity_change_target_stale' } };
     }
-    await applyBenchmarkResult(connection, entityChangeResultContent(content), metadata);
+    await applyBenchmarkResult(connection, entityChangeResultContent(content), {
+        ...metadata, editingResultID: content.targetID
+    });
 }
 
 async function applyEntityChange(connection, content, metadata) {
     if (!content.before || !Array.isArray(content.changes) || content.changes.length === 0) {
         throw { status: 409, body: { error: 'invalid_entity_change_snapshot' } };
+    }
+    if (!['update', 'delete'].includes(content.operation)) {
+        throw { status: 400, body: { error: 'invalid_change_operation' } };
     }
     if (content.targetKind === 'benchmark') {
         await applyBenchmarkChange(connection, content);
@@ -3945,13 +4027,20 @@ async function applyBenchmarkResult(connection, content, metadata) {
         const modelCondition = await loadResultModelCondition(connection, resultContent, modelID);
         const benchmarkConditionID = Number(benchmarkCondition.ID);
         const modelConditionID = Number(modelCondition.ID);
+        await connection.execute('SELECT ID FROM model_conditions WHERE ID = ? FOR UPDATE', [modelConditionID]);
+        const [sameEvidence] = await connection.execute(`SELECT source_url, raw_score FROM benchmark_results
+            WHERE model_condition_ID = ? AND benchmark_condition_ID = ? AND status = 'accepted' FOR UPDATE`, [modelConditionID, benchmarkConditionID]);
+        const evidenceKey = scoreEvidenceKey(modelConditionID, benchmarkConditionID, resultContent.source.url, resultContent.rawScore);
+        if (!metadata.editingResultID && sameEvidence.some(row => scoreEvidenceKey(modelConditionID, benchmarkConditionID, row.source_url, row.raw_score) === evidenceKey)) {
+            throw { status: 409, body: { error: 'score_evidence_already_exists' } };
+        }
         await connection.execute(`
             INSERT INTO benchmark_results
                 (model_ID, model_condition_ID, benchmark_ID, benchmark_condition_ID,
-                 raw_score, source_url, source_type, source_title,
+                 raw_score, source_url, source_type, source_title, notes,
                  benchmark_condition_snapshot, model_condition_snapshot,
                  submitted_by, moderation_log_ID, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'accepted')`,
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'accepted')`,
         [
             modelID,
             modelConditionID,
@@ -3961,6 +4050,7 @@ async function applyBenchmarkResult(connection, content, metadata) {
             resultContent.source.url,
             resultContent.source.type,
             resultContent.source.title || null,
+            resultContent.notes,
             JSON.stringify(benchmarkConditionSnapshot(benchmarkCondition)),
             JSON.stringify(modelConditionSnapshot(modelCondition)),
             metadata.submittedBy ?? null,
@@ -3970,6 +4060,10 @@ async function applyBenchmarkResult(connection, content, metadata) {
 }
 
 async function applyModerationContent(connection, content, metadata = {}) {
+    if (content.type === 'discussion_report') {
+        await applyDiscussionReport(connection, content);
+        return;
+    }
     await validateContributionStructureForSubmission(
         connection,
         content,
@@ -4130,6 +4224,7 @@ API.post('/submit_contribution', requireAuthForAPI, async (req, res) => {
             };
         }
         content = await prepareEntityChangeForSubmission(workingConnection, content);
+        if (content.type === 'discussion_report') await validateDiscussionReport(workingConnection, content, req.user.ID);
         await validateContributionReferences(workingConnection, content, req.session.userID);
         await validateContributionStructureForSubmission(workingConnection, content, req.session.userID);
         await validateContributionEntitiesForSubmission(workingConnection, content);
@@ -4418,7 +4513,8 @@ async function mergePendingContributionCatalog(connection, catalogData, pendingR
                         pending: true,
                         moderationLogID,
                         modelID: model.ID,
-                        conditionKey: slugifyIdentifier(condition.name, 'condition')
+                        conditionKey: modelConditionKey(condition),
+                        parameters: condition.parameters
                     });
                 }
             }
@@ -4499,7 +4595,7 @@ async function mergePendingContributionCatalog(connection, catalogData, pendingR
 API.post('/get_contribution_catalog', async (req, res) => {
     const userID = await activeSessionUserID(req);
     const [benchmarks] = await db.execute(`
-        SELECT ID, name, introduction_url AS introductionURL
+        SELECT ID, name, introduction_url AS introductionURL, notes
         FROM benchmarks
         WHERE is_active = 1
         ORDER BY name, ID`);
@@ -4525,18 +4621,19 @@ API.post('/get_contribution_catalog', async (req, res) => {
                vendors.ID AS vendorID, vendors.slug AS vendorSlug,
                vendors.name AS vendorName, vendors.logo_key AS vendorLogoKey
         FROM models
-        JOIN vendors ON vendors.ID = models.vendor_ID
+        JOIN organizations vendors ON vendors.ID = models.vendor_ID
         WHERE models.is_active = 1
         ORDER BY models.name, models.ID`);
     const [modelConditions] = await db.execute(`
-        SELECT ID, model_ID AS modelID, condition_key AS conditionKey, name,
+        SELECT ID, model_ID AS modelID, condition_key AS conditionKey, name, parameters,
                is_default AS isDefault
         FROM model_conditions
         WHERE is_active = 1
         ORDER BY model_ID, is_default DESC, name, ID`);
     const [vendors] = await db.execute(`
         SELECT ID, slug, name, logo_key AS logoKey
-        FROM vendors
+        FROM organizations vendors
+        WHERE is_active = 1
         ORDER BY name, ID`);
     const [categories] = await db.execute(`
         SELECT categories.ID, categories.parent_ID AS parentID, categories.name,
@@ -4598,6 +4695,7 @@ API.post('/get_contribution_catalog', async (req, res) => {
             ...condition,
             ID: Number(condition.ID),
             modelID,
+            parameters: parseJSONColumn(condition.parameters),
             isDefault: Boolean(condition.isDefault)
         });
     }
@@ -4671,11 +4769,17 @@ API.post('/get_contribution_target', requireAuthForAPI, async (req, res) => {
         throw { status: 400, body: { error: 'invalid_change_target_kind' } };
     }
     const targetID = normalizeRequiredPositiveInteger(req.body.targetID);
+    const form = await loadEntityChangeTarget(db, targetKind, targetID);
     res.json({
         targetKind,
         targetID,
-        form: await loadEntityChangeTarget(db, targetKind, targetID)
+        form
     });
+});
+
+API.post('/get_condition_impact', requireAuthForAPI, async (req, res) => {
+    res.json(await conditionImpact(db, normalizeString(req.body.targetKind, 32, true),
+        normalizeRequiredPositiveInteger(req.body.targetID), normalizeRequiredPositiveInteger(req.body.conditionID)));
 });
 
 async function adminMessagesSchemaExists(connection = db) {

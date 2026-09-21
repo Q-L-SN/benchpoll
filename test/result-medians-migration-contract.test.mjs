@@ -35,7 +35,7 @@ test('new score approval appends accepted evidence instead of replacing its peer
     assert.notEqual(end, -1);
     const applyResult = server.slice(start, end);
     assert.match(applyResult, /INSERT INTO benchmark_results/);
-    assert.doesNotMatch(applyResult, /SELECT ID[\s\S]*FROM benchmark_results/);
+    assert.match(applyResult, /score_evidence_already_exists/);
     assert.doesNotMatch(applyResult, /SET status = 'superseded'/);
     assert.doesNotMatch(applyResult, /multiple_accepted_results/);
 });

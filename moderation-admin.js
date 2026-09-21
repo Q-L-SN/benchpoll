@@ -17,7 +17,7 @@ const EXPLORER_ENTITIES = {
         ],
         select: `
             benchmarks.ID AS id, benchmarks.name,
-            benchmarks.introduction_url AS introductionURL,
+            benchmarks.introduction_url AS introductionURL, benchmarks.notes,
             benchmarks.is_active AS isActive,
             (SELECT COUNT(*) FROM benchmark_conditions
              WHERE benchmark_conditions.benchmark_ID = benchmarks.ID) AS conditionCount,
@@ -84,7 +84,7 @@ const EXPLORER_ENTITIES = {
         select: `
             models.ID AS id, models.vendor_ID AS vendorID,
             vendors.name AS vendorName, vendors.slug AS vendorSlug,
-            models.slug, models.name, models.introduction_url AS introductionURL,
+            models.slug, models.name, models.introduction_url AS introductionURL, models.notes,
             models.is_active AS isActive,
             (SELECT COUNT(*) FROM model_conditions
              WHERE model_conditions.model_ID = models.ID) AS conditionCount,
@@ -92,7 +92,7 @@ const EXPLORER_ENTITIES = {
              WHERE benchmark_results.model_ID = models.ID
                AND benchmark_results.status = 'accepted') AS resultCount,
             models.created_at AS createdAt, models.updated_at AS updatedAt`,
-        from: 'FROM models JOIN vendors ON vendors.ID = models.vendor_ID',
+        from: 'FROM models JOIN organizations vendors ON vendors.ID = models.vendor_ID',
         search: "CONCAT_WS(' ', models.ID, vendors.name, models.name, models.slug, COALESCE(models.introduction_url, ''))",
         orderBy: 'models.updated_at DESC, models.ID DESC'
     },
@@ -110,7 +110,7 @@ const EXPLORER_ENTITIES = {
         select: `
             model_conditions.ID AS id, model_conditions.model_ID AS modelID,
             vendors.name AS vendorName, models.name AS modelName,
-            model_conditions.condition_key AS conditionKey, model_conditions.name,
+            model_conditions.condition_key AS conditionKey, model_conditions.name, model_conditions.parameters,
             model_conditions.is_default AS isDefault, model_conditions.is_active AS isActive,
             (SELECT COUNT(*) FROM benchmark_results
              WHERE benchmark_results.model_condition_ID = model_conditions.ID
@@ -118,7 +118,7 @@ const EXPLORER_ENTITIES = {
             model_conditions.created_at AS createdAt, model_conditions.updated_at AS updatedAt`,
         from: `FROM model_conditions
                JOIN models ON models.ID = model_conditions.model_ID
-               JOIN vendors ON vendors.ID = models.vendor_ID`,
+               JOIN organizations vendors ON vendors.ID = models.vendor_ID`,
         search: "CONCAT_WS(' ', model_conditions.ID, vendors.name, models.name, model_conditions.name, model_conditions.condition_key)",
         orderBy: 'model_conditions.updated_at DESC, model_conditions.ID DESC'
     },
@@ -143,7 +143,7 @@ const EXPLORER_ENTITIES = {
             benchmarks.name AS benchmarkName,
             benchmark_conditions.name AS benchmarkCondition,
             benchmark_results.raw_score AS rawScore,
-            benchmark_results.source_url AS sourceURL,
+            benchmark_results.source_url AS sourceURL, benchmark_results.notes,
             benchmark_results.source_type AS sourceType,
             benchmark_results.source_title AS sourceTitle,
             benchmark_results.benchmark_condition_snapshot AS benchmarkConditionSnapshot,
@@ -155,7 +155,7 @@ const EXPLORER_ENTITIES = {
             benchmark_results.updated_at AS updatedAt`,
         from: `FROM benchmark_results
                JOIN models ON models.ID = benchmark_results.model_ID
-               JOIN vendors ON vendors.ID = models.vendor_ID
+               JOIN organizations vendors ON vendors.ID = models.vendor_ID
                JOIN model_conditions ON model_conditions.ID = benchmark_results.model_condition_ID
                JOIN benchmarks ON benchmarks.ID = benchmark_results.benchmark_ID
                JOIN benchmark_conditions ON benchmark_conditions.ID = benchmark_results.benchmark_condition_ID`,
@@ -182,19 +182,22 @@ const EXPLORER_ENTITIES = {
         orderBy: 'benchmark_tags.name, benchmark_tags.ID'
     },
     vendors: {
-        label: 'Vendors',
+        label: 'Organizations',
         actionKeys: [],
         columns: [
             { key: 'id', label: 'ID' },
-            { key: 'name', label: 'Vendor' },
+            { key: 'name', label: 'Organization' },
+            { key: 'isModelVendor', label: 'Model vendor', type: 'boolean' },
             { key: 'modelCount', label: 'Models' },
             { key: 'updatedAt', label: 'Updated', type: 'date' }
         ],
         select: `
             vendors.ID AS id, vendors.slug, vendors.name, vendors.logo_key AS logoKey,
+            vendors.is_model_vendor AS isModelVendor,
+            vendors.is_active AS isActive,
             (SELECT COUNT(*) FROM models WHERE models.vendor_ID = vendors.ID) AS modelCount,
             vendors.created_at AS createdAt, vendors.updated_at AS updatedAt`,
-        from: 'FROM vendors',
+        from: 'FROM organizations vendors',
         search: "CONCAT_WS(' ', vendors.ID, vendors.name, vendors.slug)",
         orderBy: 'vendors.name, vendors.ID'
     },
@@ -209,7 +212,7 @@ const EXPLORER_ENTITIES = {
             { key: 'isActive', label: 'Active', type: 'boolean' }
         ],
         select: `
-            categories.ID AS id, categories.parent_ID AS parentID,
+            categories.ID AS id, categories.parent_ID AS parentID, categories.notes,
             categories.name, parent.name AS parentName, categories.is_active AS isActive,
             (SELECT COUNT(*) FROM categories AS child WHERE child.parent_ID = categories.ID) AS childCount,
             (SELECT COUNT(*) FROM ranking_dimensions
@@ -230,7 +233,7 @@ const EXPLORER_ENTITIES = {
             { key: 'isActive', label: 'Active', type: 'boolean' }
         ],
         select: `
-            ranking_dimensions.ID AS id,
+            ranking_dimensions.ID AS id, ranking_dimensions.notes,
             ranking_dimensions.scope_category_ID AS scopeCategoryID,
             categories.name AS categoryName,
             ranking_dimensions.dimension_key AS dimensionKey,
@@ -421,6 +424,7 @@ export function createModerationAuditRecorder(connection) {
 
 export function moderationRequestSummary(content) {
     const type = String(content?.type ?? 'unknown');
+    if (type === 'discussion_report') return `Discussion report #${content.postID}: ${content.reason}`;
     if (type === 'new_benchmark') {
         const items = Array.isArray(content.benchmarks) ? content.benchmarks : [];
         return items[0]?.name

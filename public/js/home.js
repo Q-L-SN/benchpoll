@@ -1,4 +1,5 @@
 import { workspaceChannel } from './shared/workspace-channel.js';
+import { buildContributionURL as buildContributeURL } from './shared/contribution-navigation.js?v=clean-20260908';
 import * as S from '/js/shared.js';
 import * as G from '/js/global.js';
 
@@ -47,17 +48,6 @@ function appendCategoryPath(path, name) {
 
 function rankingURL(path = currentCategoryPath) {
     return path ? `/rankings/${path}` : '/';
-}
-
-function buildContributeURL(mode, context = {}) {
-    const url = new URL('/contribute', window.location.origin);
-    url.searchParams.set('mode', mode);
-    Object.entries(context).forEach(([key, value]) => {
-        if (value !== null && value !== undefined && String(value).trim() !== '') {
-            url.searchParams.set(key, String(value));
-        }
-    });
-    return `${url.pathname}${url.search}`;
 }
 
 async function postJSON(url, body = {}) {

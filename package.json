@@ -6,7 +6,11 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "lint": "eslint server.js ranking-service.js moderation-admin.js db.js public/js scripts test",
+    "lint": "eslint server.js ranking-service.js condition-impact.js model-comparison.js score-aggregation.js discussion-service.js moderation-admin.js db.js public/js scripts test",
+    "migrate:model-parameters": "node scripts/migrate-model-parameters.mjs --apply",
+    "migrate:object-notes": "node scripts/migrate-object-notes.mjs --apply",
+    "migrate:discussions": "node scripts/migrate-discussions.mjs --apply",
+    "migrate:remove-score-providers": "node scripts/migrate-remove-score-providers.mjs --apply",
     "test": "node --test",
     "check:ranking-integrity": "node scripts/check-ranking-integrity.mjs",
     "migrate:session-integrity": "node scripts/migrate-session-integrity.mjs --apply",

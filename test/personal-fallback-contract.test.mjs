@@ -52,7 +52,7 @@ test('homepage edits Fallback inline and saves it atomically with the personal p
     assert.match(workspace, /personalFallbackRules:\s*\[\]/);
     assert.match(workspace, /publicFallbackRules:\s*\[\]/);
     assert.match(workspace, /serverPersonalFallbackRules:\s*\[\]/);
-    assert.match(workspace, /fallbackRules\s*\n\s*\}/);
+    assert.match(workspace, /fallbackRules,\s*comparison: state\.comparisonRequest/);
     assert.match(workspace, /function snapshotPersonalPie\(\)/);
     assert.match(workspace, /fallbackRules:\s*cloneFallbackRules\(state\.personalFallbackRules\)/);
     assert.match(workspace, /function renderInlineFallback\(\)/);
@@ -64,7 +64,8 @@ test('homepage edits Fallback inline and saves it atomically with the personal p
     assert.match(workspace, /const retainedSegments = new Set\(\)/);
     assert.match(workspace, /insertBefore\(segment, currentAtIndex \?\? null\)/);
     assert.match(workspace, /fallbackWheelCommitTimer = window\.setTimeout\([\s\S]*WHEEL_WEIGHT_COMMIT_IDLE_MS/);
-    assert.match(workspace, /hasFallback \? 'fallback' : ''/);
+    assert.match(workspace, /showFallbackIcon = state\.mode === 'personal' && hasFallback/);
+    assert.match(workspace, /showFallbackIcon \? 'fallback' : ''/);
     assert.match(workspace, /function publicFallbackRuleFor\(primaryConditionID\)/);
     assert.match(workspace, /publicFallbackToggle\.addEventListener\('click'/);
     assert.match(styles, /\.bp-inline-fallback-chart\s*\{[^}]*display:\s*flex[^}]*overflow:\s*hidden/s);
@@ -74,13 +75,13 @@ test('homepage edits Fallback inline and saves it atomically with the personal p
     assert.doesNotMatch(styles, /\.bp-fallback-dialog\s*\{/);
 });
 
-test('public scoring remains rule-free while personal scoring receives OR rules', () => {
+test('public scoring receives aggregated rules while personal scoring keeps its own rules', () => {
     const workspaceBuilder = ranking.slice(
         ranking.indexOf('export async function getRankingWorkspace'),
         ranking.indexOf('function validatePieEntries')
     );
-    assert.match(workspaceBuilder, /personal:\s*scoreModels\([\s\S]*fallbackRules:\s*personalSourceFallbackRules/);
-    assert.match(workspaceBuilder, /publicPie:\s*\{[\s\S]*fallbackRules:\s*\[\]/);
-    const publicCall = workspaceBuilder.slice(workspaceBuilder.indexOf('public: scoreModels'));
-    assert.doesNotMatch(publicCall, /fallbackRules:/);
+    assert.match(workspaceBuilder, /personal:\s*scoreComparison\([\s\S]*fallbackRules:\s*personalSourceFallbackRules/);
+    assert.match(workspaceBuilder, /publicPie:\s*\{[\s\S]*fallbackRules:\s*decorateFallbackRules\(publicPie\.fallbackRules/);
+    const publicCall = workspaceBuilder.slice(workspaceBuilder.indexOf('public: scoreComparison'));
+    assert.match(publicCall, /fallbackRules:\s*publicPie\.fallbackRules, fallbackScope: 'public'/);
 });

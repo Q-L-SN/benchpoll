@@ -1,4 +1,5 @@
 import * as G from '/js/global.js';
+import { buildContributionURL } from './shared/contribution-navigation.js?v=clean-20260908';
 import { initializeOverlays } from './shared/overlays.js';
 
 initializeOverlays([...document.querySelectorAll('.moderation-overlay')]);
@@ -85,6 +86,11 @@ const issueTypeLabels = {
 };
 
 const requestFields = {
+    discussion_report: [
+        { name: 'postID', label: 'Discussion post ID', type: 'number', min: 1, required: true },
+        { name: 'reason', label: 'Reason', type: 'select', required: true, options: [['spam', 'Spam'], ['harassment', 'Harassment'], ['misinformation', 'Misinformation'], ['other', 'Other']] },
+        { name: 'details', label: 'Reason and notes', type: 'textarea', required: true, maxLength: 4000, wide: true }
+    ],
     feedback: [
         { name: 'pageURL', label: 'Page URL', type: 'url', maxLength: 512, wide: true },
         { name: 'details', label: 'Feedback', type: 'textarea', required: true, maxLength: 4000, wide: true }
@@ -221,6 +227,7 @@ function entityChangeTargetName(content) {
 
 function getHeading(log) {
     const type = normalizeRequestType(log.content.type);
+    if (type === 'discussion_report') return `Report: discussion post #${log.content.postID}`;
     if (type === 'feedback') {
         return 'BenchPoll feedback';
     }
@@ -247,7 +254,7 @@ function getHeading(log) {
             : `${model} + ${log.content.results.length - 1} more results`;
     }
     if (type === 'entity_change') {
-        const action = log.content.operation === 'delete' ? 'Delete' : 'Change';
+        const action = log.content.operation === 'delete' ? 'Delete' : log.content.operation === 'merge' ? 'Merge' : 'Change';
         return `${action} ${entityChangeTargetName(log.content)}`;
     }
     return log.content.targetName;
@@ -299,7 +306,17 @@ function createField(name, value) {
 
 function appendContentFields(fields, log) {
     const type = normalizeRequestType(log.content.type);
-    if (type === 'new_benchmark') {
+    if (type === 'discussion_report') {
+        fields.append(...createField('Reason', log.content.reason), ...createField('Notes', log.content.details),
+            ...createField('Approval effect', 'Hide this post. If it starts a thread, its replies also disappear from public views.'));
+        const preview = document.createElement('pre');
+        preview.className = 'json-value';
+        preview.textContent = 'Loading reported content...';
+        fields.append(preview);
+        postJSON('/api/get_reported_discussion', { postID: log.content.postID })
+            .then(response => response.json()).then(post => { preview.textContent = JSON.stringify(post, null, 2); })
+            .catch(() => { preview.textContent = 'Could not load reported content. Reload before reviewing.'; });
+    } else if (type === 'new_benchmark') {
         fields.append(...createField('Batch Size', log.content.benchmarks?.length ?? 0));
         (log.content.benchmarks ?? []).forEach((benchmark, index) => {
             fields.append(...createField(`Benchmark ${index + 1}`, benchmark));
@@ -339,12 +356,13 @@ function appendContentFields(fields, log) {
             after: change.after
         }));
         fields.append(
-            ...createField('Operation', log.content.operation === 'delete' ? 'Delete' : 'Update'),
+            ...createField('Operation', log.content.operation === 'delete' ? 'Delete' : log.content.operation === 'merge' ? 'Merge' : 'Update'),
             ...createField('Target', `${log.content.targetKind} #${log.content.targetID}`),
             ...createField('Object', entityChangeTargetName(log.content)),
             ...createField('Requested Changes', changes),
             ...createField('Reviewer Notes', log.content.reviewNotes)
         );
+        if (log.content.operation === 'merge') fields.append(...createField('Merge destination', log.content.after));
     } else {
         fields.append(
             ...createField('Issue Type', issueTypeLabels[log.content.issueType] ?? log.content.issueType),
@@ -522,28 +540,28 @@ function populateExplorerEntities(entities) {
 
 const EXPLORER_CONTRIBUTION_FORMS = Object.freeze({
     benchmarks: {
-        create: () => '/contribute?mode=new_benchmark',
-        update: row => `/contribute?mode=edit_benchmark&targetBenchmarkID=${encodeURIComponent(row.id)}`,
-        delete: row => `/contribute?mode=edit_benchmark&targetBenchmarkID=${encodeURIComponent(row.id)}&operation=delete`
+        create: () => buildContributionURL('new_benchmark'),
+        update: row => buildContributionURL('edit_benchmark', { targetBenchmarkID: row.id }),
+        delete: row => buildContributionURL('edit_benchmark', { targetBenchmarkID: row.id, operation: 'delete' })
     },
     benchmark_conditions: {
-        update: row => `/contribute?mode=edit_benchmark&targetBenchmarkID=${encodeURIComponent(row.benchmarkID)}`
+        update: row => buildContributionURL('edit_benchmark', { targetBenchmarkID: row.benchmarkID })
     },
     models: {
-        create: () => '/contribute?mode=new_model',
-        update: row => `/contribute?mode=edit_model&targetModelID=${encodeURIComponent(row.id)}`,
-        delete: row => `/contribute?mode=edit_model&targetModelID=${encodeURIComponent(row.id)}&operation=delete`
+        create: () => buildContributionURL('new_model'),
+        update: row => buildContributionURL('edit_model', { targetModelID: row.id }),
+        delete: row => buildContributionURL('edit_model', { targetModelID: row.id, operation: 'delete' })
     },
     model_conditions: {
-        update: row => `/contribute?mode=edit_model&targetModelID=${encodeURIComponent(row.modelID)}`
+        update: row => buildContributionURL('edit_model', { targetModelID: row.modelID })
     },
     benchmark_results: {
-        create: () => '/contribute?mode=benchmark_result',
-        update: row => `/contribute?mode=edit_result&targetResultID=${encodeURIComponent(row.id)}`,
-        delete: row => `/contribute?mode=edit_result&targetResultID=${encodeURIComponent(row.id)}&operation=delete`
+        create: () => buildContributionURL('benchmark_result'),
+        update: row => buildContributionURL('edit_result', { targetResultID: row.id }),
+        delete: row => buildContributionURL('edit_result', { targetResultID: row.id, operation: 'delete' })
     },
     categories: {
-        create: () => '/contribute?mode=new_category'
+        create: () => buildContributionURL('new_category')
     }
 });
 
@@ -553,7 +571,7 @@ function explorerContributionURL(operation, row = null) {
         return null;
     }
     const url = factory(row);
-    return typeof url === 'string' && url.startsWith('/contribute?') ? url : null;
+    return typeof url === 'string' && url.startsWith('/contribute/') ? url : null;
 }
 
 function openContributionForm(operation, row = null) {

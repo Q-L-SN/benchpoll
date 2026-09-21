@@ -1,13 +1,7 @@
+import { buildContributionURL } from '../shared/contribution-navigation.js?v=clean-20260908';
+
 function contributionEditURL(mode, values) {
-    const url = new URL('/contribute', window.location.origin);
-    url.searchParams.set('mode', mode);
-    Object.entries(values).forEach(([key, value]) => {
-        if (value !== null && value !== undefined && String(value) !== '') {
-            url.searchParams.set(key, String(value));
-        }
-    });
-    url.searchParams.set('pageURL', window.location.href);
-    return url.pathname + url.search;
+    return buildContributionURL(mode, values);
 }
 
 function buildBenchmarkEditURL(object) {

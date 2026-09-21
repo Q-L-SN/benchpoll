@@ -1,6 +1,6 @@
 /* Shared styles split by responsibility; no build step required. */
 @import url('./ui/tokens.css');
-@import url('./ui/shell.css');
-@import url('./ui/workspace.css');
-@import url('./ui/fallback.css');
+@import url('./ui/shell.css?v=brand-20260919');
+@import url('./ui/workspace.css?v=compact-discussion-20260908');
+@import url('./ui/fallback.css?v=public-fallback-20260906');
 @import url('./ui/evidence.css');

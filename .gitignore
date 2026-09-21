@@ -12,3 +12,4 @@ github-contribution-secret.local
 server.key
 server.crt
 artifacts/frontend/
+/artifacts/

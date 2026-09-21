@@ -1,0 +1,11 @@
+[Unit]
+Description=Run BenchPoll database backup daily at 03:15 UTC
+
+[Timer]
+OnCalendar=*-*-* 03:15:00 UTC
+Persistent=true
+RandomizedDelaySec=5min
+Unit=benchpoll-db-backup.service
+
+[Install]
+WantedBy=timers.target

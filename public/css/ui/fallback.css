@@ -5,7 +5,7 @@
     gap: 8px;
     margin: 0 16px 8px;
     padding-top: 12px;
-    border-top: 1px solid var(--bp-line);
+    border-top: 0;
 }
 
 .bp-inline-fallback-toolbar  {
@@ -177,6 +177,34 @@
 
 .bp-inline-fallback-chart.is-disabled, .bp-inline-fallback.is-readonly .bp-inline-fallback-chart  {
     cursor: default;
+}
+
+.bp-inline-fallback.is-readonly .bp-inline-fallback-chart {
+    touch-action: pan-y;
+}
+
+.bp-inline-fallback.is-readonly .bp-inline-fallback-segment {
+    padding-inline: 0;
+    border: 0;
+}
+
+.bp-public-fallback-unconfigured {
+    display: grid;
+    flex: 0 0 var(--bp-fallback-weight);
+    min-width: 0;
+    align-content: center;
+    overflow: hidden;
+    background: #edf0f4;
+    color: var(--bp-muted);
+    font-size: 11px;
+    text-align: center;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.bp-public-fallback-unconfigured span {
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .bp-inline-fallback-empty  {

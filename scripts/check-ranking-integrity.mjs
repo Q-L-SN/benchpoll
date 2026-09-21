@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { normalizeModelParameters, modelParameterLabel } from '../public/js/shared/model-parameters.js';
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -588,6 +589,10 @@ try {
         SELECT COUNT(*) AS count
         FROM benchmark_results
         WHERE status = 'accepted' AND TRIM(source_url) = ''`));
+    record('obsolete score provider columns', await scalar(connection, `SELECT COUNT(*) AS count
+        FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE()
+        AND ((TABLE_NAME = 'benchmark_results' AND COLUMN_NAME = 'provider_organization_ID')
+          OR (TABLE_NAME = 'organizations' AND COLUMN_NAME = 'is_score_provider'))`));
     record('accepted results with invalid condition snapshots', await scalar(connection, `
         SELECT COUNT(*) AS count
         FROM benchmark_results
@@ -614,12 +619,21 @@ try {
                     benchmark_results.model_condition_snapshot,
                     '$.modelID'
                   )) AS UNSIGNED) <> benchmark_results.model_ID)`));
-    record('active model condition default flags that disagree with the literal default name', await scalar(connection, `
-        SELECT COUNT(*) AS count
-        FROM model_conditions
-        WHERE is_active = 1
-          AND (is_default <> (LOWER(TRIM(name)) = 'default')
-               OR (condition_key = 'default') <> (LOWER(TRIM(name)) = 'default'))`));
+    record('model parameters migration missing', await scalar(connection, `
+        SELECT CASE WHEN EXISTS(SELECT 1 FROM schema_migrations WHERE migration_id = '028_model_parameters') THEN 0 ELSE 1 END AS count`));
+    const [modelConditions] = await connection.query('SELECT ID, parameters, name, condition_key, is_default FROM model_conditions WHERE is_active = 1');
+    let invalidParameters = 0;
+    for (const condition of modelConditions) {
+        try {
+            const parameters = condition.parameters === null ? null : normalizeModelParameters(
+                typeof condition.parameters === 'string' ? JSON.parse(condition.parameters) : condition.parameters);
+            const key = parameters === null ? `unconfigured-${condition.ID}`
+                : 'kv-' + crypto.createHash('sha256').update(JSON.stringify(parameters)).digest('hex');
+            if (condition.name !== modelParameterLabel(parameters, condition.ID).slice(0, 192)
+                || condition.condition_key !== key || Boolean(condition.is_default) !== (parameters !== null && Object.keys(parameters).length === 0)) invalidParameters++;
+        } catch { invalidParameters++; }
+    }
+    record('model parameters or derived labels are invalid', invalidParameters);
     record('active benchmark condition default flags that disagree with the literal default name', await scalar(connection, `
         SELECT COUNT(*) AS count
         FROM benchmark_conditions
@@ -655,14 +669,14 @@ try {
           AND COALESCE((
               JSON_TYPE(JSON_EXTRACT(content, '$.schemaVersion')) = 'INTEGER'
               AND (
-                  (JSON_UNQUOTE(JSON_EXTRACT(content, '$.type')) IN ('feedback', 'report_issue')
+                  (JSON_UNQUOTE(JSON_EXTRACT(content, '$.type')) IN ('feedback', 'report_issue', 'discussion_report')
                    AND JSON_EXTRACT(content, '$.schemaVersion') = 1)
                   OR
                   (JSON_UNQUOTE(JSON_EXTRACT(content, '$.type')) IN ('new_category', 'new_benchmark', 'new_model')
                    AND JSON_EXTRACT(content, '$.schemaVersion') = 5)
                   OR
                   (JSON_UNQUOTE(JSON_EXTRACT(content, '$.type')) = 'benchmark_result'
-                   AND JSON_EXTRACT(content, '$.schemaVersion') = 6)
+                   AND JSON_EXTRACT(content, '$.schemaVersion') = 8)
                   OR
                   (JSON_UNQUOTE(JSON_EXTRACT(content, '$.type')) = 'entity_change'
                    AND (
@@ -670,7 +684,7 @@ try {
                         AND JSON_EXTRACT(content, '$.schemaVersion') = 5)
                        OR
                        (JSON_UNQUOTE(JSON_EXTRACT(content, '$.targetKind')) = 'result'
-                        AND JSON_EXTRACT(content, '$.schemaVersion') = 6)
+                        AND JSON_EXTRACT(content, '$.schemaVersion') = 8)
                    ))
               )
           ), 0) = 0`));

@@ -229,6 +229,7 @@ test('OR fallbacks resolve direct scores only and never recurse', () => {
 
 test('model results use the median of every accepted normalized score globally', async () => {
     const baseRow = {
+        source_url: 'https://example.com/results',
         model_ID: 3,
         model_name: 'Median Model',
         introductionURL: null,
@@ -236,7 +237,7 @@ test('model results use the median of every accepted normalized score globally',
         vendor_slug: 'example-lab',
         logo_key: null,
         model_condition_ID: 7,
-        model_condition_name: 'default',
+        model_condition_name: 'default', parameters: {},
         condition_key: 'default',
         model_condition_is_default: 1,
         benchmark_condition_ID: 21,
@@ -263,6 +264,7 @@ test('model results use the median of every accepted normalized score globally',
 
 test('median aggregation happens after normalization for closer-to-target scores', async () => {
     const baseRow = {
+        source_url: 'https://example.com/results',
         model_ID: 3,
         model_name: 'Target Model',
         introductionURL: null,
@@ -270,7 +272,7 @@ test('median aggregation happens after normalization for closer-to-target scores
         vendor_slug: 'example-lab',
         logo_key: null,
         model_condition_ID: 7,
-        model_condition_name: 'default',
+        model_condition_name: 'default', parameters: {},
         condition_key: 'default',
         model_condition_is_default: 1,
         benchmark_condition_ID: 22,
@@ -527,6 +529,7 @@ test('benchmark condition invariants reject custom rows without both normalizati
 test('public pie averages every user pie in the selected subtree by participant count', async () => {
     const connection = {
         async execute(sql) {
+            if (sql.includes('FROM personal_pie_score_rules')) return [[], []];
             if (sql.includes('WITH RECURSIVE category_scope')) {
                 return [[
                     { ID: 10, category_ID: 1, context_values: '{}' },
@@ -564,6 +567,7 @@ test('public pie averages every user pie in the selected subtree by participant 
 test('public pie weights contexts by valid personal-pie count, with absent benchmarks contributing zero', async () => {
     const connection = {
         async execute(sql) {
+            if (sql.includes('FROM personal_pie_score_rules')) return [[], []];
             if (sql.includes('WITH RECURSIVE category_scope')) {
                 return [[
                     { ID: 10, category_ID: 1, context_values: '{}' },
@@ -595,6 +599,7 @@ test('public pie weights contexts by valid personal-pie count, with absent bench
 test('empty personal pies are excluded rather than counted or treated as corrupt partial pies', async () => {
     const connection = {
         async execute(sql) {
+            if (sql.includes('FROM personal_pie_score_rules')) return [[], []];
             if (sql.includes('WITH RECURSIVE category_scope')) {
                 return [[{ ID: 10, category_ID: 1, context_values: '{}' }], []];
             }
@@ -619,6 +624,7 @@ test('empty personal pies are excluded rather than counted or treated as corrupt
 test('public pie traverses only active categories and applies no age-based sample amplification', async () => {
     const connection = {
         async execute(sql) {
+            if (sql.includes('FROM personal_pie_score_rules')) return [[], []];
             if (sql.includes('WITH RECURSIVE category_scope')) {
                 assert.match(sql, /WHERE ID = \?\s+AND is_active = 1/);
                 assert.match(sql, /child\.is_active = 1/);
@@ -660,6 +666,7 @@ test('neutral contexts include every child option while a specific context exclu
     ];
     const connection = {
         async execute(sql, params) {
+            if (sql.includes('FROM personal_pie_score_rules')) return [[], []];
             if (sql.includes('WITH RECURSIVE category_scope')) {
                 return [contextRows, []];
             }

@@ -1,0 +1,29 @@
+.bp-comparison-toggle { border: 0; background: transparent; color: var(--bp-muted); padding: 6px; cursor: pointer; }
+.bp-comparison-toggle:hover, .bp-comparison-toggle[aria-expanded="true"] { color: var(--bp-accent); background: var(--bp-soft); }
+.bp-comparison-panel { padding: 12px 18px; border-bottom: 1px solid var(--bp-border); font-size: 12px; }
+.bp-comparison-panel[hidden] { display: none; }
+.bp-comparison-panel select { max-width: 100%; padding: 6px 8px; border: 1px solid var(--bp-border); border-radius: 5px; background: var(--bp-surface, white); color: inherit; }
+.bp-comparison-keys { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-top: 10px; max-height: 160px; overflow-y: auto; }
+.bp-comparison-keys label { display: inline-flex; gap: 5px; align-items: center; }
+.bp-comparison-keys input { accent-color: var(--bp-accent); }
+.bp-comparison-note { color: var(--bp-muted); font-size: 11px; line-height: 1.5; margin: 9px 0 0; }
+.bp-comparison-note.is-invalid { color: #b24d54; font-weight: 600; }
+.bp-model-row.is-incomparable { color: var(--bp-muted); }
+.bp-model-row.is-incomparable .bp-score-track { visibility: hidden; }
+.bp-model-row.is-incomparable .bp-model-score { font-size: 11px; }
+.model-parameter-editor { padding: 12px; border-bottom: 1px solid var(--bp-border, #e3e6ec); }
+.model-parameter-editor header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.model-parameter-editor header strong { margin-right: auto; font-size: 13px; }
+.model-parameter-pair { display: grid; grid-template-columns: minmax(90px, 1fr) minmax(90px, 1.5fr) 30px; gap: 8px; margin-bottom: 7px; }
+.model-parameter-pair input { width: 100%; min-width: 0; box-sizing: border-box; }
+.bp-contribute .model-parameter-pair > .field { grid-column: auto; margin: 0; }
+.model-parameter-editor > .condition-section-heading { display: flex; flex-direction: row; align-items: center; gap: 8px; }
+.model-parameter-editor > .condition-section-heading strong { margin-right: auto; }
+.model-parameter-editor > .condition-section-heading .condition-delete { width: 30px; flex: 0 0 30px; }
+.model-parameter-editor button { border: 0; background: transparent; color: inherit; cursor: pointer; }
+.model-parameter-editor button:hover { color: var(--bp-accent, #405f50); }
+.model-parameter-editor .parameter-unknown { font-size: 12px; color: var(--bp-muted, #758091); }
+.bp-model-scores-body .bp-inline-link { display: inline-block; border: 0; background: transparent; padding: 5px 0; margin-right: 14px; color: var(--bp-accent, #b44a14); font: inherit; text-align: left; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.bp-model-scores-body .bp-inline-link:hover { text-decoration-thickness: 2px; }
+.bp-model-scores-body .bp-model-score-detail-row > strong { display: block; padding-top: 8px; }
+.bp-model-scores-body .bp-model-score-detail-row > p { margin: 5px 0; color: var(--bp-muted, #687080); }

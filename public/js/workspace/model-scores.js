@@ -1,6 +1,6 @@
 import { postJSON } from '../shared/http.js';
-import { validateApprovedModelResultsPayload, invalidModelScoresResponse } from './contracts.js';
-import { buildResultEditURL } from './links.js';
+import { validateApprovedModelResultsPayload, invalidModelScoresResponse } from './contracts.js?v=score-values-20260907';
+import { buildResultEditURL } from './links.js?v=clean-urls-20260908';
 
 export function createModelScoresView({ state, modelScoresDialog, modelScoresTitle, modelScoresSummary, modelScoresList }) {
     let modelScoresRequestSequence = 0;
@@ -77,15 +77,16 @@ export function createModelScoresView({ state, modelScoresDialog, modelScoresTit
                 : group.benchmarkConditionName;
             benchmarkTitle.append(benchmarkCondition);
             const sampleDescription = document.createElement('small');
-            sampleDescription.textContent = group.sampleCount === 1
-                ? '1 accepted source score'
-                : `Median of ${group.sampleCount} accepted source scores`;
+            const distinctCount = group.distinctScoreCount;
+            sampleDescription.textContent = distinctCount === 1
+                ? '1 distinct score value'
+                : `Median of ${distinctCount} distinct score values`;
             identity.append(benchmarkTitle, sampleDescription);
 
             const aggregate = document.createElement('div');
             aggregate.className = 'bp-model-score-aggregate';
             const aggregateLabel = document.createElement('small');
-            aggregateLabel.textContent = group.sampleCount === 1 ? 'Reported score' : 'Reported median';
+            aggregateLabel.textContent = distinctCount === 1 ? 'Reported score' : 'Reported median';
             const aggregateValue = document.createElement('strong');
             aggregateValue.className = 'bp-model-score-detail-value';
             aggregateValue.textContent = approvedResultScore(group.medianRawScore, group.usesPercentageScale);
@@ -114,9 +115,11 @@ export function createModelScoresView({ state, modelScoresDialog, modelScoresTit
                 source.setAttribute('aria-label', `Open source for ${group.benchmarkName}`);
                 const sourceLabel = document.createElement('span');
                 sourceLabel.textContent = approvedResultSourceLabel(sample);
+                const duplicateNote = document.createElement('small');
+                duplicateNote.textContent = sample.excludedAsDuplicate ? 'Repeated score value; counted once' : '';
                 const sourceDate = document.createElement('small');
                 sourceDate.textContent = approvedResultDate(sample.createdAt);
-                source.append(sourceLabel, sourceDate, document.createElement('i'));
+                source.append(sourceLabel, duplicateNote, sourceDate, document.createElement('i'));
                 source.lastElementChild.className = 'fa-solid fa-arrow-up-right-from-square';
                 source.lastElementChild.setAttribute('aria-hidden', 'true');
                 const normalizedSample = document.createElement('span');
@@ -137,12 +140,47 @@ export function createModelScoresView({ state, modelScoresDialog, modelScoresTit
         });
     }
 
-    async function openApprovedModelResults(model) {
+    function renderComparisonResults(model) {
+        modelScoresSummary.textContent = `${model.members.length} recorded configurations · ${model.comparisonMode === 'matched' ? 'Matched conditions, equal weight per common configuration' : 'Best normalized score per benchmark'}`;
+        if (!model.comparable) modelScoresSummary.textContent += ' · No matched total for this weight mix';
+        for (const score of model.comparisonScores) {
+            const benchmark = state.benchmarks.find(item => Number(item.conditionID) === score.conditionID);
+            const row = document.createElement('article');
+            row.className = 'bp-model-score-detail-row';
+            const title = document.createElement('strong');
+            title.textContent = `${benchmark?.name ?? 'Benchmark'}${benchmark && !benchmark.isDefaultCondition ? ' / ' + benchmark.conditionName : ''}`;
+            const value = document.createElement('p');
+            value.textContent = `${score.normalizedScore.toFixed(2)} / 100${score.matchedCount === null ? ' · Best configuration' : ' · ' + score.matchedCount + ' matched configurations'}`;
+            row.append(title, value);
+            for (const ID of score.memberIDs) {
+                const member = model.members.find(item => item.ID === ID);
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'bp-inline-link';
+                button.textContent = member.name;
+                button.title = 'View this configuration’s approved source scores';
+                button.addEventListener('click', () => openApprovedModelResults(member, model));
+                row.append(button);
+            }
+            modelScoresList.append(row);
+        }
+        if (!model.comparisonScores.length) {
+            const empty = document.createElement('p');
+            empty.textContent = 'No common recorded conditions. Configure model parameters or change the comparison keys.';
+            modelScoresList.append(empty);
+        }
+    }
+
+    async function openApprovedModelResults(model, parentGroup = null) {
         const requestSequence = ++modelScoresRequestSequence;
         modelScoresTitle.textContent = `${model.name} · approved scores`;
         modelScoresSummary.textContent = 'Loading approved scores…';
         modelScoresList.replaceChildren();
         modelScoresDialog.hidden = false;
+        if (model.members && (model.members.length > 1 || model.comparisonMode === 'matched')) {
+            renderComparisonResults(model);
+            return;
+        }
         try {
             const payload = validateApprovedModelResultsPayload(await postJSON('/api/get_approved_benchmark_results', {
                 modelID: Number(model.modelID),
@@ -154,6 +192,14 @@ export function createModelScoresView({ state, modelScoresDialog, modelScoresTit
                 throw invalidModelScoresResponse('model', 'does not match the requested model condition');
             }
             renderApprovedModelResults(payload);
+            if (parentGroup) {
+                const back = document.createElement('button');
+                back.type = 'button';
+                back.className = 'bp-inline-link';
+                back.textContent = 'Back to comparison';
+                back.addEventListener('click', () => openApprovedModelResults(parentGroup));
+                modelScoresSummary.prepend(back);
+            }
         } catch (error) {
             if (requestSequence !== modelScoresRequestSequence) return;
             modelScoresSummary.textContent = 'Approved scores could not be loaded.';

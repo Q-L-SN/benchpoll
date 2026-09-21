@@ -1,3 +1,4 @@
+import { normalizeModelParameters, modelParameterLabel, parameterRowsToObject } from '../public/js/shared/model-parameters.js';
 import { frontendSource } from './helpers/frontend-source.mjs';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
@@ -18,7 +19,7 @@ function between(source, startMarker, endMarker) {
 }
 
 function loadContributionContract() {
-    const sandbox = vm.createContext({ URL, crypto, structuredClone });
+    const sandbox = vm.createContext({ normalizeModelParameters, modelParameterLabel, parameterRowsToObject, URL, crypto, structuredClone });
     const normalization = between(server, 'function normalizeString(', 'function parseModerationContent(');
     const changeDiff = between(server, 'function canonicalChangeValue(', 'function entityChildSetChanges(');
     const moderationEdit = between(
@@ -49,11 +50,8 @@ function benchmarkCondition({ ID = 101, name = 'pass@1' } = {}) {
 }
 
 function modelCondition({ ID = 201, name = 'high reasoning' } = {}) {
-    return {
-        ID,
-        name,
-        isDefault: name.trim().toLowerCase() === 'default'
-    };
+    const parameters = name === 'default' ? {} : { effort: name };
+    return { ID, parameters, name: modelParameterLabel(parameters), isDefault: name === 'default' };
 }
 
 function benchmarkChangeRequest(condition = benchmarkCondition()) {
@@ -94,8 +92,11 @@ function modelChangeRequest(condition = modelCondition()) {
 function storedEntityChange(contract, request, beforeConditionName) {
     const normalized = contract.buildContributionContent(request);
     const before = structuredClone(normalized.after);
-    before.conditions[0].name = beforeConditionName;
-    before.conditions[0].isDefault = beforeConditionName.trim().toLowerCase() === 'default';
+    if (request.targetKind === 'model') before.conditions[0] = modelCondition({ ID: before.conditions[0].ID, name: beforeConditionName });
+    else {
+        before.conditions[0].name = beforeConditionName;
+        before.conditions[0].isDefault = beforeConditionName.trim().toLowerCase() === 'default';
+    }
     return {
         ...normalized,
         before,
@@ -119,11 +120,11 @@ test('external benchmark and model change requests preserve condition IDs by obj
     assert.equal(benchmark.after.conditions[1].name, 'pass@1');
     assert.equal(model.after.conditions[0].ID, 201);
     assert.equal(model.after.vendorID, 7);
-    assert.equal(model.after.conditions[0].name, 'high reasoning');
+    assert.equal(model.after.conditions[0].name, 'effort=high reasoning');
 });
 
 test('client change proposal builders keep each hydrated condition ID on that condition', () => {
-    const sandbox = vm.createContext({
+    const sandbox = vm.createContext({ normalizeModelParameters, modelParameterLabel, parameterRowsToObject,
         normalizedText: value => String(value ?? '').trim(),
         isLiteralDefaultCondition: value => String(value ?? '').trim().toLowerCase() === 'default',
         integerOrNull: value => Number.isInteger(Number(value)) ? Number(value) : null,
@@ -133,7 +134,7 @@ test('client change proposal builders keep each hydrated condition ID on that co
         evaluationScoreBounds: () => ({ min: null, max: null }),
         evaluationStoredTargetValue: () => null
     });
-    vm.runInContext(`${between(
+    vm.runInContext(`${between(client, 'function configurationValues(', 'function configurationRows(')}\n${between(
         client,
         'function evaluationProfileChangeProposal(',
         'function evaluationChangeProposal('
@@ -150,12 +151,12 @@ test('client change proposal builders keep each hydrated condition ID on that co
         scoreDirection: 'higher',
         targetValue: null
     }, {});
-    this.modelCondition = modelConfigurationChangeProposal({ ID: 201, name: 'high reasoning' });`, sandbox);
+    this.modelCondition = modelConfigurationChangeProposal({ ID: 201, parameterRows: [{ key: 'effort', value: 'high reasoning' }] });`, sandbox);
 
     assert.equal(sandbox.benchmarkCondition.ID, 101);
     assert.equal(sandbox.benchmarkCondition.name, 'pass@2');
     assert.equal(sandbox.modelCondition.ID, 201);
-    assert.equal(sandbox.modelCondition.name, 'high reasoning');
+    assert.equal(sandbox.modelCondition.name, 'effort=high reasoning');
 });
 
 test('change-form restoration follows condition IDs after another row is removed', () => {
@@ -294,6 +295,7 @@ test('canonical moderation records revalidate without using the external request
                 },
                 conditions: [{
                     clientRef: 'model-condition-one',
+                    parameters: {},
                     name: 'default',
                     isDefault: true
                 }]
@@ -463,6 +465,7 @@ test('new scores reject inactive benchmarks even if a condition row is still act
     const connection = {
         async execute(sql) {
             const statement = String(sql).replace(/\s+/g, ' ').trim();
+            if (statement.startsWith('SELECT ID FROM organizations')) return [[{ ID: 1 }], []];
             if (statement.startsWith('SELECT ID, is_active FROM models')) {
                 return [[{ ID: 22, is_active: 1 }], []];
             }
@@ -492,7 +495,7 @@ test('new scores reject inactive benchmarks even if a condition row is still act
                 modelConditionID: 201,
                 benchmarkID: 12,
                 benchmarkConditionID: 101,
-                rawScore: 80
+                rawScore: 80, source: {  }
             }]
         }),
         error => error?.body?.error === 'benchmark_not_found'
@@ -500,7 +503,7 @@ test('new scores reject inactive benchmarks even if a condition row is still act
 });
 
 function loadApplyContract(state) {
-    const sandbox = vm.createContext({
+    const sandbox = vm.createContext({ crypto, normalizeModelParameters,
         loadBenchmarkChangeTarget: async () => structuredClone(state.benchmarkCurrent),
         loadModelChangeTarget: async () => structuredClone(state.modelCurrent),
         assertEntityChangeIsCurrent() {},
@@ -514,7 +517,7 @@ function loadApplyContract(state) {
             state.modelInserts += 1;
         }
     });
-    vm.runInContext(`${between(
+    vm.runInContext(`${between(server, 'function modelConditionKey(', 'function normalizeModelCondition(')}\n${between(
         server,
         'function assertSingleConditionMutation(',
         'function entityChangeResultContent('
@@ -657,7 +660,7 @@ test('model condition rename updates the existing row without inserting a replac
     connection.execute = async function execute(sql, params = []) {
         const statement = String(sql).replace(/\s+/g, ' ').trim();
         this.statements.push({ statement, params: structuredClone(params) });
-        if (statement.startsWith('SELECT name FROM vendors ')) return [[{ name: 'Vendor' }], []];
+        if (statement.startsWith('SELECT name FROM organizations vendors ')) return [[{ name: 'Vendor' }], []];
         if (statement.startsWith('SELECT ID FROM models WHERE slug =')) return [[], []];
         if (statement.startsWith('UPDATE models ')) return mutationResult();
         if (statement.startsWith('UPDATE model_conditions SET condition_key = ?, is_default = 0 WHERE')) {
@@ -667,11 +670,12 @@ test('model condition rename updates the existing row without inserting a replac
             return mutationResult();
         }
         if (statement.startsWith('UPDATE model_conditions SET condition_key = ?, name = ?')) {
-            const row = this.modelRows.find(candidate => candidate.ID === params[3] && candidate.modelID === params[4]);
+            const row = this.modelRows.find(candidate => candidate.ID === params[4] && candidate.modelID === params[5]);
             if (!row) return mutationResult(0);
             row.conditionKey = params[0];
             row.name = params[1];
-            row.isDefault = Boolean(params[2]);
+            row.parameters = JSON.parse(params[2]);
+            row.isDefault = Boolean(params[3]);
             return mutationResult();
         }
         throw new Error(`Unexpected SQL in model identity test: ${statement}`);
@@ -689,7 +693,8 @@ test('model condition rename updates the existing row without inserting a replac
     });
 
     assert.equal(connection.modelRows[0].ID, 201);
-    assert.equal(connection.modelRows[0].name, 'high reasoning');
+    assert.equal(connection.modelRows[0].name, 'effort=high reasoning');
+    assert.deepEqual(connection.modelRows[0].parameters, { effort: 'high reasoning' });
     assert.equal(state.modelInserts, 0);
 });
 

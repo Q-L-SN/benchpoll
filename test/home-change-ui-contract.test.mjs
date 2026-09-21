@@ -49,7 +49,7 @@ test('model score details load and group accepted samples for the selected model
     assert.match(workspace, /validateApprovedModelResultsPayload/);
     assert.match(workspace, /typeof model\.vendorName !== 'string'/);
     assert.match(workspace, /Model condition/);
-    assert.match(workspace, /Median of \$\{group\.sampleCount\} accepted source scores/);
+    assert.match(workspace, /Median of \$\{distinctCount\} distinct score values/);
     assert.match(workspace, /Ranking value \$\{Number\(group\.medianNormalizedScore\)\.toFixed\(2\)\} \/ 100/);
     assert.match(workspace, /benchmarkCondition\.className = 'bp-benchmark-condition'/);
     assert.match(workspace, /group\.samples\.forEach/);

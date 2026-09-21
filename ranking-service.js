@@ -1,4 +1,7 @@
+import { comparisonOptions, groupComparisonModels } from './model-comparison.js';
+import { normalizeModelParameters } from './public/js/shared/model-parameters.js';
 import crypto from 'node:crypto';
+import { scoreValueKey } from './score-aggregation.js';
 
 export const PIE_TOTAL_BASIS_POINTS = 10000;
 export const PIE_MIN_ITEM_BASIS_POINTS = 100;
@@ -443,7 +446,7 @@ async function loadMatchingContexts(connection, context) {
 export async function loadPublicPie(connection, context, conditionsByID) {
     const matchingContexts = await loadMatchingContexts(connection, context);
     if (matchingContexts.length === 0) {
-        return { entries: [], participantCount: 0, isFallback: false, scoringEntries: [], contextIDs: [] };
+        return { entries: [], fallbackRules: [], participantCount: 0, isFallback: false, scoringEntries: [], contextIDs: [] };
     }
     const contextIDs = matchingContexts.map(candidate => candidate.ID);
     const [rows] = await connection.execute(`
@@ -506,7 +509,7 @@ export async function loadPublicPie(connection, context, conditionsByID) {
         validPies.set(pieID, pie);
     }
     if (validPies.size === 0) {
-        return { entries: [], participantCount: 0, isFallback: false, scoringEntries: [], contextIDs };
+        return { entries: [], fallbackRules: [], participantCount: 0, isFallback: false, scoringEntries: [], contextIDs };
     }
 
     const aggregateWeights = new Map();
@@ -526,7 +529,58 @@ export async function loadPublicPie(connection, context, conditionsByID) {
             });
         }
     }
+    const pieIDs = Array.from(validPies.keys());
+    const [fallbackRows] = await connection.execute(`
+        SELECT rules.pie_ID, rules.primary_benchmark_condition_ID, rules.mode,
+               components.fallback_benchmark_condition_ID, components.weight_basis_points
+        FROM personal_pie_score_rules AS rules
+        LEFT JOIN personal_pie_score_rule_components AS components
+          ON components.pie_ID = rules.pie_ID
+         AND components.primary_benchmark_condition_ID = rules.primary_benchmark_condition_ID
+        WHERE rules.pie_ID IN (${pieIDs.map(() => '?').join(', ')})
+        ORDER BY rules.pie_ID, rules.primary_benchmark_condition_ID,
+                 components.fallback_benchmark_condition_ID`, pieIDs);
+    const rowsByPie = new Map(pieIDs.map(ID => [ID, []]));
+    for (const row of fallbackRows) {
+        const pieID = Number(row.pie_ID);
+        if (!rowsByPie.has(pieID)) {
+            throw requestError(409, 'public_fallback_pie_outside_scope', { pieID });
+        }
+        rowsByPie.get(pieID).push(row);
+    }
+    const aggregates = new Map();
+    for (const [pieID, pie] of validPies) {
+        const rules = parseStoredFallbackRules(rowsByPie.get(pieID), pie.conditionIDs, pieID);
+        for (const rule of rules) {
+            const primaryWeight = pie.entries.find(entry => entry.conditionID === rule.primaryConditionID).weightBasisPoints;
+            if (!aggregates.has(rule.primaryConditionID)) {
+                aggregates.set(rule.primaryConditionID, { configuredWeight: 0, components: new Map() });
+            }
+            const aggregate = aggregates.get(rule.primaryConditionID);
+            aggregate.configuredWeight += primaryWeight;
+            for (const entry of rule.entries) {
+                if (!conditionsByID.has(entry.conditionID)) {
+                    throw requestError(409, 'personal_pie_fallback_condition_not_available', { pieID, conditionID: entry.conditionID });
+                }
+                aggregate.components.set(entry.conditionID,
+                    (aggregate.components.get(entry.conditionID) ?? 0) + primaryWeight * entry.weightBasisPoints);
+            }
+        }
+    }
+    // Include holders without a rule in the denominator; never inflate the configured subset.
+    const fallbackRules = Array.from(aggregates, ([primaryConditionID, aggregate]) => {
+        const denominator = aggregateWeights.get(primaryConditionID);
+        return {
+            primaryConditionID,
+            mode: FALLBACK_RULE_MODE,
+            unconfiguredWeightBasisPoints: (denominator - aggregate.configuredWeight) / denominator * PIE_TOTAL_BASIS_POINTS,
+            entries: Array.from(aggregate.components, ([conditionID, weightedSum]) => ({
+                conditionID, weightBasisPoints: weightedSum / denominator
+            })).sort((a, b) => b.weightBasisPoints - a.weightBasisPoints || a.conditionID - b.conditionID)
+        };
+    });
     return {
+        fallbackRules,
         entries: normalizeWeights(Array.from(aggregateWeights, ([conditionID, rawWeight]) => ({
             conditionID,
             rawWeight
@@ -595,6 +649,17 @@ export async function loadPersonalPie(connection, contextID, userID) {
         ORDER BY personal_pie_score_rules.primary_benchmark_condition_ID,
                  personal_pie_score_rule_components.weight_basis_points DESC,
                  personal_pie_score_rule_components.fallback_benchmark_condition_ID`, [pie.ID]);
+    return {
+        ID: Number(pie.ID),
+        revision: Number(pie.revision),
+        updatedAt: pie.updated_at,
+        entries,
+        fallbackRules: parseStoredFallbackRules(fallbackRows, conditionIDs, Number(pie.ID))
+    };
+}
+
+function parseStoredFallbackRules(fallbackRows, conditionIDs, pieID) {
+    const pie = { ID: pieID };
     const fallbackRulesByPrimary = new Map();
     for (const row of fallbackRows) {
         const primaryConditionID = Number(row.primary_benchmark_condition_ID);
@@ -680,13 +745,7 @@ export async function loadPersonalPie(connection, contextID, userID) {
             pieID: Number(pie.ID)
         });
     }
-    return {
-        ID: Number(pie.ID),
-        revision: Number(pie.revision),
-        updatedAt: pie.updated_at,
-        entries,
-        fallbackRules
-    };
+    return fallbackRules;
 }
 
 export function decoratePieEntries(entries, conditionsByID) {
@@ -847,10 +906,12 @@ function resultKey(conditionID) {
     return String(Number(conditionID));
 }
 
-function indexFallbackRules(fallbackRules) {
+function indexFallbackRules(fallbackRules, scope) {
     if (!Array.isArray(fallbackRules)) {
         throw new TypeError('fallback rules must be an array');
     }
+    if (!['personal', 'public'].includes(scope)) throw new TypeError('invalid fallback scope');
+    const isPublic = scope === 'public';
     const rulesByPrimary = new Map();
     for (const rule of fallbackRules) {
         if (!rule || typeof rule !== 'object' || Array.isArray(rule)
@@ -858,7 +919,7 @@ function indexFallbackRules(fallbackRules) {
             || !Number.isSafeInteger(rule.primaryConditionID)
             || !Array.isArray(rule.entries)
             || rule.entries.length === 0
-            || rule.entries.length > MAX_FALLBACK_COMPONENTS
+            || (!isPublic && rule.entries.length > MAX_FALLBACK_COMPONENTS)
             || rulesByPrimary.has(rule.primaryConditionID)) {
             throw new TypeError('invalid fallback rule');
         }
@@ -871,8 +932,8 @@ function indexFallbackRules(fallbackRules) {
                 || conditionID < 1
                 || conditionID === rule.primaryConditionID
                 || seen.has(conditionID)
-                || !Number.isSafeInteger(weightBasisPoints)
-                || weightBasisPoints < PIE_MIN_ITEM_BASIS_POINTS
+                || (isPublic ? !Number.isFinite(weightBasisPoints) || weightBasisPoints <= 0
+                    : !Number.isSafeInteger(weightBasisPoints) || weightBasisPoints < PIE_MIN_ITEM_BASIS_POINTS)
                 || weightBasisPoints > PIE_TOTAL_BASIS_POINTS) {
                 throw new TypeError('invalid fallback rule component');
             }
@@ -880,10 +941,14 @@ function indexFallbackRules(fallbackRules) {
             total += weightBasisPoints;
             return { conditionID, weightBasisPoints };
         });
-        if (total !== PIE_TOTAL_BASIS_POINTS) {
-            throw new TypeError('fallback rule weights must total 100 percent');
+        const unconfiguredWeightBasisPoints = isPublic ? rule.unconfiguredWeightBasisPoints : 0;
+        if (isPublic ? !Number.isFinite(unconfiguredWeightBasisPoints)
+            || unconfiguredWeightBasisPoints < 0 || unconfiguredWeightBasisPoints > PIE_TOTAL_BASIS_POINTS
+            || Math.abs(total + unconfiguredWeightBasisPoints - PIE_TOTAL_BASIS_POINTS) > 1e-6
+            : total !== PIE_TOTAL_BASIS_POINTS) {
+            throw new TypeError('fallback components and unconfigured weight must total 100 percent');
         }
-        rulesByPrimary.set(rule.primaryConditionID, { ...rule, entries });
+        rulesByPrimary.set(rule.primaryConditionID, { ...rule, entries, unconfiguredWeightBasisPoints });
     }
     return rulesByPrimary;
 }
@@ -897,7 +962,8 @@ function directModelScore(model, conditionID) {
 
 function resolveDirectFallback(model, rule) {
     let lower = 0;
-    let upper = 0;
+    // Public holders without a fallback retain the normal missing-score interval.
+    let upper = rule.unconfiguredWeightBasisPoints / PIE_TOTAL_BASIS_POINTS * 100;
     let coveredBasisPoints = 0;
     const resultKeys = new Set();
     const components = rule.entries.map(entry => {
@@ -926,18 +992,18 @@ function resolveDirectFallback(model, rule) {
     return { lower, upper, coveredBasisPoints, resultKeys, components };
 }
 
-export function scoreModels(models, weightedEntries, totalBasisPoints, { fallbackRules = [] } = {}) {
+export function scoreModels(models, weightedEntries, totalBasisPoints, { fallbackRules = [], fallbackScope = 'personal' } = {}) {
     if (!Number.isFinite(totalBasisPoints) || totalBasisPoints <= 0 || weightedEntries.length === 0) {
         return [];
     }
-    const fallbackRulesByPrimary = indexFallbackRules(fallbackRules);
+    const fallbackRulesByPrimary = indexFallbackRules(fallbackRules, fallbackScope);
     return models.map(model => {
         let lower = 0;
         let upper = 0;
         let coveredBasisPoints = 0;
         let fallbackCoveredBasisPoints = 0;
         const resultKeys = new Set();
-        const fallbackResolutions = [];
+        const fallbackResolutions = new Map();
         for (const entry of weightedEntries) {
             const entryFraction = entry.weightBasisPoints / totalBasisPoints;
             const normalizedScore = directModelScore(model, entry.conditionID);
@@ -961,11 +1027,12 @@ export function scoreModels(models, weightedEntries, totalBasisPoints, { fallbac
             coveredBasisPoints += coveredFromFallback;
             fallbackCoveredBasisPoints += coveredFromFallback;
             fallback.resultKeys.forEach(key => resultKeys.add(key));
-            fallbackResolutions.push({
+            fallbackResolutions.set(Number(entry.conditionID), {
                 primaryConditionID: Number(entry.conditionID),
                 lower: roundTo(fallback.lower),
                 upper: roundTo(fallback.upper),
                 coverage: roundTo(fallback.coveredBasisPoints / PIE_TOTAL_BASIS_POINTS * 100),
+                unconfiguredWeightBasisPoints: fallbackRule.unconfiguredWeightBasisPoints,
                 components: fallback.components.map(component => ({
                     ...component,
                     normalizedScore: component.normalizedScore === null
@@ -987,10 +1054,22 @@ export function scoreModels(models, weightedEntries, totalBasisPoints, { fallbac
             upper: roundTo(upper),
             coverage: roundTo(coveredBasisPoints / totalBasisPoints * 100),
             resultCount: resultKeys.size,
-            fallbackUsageCount: fallbackResolutions.length,
+            fallbackUsageCount: fallbackResolutions.size,
             fallbackCoverage: roundTo(fallbackCoveredBasisPoints / totalBasisPoints * 100),
-            fallbackResolutions
+            fallbackResolutions: Array.from(fallbackResolutions.values())
         };
+    });
+}
+
+export function scoreComparison(models, entries, total, rules, options) {
+    const grouped = groupComparisonModels(models, options, entries);
+    const groupsByID = new Map(grouped.map(group => [group.ID, group]));
+    const scores = scoreModels(grouped, entries, total, options.mode === 'matched' ? {} : rules);
+    return scores.map(score => {
+        const group = groupsByID.get(score.ID);
+        return { ...score, comparable: group.comparable, comparisonMode: group.comparisonMode,
+            members: group.members, comparisonScores: group.comparisonScores,
+            lower: group.comparable ? score.lower : null, upper: group.comparable ? score.upper : null };
     });
 }
 
@@ -1001,18 +1080,19 @@ export async function loadModels(connection) {
                vendors.name AS vendor_name, vendors.slug AS vendor_slug, vendors.logo_key,
                model_conditions.ID AS model_condition_ID,
                model_conditions.name AS model_condition_name,
-               model_conditions.condition_key,
+               model_conditions.condition_key, model_conditions.parameters,
                model_conditions.is_default AS model_condition_is_default,
                benchmark_results.ID AS result_ID,
                benchmark_results.benchmark_condition_ID,
                benchmark_results.raw_score,
+               benchmark_results.source_url,
                benchmark_conditions.uses_percentage_scale,
                benchmark_conditions.score_min,
                benchmark_conditions.score_max,
                benchmark_conditions.score_direction,
                benchmark_conditions.target_value
         FROM models
-        JOIN vendors ON vendors.ID = models.vendor_ID
+        JOIN organizations vendors ON vendors.ID = models.vendor_ID
         JOIN model_conditions
           ON model_conditions.model_ID = models.ID
          AND model_conditions.is_active = 1
@@ -1028,6 +1108,7 @@ export async function loadModels(connection) {
                  model_conditions.name, model_conditions.ID,
                  benchmark_results.ID`);
     const modelConditions = new Map();
+    const evidence = new Set();
     for (const row of rows) {
         const modelConditionID = Number(row.model_condition_ID);
         if (!modelConditions.has(modelConditionID)) {
@@ -1035,6 +1116,7 @@ export async function loadModels(connection) {
             modelConditions.set(modelConditionID, {
                 ID: modelConditionID,
                 modelID: Number(row.model_ID),
+                modelName: row.model_name,
                 name: isDefaultCondition
                     ? row.model_name
                     : `${row.model_name} · ${row.model_condition_name}`,
@@ -1044,13 +1126,17 @@ export async function loadModels(connection) {
                 introductionURL: row.introductionURL,
                 condition: {
                     ID: modelConditionID,
-                    name: row.model_condition_name
+                    name: row.model_condition_name,
+                    parameters: row.parameters === null ? null : normalizeModelParameters(typeof row.parameters === 'string' ? JSON.parse(row.parameters) : row.parameters)
                 },
                 resultSamples: new Map(),
                 results: new Map()
             });
         }
         if (row.result_ID !== null && row.benchmark_condition_ID !== null && row.score_direction !== null) {
+            const evidenceKey = scoreValueKey(modelConditionID, row.benchmark_condition_ID, row.raw_score);
+            if (evidence.has(evidenceKey)) continue;
+            evidence.add(evidenceKey);
             const key = resultKey(row.benchmark_condition_ID);
             const normalizedScore = normalizedResultScore({
                 rawScore: row.raw_score,
@@ -1091,10 +1177,28 @@ export async function loadModels(connection) {
     });
 }
 
-export async function getRankingWorkspace(db, {
+export async function getRankingWorkspace(db, options = {}) {
+    const connection = await db.getConnection();
+    try {
+        // Weights and rules must come from the same revision during concurrent saves.
+        await connection.query('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ');
+        await connection.query('START TRANSACTION WITH CONSISTENT SNAPSHOT, READ ONLY');
+        const workspace = await buildRankingWorkspace(connection, options);
+        await connection.commit();
+        return workspace;
+    } catch (error) {
+        await connection.rollback();
+        throw error;
+    } finally {
+        connection.release();
+    }
+}
+
+async function buildRankingWorkspace(db, {
     categoryID,
     contextValues = {},
-    userID = null
+    userID = null,
+    comparison = null
 } = {}) {
     const context = await resolveRankingContext(db, { categoryID, contextValues, create: false });
     const conditions = await loadBenchmarkConditions(db);
@@ -1108,6 +1212,7 @@ export async function getRankingWorkspace(db, {
     const publicEntries = decoratePieEntries(publicPie.entries, conditionsByID);
     const benchmarkList = buildBenchmarkList(conditions, publicEntries, personalEntries);
     const models = await loadModels(db);
+    const compareOptions = comparisonOptions(models, comparison);
     const personalScoringEntries = context.ID === null
         ? []
         : personalSourceEntries.map(entry => ({
@@ -1129,17 +1234,22 @@ export async function getRankingWorkspace(db, {
             participantCount: publicPie.participantCount,
             isFallback: false,
             entries: publicEntries,
-            fallbackRules: []
+            fallbackRules: decorateFallbackRules(publicPie.fallbackRules, conditionsByID).map((rule, index) => ({
+                ...rule,
+                unconfiguredWeightBasisPoints: publicPie.fallbackRules[index].unconfiguredWeightBasisPoints
+            }))
         },
         benchmarks: benchmarkList,
+        comparison: compareOptions,
         modelLeaderboards: {
-            personal: scoreModels(models, personalScoringEntries, PIE_TOTAL_BASIS_POINTS, {
+            personal: scoreComparison(models, personalScoringEntries, PIE_TOTAL_BASIS_POINTS, {
                 fallbackRules: personalSourceFallbackRules
-            }),
-            public: scoreModels(
+            }, compareOptions),
+            public: scoreComparison(
                 models,
                 publicPie.scoringEntries,
-                publicPie.participantCount * PIE_TOTAL_BASIS_POINTS
+                publicPie.participantCount * PIE_TOTAL_BASIS_POINTS,
+                { fallbackRules: publicPie.fallbackRules, fallbackScope: 'public' }, compareOptions
             )
         },
         scoreScale: {
@@ -1288,7 +1398,8 @@ export async function savePersonalPie(db, {
     contextValues = {},
     expectedRevision,
     entries,
-    fallbackRules
+    fallbackRules,
+    comparison = null
 }) {
     const normalizedUserID = normalizeUserID(userID);
     const normalizedCategoryID = parseSafeInteger(categoryID, { minimum: 1 });
@@ -1305,6 +1416,7 @@ export async function savePersonalPie(db, {
     let resolvedContextValues;
     let returnEarly = false;
     try {
+        if (comparison !== null) comparisonOptions(await loadModels(connection), comparison);
         await connection.beginTransaction();
         const [users] = await connection.execute(`
             SELECT ID
@@ -1444,7 +1556,8 @@ export async function savePersonalPie(db, {
         return getRankingWorkspace(db, {
             categoryID: resolvedCategoryID,
             contextValues: resolvedContextValues,
-            userID: normalizedUserID
+            userID: normalizedUserID,
+            comparison
         });
     }
     throw requestError(500, 'personal_pie_save_incomplete');

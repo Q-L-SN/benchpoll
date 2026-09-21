@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "timeZone": "China Standard Time",
+  "outputDirectory": "",
+  "timeoutSeconds": 5,
+  "windowBudget": 450,
+  "freeReserve": 50,
+  "roundIntervalSeconds": 180,
+  "pollIntervalSeconds": 2,
+  "dailyRequestsPerTargetPerMarketGoal": 1000,
+  "requireZeroCreditBalance": true,
+  "targets": [
+    { "id": "aws-oregon", "url": "", "allowedIps": [], "regionVerified": false, "expectedStatus": 200, "expectedBody": "benchpoll-health-ok" },
+    { "id": "aws-ohio", "url": "", "allowedIps": [], "regionVerified": false, "expectedStatus": 200, "expectedBody": "benchpoll-health-ok" },
+    { "id": "tencent-silicon-valley", "url": "", "allowedIps": [], "regionVerified": false, "expectedStatus": 200, "expectedBody": "benchpoll-health-ok" }
+  ],
+  "windows": [
+    { "id": "europe", "startHour": 3, "durationHours": 1, "locations": [
+      { "country": "DE", "asn": 3320 }, { "country": "DE", "asn": 3209 },
+      { "country": "GB", "asn": 2856 }, { "country": "GB", "asn": 5089 },
+      { "country": "FR", "asn": 3215 }, { "country": "FR", "asn": 12322 }
+    ] },
+    { "id": "americas-east", "startHour": 9, "durationHours": 1, "locations": [
+      { "country": "BR", "asn": 28573 }, { "country": "BR", "asn": 27699 }, { "country": "BR", "asn": 26615 },
+      { "country": "US", "asn": 7922, "city": "New York" }, { "country": "US", "asn": 7018, "city": "Chicago" }, { "country": "US", "asn": 701, "city": "New York" },
+      { "country": "CA", "asn": 577, "city": "Toronto" }, { "country": "CA", "asn": 812, "city": "Toronto" }
+    ] },
+    { "id": "americas-west", "startHour": 12, "durationHours": 1, "locations": [
+      { "country": "US", "asn": 7922, "city": "San Jose" }, { "country": "US", "asn": 7018, "city": "Los Angeles" }, { "country": "US", "asn": 5650, "city": "Los Angeles" },
+      { "country": "CA", "asn": 852, "city": "Vancouver" }, { "country": "CA", "asn": 6327, "city": "Calgary" }
+    ] },
+    { "id": "asia", "startHour": 21, "durationHours": 1, "locations": [
+      { "country": "CN", "asn": 4134, "city": "Dongguan" }, { "country": "CN", "asn": 4134, "city": "Nanjing" }, { "country": "CN", "asn": 4134, "city": "Beijing" },
+      { "country": "CN", "asn": 4837, "city": "Changsha" }, { "country": "CN", "asn": 4837, "city": "Shanghai" }, { "country": "CN", "asn": 4837, "city": "Hangzhou" },
+      { "country": "CN", "asn": 9808, "city": "Beijing" }, { "country": "CN", "asn": 9808, "city": "Shanghai" }, { "country": "CN", "asn": 9808, "city": "Shenzhen" },
+      { "country": "JP", "asn": 2516 }, { "country": "JP", "asn": 4713 }, { "country": "JP", "asn": 17676 },
+      { "country": "KR", "asn": 4766 }, { "country": "KR", "asn": 9318 }
+    ] },
+    { "id": "india", "startHour": 23, "durationHours": 2, "locations": [
+      { "country": "IN", "asn": 55836 }, { "country": "IN", "asn": 24560 }, { "country": "IN", "asn": 9829 }
+    ] }
+  ]
+}

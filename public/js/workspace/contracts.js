@@ -42,6 +42,7 @@ function requireWorkspaceConditionIdentity(value, path) {
 }
 
 function validateWorkspaceFallbackRules(value, pieEntries, piePath) {
+    const isPublic = piePath === 'publicPie';
     const rulesPath = `${piePath}.fallbackRules`;
     const rules = requireWorkspaceArray(value, rulesPath);
     const pieConditionIDs = new Set(pieEntries.map(entry => Number(entry.conditionID)));
@@ -60,7 +61,7 @@ function validateWorkspaceFallbackRules(value, pieEntries, piePath) {
         const componentIDs = new Set();
         let totalBasisPoints = 0;
         const entries = requireWorkspaceArray(rule.entries, `${path}.entries`);
-        if (entries.length === 0 || entries.length > MAX_FALLBACK_COMPONENTS) {
+        if (entries.length === 0 || (!isPublic && entries.length > MAX_FALLBACK_COMPONENTS)) {
             throw invalidWorkspaceResponse(`${path}.entries`, 'has an invalid size');
         }
         entries.forEach((valueEntry, entryIndex) => {
@@ -72,15 +73,23 @@ function validateWorkspaceFallbackRules(value, pieEntries, piePath) {
                 || conditionID < 1
                 || conditionID === primaryConditionID
                 || componentIDs.has(conditionID)
-                || !Number.isSafeInteger(weightBasisPoints)
-                || weightBasisPoints < MIN_WEIGHT_BASIS_POINTS
+                || (isPublic
+                    ? !Number.isFinite(weightBasisPoints) || weightBasisPoints <= 0
+                    : !Number.isSafeInteger(weightBasisPoints) || weightBasisPoints < MIN_WEIGHT_BASIS_POINTS)
                 || weightBasisPoints > 10000) {
                 throw invalidWorkspaceResponse(entryPath, 'has an invalid condition or weight');
             }
             componentIDs.add(conditionID);
             totalBasisPoints += weightBasisPoints;
         });
-        if (totalBasisPoints !== 10000) {
+        if (isPublic) {
+            const unconfigured = rule.unconfiguredWeightBasisPoints;
+            if (typeof unconfigured !== 'number' || !Number.isFinite(unconfigured)
+                || unconfigured < 0 || unconfigured > 10000
+                || Math.abs(totalBasisPoints + unconfigured - 10000) > 0.000001) {
+                throw invalidWorkspaceResponse(path, 'must account for configured and unconfigured shares');
+            }
+        } else if (totalBasisPoints !== 10000) {
             throw invalidWorkspaceResponse(`${path}.entries`, 'must total 100 percent');
         }
     });
@@ -110,6 +119,18 @@ function validateWorkspacePayload(payload) {
     requireWorkspaceArray(response.benchmarks, 'benchmarks').forEach((entry, index) => {
         requireWorkspaceConditionIdentity(entry, `benchmarks[${index}]`);
     });
+    const comparison = requireWorkspaceObject(response.comparison, 'comparison');
+    const availableKeys = requireWorkspaceArray(comparison.availableKeys, 'comparison.availableKeys');
+    const selectedKeys = requireWorkspaceArray(comparison.keys, 'comparison.keys');
+    if (!['best', 'matched'].includes(comparison.mode) || !availableKeys.includes('model')
+        || (comparison.mode === 'matched' && selectedKeys.length === 0)
+        || availableKeys.some(key => typeof key !== 'string' || !key)
+        || new Set(availableKeys).size !== availableKeys.length
+        || new Set(selectedKeys).size !== selectedKeys.length
+        || selectedKeys.some(key => !availableKeys.includes(key))
+        || !Number.isSafeInteger(comparison.unconfiguredCount) || comparison.unconfiguredCount < 0) {
+        throw invalidWorkspaceResponse('comparison', 'has invalid keys or configuration counts');
+    }
     const modelLeaderboards = requireWorkspaceObject(response.modelLeaderboards, 'modelLeaderboards');
     requireWorkspaceArray(modelLeaderboards.personal, 'modelLeaderboards.personal');
     requireWorkspaceArray(modelLeaderboards.public, 'modelLeaderboards.public');
@@ -175,7 +196,14 @@ function validateApprovedModelResultsPayload(payload) {
             if (typeof sample.sourceURL !== 'string' || sample.sourceURL.trim() === '') {
                 throw invalidModelScoresResponse(`scoreGroups[${groupIndex}].samples[${sampleIndex}].sourceURL`, 'must be a non-empty string');
             }
+            if (typeof sample.excludedAsDuplicate !== 'boolean') {
+                throw invalidModelScoresResponse('sample.excludedAsDuplicate', 'must be a boolean');
+            }
         });
+        if (group.distinctScoreCount !== samples.filter(sample => !sample.excludedAsDuplicate).length
+            || group.distinctScoreCount < 1) {
+            throw invalidModelScoresResponse('group.distinctScoreCount', 'must match the distinct score values being counted');
+        }
     });
     return response;
 }

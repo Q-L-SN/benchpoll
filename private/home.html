@@ -1,18 +1,24 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-home-palette="orange">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BenchPoll</title>
-    <link rel="icon" href="/favicon.ico?v=benchpoll-g-2" sizes="any">
-    <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png?v=benchpoll-g-2">
+    <link rel="icon" href="/favicon.ico?v=benchpoll-brand-20260919" sizes="any">
+    <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png?v=benchpoll-brand-20260919">
     <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
     <link rel="stylesheet" href="/css/global.css">
-    <link rel="stylesheet" href="/css/home-v2.css?v=frontend-20260905">
-    <link rel="stylesheet" href="/css/home-welcome.css?v=20260901-welcome-1">
-    <script src="/js/home.js?v=frontend-20260905" type="module"></script>
-    <script src="/js/home-workspace.js?v=frontend-20260905" type="module"></script>
+    <link rel="stylesheet" href="/css/home-v2.css?v=20260919">
+    <link rel="stylesheet" href="/css/home-welcome.css?v=20260919">
+    <link rel="stylesheet" href="/css/discussion.css?v=compact-20260908">
+    <link rel="stylesheet" href="/css/workspace-layout.css?v=20260919">
+    <link rel="stylesheet" href="/css/home-palette.css?v=20260919">
+    <script src="/js/home-palette.js?v=20260910-1"></script>
+    <script src="/js/discussion.js?v=20260919" type="module"></script>
+    <script src="/js/home.js?v=clean-urls-20260908" type="module"></script>
+    <script src="/js/home-workspace.js?v=comparison-recovery-20260912" type="module"></script>
     <script src="/js/home-welcome.js?v=20260901-welcome-2" type="module"></script>
+    <link rel="stylesheet" href="/css/model-comparison.css?v=20260912">
 </head>
 <body class="bp-home bp-no-template-context">
     <div id="welcome-overlay" class="bp-welcome-overlay" hidden>
@@ -30,41 +36,21 @@
             </button>
 
             <div class="bp-welcome-brand" aria-label="BenchPoll">
-                <span class="bp-brand-symbol" aria-hidden="true"></span><span>BenchPoll</span>
+                <img class="bp-brand-lockup" src="/assets/benchpoll-logo.svg" alt="BenchPoll" width="155" height="32">
             </div>
 
-            <p class="bp-welcome-eyebrow">Your benchmarks, your weights</p>
             <h2 id="welcome-title">Build your own benchmark mix.</h2>
             <p id="welcome-description" class="bp-welcome-description">
-                Choose the benchmarks that matter to you, compare your mix with Public Weights, and see the model leaderboard those public priorities produce.
+                Choose what matters to you. Explore Public Weights or create your own model ranking.
             </p>
-
-            <div class="bp-welcome-weight-preview" aria-hidden="true">
-                <div class="bp-welcome-weight-caption">
-                    <span>Your benchmark mix for this context</span>
-                    <strong>100% allocated</strong>
-                </div>
-                <div class="bp-welcome-weight-track">
-                    <span class="bp-welcome-weight-segment is-purple"></span>
-                    <span class="bp-welcome-weight-segment is-blue"></span>
-                    <span class="bp-welcome-weight-segment is-teal"></span>
-                    <span class="bp-welcome-weight-segment is-yellow"></span>
-                </div>
-            </div>
-
-            <ul class="bp-welcome-signals" aria-label="What you can do on BenchPoll">
-                <li><i class="fa-solid fa-chart-pie" aria-hidden="true"></i><span>Build your benchmark mix</span></li>
-                <li><i class="fa-solid fa-scale-balanced" aria-hidden="true"></i><span>Compare Public Weights</span></li>
-                <li><i class="fa-solid fa-ranking-star" aria-hidden="true"></i><span>View the public model ranking</span></li>
-            </ul>
 
             <div class="bp-welcome-actions">
                 <button id="welcome-primary" class="bp-welcome-primary" type="button">
-                    <span>Explore weights and rankings</span>
+                    <span>Explore rankings</span>
                     <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
                 </button>
                 <a id="welcome-methodology" class="bp-welcome-methodology" href="/how-it-works">
-                    See how BenchPoll works
+                    How it works
                 </a>
             </div>
         </section>
@@ -165,7 +151,7 @@
     <div class="bp-shell">
         <aside class="bp-sidebar" aria-label="Benchmark taxonomy">
             <a class="bp-brand" href="/" aria-label="BenchPoll home">
-                <span class="bp-brand-symbol" aria-hidden="true"></span><span>BenchPoll</span>
+                <img class="bp-brand-lockup" src="/assets/benchpoll-logo.svg" alt="BenchPoll" width="155" height="32">
             </a>
             <button id="taxonomy-toggle" class="bp-taxonomy-toggle" type="button" aria-label="Open categories" aria-expanded="false">
                 <i class="fa-solid fa-bars" aria-hidden="true"></i>
@@ -209,30 +195,20 @@
 
         <main class="bp-workspace" data-mobile-panel="mix">
             <header class="bp-page-heading">
-                <div><span class="bp-eyebrow">Independent evaluation · Community priorities</span><h1>Models, measured your way.</h1></div>
+                <div id="workspace-brand-slot" class="bp-workspace-brand-slot"></div>
+                <h1><button id="mission-welcome-trigger" type="button" aria-haspopup="dialog" aria-controls="welcome-dialog" title="About BenchPoll">Models, measured your way.</button></h1>
                 <p>Choose what matters. Compare model results against the benchmarks you trust.</p>
             </header>
-            <section id="mission-banner" class="bp-mission-banner" aria-label="BenchPoll introduction">
-                <button
-                    id="mission-welcome-trigger"
-                    class="bp-mission-trigger"
-                    type="button"
-                    aria-haspopup="dialog"
-                    aria-controls="welcome-dialog"
-                    title="Open the BenchPoll introduction"
-                >
-                    <strong>Build your own benchmark mix.</strong>
-                    <span>Compare it with Public Weights.</span>
-                    <span>See the model ranking those weights produce.</span>
-                </button>
-                <button id="mission-dismiss" class="bp-icon-button bp-mission-dismiss" type="button" aria-label="Dismiss message">
-                    <i class="fa-solid fa-xmark" aria-hidden="true"></i>
-                </button>
-            </section>
-
             <section class="bp-context-row" aria-label="Current ranking context">
                 <nav id="bp-breadcrumb" class="bp-breadcrumb" aria-label="Breadcrumb"></nav>
                 <div class="bp-context-actions">
+                    <div class="bp-palette-switch" role="group" aria-label="Homepage color palette">
+                        <button type="button" data-palette="orange" aria-label="Graphite and orange palette" title="Graphite and orange" aria-pressed="true"></button>
+                        <button type="button" data-palette="berry" aria-label="Berry palette" title="Berry" aria-pressed="false"></button>
+                    </div>
+                    <a id="discussion-entry" class="bp-discussion-entry" href="/?discussion=1" aria-controls="discussion-panel" aria-expanded="false" title="Discussions in this category">
+                        <i class="fa-regular fa-comments" aria-hidden="true"></i><span data-discussion-count>Discussions</span>
+                    </a>
                     <button id="workspace-refresh" class="bp-square-button" type="button" aria-label="Refresh data" title="Refresh data">
                         <i class="fa-solid fa-rotate" aria-hidden="true"></i>
                     </button>
@@ -245,11 +221,11 @@
                             <i class="fa-solid fa-ellipsis" aria-hidden="true"></i>
                         </summary>
                         <div class="bp-category-actions-panel">
-                            <a id="new-category-button" href="/contribute?mode=new_category" hidden>
+                            <a id="new-category-button" href="/contribute/categories/new" hidden>
                                 <i class="fa-solid fa-circle-plus" aria-hidden="true"></i>
                                 <span>New Category</span>
                             </a>
-                            <a id="category-issue-button" href="/contribute?mode=delete_or_migrate_category" hidden>
+                            <a id="category-issue-button" href="/contribute/categories/edit" hidden>
                                 <i class="fa-solid fa-sliders" aria-hidden="true"></i>
                                 <span>Adjust Category</span>
                             </a>
@@ -274,9 +250,12 @@
                                     <button id="pie-mode-public" class="bp-mode-option selected" type="button" role="tab" aria-selected="true">Public Weights</button>
                                 </div>
                                 <button id="personal-pie-create" class="bp-personal-pie-create" type="button" hidden>
-                                    <span>
+                                    <span class="bp-create-mix-content">
                                         <i class="fa-solid fa-chart-pie" aria-hidden="true"></i>
-                                        <strong>Build your benchmark mix and personal leaderboard</strong>
+                                        <span class="bp-create-mix-copy">
+                                            <strong>Create your benchmark mix</strong>
+                                            <span>Your weights. Your leaderboard.</span>
+                                        </span>
                                     </span>
                                     <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
                                 </button>
@@ -327,7 +306,7 @@
                         <div class="bp-benchmark-toolbar">
                             <h2 id="benchmark-heading">Benchmarks</h2>
                             <div class="bp-benchmark-toolbar-actions">
-                                <a id="contribute-button" class="bp-inline-create-evaluation" href="/contribute?mode=new_benchmark" hidden>
+                                <a id="contribute-button" class="bp-inline-create-evaluation" href="/contribute/benchmarks/new" hidden>
                                     <span>New Benchmark</span>
                                 </a>
                                 <label class="bp-benchmark-search">
@@ -356,9 +335,15 @@
                 <section id="model-card" class="bp-model-card" aria-labelledby="model-leaderboard-heading">
                     <div class="bp-model-toolbar">
                         <h2 id="model-leaderboard-heading">Model Leaderboard</h2>
-                        <a id="contribute-data-button" class="bp-contribute-data" href="/contribute?mode=benchmark_result" hidden>
+                        <button id="model-comparison-toggle" class="bp-comparison-toggle" type="button" aria-label="Advanced comparison" title="Advanced comparison" aria-expanded="false" aria-controls="model-comparison-panel"><i class="fa-solid fa-sliders" aria-hidden="true"></i></button>
+                        <a id="contribute-data-button" class="bp-contribute-data" href="/contribute/scores/new" hidden>
                             <span>Contribute scores</span>
                         </a>
+                    </div>
+                    <div id="model-comparison-panel" class="bp-comparison-panel" hidden>
+                        <label>Comparison <select id="model-comparison-mode"><option value="best">Best performance</option><option value="matched">Matched conditions</option></select></label>
+                        <div id="model-comparison-keys" class="bp-comparison-keys" role="group" aria-label="Keys defining comparison groups"></div>
+                        <p id="model-comparison-note" class="bp-comparison-note"></p>
                     </div>
                     <div class="bp-model-head" aria-hidden="true">
                         <span>#</span>
@@ -370,6 +355,40 @@
                 </div>
             </section>
         </main>
+        <aside id="discussion-panel" class="discussion-rail" aria-labelledby="discussion-title" aria-hidden="true" inert>
+            <div class="discussion-main">
+                <header class="discussion-heading">
+                    <div><div id="discussion-brand-slot"></div><span id="category-path"></span><h2 id="discussion-title">Discussion</h2></div>
+                    <button id="discussion-close" type="button" aria-label="Close discussion" title="Close discussion"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+                </header>
+                <div class="discussion-scroll">
+                    <div id="discussion-error" role="alert" hidden></div>
+                    <div id="thread-root"></div>
+                    <div class="discussion-filterbar">
+                        <div class="discussion-sort" role="group" aria-label="Sort discussions"><button type="button" data-sort="hot" aria-pressed="true">Hot</button><button type="button" data-sort="new" aria-pressed="false">Newest</button></div>
+                        <label id="context-filter-label"><span class="sr-only">Filter context</span><select id="discussion-context"><option value="">All contexts</option></select></label>
+                        <label id="scope-filter-label" hidden><input id="discussion-all-categories" type="checkbox"> All categories</label>
+                        <button id="clear-benchmark" type="button" hidden></button>
+                        <a id="all-threads" href="/?discussion=1" hidden>All discussions</a>
+                    </div>
+                    <div id="discussion-feed" aria-live="polite"></div>
+                    <button id="discussion-more" type="button" hidden>Load more</button>
+                </div>
+                <form id="discussion-composer" class="discussion-composer">
+                    <button id="discussion-compose-toggle" class="discussion-compose-toggle" type="button" aria-expanded="false" aria-controls="discussion-compose-fields">
+                        <i class="fa-regular fa-pen-to-square" aria-hidden="true"></i><span id="composer-title">Write a message</span><i class="fa-solid fa-chevron-up" aria-hidden="true"></i>
+                    </button>
+                    <div id="discussion-compose-fields" hidden>
+                        <div id="posting-context"></div>
+                        <label class="sr-only" for="discussion-text">Your message</label>
+                        <textarea id="discussion-text" required minlength="2" maxlength="4000" rows="2" placeholder="Share your reasoning. Type @ to reference a benchmark."></textarea>
+                        <div id="mention-suggestions" class="mention-suggestions" role="listbox" aria-label="Benchmark suggestions" hidden></div>
+                        <div id="composer-mentions" class="discussion-mentions"></div>
+                        <div class="composer-actions"><button id="mention-button" type="button" title="Mention a benchmark" aria-label="Mention a benchmark">@</button><span id="composer-status" role="status"></span><button id="post-discussion" class="discussion-primary" type="submit">Post message</button></div>
+                    </div>
+                </form>
+            </div>
+        </aside>
     </div>
 
 </body>

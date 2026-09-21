@@ -48,7 +48,8 @@ function contributionLabel(type) {
         new_model: 'model contribution',
         benchmark_result: 'score contribution',
         entity_change: 'change request',
-        report_issue: 'issue report'
+        report_issue: 'issue report',
+        discussion_report: 'discussion report'
     })[type] ?? 'contribution';
 }
 

@@ -1,8 +1,10 @@
+import { normalizeModelParameters, modelParameterLabel, parameterRowsToObject } from '../public/js/shared/model-parameters.js';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import test from 'node:test';
 import vm from 'node:vm';
+import { normalizeDiscussionReport } from '../discussion-service.js';
 
 const serverSource = fs.readFileSync(new URL('../server.js', import.meta.url), 'utf8');
 
@@ -19,11 +21,21 @@ function sourceBetween(startMarker, endMarker) {
 }
 
 function loadContract() {
-    const sandbox = vm.createContext({ URL, crypto, structuredClone });
+    const sandbox = vm.createContext({ normalizeModelParameters, modelParameterLabel, parameterRowsToObject, URL, crypto, structuredClone, normalizeDiscussionReport });
     const source = sourceBetween('function normalizeString(', 'function parseModerationContent(');
-    vm.runInContext(`${source}\nthis.contract = { buildContributionContent };`, sandbox);
+    vm.runInContext(`${source}\nthis.contract = { buildContributionContent, normalizeStoredModerationContent };`, sandbox);
     return sandbox.contract;
 }
+
+test('discussion reports round-trip through the native moderation contract', () => {
+    const contract = loadContract();
+    const content = contract.buildContributionContent({ type: 'discussion_report', postID: 5, reason: 'spam', details: 'Repeated promotional messages.' });
+    const stored = contract.normalizeStoredModerationContent(structuredClone(content));
+    assert.equal(stored.postID, 5);
+    assert.equal(stored.type, 'discussion_report');
+    assert.equal(stored.schemaVersion, 1);
+    assert.equal(stored.details, content.details);
+});
 
 function benchmarkCondition(overrides = {}) {
     return {
@@ -215,12 +227,13 @@ test('new models use only model conditions and canonical introduction URL', () =
                 name: 'Example Lab',
                 logoKey: ''
             },
-            conditions: [{ clientRef: 'model-condition-default', name: 'default', isDefault: true }]
+            conditions: [{ clientRef: 'model-condition-default', name: 'default', isDefault: true, parameters: {} }]
         }]
     });
     assert.equal(content.models[0].introductionURL, 'https://example.com/model');
     assert.deepEqual(JSON.parse(JSON.stringify(content.models[0].conditions)), [{
         clientRef: 'model-condition-default',
+        parameters: {},
         name: 'default',
         isDefault: true
     }]);
@@ -249,7 +262,7 @@ test('new models use only model conditions and canonical introduction URL', () =
                 name: 'Example Lab Two',
                 logoKey: ''
             },
-            conditions: [{ clientRef: 'model-condition-high', name: 'high reasoning', isDefault: false }]
+            conditions: [{ clientRef: 'model-condition-high', name: 'effort=high', parameters: { effort: 'high' }, isDefault: false }]
         }]
     });
     assert.equal(modelWithoutDefault.models[0].conditions[0].isDefault, false);
@@ -268,9 +281,9 @@ test('new models use only model conditions and canonical introduction URL', () =
                 name: 'Example Lab Three',
                 logoKey: ''
             },
-            conditions: [{ clientRef: 'model-condition-wrong', name: 'high reasoning', isDefault: true }]
+            conditions: [{ clientRef: 'model-condition-wrong', name: 'effort=high', parameters: { effort: 'high' }, isDefault: true }]
         }]
-    }), error => error?.body?.error === 'model_condition_default_mismatch');
+    }), error => error?.body?.error === 'model_parameter_label_mismatch');
 });
 
 test('new category submissions preserve their final reviewer notes', () => {
@@ -313,7 +326,7 @@ test('every benchmark result carries its own required source URL', () => {
 test('benchmark results are global evidence and reject ranking context fields', () => {
     const contract = loadContract();
     const content = contract.buildContributionContent(benchmarkResult());
-    assert.equal(content.schemaVersion, 6);
+    assert.equal(content.schemaVersion, 8);
     assert.equal(Object.hasOwn(content, 'context'), false);
 
     const oldContext = benchmarkResult({

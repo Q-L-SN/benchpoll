@@ -4,6 +4,8 @@ import { resolve, sep, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { categories, createFixtureState, weightedEntries, workspace, catalog, approvedResults } from './fixtures.mjs';
+import { discussionFixture } from './discussions.mjs';
+import { comparisonOptions } from '../../model-comparison.js';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const publicRoot = resolve(root, 'public');
@@ -14,6 +16,8 @@ export async function startPreview({ port = 0, ...options } = {}) {
     const state = createFixtureState(options);
     const server = createServer(async (request, response) => {
         const url = new URL(request.url, 'http://localhost');
+        if (url.pathname.startsWith('/contribute/')) url.pathname = '/contribute';
+        if (url.pathname.startsWith('/rankings/')) url.pathname = '/';
         const send = (status, value) => { response.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store' }); response.end(JSON.stringify(value)); };
         try {
             if (url.pathname.startsWith('/api/')) {
@@ -22,6 +26,8 @@ export async function startPreview({ port = 0, ...options } = {}) {
                 for await (const part of request) { raw += part; if (raw.length > 1000000) return send(413, {}); }
                 const body = raw ? JSON.parse(raw) : {};
                 state.requests.push({ path: url.pathname, body });
+                const discussion = discussionFixture(url.pathname, body, state);
+                if (discussion !== null) return send(200, discussion);
                 if (url.pathname.startsWith('/api/get_page')) return send(200, { categoryTree: categories, currentCategoryID: 1 });
                 switch (url.pathname) {
                 case '/api/get_user_profile': return send(state.authenticated ? 200 : 204, { userName: 'Preview account', hasVerifiedEmail: true, role: state.isSenior ? 'senior' : 'reviewer' });
@@ -35,6 +41,7 @@ export async function startPreview({ port = 0, ...options } = {}) {
                     if (state.saveFailure) return send(state.saveFailure, { error: state.saveFailure === 409 ? 'pie_revision_conflict' : 'fixture_save_failure' });
                     if (!state.authenticated) return send(401, { error: 'unauthorized' });
                     if (body.expectedRevision !== state.revision) return send(409, { error: 'pie_revision_conflict' });
+                    if (state.comparisonModels) comparisonOptions(state.comparisonModels, body.comparison);
                     state.revision += 1;
                     state.personalEntries = weightedEntries(body.entries);
                     state.fallbackRules = body.fallbackRules.map(rule => ({ ...rule, entries: weightedEntries(rule.entries) }));
@@ -42,11 +49,17 @@ export async function startPreview({ port = 0, ...options } = {}) {
                 case '/api/get_approved_benchmark_results':
                     await delay(state.evidenceDelay);
                     return send(200, approvedResults(body));
-                case '/api/get_contribution_catalog': return send(200, catalog());
+                case '/api/get_contribution_catalog': {
+                    const data = catalog();
+                    return send(200, data);
+                }
+                case '/api/get_condition_impact': return send(200, state.conditionImpact ?? { resultCount: 3, pieCount: body.targetKind === 'benchmark' ? 2 : 0 });
                 case '/api/get_contribution_target': {
                     const data = catalog();
                     const kind = body.targetKind;
                     const form = kind === 'benchmark' ? data.benchmarks[0] : kind === 'model' ? data.models[0] : { result: { modelID: 301, modelConditionID: 201, benchmarkID: 101, benchmarkConditionID: 1, rawScore: 88, source: { url: 'https://example.com/evidence', type: 'independent', title: 'Synthetic report' } } };
+                    if (kind === 'result') form.result.notes = 'Saved score note';
+                    else form.notes = 'Saved object note';
                     return send(200, { targetKind: kind, targetID: body.targetID, form });
                 }
                 case '/api/submit_contribution': return send(200, { ID: 1001, status: 'pending' });
@@ -78,7 +91,7 @@ export async function startPreview({ port = 0, ...options } = {}) {
             response.writeHead(200, { 'content-type': `${types[extname(file)] ?? 'application/octet-stream'}; charset=utf-8`, 'cache-control': 'no-store' });
             response.end(data);
         } catch (error) {
-            send(error.code === 'ENOENT' ? 404 : 500, { error: error.code === 'ENOENT' ? 'not_found' : 'fixture_error' });
+            send(error.status ?? (error.code === 'ENOENT' ? 404 : 500), error.body ?? { error: error.code === 'ENOENT' ? 'not_found' : 'fixture_error' });
         }
     });
     await new Promise(resolve => server.listen(port, '127.0.0.1', resolve));

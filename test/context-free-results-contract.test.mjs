@@ -79,5 +79,5 @@ test('result change requests use the context-free schema version', () => {
         'function normalizeEntityChange(',
         'function buildContributionContent('
     );
-    assert.match(entityChange, /schemaVersion: targetKind === 'result' \? 6 : 5/);
+    assert.match(entityChange, /schemaVersion: contributionSchemaVersion\('entity_change', targetKind\)/);
 });

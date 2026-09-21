@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import test from 'node:test';
 import vm from 'node:vm';
+import { scoreEvidenceKey } from '../score-aggregation.js';
 
 import {
     PIE_TOTAL_BASIS_POINTS,
@@ -29,6 +30,8 @@ function loadSubmissionContract() {
 
 function loadPersistenceContract(overrides = {}) {
     const sandbox = vm.createContext({
+        scoreEvidenceKey,
+        parseJSONColumn: value => typeof value === 'string' ? JSON.parse(value) : value,
         JSON,
         Number,
         Set,
@@ -65,6 +68,7 @@ function loadPersistenceContract(overrides = {}) {
             return {
                 ID: result.modelConditionID,
                 model_ID: modelID,
+                parameters: {},
                 name: 'default'
             };
         },
@@ -228,7 +232,8 @@ test('canonical benchmark submission persists conditions, multiple tags, and exp
     const benchmarkInsert = calls.find(call => call.statement.startsWith('INSERT INTO benchmarks '));
     assert.deepEqual(benchmarkInsert.params, [
         'CanonicalBench',
-        'https://example.com/canonical-bench'
+        'https://example.com/canonical-bench',
+        ''
     ]);
     const conditionInserts = calls.filter(call => (
         call.statement.startsWith('INSERT INTO benchmark_conditions ')
@@ -245,7 +250,7 @@ test('canonical benchmark submission persists conditions, multiple tags, and exp
 test('canonical result persistence is context-free and keeps a source on every score row', async () => {
     const contract = loadSubmissionContract();
     const content = contract.buildContributionContent(benchmarkResultSubmission());
-    assert.equal(content.schemaVersion, 6);
+    assert.equal(content.schemaVersion, 8);
     assert.equal(Object.hasOwn(content, 'context'), false);
 
     const legacy = {
@@ -259,14 +264,19 @@ test('canonical result persistence is context-free and keeps a source on every s
     );
 
     const calls = [];
+    const stored = [];
     const connection = {
         async execute(sql, params = []) {
             const statement = normalizedSQL(sql);
             calls.push({ statement, params: structuredClone(params) });
-            if (statement.startsWith('SELECT ID FROM benchmark_results ')) {
-                return [[], []];
+            if (statement.startsWith('SELECT ID FROM organizations') || statement.startsWith('SELECT ID FROM model_conditions')) {
+                return [[{ ID: 1 }], []];
+            }
+            if (statement.startsWith('SELECT source_url, raw_score FROM benchmark_results')) {
+                return [stored.filter(row => row.modelConditionID === params[0] && row.benchmarkConditionID === params[1]), []];
             }
             if (statement.startsWith('INSERT INTO benchmark_results ')) {
+                stored.push({ modelConditionID: params[1], benchmarkConditionID: params[3], raw_score: params[4], source_url: params[5] });
                 return [{ insertId: calls.length }, []];
             }
             throw new Error(`Unexpected SQL: ${statement}`);
@@ -277,13 +287,13 @@ test('canonical result persistence is context-free and keeps a source on every s
         submittedBy: 12,
         moderationLogID: 34
     });
-    await persistence.applyBenchmarkResult(connection, content, {
+    await assert.rejects(persistence.applyBenchmarkResult(connection, content, {
         submittedBy: 13,
         moderationLogID: 35
-    });
+    }), error => error?.body?.error === 'score_evidence_already_exists');
 
     const inserts = calls.filter(call => call.statement.startsWith('INSERT INTO benchmark_results '));
-    assert.equal(inserts.length, 4);
+    assert.equal(inserts.length, 2);
     assert.equal(calls.some(call => call.statement.startsWith('UPDATE benchmark_results ')), false);
     assert.equal(calls.some(call => call.statement.startsWith('SELECT ID FROM benchmark_results ')), false);
     assert.match(inserts[0].statement, /source_url, source_type, source_title/);
@@ -293,8 +303,17 @@ test('canonical result persistence is context-free and keeps a source on every s
     assert.equal(inserts[1].params[5], 'https://example.com/results/two');
     assert.equal(inserts[1].params[6], 'third_party_lab');
     assert.notEqual(inserts[0].params[5], inserts[1].params[5]);
-    assert.equal(inserts[2].params[5], inserts[0].params[5]);
-    assert.equal(inserts[3].params[5], inserts[1].params[5]);
+    assert.doesNotMatch(inserts[0].statement, /provider/);
+    assert.equal(JSON.parse(inserts[0].params[9]).conditionID, content.results[0].benchmarkConditionID);
+    assert.equal(JSON.parse(inserts[1].params[9]).conditionID, content.results[1].benchmarkConditionID);
+    assert.equal(inserts[0].params.length, 13);
+    assert.equal(inserts[0].params[8], content.results[0].notes);
+    assert.equal(inserts[1].params[8], content.results[1].notes);
+    const anotherSource = structuredClone(content);
+    anotherSource.results = [anotherSource.results[0]];
+    anotherSource.results[0].source.url = 'https://example.net/another-report';
+    await persistence.applyBenchmarkResult(connection, anotherSource, { submittedBy: 13, moderationLogID: 35 });
+    assert.equal(stored.length, 3, 'Equal numeric scores from distinct sources remain stored');
     assert.ok(calls.every(call => !/evaluation_results|evaluation_profiles|model_configurations/.test(call.statement)));
 });
 
@@ -344,6 +363,7 @@ test('custom scores may exceed normalization anchors while percentage scores rem
 test('public weights average participants across the subtree and drive model score intervals', async () => {
     const connection = {
         async execute(sql) {
+            if (sql.includes('FROM personal_pie_score_rules')) return [[], []];
             if (sql.includes('WITH RECURSIVE category_scope')) {
                 return [[
                     { ID: 10, category_ID: 1, context_values: '{}' },

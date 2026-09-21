@@ -36,18 +36,26 @@ body.bp-home  {
     text-decoration: none;
     font-size: 23px;
     font-weight: 730;
-    letter-spacing: -.8px;
+    letter-spacing: 0;
     margin: 0 8px 34px;
     flex: 0 0 auto;
+}
+
+.bp-brand-lockup {
+    display: block;
+    width: 155px;
+    max-width: 100%;
+    height: auto;
+    flex-shrink: 0;
 }
 
 .bp-brand-symbol  {
     display: inline-block;
     width: 27px;
     height: 27px;
-    border-radius: 50%;
-    background: conic-gradient(from -90deg, #245e47 0 71%, transparent 71% 74%, #91b096 74% 99%, transparent 99%);
-    transform: rotate(-8deg);
+    border-radius: 0;
+    background: url('/assets/benchpoll-mark.svg') center / contain no-repeat;
+    transform: none;
     flex: 0 0 auto;
 }
 

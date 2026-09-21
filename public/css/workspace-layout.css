@@ -1,0 +1,41 @@
+.bp-page-heading h1 { font-family: Georgia, 'Times New Roman', serif; font-size: 34px; font-style: italic; font-weight: 400; line-height: 1.2; letter-spacing: 0; }
+#mission-welcome-trigger { display: inline; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+#mission-welcome-trigger:hover { color: var(--bp-accent, #285d44); }
+#mission-welcome-trigger:focus-visible { outline: 2px solid #61977c; outline-offset: 5px; border-radius: 4px; }
+.bp-workspace-brand-slot:empty, #discussion-brand-slot:empty { display: none; }
+.bp-workspace-brand-slot { flex-shrink: 0; }
+.bp-workspace-brand-slot .bp-brand, #discussion-brand-slot .bp-brand { margin: 0; font-size: 22px; letter-spacing: 0; }
+.discussion-open .bp-page-heading { align-items: center; justify-content: flex-start; gap: 24px; }
+.discussion-open .bp-page-heading p { display: none; }
+#discussion-brand-slot { margin-bottom: 12px; }
+
+@media (min-width: 761px) {
+    .bp-home .bp-shell { --discussion-width: 360px; height: 100dvh; overflow: hidden; grid-template-columns: var(--bp-sidebar-width) minmax(0, 1fr) 0px; transition: grid-template-columns 320ms ease; }
+    .bp-home.discussion-open .bp-shell { grid-template-columns: 0px minmax(0, 1fr) var(--discussion-width); }
+    .bp-home .bp-shell > .bp-sidebar { width: var(--bp-sidebar-width); transition: transform 320ms ease, visibility 0s; }
+    .bp-home.discussion-open .bp-shell > .bp-sidebar { transform: translateX(-100%); visibility: hidden; transition: transform 320ms ease, visibility 0s 320ms; }
+    .bp-home .bp-workspace { display: flex; flex-direction: column; height: 100dvh; min-height: 0; padding: 22px 20px 16px; overflow: hidden; }
+    .bp-workspace > :not(.bp-workspace-grid) { flex-shrink: 0; }
+    .bp-home .bp-workspace-grid { flex: 1; min-height: 0; grid-template-columns: minmax(0, 1.85fr) minmax(0, 1fr); align-items: stretch; gap: 14px; }
+    .bp-home .bp-left-workspace { display: grid; grid-template-columns: minmax(0, .86fr) minmax(0, 1.14fr); height: 100%; min-height: 0; align-items: stretch; gap: 14px; }
+    .bp-home .bp-right-workspace { height: 100%; min-height: 0; }
+    .bp-home .bp-benchmark-card, .bp-home .bp-model-card { height: 100%; min-height: 0; }
+    .bp-home .bp-pie-home-slot { min-height: 0; overflow-y: auto; overflow-x: hidden; }
+    .bp-home .bp-pie-stage { max-width: none; }
+    .bp-home .bp-benchmark-card .bp-benchmark-rows, .bp-home .bp-model-card .bp-model-rows { min-height: 0; max-height: none; }
+    .bp-home .bp-benchmark-toolbar, .bp-home .bp-model-toolbar { flex-wrap: wrap; }
+    .bp-home .bp-workspace-grid { overflow-x: auto; }
+    /* Keep narrow desktop tables readable without covering either with the rail. */
+    @media (max-width: 1150px) {
+        .bp-home .bp-workspace-grid { grid-template-columns: minmax(490px, 1.85fr) minmax(260px, 1fr); }
+        .bp-home .bp-shell { --discussion-width: 320px; }
+    }
+}
+@media (max-width: 760px) {
+    .bp-page-heading h1 { font-size: 27px; }
+    .bp-home.discussion-open { overflow: hidden; }
+    .bp-home.discussion-open .bp-shell { height: 100dvh; overflow: hidden; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .bp-home .bp-shell, .bp-home .bp-shell > .bp-sidebar { transition: none; }
+}

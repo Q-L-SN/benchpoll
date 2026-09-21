@@ -56,7 +56,9 @@ test('approved score contract requires real sample counts, numeric scores and so
     for (const mutate of [
         payload => { payload.scoreGroups[0].sampleCount = 7; },
         payload => { payload.scoreGroups[0].samples[0].rawScore = '88'; },
-        payload => { payload.scoreGroups[0].samples[0].sourceURL = ''; }
+        payload => { payload.scoreGroups[0].samples[0].sourceURL = ''; },
+        payload => { delete payload.scoreGroups[0].distinctScoreCount; },
+        payload => { payload.scoreGroups[0].distinctScoreCount = 3; }
     ]) {
         const payload = structuredClone(valid); mutate(payload);
         assert.throws(() => validateApprovedModelResultsPayload(payload), error => error.code === 'invalid_model_scores_response');

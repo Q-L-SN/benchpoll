@@ -82,22 +82,23 @@ test('custom normalization requires both anchors but does not constrain entered 
     assert.doesNotMatch(submissionValidation, /to \+∞|−∞ to/);
 });
 
-test('benchmark and model conditions are single-line names with no status column', () => {
+test('benchmark names remain single-line while model configurations use key-value inputs', () => {
     const benchmarkRows = sourceBetween('function conditionRows(', 'function changeOperationSelector(');
     const modelRows = sourceBetween('function configurationRows(', 'function subjectDetailsStep(');
     assert.match(benchmarkRows, /<input required[^>]*data-condition-input/);
-    assert.match(modelRows, /<input required[^>]*data-configuration-input/);
+    assert.match(modelRows, /data-bind="modelParameter" data-field="key"/);
+    assert.match(modelRows, /data-bind="modelParameter" data-field="value"/);
     assert.doesNotMatch(benchmarkRows, /textarea|Score direction|Status/);
     assert.doesNotMatch(modelRows, /textarea|Thinking effort|Status/);
 });
 
-test('selecting an existing benchmark or model starts with one blank new condition', () => {
-    const benchmarkSelection = sourceBetween('function setEvaluationSelection(', 'function clearEvaluationSelection(');
+test('existing benchmark links append a blank condition on the change form; model addition stays supported', () => {
+    const benchmarkSelection = sourceBetween('async function loadChangeTarget(', 'async function loadUser(');
     const modelSelection = sourceBetween('function setSubjectModel(', 'function clearSubjectModel(');
-    assert.match(benchmarkSelection, /const newProfile = makeProfile\(1\)/);
-    assert.match(benchmarkSelection, /newProfile\.name = ''/);
-    assert.match(benchmarkSelection, /newProfile\.isDefault = false/);
-    assert.match(benchmarkSelection, /evaluation\.conditions = \[newProfile\]/);
+    assert.match(benchmarkSelection, /param\('addCondition'\) === '1'/);
+    assert.match(benchmarkSelection, /condition\.name = ''/);
+    assert.match(benchmarkSelection, /condition\.isDefault = false/);
+    assert.match(benchmarkSelection, /conditions\.push\(condition\)/);
     assert.match(modelSelection, /const configuration = makeConfiguration\(1\)/);
     assert.match(modelSelection, /configuration\.name = ''/);
     assert.match(modelSelection, /configuration\.isDefault = false/);
@@ -112,7 +113,8 @@ test('condition payloads derive default identity from the name and never from ro
         'decorateChangedFields();'
     );
     assert.match(benchmarkPayload, /isDefault:\s*isLiteralDefaultCondition\(profile\.name\)/);
-    assert.match(modelPayload, /isDefault:\s*isLiteralDefaultCondition\(configuration\.name\)/);
+    assert.match(modelPayload, /configurationValues\(configuration\)/);
+    assert.match(sourceBetween('function configurationValues(', 'function configurationRows('), /Object\.keys\(parameters\)\.length === 0/);
     assert.doesNotMatch(benchmarkPayload, /index\s*===\s*0|literalDefaultIndex/);
     assert.doesNotMatch(modelPayload, /index\s*===\s*0|literalDefaultIndex/);
     assert.match(conditionInput, /profile\.isDefault = isDefault/);
@@ -205,7 +207,8 @@ test('existing score choices validate on blur and selected models use vendor mar
     assert.match(choiceValidation, /Choose an existing model from the suggestions/);
     assert.match(choiceValidation, /Choose an existing benchmark from the suggestions/);
     assert.match(choiceValidation, /input\.setCustomValidity\(message\)/);
-    assert.match(focusout, /validateExistingChoiceInput\(existingChoice, \{ report: true \}\)/);
+    assert.match(focusout, /validateExistingChoiceInput\(existingChoice\)/);
+    assert.doesNotMatch(focusout, /reportValidity|showError/);
     assert.match(source, /const existingChoicesValid = validateRenderedExistingChoices\(\)/);
     assert.match(css, /\.evaluation-combobox\.has-model-selection > \.vendor-mark/);
     assert.doesNotMatch(source, /evaluation-selected-mark/);
@@ -217,13 +220,14 @@ test('percentage scores remain raw 0-100 values in the client payload', () => {
     assert.doesNotMatch(storedScore, /\/\s*100|\*\s*0\.01/);
 });
 
-test('change forms reuse ordinary fields and only add change-or-delete controls', () => {
+test('change forms reuse ordinary fields and offer change, delete and merge controls', () => {
     assert.match(source, /mode === 'edit_benchmark'/);
     assert.match(source, /mode === 'edit_model'/);
     assert.match(source, /mode === 'edit_result'/);
     assert.match(source, /changeOperationSelector\(\)/);
-    assert.match(source, /data-change-operation="update"/);
-    assert.match(source, /data-change-operation="delete"/);
+    assert.match(source, /\['update', 'Change'\]/);
+    assert.match(source, /\['delete', 'Delete'\]/);
+    assert.match(source, /\['merge', 'Merge into another'\]/);
     assert.match(source, /data-restore-path/);
 });
 
