@@ -6,6 +6,7 @@ export function createWorkspaceState() {
         selectedContextValues: {},
         dimensions: [],
         mode: 'public',
+        fallbackVisible: { personal: true, public: false },
         pinPersonalBenchmarks: false,
         workspaceView: 'overview',
         selectedObjectID: null,
