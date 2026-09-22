@@ -285,6 +285,7 @@ try {
     });
     await check('account switching replaces the index and rejects delayed data from the previous account', async ({ page, state }) => {
         await goConfigured(page);
+        const previousDocument = await page.evaluate(() => performance.timeOrigin);
         state.indexDelay = 450;
         await page.evaluate(() => window.dispatchEvent(new Event('focus')));
         await delay(80);
@@ -297,6 +298,7 @@ try {
         await delay(500);
         assert.deepEqual(await savedRows(page).evaluateAll(rows => rows.map(row => Number(row.dataset.locationCategoryId))), [9]);
         assert.equal(await page.locator('#tree-content [data-configured="true"]').count(), 1);
+        assert.notEqual(await page.evaluate(() => performance.timeOrigin), previousDocument, 'The old account workspace must not remain editable');
     });
     await check('configured scroll and keyboard focus survive view switches reload and index refresh', async ({ page, state }) => {
         const added = Array.from({ length: 45 }, (_, index) => ({ ID: 100 + index, parentID: 1, name: `Extra ${index}` }));

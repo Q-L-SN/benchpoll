@@ -303,6 +303,12 @@ function setTaxonomyOpen(open) {
 }
 
 function showUserProfile(profile) {
+    if (currentUserProfile && currentUserProfile.userID !== profile.userID) {
+        // Never keep an old account's editable workspace under a new session.
+        sidebarNavigation.setAccount(null);
+        window.location.reload();
+        return;
+    }
     currentUserProfile = profile;
     sidebarNavigation.setAccount(profile.userID);
     const picture = String(profile?.userProfilePictureURL ?? '');
