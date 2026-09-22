@@ -18,7 +18,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - name: Apply checked feature patch
+      - name: Apply checked feature patches
         run: |
           python3 - <<'PY'
           import base64, gzip, hashlib
@@ -32,6 +32,8 @@ jobs:
           PY
           git apply --check /tmp/sidebar.patch
           git apply /tmp/sidebar.patch
+          git apply --check .github/sidebar-transfer/followup.patch
+          git apply .github/sidebar-transfer/followup.patch
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: npx playwright install --with-deps chromium
       - name: Lint and Node tests
@@ -41,20 +43,25 @@ jobs:
           npm run lint 2>&1 | tee artifacts/navigation/lint.log
           npm test 2>&1 | tee artifacts/navigation/unit.log
       - name: Existing browser regressions
-        id: existing
         continue-on-error: true
         run: |
           set -o pipefail
           npm run test:frontend 2>&1 | tee artifacts/navigation/existing-browser.log
       - name: Sidebar browser regressions
-        id: sidebar
         continue-on-error: true
         run: |
           set -o pipefail
           npm run test:navigation 2>&1 | tee artifacts/navigation/sidebar-browser.log
       - name: Require both browser suites
-        if: steps.existing.outcome != 'success' || steps.sidebar.outcome != 'success'
-        run: exit 1
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          for file in ['artifacts/frontend/results.json','artifacts/navigation/results.json']:
+              rows = json.loads(Path(file).read_text())
+              print(file, sum(row['passed'] for row in rows), '/', len(rows))
+              assert rows and all(row['passed'] for row in rows), file
+          PY
       - name: Preserve verified feature tree on isolated branch
         run: |
           git config user.name 'BenchPoll verification'

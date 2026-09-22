@@ -1,0 +1,199 @@
+--- a/public/js/navigation/sidebar.js
++++ b/public/js/navigation/sidebar.js
+@@ -17,7 +17,15 @@
+     const preferences = readSidebarPreferences();
+     let account = null, current = null, confirmed = null, items = [], rowEntries = new Map();
+     let request = 0, controller = null, failed = false, loaded = false;
+-    let restoring = false, confirmedVersion = 0;
++    let restoring = false, confirmedVersion = 0, scrollFrame = null;
++    const scrollReady = { all: false, configured: false };
++
++    function restorePosition(top) {
++        restoring = true;
++        viewport.scrollTop = top;
++        if (scrollFrame !== null) cancelAnimationFrame(scrollFrame);
++        scrollFrame = requestAnimationFrame(() => { restoring = false; scrollFrame = null; });
++    }
+ 
+     function mark(configured, label) {
+         const icon = document.createElement('span');
+@@ -119,26 +127,28 @@
+         browse.hidden = items.length > 0 && rows.length > 0;
+         retry.hidden = !failed;
+         if (preferences.view === 'configured') {
+-            restoring = true;
+-            viewport.scrollTop = anchor?.isConnected ? oldScroll + anchor.getBoundingClientRect().top - anchorTop : oldScroll;
+-            restoring = false;
+-            if (focused?.classList.contains('bp-configured-row') && !focused.isConnected) {
+-                list.querySelector('[aria-current="page"]')?.focus({ preventScroll: true });
++            const top = !scrollReady.configured ? preferences.scroll.configured
++                : anchor?.isConnected ? oldScroll + anchor.getBoundingClientRect().top - anchorTop : oldScroll;
++            restorePosition(top);
++            if (loaded) scrollReady.configured = true;
++            // Moving retained anchors through a fragment can blur them in browsers.
++            if (focused?.classList.contains('bp-configured-row')) {
++                const nextFocus = focused.isConnected ? focused : list.querySelector('[aria-current="page"]');
++                if (nextFocus && document.activeElement !== nextFocus) nextFocus.focus({ preventScroll: true });
+             }
+         }
+     }
+ 
+     function setView(view, { remember = true } = {}) {
+-        if (remember) preferences.scroll[preferences.view] = viewport.scrollTop;
++        if (remember && scrollReady[preferences.view]) preferences.scroll[preferences.view] = viewport.scrollTop;
+         preferences.view = view === 'configured' ? 'configured' : 'all';
+         const configured = preferences.view === 'configured';
+         tree.hidden = configured;
+         document.getElementById('configured-panel').hidden = !configured;
+         tools.hidden = !configured;
+         buttons.forEach(button => button.setAttribute('aria-pressed', String(button.dataset.navigationView === preferences.view)));
+-        restoring = true;
+-        viewport.scrollTop = preferences.scroll[preferences.view];
+-        restoring = false;
++        restorePosition(preferences.scroll[preferences.view]);
++        if (configured && loaded) scrollReady.configured = true;
+         if (remember) writeSidebarPreferences(preferences);
+     }
+ 
+@@ -189,6 +199,7 @@
+         ++request;
+         controller?.abort();
+         account = next;
++        scrollReady.configured = false;
+         items = [];
+         failed = false;
+         loaded = next === null;
+@@ -220,7 +231,7 @@
+     browse.addEventListener('click', () => setView('all'));
+     login.addEventListener('click', onLogin);
+     viewport.addEventListener('scroll', () => {
+-        if (restoring) return;
++        if (restoring || !scrollReady[preferences.view]) return;
+         preferences.scroll[preferences.view] = viewport.scrollTop;
+         writeSidebarPreferences(preferences);
+     }, { passive: true });
+@@ -236,9 +247,8 @@
+             writeSidebarPreferences(preferences);
+         },
+         restoreScroll() {
+-            restoring = true;
+-            viewport.scrollTop = preferences.scroll[preferences.view];
+-            restoring = false;
++            scrollReady.all = true;
++            restorePosition(preferences.scroll[preferences.view]);
+         }
+     };
+ }
+--- a/public/js/home.js
++++ b/public/js/home.js
+@@ -50,7 +50,7 @@
+             url.pathname.slice('/rankings/'.length), { contextValues: entry.contextValues, lineage: entry.lineage });
+     },
+     onLogin: () => loginButton.click(),
+-    onSessionChange: () => { void loadUserProfile(); }
++    onSessionChange: () => { void loadUserProfile().catch(showNavigationError); }
+ });
+ navigationChannel.subscribe(() => { lastWorkspaceURL = window.location.href; });
+ 
+@@ -174,8 +174,9 @@
+         if (lineage) renderTree();
+         else updateTreeSelection();
+         updateContributionLinks();
+-        await publishWorkspaceState({ contextValues });
++        const pendingWorkspace = publishWorkspaceState({ contextValues });
+         setTaxonomyOpen(false);
++        await pendingWorkspace;
+         return true;
+     } catch {
+         showNavigationError();
+@@ -226,6 +227,16 @@
+         children.replaceChildren(...entries.map(child => makeCategoryNode(child, appendCategoryPath(path, child.name))));
+     };
+     if (Array.isArray(category.children)) renderChildren(category.children);
++    else if (category.expanded && hasChildren) {
++        // Restore expanded lazy branches after a full document reload as well.
++        void loadChildren(category).then(entries => {
++            if (!group.isConnected) return;
++            renderChildren(entries);
++            updateTreeSelection();
++            sidebarNavigation.updateTreeMarkers();
++            sidebarNavigation.restoreScroll();
++        }).catch(showNavigationError);
++    }
+ 
+     const toggle = async event => {
+         event.preventDefault();
+--- a/public/css/ui/navigation.css
++++ b/public/css/ui/navigation.css
+@@ -1,7 +1,7 @@
+ /* Two navigation scopes; neither one changes the workspace's weight source. */
+ .bp-navigation-controls { flex: 0 0 auto; min-width: 0; margin-bottom: 10px; }
+ .bp-navigation-views { display: flex; gap: 3px; align-items: center; padding: 3px; border: 1px solid var(--bp-line); border-radius: 7px; }
+-.bp-navigation-views button { min-width: 0; flex: 1; min-height: 34px; padding: 6px 4px; border: 0; border-radius: 4px; background: transparent; color: var(--bp-muted); font: inherit; font-size: 12px; cursor: pointer; }
++.bp-navigation-views button { min-width: 0; flex: 1 1 auto; white-space: nowrap; min-height: 34px; padding: 6px 4px; border: 0; border-radius: 4px; background: transparent; color: var(--bp-muted); font: inherit; font-size: 12px; cursor: pointer; }
+ .bp-navigation-views button[aria-pressed="true"] { color: var(--bp-purple); background: var(--bp-selected, #dce8dc); font-weight: 650; }
+ .bp-navigation-controls button:focus-visible, .bp-configured-row:focus-visible, #configured-panel button:focus-visible { outline: 2px solid var(--bp-purple); outline-offset: -2px; }
+ .bp-navigation-search { display: flex; align-items: center; gap: 6px; margin: 9px 2px 0; }
+--- a/scripts/frontend/navigation.mjs
++++ b/scripts/frontend/navigation.mjs
+@@ -174,7 +174,10 @@
+         assert.equal(await currentRow(page).getAttribute('data-configured'), 'true');
+     });
+     await check('lazy tree marks only directly configured categories across all template contexts', async ({ page }) => {
+-        const expand = async ID => page.locator(`#tree-content [data-category-id="${ID}"] .icon-folder`).click();
++        const expand = async ID => {
++            await page.locator(`#tree-content [data-category-id="${ID}"] .icon-folder`).click();
++            await page.waitForFunction(ID => document.querySelector(`#tree-content [data-category-id="${ID}"] .icon-folder`)?.getAttribute('aria-expanded') === 'true', ID);
++        };
+         assert.equal(await page.locator('#tree-content [data-category-id="1"] .bp-config-mark').count(), 0);
+         assert.equal(await page.locator('#tree-content [data-category-id="2"] .bp-config-mark').count(), 0);
+         await expand(2);
+@@ -279,6 +282,48 @@
+         assert.equal(await savedRows(page).count(), 0);
+         assert.equal(await page.locator('#tree-content .bp-config-mark').count(), 0);
+         assert.equal(await page.locator('.bp-configured-row[data-configured="false"]').count(), 1);
++    });
++    await check('account switching replaces the index and rejects delayed data from the previous account', async ({ page, state }) => {
++        await goConfigured(page);
++        state.indexDelay = 450;
++        await page.evaluate(() => window.dispatchEvent(new Event('focus')));
++        await delay(80);
++        state.owner = '2';
++        const only = pie(9);
++        state.pies = new Map([[contextKey(9, only.context.contextValues), only]]);
++        state.indexDelay = 0;
++        await page.evaluate(() => window.dispatchEvent(new Event('focus')));
++        await until(async () => await savedRows(page).count() === 1 && await config(page, 9).count() === 1, 'New account index did not replace old data');
++        await delay(500);
++        assert.deepEqual(await savedRows(page).evaluateAll(rows => rows.map(row => Number(row.dataset.locationCategoryId))), [9]);
++        assert.equal(await page.locator('#tree-content [data-configured="true"]').count(), 1);
++    });
++    await check('configured scroll and keyboard focus survive view switches reload and index refresh', async ({ page, state }) => {
++        const added = Array.from({ length: 45 }, (_, index) => ({ ID: 100 + index, parentID: 1, name: `Extra ${index}` }));
++        categories.push(...added);
++        try {
++            for (const category of added) {
++                const item = pie(category.ID);
++                state.pies.set(contextKey(category.ID, item.context.contextValues), item);
++            }
++            await goConfigured(page);
++            await page.evaluate(() => window.dispatchEvent(new Event('focus')));
++            await until(async () => await savedRows(page).count() === 50, 'Long index did not load');
++            const viewport = page.locator('.bp-taxonomy');
++            await viewport.evaluate(element => { element.scrollTop = 600; });
++            await delay(100);
++            await page.locator('[data-navigation-view="all"]').click();
++            await goConfigured(page);
++            assert.ok(Math.abs(await viewport.evaluate(element => element.scrollTop) - 600) < 2);
++            await page.reload(); await ready(page, 1);
++            await until(async () => await savedRows(page).count() === 50, 'Reloaded index did not load');
++            assert.ok(Math.abs(await viewport.evaluate(element => element.scrollTop) - 600) < 2, 'Reload lost configured scroll position');
++            const target = config(page, 110);
++            await target.focus();
++            await page.evaluate(() => window.dispatchEvent(new Event('focus')));
++            await delay(200);
++            assert.equal(await target.evaluate(element => element === document.activeElement), true, 'Index refresh lost keyboard focus');
++        } finally { categories.splice(categories.length - added.length, added.length); }
+     });
+     await check('back and forward restore exact locations without resetting either selected mode', async ({ page }) => {
+         await goConfigured(page); await config(page, 4, 'Extended').click(); await ready(page, 4);
