@@ -1,7 +1,7 @@
 export default [{
     ignores: ['node_modules/**', 'data/**']
 }, {
-    files: ['server.js', 'ranking-service.js', 'db.js', 'scripts/**/*.mjs', 'test/**/*.mjs'],
+    files: ['server.js', 'ranking-service.js', 'navigation-service.js', 'db.js', 'scripts/**/*.mjs', 'test/**/*.mjs'],
     rules: {
         'no-constant-binary-expression': 'error',
         'no-dupe-keys': 'error',

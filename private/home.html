@@ -15,10 +15,11 @@
     <link rel="stylesheet" href="/css/home-palette.css?v=20260919">
     <script src="/js/home-palette.js?v=20260910-1"></script>
     <script src="/js/discussion.js?v=20260919" type="module"></script>
-    <script src="/js/home.js?v=clean-urls-20260908" type="module"></script>
-    <script src="/js/home-workspace.js?v=public-fallback-preferences-20260921" type="module"></script>
+    <script src="/js/home.js?v=sidebar-navigation-20260922" type="module"></script>
+    <script src="/js/home-workspace.js?v=sidebar-navigation-20260922" type="module"></script>
     <script src="/js/home-welcome.js?v=20260901-welcome-2" type="module"></script>
     <link rel="stylesheet" href="/css/model-comparison.css?v=20260912">
+    <link rel="stylesheet" href="/css/ui/navigation.css?v=sidebar-navigation-20260922">
 </head>
 <body class="bp-home bp-no-template-context">
     <div id="welcome-overlay" class="bp-welcome-overlay" hidden>
@@ -160,9 +161,27 @@
                 <i class="fa-solid fa-xmark" aria-hidden="true"></i>
             </button>
 
-            <span class="bp-rail-label">Explore capabilities</span>
+            <div class="bp-navigation-controls">
+                <div class="bp-navigation-views" role="group" aria-label="Navigation view">
+                    <button type="button" data-navigation-view="all" aria-pressed="true" aria-controls="tree-content">All categories</button>
+                    <button type="button" data-navigation-view="configured" aria-pressed="false" aria-controls="configured-panel">Configured</button>
+                </div>
+                <label id="configured-search-wrap" class="bp-navigation-search" hidden>
+                    <input id="configured-search" type="search" placeholder="Find a configuration…" aria-label="Search configured categories and contexts" autocomplete="off">
+                </label>
+                <button id="navigation-retry" type="button" aria-label="Retry loading configured weights" title="Could not load configured weights. Retry." hidden><i class="fa-solid fa-rotate" aria-hidden="true"></i></button>
+                <span id="navigation-feedback" class="sr-only" role="status"></span>
+            </div>
             <nav class="bp-taxonomy" aria-label="Categories">
                 <div id="tree-content"></div>
+                <div id="configured-panel" hidden>
+                    <div id="configured-content" aria-label="Configured weights"></div>
+                    <p id="configured-empty" hidden></p>
+                    <div class="bp-configured-actions">
+                        <button id="configured-browse" type="button" hidden>Browse categories</button>
+                        <button id="configured-login" type="button" hidden>Sign in</button>
+                    </div>
+                </div>
             </nav>
 
             <div class="bp-sidebar-actions">

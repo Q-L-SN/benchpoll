@@ -6,7 +6,7 @@ export function createWorkspaceChannel() {
     return {
         publish(detail) {
             current = { ...detail };
-            listeners.forEach(listener => listener({ ...current }));
+            return Promise.all([...listeners].map(listener => listener({ ...current })));
         },
         subscribe(listener) {
             listeners.add(listener);

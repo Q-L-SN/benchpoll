@@ -1,3 +1,7 @@
+import { createSidebarNavigation } from './navigation/sidebar.js?v=sidebar-navigation-20260922';
+import { navigationChannel } from './shared/navigation-channel.js';
+import { locationURL } from './navigation/model.js';
+import { postJSON as requestJSON } from './shared/http.js';
 import { workspaceChannel } from './shared/workspace-channel.js';
 import { buildContributionURL as buildContributeURL } from './shared/contribution-navigation.js?v=clean-20260908';
 import * as S from '/js/shared.js';
@@ -36,6 +40,19 @@ let currentCategoryPath = '';
 let currentCategoryName = '';
 let currentUserProfile = null;
 let currentTree = [];
+let navigationBusy = false;
+let profileSequence = 0;
+let lastWorkspaceURL = window.location.href;
+const sidebarNavigation = createSidebarNavigation({
+    onNavigate(entry) {
+        const url = new URL(locationURL(entry), window.location.origin);
+        return selectCategory({ ID: entry.categoryID, name: entry.categoryName },
+            url.pathname.slice('/rankings/'.length), { contextValues: entry.contextValues, lineage: entry.lineage });
+    },
+    onLogin: () => loginButton.click(),
+    onSessionChange: () => { void loadUserProfile().catch(showNavigationError); }
+});
+navigationChannel.subscribe(() => { lastWorkspaceURL = window.location.href; });
 
 function displayURLPart(value) {
     return encodeURIComponent(String(value ?? '').trim().replace(/\s+/g, '-'));
@@ -69,13 +86,14 @@ async function prepareWorkspaceContextChange() {
     }
 }
 
-function publishWorkspaceState() {
+function publishWorkspaceState(options = {}) {
     const detail = {
         categoryPath: currentCategoryPath,
         categoryName: currentCategoryName,
-        currentCategoryID
+        currentCategoryID,
+        ...options
     };
-    workspaceChannel.publish(detail);
+    return workspaceChannel.publish(detail);
 }
 
 function updateContributionLinks() {
@@ -117,16 +135,53 @@ function updateTreeSelection() {
     });
 }
 
-async function selectCategory(category, path, { replace = false } = {}) {
-    if (!await prepareWorkspaceContextChange()) return;
-    currentCategoryID = category?.ID ?? null;
-    currentCategoryPath = path || '';
-    currentCategoryName = category?.name ?? '';
-    window.history[replace ? 'replaceState' : 'pushState']({}, '', rankingURL());
-    updateTreeSelection();
-    updateContributionLinks();
-    publishWorkspaceState();
-    setTaxonomyOpen(false);
+function mergeCategoryTree(previous, incoming) {
+    const old = new Map(previous.map(category => [Number(category.ID), category]));
+    return incoming.map(category => {
+        const retained = old.get(Number(category.ID));
+        return { ...retained, ...category,
+            children: Array.isArray(category.children)
+                ? mergeCategoryTree(retained?.children ?? [], category.children) : retained?.children };
+    });
+}
+
+function showNavigationError() {
+    const feedback = document.getElementById('navigation-feedback');
+    feedback.textContent = 'Could not open this category or context. Try again.';
+    document.getElementById('navigation-retry').hidden = false;
+}
+
+async function selectCategory(category, path, { replace = false, contextValues, lineage } = {}) {
+    if (navigationBusy) return false;
+    navigationBusy = true;
+    try {
+        if (!await prepareWorkspaceContextChange()) return false;
+        if (lineage) {
+            // Resolve the real taxonomy path as well, including lazy/unvisited nodes.
+            const payload = await requestJSON(`/api/get_page${rankingURL(path)}`, { treeOnly: true });
+            if (Number(payload.currentCategoryID) !== Number(category.ID)) throw new Error('Category changed');
+            currentTree = mergeCategoryTree(currentTree, payload.categoryTree);
+            lineage.slice(0, -1).forEach(parent => sidebarNavigation.rememberExpansion(parent.ID, true));
+        }
+        currentCategoryID = category?.ID ?? null;
+        currentCategoryPath = path || '';
+        currentCategoryName = category?.name ?? '';
+        const url = new URL(rankingURL(), window.location.origin);
+        if (contextValues !== undefined) {
+            Object.keys(contextValues).sort().forEach(key => url.searchParams.set(`context_${key}`, contextValues[key]));
+        }
+        window.history[replace ? 'replaceState' : 'pushState']({}, '', url);
+        if (lineage) renderTree();
+        else updateTreeSelection();
+        updateContributionLinks();
+        const pendingWorkspace = publishWorkspaceState({ contextValues });
+        setTaxonomyOpen(false);
+        await pendingWorkspace;
+        return true;
+    } catch {
+        showNavigationError();
+        return false;
+    } finally { navigationBusy = false; }
 }
 
 async function loadChildren(category) {
@@ -142,6 +197,7 @@ async function loadChildren(category) {
 
 function makeCategoryRow(category, path) {
     const hasChildren = Boolean(category.hasChildren);
+    category.expanded = sidebarNavigation.expansionFor(category.ID, Boolean(category.expanded));
     const group = document.createElement('div');
     group.className = 'tree-group';
     if (category.expanded) group.classList.add('expanded');
@@ -171,6 +227,16 @@ function makeCategoryRow(category, path) {
         children.replaceChildren(...entries.map(child => makeCategoryNode(child, appendCategoryPath(path, child.name))));
     };
     if (Array.isArray(category.children)) renderChildren(category.children);
+    else if (category.expanded && hasChildren) {
+        // Restore expanded lazy branches after a full document reload as well.
+        void loadChildren(category).then(entries => {
+            if (!group.isConnected) return;
+            renderChildren(entries);
+            updateTreeSelection();
+            sidebarNavigation.updateTreeMarkers();
+            sidebarNavigation.restoreScroll();
+        }).catch(showNavigationError);
+    }
 
     const toggle = async event => {
         event.preventDefault();
@@ -180,6 +246,9 @@ function makeCategoryRow(category, path) {
         group.classList.toggle('expanded', expanding);
         children.hidden = !expanding;
         expander.setAttribute('aria-expanded', String(expanding));
+        category.expanded = expanding;
+        sidebarNavigation.rememberExpansion(category.ID, expanding);
+        sidebarNavigation.updateTreeMarkers();
     };
     expander.addEventListener('click', toggle);
     expander.addEventListener('keydown', event => {
@@ -213,6 +282,8 @@ function renderTree() {
         makeCategoryNode(category, appendCategoryPath('', category.name))
     )));
     updateTreeSelection();
+    sidebarNavigation.updateTreeMarkers();
+    sidebarNavigation.restoreScroll();
 }
 
 function findCategoryByID(entries, targetID) {
@@ -233,6 +304,7 @@ function setTaxonomyOpen(open) {
 
 function showUserProfile(profile) {
     currentUserProfile = profile;
+    sidebarNavigation.setAccount(profile.userID);
     const picture = String(profile?.userProfilePictureURL ?? '');
     userProfilePicture.style.backgroundImage = picture ? `url("${picture.replaceAll('"', '%22')}")` : '';
     accountDialogPicture.style.backgroundImage = picture ? `url("${picture.replaceAll('"', '%22')}")` : '';
@@ -245,6 +317,7 @@ function showUserProfile(profile) {
 
 function clearUserProfile() {
     currentUserProfile = null;
+    sidebarNavigation.setAccount(null);
     userProfile.hidden = true;
     loginButton.hidden = false;
     userProfileName.textContent = '';
@@ -255,15 +328,18 @@ function clearUserProfile() {
 }
 
 async function loadUserProfile() {
+    const sequence = ++profileSequence;
     const response = await fetch('/api/get_user_profile', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
     });
+    if (sequence !== profileSequence) return;
     if (response.status === 204) {
         clearUserProfile();
         return;
     }
-    showUserProfile(await G.checkErrorCodeInURL(response));
+    const profile = await G.checkErrorCodeInURL(response);
+    if (sequence === profileSequence) showUserProfile(profile);
 }
 
 async function runAccountAction(url, dialog, successDialog) {
@@ -271,6 +347,8 @@ async function runAccountAction(url, dialog, successDialog) {
     actions.hidden = true;
     try {
         await postJSON(url);
+        ++profileSequence;
+        clearUserProfile();
         dialog.hidden = true;
         successDialog.hidden = false;
     } catch (error) {
@@ -279,13 +357,13 @@ async function runAccountAction(url, dialog, successDialog) {
     }
 }
 
-async function initializeTree() {
-    const payload = await postJSON(`/api/get_page${window.location.pathname}`, { treeOnly: true });
+async function initializeTree({ fromURL = false } = {}) {
+    const payload = await requestJSON(`/api/get_page${window.location.pathname}`, { treeOnly: true });
     if (payload?.jump) {
         window.location.replace('/');
         return;
     }
-    currentTree = payload?.categoryTree ?? [];
+    currentTree = mergeCategoryTree(currentTree, payload?.categoryTree ?? []);
     currentCategoryID = payload?.currentCategoryID ?? null;
     const selected = findCategoryByID(currentTree, currentCategoryID)
         ?? (currentCategoryID === null && currentTree.length === 1 ? currentTree[0] : null);
@@ -296,8 +374,32 @@ async function initializeTree() {
         : selected ? appendCategoryPath('', selected.name) : '';
     renderTree();
     updateContributionLinks();
-    publishWorkspaceState();
+    await publishWorkspaceState({ fromURL });
 }
+
+// Back/forward changes the location, never the selected sidebar or pie mode.
+window.addEventListener('popstate', async () => {
+    const target = window.location.href;
+    const contextAddress = input => {
+        const url = new URL(input);
+        ['discussion', 'categoryID', 'benchmarkID', 'threadID'].forEach(key => url.searchParams.delete(key));
+        return url.pathname + url.search;
+    };
+    if (contextAddress(target) === contextAddress(lastWorkspaceURL)) return;
+    if (navigationBusy) { history.replaceState(history.state, '', lastWorkspaceURL); return; }
+    navigationBusy = true;
+    const previous = lastWorkspaceURL;
+    // A queued save still belongs to the old location; don't let its URL sync
+    // overwrite the destination chosen by the browser's history controls.
+    history.replaceState(history.state, '', previous);
+    try {
+        if (!await prepareWorkspaceContextChange()) return;
+        history.replaceState(history.state, '', target);
+        await initializeTree({ fromURL: true });
+    } catch { showNavigationError(); }
+    finally { navigationBusy = false; }
+});
+window.addEventListener('focus', () => { void loadUserProfile().catch(showNavigationError); });
 
 taxonomyToggle.addEventListener('click', () => setTaxonomyOpen(!document.body.classList.contains('taxonomy-open')));
 taxonomyClose.addEventListener('click', () => setTaxonomyOpen(false));
@@ -349,6 +451,8 @@ revokeGitHubAuthLink.href = `https://github.com/settings/connections/application
 revokeGitHubAuthLink.textContent = revokeGitHubAuthLink.href;
 
 G.listenStorageChange('user-profile-update', async profileSignal => {
+    ++profileSequence;
+    sidebarNavigation.setAccount(null);
     if (profileSignal === null) {
         clearUserProfile();
         logoutSuccessDialog.hidden = false;

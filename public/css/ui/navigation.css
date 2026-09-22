@@ -1,0 +1,42 @@
+/* Two navigation scopes; neither one changes the workspace's weight source. */
+.bp-navigation-controls { flex: 0 0 auto; min-width: 0; margin-bottom: 10px; }
+.bp-navigation-views { display: flex; gap: 3px; align-items: center; padding: 3px; border: 1px solid var(--bp-line); border-radius: 7px; }
+.bp-navigation-views button { min-width: 0; flex: 1 1 auto; white-space: nowrap; min-height: 34px; padding: 6px 4px; border: 0; border-radius: 4px; background: transparent; color: var(--bp-muted); font: inherit; font-size: 12px; cursor: pointer; }
+.bp-navigation-views button[aria-pressed="true"] { color: var(--bp-purple); background: var(--bp-selected, #dce8dc); font-weight: 650; }
+.bp-navigation-controls button:focus-visible, .bp-configured-row:focus-visible, #configured-panel button:focus-visible { outline: 2px solid var(--bp-purple); outline-offset: -2px; }
+.bp-navigation-search { display: flex; align-items: center; gap: 6px; margin: 9px 2px 0; }
+.bp-navigation-search input { min-width: 0; width: 100%; height: 33px; border: 1px solid var(--bp-line); border-radius: 5px; padding: 5px 8px; background: var(--bp-surface, white); color: var(--bp-text); font: inherit; font-size: 12px; }
+#navigation-retry { border: 0; padding: 5px 8px; color: var(--bp-muted); background: none; cursor: pointer; }
+#tree-content [data-category-id] > span:not(.icon-folder):not(.bp-config-mark) { min-width: 0; overflow-wrap: anywhere; }
+.bp-config-mark { flex: 0 0 15px; width: 15px; height: 15px; margin-left: auto; color: var(--bp-muted); align-self: center; }
+.bp-config-mark svg { display: block; width: 100%; height: 100%; }
+.bp-config-mark circle { fill: none; stroke: currentColor; stroke-width: 1.4; }
+.bp-config-mark path { fill: none; stroke: currentColor; stroke-width: 1.2; }
+.bp-config-mark.is-configured circle { fill: currentColor; }
+.bp-config-mark.is-configured path { fill: var(--bp-surface-soft, white); }
+.bp-config-mark.is-unavailable { color: var(--bp-muted); opacity: .65; }
+#configured-panel { min-width: 0; }
+#configured-content { display: block; }
+.bp-configured-row { display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0; min-height: 38px; padding: 8px 8px 8px calc(10px + var(--navigation-depth, 0) * 8px); border: 0; border-radius: 6px; color: var(--bp-text); font-size: 13px; text-decoration: none; cursor: pointer; }
+.bp-configured-row:hover { background: var(--bp-hover, #e2e9e0); }
+.bp-configured-row.selected { background: var(--bp-selected, #dce8dc); color: var(--bp-purple); }
+.bp-configured-row.selected .bp-configured-name { font-weight: 650; }
+/* Only the roots of the saved forest receive an extra gap. No internal dividers. */
+.bp-configured-row.is-group-start { margin-top: 14px; }
+.bp-configured-copy { display: grid; gap: 2px; flex: 1; min-width: 0; }
+.bp-configured-name, .bp-configured-context, .bp-configured-path { overflow-wrap: anywhere; }
+.bp-configured-context, .bp-configured-path { color: var(--bp-muted); font-size: 11px; line-height: 1.4; }
+.bp-configured-row.is-unavailable { cursor: not-allowed; }
+.bp-configured-row.is-unavailable .bp-configured-name { text-decoration: line-through; text-decoration-thickness: 1px; }
+#configured-empty { padding: 12px 10px; margin: 0; color: var(--bp-muted); font-size: 12px; }
+.bp-configured-actions { display: flex; flex-wrap: wrap; gap: 4px; padding-top: 8px; }
+.bp-configured-actions button { border: 0; background: none; color: var(--bp-purple); font-size: 12px; padding: 7px 10px; cursor: pointer; text-underline-offset: 3px; text-decoration: underline; }
+@media (max-width: 760px) {
+    .bp-sidebar > .bp-navigation-controls { display: none; }
+    .taxonomy-open .bp-sidebar > .bp-navigation-controls { display: block; }
+}
+@media (forced-colors: active) {
+    .bp-configured-row.selected { outline: 1px solid Highlight; }
+    .bp-navigation-views button[aria-pressed="true"] { outline: 1px solid Highlight; }
+    .bp-config-mark.is-configured path { fill: Canvas; }
+}

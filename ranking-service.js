@@ -31,7 +31,7 @@ function parseFiniteNumber(value) {
     return null;
 }
 
-function normalizeUserID(value) {
+export function normalizeUserID(value) {
     if (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'bigint') {
         return null;
     }
@@ -156,17 +156,7 @@ async function loadDimensions(connection, category) {
         WHERE is_active = 1
           AND scope_category_ID IN (${scopedIDs.map(() => '?').join(', ')})
         ORDER BY position, ID`, scopedIDs);
-    const priority = new Map(scopedIDs.map((scopeID, index) => [Number(scopeID), index]));
-    const selectedByKey = new Map();
-    for (const row of rows) {
-        const key = String(row.dimension_key);
-        const current = selectedByKey.get(key);
-        if (!current || priority.get(Number(row.scope_category_ID)) > priority.get(Number(current.scope_category_ID))) {
-            selectedByKey.set(key, row);
-        }
-    }
-    const selected = Array.from(selectedByKey.values())
-        .sort((a, b) => (Number(a.position) - Number(b.position)) || (Number(a.ID) - Number(b.ID)));
+    const selected = selectScopedDimensions(rows, category);
     if (selected.length === 0) {
         return [];
     }
@@ -176,6 +166,27 @@ async function loadDimensions(connection, category) {
         FROM ranking_dimension_options
         WHERE dimension_ID IN (${dimensionIDs.map(() => '?').join(', ')})
         ORDER BY dimension_ID, position, ID`, dimensionIDs);
+    return decorateDimensions(selected, options);
+}
+
+export function selectScopedDimensions(rows, category) {
+    if (!category.isLeaf) return [];
+    const scopedIDs = [0, ...category.lineage.map(item => item.ID)];
+    const priority = new Map(scopedIDs.map((scopeID, index) => [Number(scopeID), index]));
+    const selectedByKey = new Map();
+    for (const row of rows.filter(row => scopedIDs.includes(Number(row.scope_category_ID)))) {
+        const key = String(row.dimension_key);
+        const current = selectedByKey.get(key);
+        if (!current || priority.get(Number(row.scope_category_ID)) > priority.get(Number(current.scope_category_ID))) {
+            selectedByKey.set(key, row);
+        }
+    }
+    const selected = Array.from(selectedByKey.values())
+        .sort((a, b) => (Number(a.position) - Number(b.position)) || (Number(a.ID) - Number(b.ID)));
+    return selected;
+}
+
+export function decorateDimensions(selected, options) {
     const optionsByDimension = new Map();
     for (const option of options) {
         const dimensionID = Number(option.dimension_ID);
@@ -199,7 +210,7 @@ async function loadDimensions(connection, category) {
     }));
 }
 
-function canonicalizeContextValues(requestedValues, dimensions, { requireAllDimensions = false } = {}) {
+export function canonicalizeContextValues(requestedValues, dimensions, { requireAllDimensions = false } = {}) {
     if (requestedValues !== null && requestedValues !== undefined
         && (!requestedValues || typeof requestedValues !== 'object' || Array.isArray(requestedValues))) {
         throw requestError(400, 'invalid_context_values');
@@ -894,6 +905,7 @@ export async function resolveRankingContext(connection, {
         ID: context.ID,
         categoryID: category.ID,
         categoryPath: category.path,
+        lineage: category.lineage.map(item => ({ ID: item.ID, name: item.name })),
         isLeafCategory: category.isLeaf,
         contextHash: context.contextHash,
         contextValues: resolvedContext.contextValues,
@@ -1222,6 +1234,7 @@ async function buildRankingWorkspace(db, {
 
     return {
         authenticated: Boolean(userID),
+        userID: normalizeUserID(userID),
         context,
         personalPie: {
             revision: storedPersonalPie?.revision ?? 0,

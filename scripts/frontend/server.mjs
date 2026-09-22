@@ -1,3 +1,4 @@
+import { entryFromContext } from '../../public/js/navigation/model.js';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { resolve, sep, extname } from 'node:path';
@@ -30,7 +31,11 @@ export async function startPreview({ port = 0, ...options } = {}) {
                 if (discussion !== null) return send(200, discussion);
                 if (url.pathname.startsWith('/api/get_page')) return send(200, { categoryTree: categories, currentCategoryID: 1 });
                 switch (url.pathname) {
-                case '/api/get_user_profile': return send(state.authenticated ? 200 : 204, { userName: 'Preview account', hasVerifiedEmail: true, role: state.isSenior ? 'senior' : 'reviewer' });
+                case '/api/get_user_profile': return send(state.authenticated ? 200 : 204, { userID: state.userID, userName: 'Preview account', hasVerifiedEmail: true, role: state.isSenior ? 'senior' : 'reviewer' });
+                case '/api/get_personal_navigation':
+                    if (!state.authenticated) return send(401, { error: 'authentication_required' });
+                    return send(200, { userID: state.userID, items: state.empty || state.personalEntries.length === 0 ? []
+                        : [entryFromContext(workspace(state, { categoryID: 1, contextValues: { budget: 'standard' } }).context)] });
                 case '/api/load_benchmarks_and_subcategories': return send(200, { subcategories: categories[0].children });
                 case '/api/get_weighted_workspace':
                     await delay(state.workspaceDelay);

@@ -26,7 +26,7 @@ export function weightedEntries(weights) {
 }
 export function createFixtureState(options = {}) {
     return {
-        authenticated: true, isSenior: true, empty: false, workspaceFailure: null, saveFailure: null,
+        userID: '1', authenticated: true, isSenior: true, empty: false, workspaceFailure: null, saveFailure: null,
         workspaceDelay: 0, saveDelay: 0, evidenceDelay: 0, requests: [], revision: 1, publicFallbackRules: [],
         personalEntries: weightedEntries(benchmarks.slice(0, 4).map(item => ({ conditionID: item.conditionID, weightBasisPoints: item.personalWeight * 100 }))),
         fallbackRules: [], logs: [{ ID: 901, status: 'pending', content: { type: 'feedback', details: 'Please make score sources easier to inspect.', pageURL: 'https://example.com/' }, created_at: '2026-09-01T08:00:00Z', userName: 'Preview contributor' }],
@@ -40,7 +40,9 @@ export function workspace(state, body) {
     const publicWeights = benchmarks.filter(item => item.publicWeight).map(item => ({ conditionID: item.conditionID, weightBasisPoints: item.publicWeight * 100 }));
     return {
         authenticated: state.authenticated,
+        userID: state.authenticated ? state.userID : null,
         context: { categoryID: category.ID, categoryPath: category.path, categoryName: category.name,
+            lineage: (category.ID === 1 ? [categories[0]] : [categories[0], category]).map(item => ({ ID: item.ID, name: item.name })),
             contextValues: { budget: selectedKey }, dimensions: [{ key: 'budget', name: 'Budget', selectedKey,
                 options: [{ key: 'standard', name: 'Standard' }, { key: 'extended', name: 'Extended' }] }] },
         personalPie: { revision: state.revision, isDraft: false, editable: state.authenticated,

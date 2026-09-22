@@ -1,3 +1,4 @@
+import { navigationChannel } from './shared/navigation-channel.js';
 import { createComparisonControls } from './workspace/comparison-controls.js?v=comparison-recovery-20260912';
 import { workspaceChannel } from './shared/workspace-channel.js';
 import { readRankingContext, rankingContextURL } from './shared/ranking-url.js?v=short-20260908';
@@ -1605,7 +1606,7 @@ function renderAll() {
     modelCard?.setAttribute('aria-busy', String(state.loading));
 }
 
-function applyServerWorkspace(payload, { preserveUndo = true } = {}) {
+function applyServerWorkspace(payload, { preserveUndo = true, personalSave = false } = {}) {
     const previousUndo = preserveUndo ? state.undoSnapshot : null;
     const nextContextFingerprint = workspaceContextFingerprint(
         payload.context.categoryID,
@@ -1660,6 +1661,13 @@ function applyServerWorkspace(payload, { preserveUndo = true } = {}) {
         state.selectedObjectID = currentEntries[0]?.conditionID ?? null;
     }
     syncContextValuesToURL();
+    navigationChannel.publish({
+        context: payload.context,
+        userID: payload.userID ?? null,
+        authenticated: state.authenticated,
+        hasPersonalWeights: !state.personalIsDraft && state.personalEntries.length > 0,
+        personalSave
+    });
 }
 
 function workspaceLoadErrorMessage(error) {
@@ -1817,7 +1825,7 @@ async function persistPersonalPie() {
             const payload = validateWorkspacePayload(await state.savePromise);
             const currentFingerprint = workspaceContextFingerprint();
             if (contextFingerprint === currentFingerprint) {
-                applyServerWorkspace(payload, { preserveUndo: true });
+                applyServerWorkspace(payload, { preserveUndo: true, personalSave: true });
                 state.personalIsDraft = false;
                 setStatus('Saved');
                 window.setTimeout(() => {
@@ -1882,12 +1890,13 @@ async function applyWorkspaceState(detail = {}) {
         || nextCategoryPath !== state.categoryPath;
     state.categoryID = nextCategoryID;
     state.categoryPath = nextCategoryPath;
-    if (changed) {
-        state.selectedContextValues = {};
+    const explicitContext = detail.contextValues !== undefined || detail.fromURL === true;
+    if (changed || explicitContext) {
+        state.selectedContextValues = { ...(detail.contextValues ?? {}) };
         state.dimensions = [];
         state.workspaceView = 'overview';
     }
-    if (changed || state.benchmarks.length === 0) {
+    if (changed || explicitContext || state.benchmarks.length === 0) {
         await loadWeightedWorkspace();
     }
 }
@@ -2272,6 +2281,4 @@ termsButton.addEventListener('click', () => {
     termsDialog.hidden = false;
 });
 
-workspaceChannel.subscribe(detail => {
-    void applyWorkspaceState(detail);
-});
+workspaceChannel.subscribe(detail => applyWorkspaceState(detail));
