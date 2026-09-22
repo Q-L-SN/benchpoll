@@ -1,5 +1,6 @@
 import * as S from './public/js/shared.js';
 import { conditionImpact } from './condition-impact.js';
+import { getPersonalNavigation } from './navigation-service.js';
 import { normalizeModelParameters, modelParameterLabel } from './public/js/shared/model-parameters.js';
 import { scoreEvidenceKey, scoreValueKey } from './score-aggregation.js';
 import { createDiscussionPost, deleteDiscussionPost, voteDiscussion, listDiscussion, discussionSummary,
@@ -387,7 +388,8 @@ API.post('/get_user_profile', async (req, res, next) => {
         email IS NOT NULL AS hasVerifiedEmail
         FROM users WHERE ID = ?`
         , [req.session.userID]);
-    res.json({ ...rows[0], hasVerifiedEmail: Boolean(rows[0].hasVerifiedEmail) });
+    res.set('Cache-Control', 'private, no-store');
+    res.json({ ...rows[0], userID: String(req.session.userID), hasVerifiedEmail: Boolean(rows[0].hasVerifiedEmail) });
 });
 
 function normalizeURLPart(value) {
@@ -512,6 +514,12 @@ API.post('/load_benchmarks_and_subcategories', async (req, res, next) => {
         data.subcategories = await getSubCategories(targetCategory.ID);
     }
     res.json(data);
+});
+
+// The account is always taken from the validated session, never from request data.
+API.post('/get_personal_navigation', requireAuthForAPI, async (req, res) => {
+    res.set('Cache-Control', 'private, no-store');
+    res.json(await getPersonalNavigation(db, req.session.userID));
 });
 
 API.post('/get_weighted_workspace', async (req, res) => {

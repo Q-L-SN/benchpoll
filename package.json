@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "lint": "eslint server.js ranking-service.js condition-impact.js model-comparison.js score-aggregation.js discussion-service.js moderation-admin.js db.js public/js scripts test",
+    "lint": "eslint server.js ranking-service.js navigation-service.js condition-impact.js model-comparison.js score-aggregation.js discussion-service.js moderation-admin.js db.js public/js scripts test",
     "migrate:model-parameters": "node scripts/migrate-model-parameters.mjs --apply",
     "migrate:object-notes": "node scripts/migrate-object-notes.mjs --apply",
     "migrate:discussions": "node scripts/migrate-discussions.mjs --apply",
@@ -27,6 +27,7 @@
     "migrate:context-free-results": "node scripts/migrate-context-free-results.mjs --apply",
     "migrate:personal-fallback-rules": "node scripts/migrate-personal-fallback-rules.mjs --apply",
     "test:frontend": "node scripts/frontend/verify.mjs",
+    "test:navigation": "node scripts/frontend/navigation.mjs",
     "preview:frontend": "node scripts/frontend/preview.mjs"
   },
   "author": {
