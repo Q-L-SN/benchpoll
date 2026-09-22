@@ -1,0 +1,20 @@
+name: Sidebar navigation verification
+on:
+  push:
+    branches: [work/sidebar-navigation-20260922]
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Export tracked source only
+        run: git archive HEAD --format=tar.gz -o /tmp/benchpoll-source.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: benchpoll-source
+          path: /tmp/benchpoll-source.tar.gz
+          retention-days: 1
