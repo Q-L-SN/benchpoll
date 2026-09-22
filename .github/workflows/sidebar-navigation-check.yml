@@ -5,16 +5,20 @@ on:
 permissions:
   contents: read
 jobs:
-  snapshot:
+  dependencies:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Export tracked source only
-        run: git archive HEAD --format=tar.gz -o /tmp/benchpoll-source.tar.gz
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Package pinned dependencies only
+        run: tar -czf /tmp/benchpoll-dependencies.tar.gz node_modules
       - uses: actions/upload-artifact@v4
         with:
-          name: benchpoll-source
-          path: /tmp/benchpoll-source.tar.gz
+          name: benchpoll-dependencies
+          path: /tmp/benchpoll-dependencies.tar.gz
           retention-days: 1
