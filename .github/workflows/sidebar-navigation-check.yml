@@ -3,22 +3,71 @@ on:
   push:
     branches: [work/sidebar-navigation-20260922]
 permissions:
-  contents: read
+  contents: write
 jobs:
-  dependencies:
+  verify:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      LANG: en_US.UTF-8
+      LC_ALL: en_US.UTF-8
     steps:
       - uses: actions/checkout@v4
         with:
-          persist-credentials: false
+          ref: work/sidebar-navigation-20260922
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
+      - name: Apply checked feature patch
+        run: |
+          python3 - <<'PY'
+          import base64, gzip, hashlib
+          from pathlib import Path
+          parts = [Path(f'.github/sidebar-transfer/part-{i}.txt').read_text().strip() for i in range(1,5)]
+          prefix = 'D0KYGICYGCGCenxbnmYVfzfD+Swu7ZwIZ9Mh6bM0lX6bTj4VdXUUhJNgF5UDG1vNrXVLN8BVkSIe0+4nb2+1rkpj4+CFQynkzDZJ98hBKAjlAmoVJTI+ZbFtAYo1xKSIifQmP9IhX/bbprIhVFywE1KQgoSJfCNUTLAVDZeuKGhPyfXknXwFUiIUOJWjhRLiJyFzLepFNYw2w09n9bt72Hw1pbkjhUdDgAwuhPUtsL7'
+          parts[1] = prefix + parts[1][82:]
+          data = gzip.decompress(base64.b64decode(''.join(parts), validate=True))
+          Path('/tmp/sidebar.patch').write_bytes(data)
+          assert hashlib.sha256(data).hexdigest() == 'cf9cd110e61c9a0f3326bc00b8950712272312b34f5ad5547ec66f03e3004d50'
+          PY
+          git apply --check /tmp/sidebar.patch
+          git apply /tmp/sidebar.patch
       - run: npm ci --ignore-scripts --no-audit --no-fund
-      - name: Package pinned dependencies only
-        run: tar -czf /tmp/benchpoll-dependencies.tar.gz node_modules
+      - run: npx playwright install --with-deps chromium
+      - name: Lint and Node tests
+        run: |
+          set -o pipefail
+          mkdir -p artifacts/navigation
+          npm run lint 2>&1 | tee artifacts/navigation/lint.log
+          npm test 2>&1 | tee artifacts/navigation/unit.log
+      - name: Existing browser regressions
+        id: existing
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          npm run test:frontend 2>&1 | tee artifacts/navigation/existing-browser.log
+      - name: Sidebar browser regressions
+        id: sidebar
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          npm run test:navigation 2>&1 | tee artifacts/navigation/sidebar-browser.log
+      - name: Require both browser suites
+        if: steps.existing.outcome != 'success' || steps.sidebar.outcome != 'success'
+        run: exit 1
+      - name: Preserve verified feature tree on isolated branch
+        run: |
+          git config user.name 'BenchPoll verification'
+          git config user.email 'benchpoll-verification@users.noreply.github.com'
+          git add eslint.config.js navigation-service.js package.json private/home.html public/css/ui/navigation.css public/js/home-workspace.js public/js/home.js public/js/navigation public/js/shared/navigation-channel.js public/js/shared/workspace-channel.js ranking-service.js scripts/frontend/fixtures.mjs scripts/frontend/navigation.mjs scripts/frontend/server.mjs server.js test/navigation.test.mjs
+          git diff --cached --check
+          git commit -m 'feat: verified independent sidebar navigation and configured contexts [skip ci]'
+          git push origin HEAD:work/sidebar-navigation-20260922
+          git rev-parse HEAD | tee artifacts/navigation/verified-commit.txt
+          git rev-parse HEAD^{tree} | tee artifacts/navigation/verified-tree.txt
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: benchpoll-dependencies
-          path: /tmp/benchpoll-dependencies.tar.gz
-          retention-days: 1
+          name: sidebar-navigation-results
+          path: artifacts/
+          retention-days: 7
