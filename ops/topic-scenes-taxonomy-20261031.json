@@ -1,0 +1,1700 @@
+{
+  "version": "official_topic_scenes_taxonomy_20261031",
+  "featuredTopicID": 54,
+  "expectedTopics": 32,
+  "expectedActiveScenes": 209,
+  "policy": {
+    "preserveContextIDs": true,
+    "mergeWeights": false,
+    "retireWithoutDeleting": true,
+    "referenceContentIsNotReferenceImage": true
+  },
+  "topics": [
+    {
+      "key": "intelligence",
+      "ID": 54,
+      "name": "Intelligence",
+      "description": "Reasoning, knowledge, and getting useful work done.",
+      "position": 10,
+      "scenes": []
+    },
+    {
+      "key": "coding",
+      "ID": 180,
+      "name": "Coding",
+      "description": "Build, debug, and improve software.",
+      "position": 20,
+      "scenes": []
+    },
+    {
+      "key": "diagnosis",
+      "ID": 197,
+      "name": "Medical Diagnosis",
+      "description": "Interpret clinical evidence and reason about diagnoses.",
+      "position": 30,
+      "scenes": []
+    },
+    {
+      "key": "law",
+      "ID": 198,
+      "name": "Law",
+      "description": "Understand legal sources and reason through legal problems.",
+      "position": 40,
+      "scenes": []
+    },
+    {
+      "key": "security",
+      "ID": 199,
+      "name": "Cybersecurity & Cryptography",
+      "description": "Assess security, cryptographic reasoning, and defensive work.",
+      "position": 50,
+      "scenes": []
+    },
+    {
+      "key": "rsi",
+      "ID": 232,
+      "name": "RSI",
+      "description": "Research and improve AI systems through recursive self-improvement.",
+      "position": 60,
+      "scenes": []
+    },
+    {
+      "key": "teaching",
+      "ID": 216,
+      "name": "Teaching",
+      "description": "Explain ideas, diagnose misunderstandings, and support learning.",
+      "position": 70,
+      "scenes": []
+    },
+    {
+      "key": "office",
+      "ID": 196,
+      "name": "Office",
+      "previousName": "Office Documents & Data Processing",
+      "description": "Work with documents, spreadsheets, and everyday office tasks.",
+      "position": 80,
+      "scenes": []
+    },
+    {
+      "key": "management",
+      "ID": 202,
+      "name": "Management",
+      "description": "Make operational decisions and coordinate business activities.",
+      "position": 90,
+      "scenes": []
+    },
+    {
+      "key": "research",
+      "ID": 167,
+      "name": "Academic Research",
+      "description": "Explore questions, evaluate evidence, and advance research.",
+      "position": 100,
+      "scenes": []
+    },
+    {
+      "key": "gui",
+      "ID": 176,
+      "name": "GUI Operation",
+      "previousName": "Computer Use",
+      "description": "Complete tasks through graphical user interfaces.",
+      "position": 110,
+      "scenes": []
+    },
+    {
+      "key": "robotics",
+      "ID": 178,
+      "name": "Robot Operation",
+      "description": "Perceive, plan, and act through robots in the physical world.",
+      "position": 120,
+      "scenes": []
+    },
+    {
+      "key": "foresight",
+      "ID": 234,
+      "name": "Foresight",
+      "description": "Anticipate consequences and make informed forward-looking decisions.",
+      "position": 130,
+      "scenes": []
+    },
+    {
+      "key": "planning",
+      "ID": 184,
+      "name": "Planning",
+      "description": "Form effective plans under constraints and uncertainty.",
+      "position": 140,
+      "scenes": []
+    },
+    {
+      "key": "collaboration",
+      "ID": 204,
+      "name": "Collaboration",
+      "description": "Coordinate with people and other agents toward shared goals.",
+      "position": 150,
+      "scenes": []
+    },
+    {
+      "key": "learning",
+      "ID": 208,
+      "name": "Self-Learning",
+      "description": "Acquire new skills and improve through experience.",
+      "position": 160,
+      "scenes": []
+    },
+    {
+      "key": "retrieval",
+      "ID": 209,
+      "name": "Knowledge & Retrieval",
+      "description": "Find, connect, and apply relevant knowledge.",
+      "position": 170,
+      "scenes": []
+    },
+    {
+      "key": "hallucination",
+      "ID": 182,
+      "name": "Low Hallucination",
+      "description": "Stay grounded in evidence and acknowledge uncertainty.",
+      "position": 180,
+      "scenes": []
+    },
+    {
+      "key": "memory",
+      "ID": 215,
+      "name": "Memory & Long Context",
+      "description": "Retain and use information across long contexts.",
+      "position": 190,
+      "scenes": []
+    },
+    {
+      "key": "multimodal",
+      "ID": 210,
+      "name": "Multimodal Understanding",
+      "description": "Understand information across images, audio, video, and text.",
+      "position": 200,
+      "scenes": [
+        {
+          "name": "General",
+          "match": {}
+        },
+        {
+          "name": "Non-Real-Time",
+          "match": {
+            "realtime": "no"
+          }
+        },
+        {
+          "name": "Real-Time",
+          "match": {
+            "realtime": "yes"
+          }
+        }
+      ]
+    },
+    {
+      "key": "real_time_visual",
+      "ID": null,
+      "name": "Real-Time Visual Output",
+      "description": "Generate and update visual output in real time.",
+      "position": 210,
+      "scenes": []
+    },
+    {
+      "key": "image",
+      "ID": 172,
+      "name": "Image Generation",
+      "description": "Generate images from instructions and visual references.",
+      "position": 220,
+      "scenes": [
+        {
+          "name": "General",
+          "match": {}
+        },
+        {
+          "name": "No Reference Image",
+          "match": {
+            "reference_image": "none"
+          }
+        },
+        {
+          "name": "Single Reference Image",
+          "match": {
+            "reference_image": "single"
+          }
+        },
+        {
+          "name": "Multiple Reference Images",
+          "match": {
+            "reference_image": "multiple"
+          }
+        }
+      ]
+    },
+    {
+      "key": "vector",
+      "ID": null,
+      "name": "Vector Graphics",
+      "description": "Create scalable vector artwork and graphics.",
+      "position": 230,
+      "scenes": [
+        {
+          "name": "General",
+          "match": {
+            "output": "vector"
+          },
+          "sourceTopicID": 172
+        },
+        {
+          "name": "No Reference Image",
+          "match": null
+        },
+        {
+          "name": "With Reference Image",
+          "match": null
+        }
+      ]
+    },
+    {
+      "key": "video",
+      "ID": 173,
+      "name": "Video Generation",
+      "description": "Generate videos from instructions and reference images.",
+      "position": 240,
+      "scenes": [
+        {
+          "name": "General",
+          "match": {}
+        },
+        {
+          "name": "No Reference Image",
+          "match": {
+            "reference_image": "none"
+          }
+        },
+        {
+          "name": "With Reference Image",
+          "match": {
+            "reference_image": "present"
+          }
+        }
+      ]
+    },
+    {
+      "key": "video_projects",
+      "ID": null,
+      "name": "Video Projects",
+      "description": "Create editable video projects rather than only rendered videos.",
+      "position": 250,
+      "scenes": [
+        {
+          "name": "General",
+          "match": {
+            "output": "project_file"
+          },
+          "sourceTopicID": 173
+        },
+        {
+          "name": "No Reference Video",
+          "match": null
+        },
+        {
+          "name": "With Reference Video",
+          "match": null
+        }
+      ]
+    },
+    {
+      "key": "audio",
+      "ID": 190,
+      "name": "Audio Generation",
+      "description": "Create audio for offline and real-time use.",
+      "position": 260,
+      "scenes": [
+        {
+          "name": "Non-Real-Time Audio",
+          "match": {
+            "realtime": "no"
+          }
+        },
+        {
+          "name": "Real-Time Audio",
+          "match": {
+            "realtime": "yes"
+          }
+        }
+      ]
+    },
+    {
+      "key": "3d",
+      "ID": 191,
+      "name": "3D Generation",
+      "description": "Create three-dimensional content from instructions and reference images.",
+      "position": 270,
+      "scenes": [
+        {
+          "name": "General",
+          "match": {}
+        },
+        {
+          "name": "With Reference Image",
+          "match": null
+        },
+        {
+          "name": "No Reference Image",
+          "match": null
+        }
+      ]
+    },
+    {
+      "key": "interfaces",
+      "ID": 192,
+      "name": "Interface Generation",
+      "description": "Create interactive interfaces from instructions and reference images.",
+      "position": 280,
+      "scenes": [
+        {
+          "name": "General",
+          "match": {}
+        },
+        {
+          "name": "With Reference Image",
+          "match": null
+        },
+        {
+          "name": "No Reference Image",
+          "match": null
+        }
+      ]
+    },
+    {
+      "key": "communication",
+      "ID": 193,
+      "name": "Communication & EQ",
+      "description": "Communicate clearly and respond with social and emotional understanding.",
+      "position": 290,
+      "scenes": []
+    },
+    {
+      "key": "writing",
+      "ID": 187,
+      "name": "Writing",
+      "description": "Compose, revise, and adapt written content.",
+      "position": 300,
+      "scenes": []
+    },
+    {
+      "key": "language",
+      "ID": 219,
+      "name": "Language",
+      "description": "Understand and use language across linguistic communities.",
+      "position": 310,
+      "scenes": [
+        {
+          "name": "General",
+          "match": {}
+        },
+        {
+          "name": "aa",
+          "match": {
+            "language": "aa"
+          },
+          "language": "aa"
+        },
+        {
+          "name": "ab",
+          "match": {
+            "language": "ab"
+          },
+          "language": "ab"
+        },
+        {
+          "name": "ae",
+          "match": {
+            "language": "ae"
+          },
+          "language": "ae"
+        },
+        {
+          "name": "Afrikaans",
+          "match": {
+            "language": "af"
+          },
+          "language": "af"
+        },
+        {
+          "name": "Akan",
+          "match": {
+            "language": "ak"
+          },
+          "language": "ak"
+        },
+        {
+          "name": "Akan",
+          "match": {
+            "language": "tw"
+          },
+          "language": "tw"
+        },
+        {
+          "name": "Albanian",
+          "match": {
+            "language": "sq"
+          },
+          "language": "sq"
+        },
+        {
+          "name": "Amharic",
+          "match": {
+            "language": "am"
+          },
+          "language": "am"
+        },
+        {
+          "name": "Arabic",
+          "match": {
+            "language": "ar"
+          },
+          "language": "ar"
+        },
+        {
+          "name": "Aragonese",
+          "match": {
+            "language": "an"
+          },
+          "language": "an"
+        },
+        {
+          "name": "Armenian",
+          "match": {
+            "language": "hy"
+          },
+          "language": "hy"
+        },
+        {
+          "name": "Assamese",
+          "match": {
+            "language": "as"
+          },
+          "language": "as"
+        },
+        {
+          "name": "av",
+          "match": {
+            "language": "av"
+          },
+          "language": "av"
+        },
+        {
+          "name": "Aymara",
+          "match": {
+            "language": "ay"
+          },
+          "language": "ay"
+        },
+        {
+          "name": "Azerbaijani",
+          "match": {
+            "language": "az"
+          },
+          "language": "az"
+        },
+        {
+          "name": "ba",
+          "match": {
+            "language": "ba"
+          },
+          "language": "ba"
+        },
+        {
+          "name": "Bambara",
+          "match": {
+            "language": "bm"
+          },
+          "language": "bm"
+        },
+        {
+          "name": "Bangla",
+          "match": {
+            "language": "bn"
+          },
+          "language": "bn"
+        },
+        {
+          "name": "Basque",
+          "match": {
+            "language": "eu"
+          },
+          "language": "eu"
+        },
+        {
+          "name": "Belarusian",
+          "match": {
+            "language": "be"
+          },
+          "language": "be"
+        },
+        {
+          "name": "Bhojpuri",
+          "match": {
+            "language": "bh"
+          },
+          "language": "bh"
+        },
+        {
+          "name": "bi",
+          "match": {
+            "language": "bi"
+          },
+          "language": "bi"
+        },
+        {
+          "name": "bo",
+          "match": {
+            "language": "bo"
+          },
+          "language": "bo"
+        },
+        {
+          "name": "Bosnian",
+          "match": {
+            "language": "bs"
+          },
+          "language": "bs"
+        },
+        {
+          "name": "Breton",
+          "match": {
+            "language": "br"
+          },
+          "language": "br"
+        },
+        {
+          "name": "Bulgarian",
+          "match": {
+            "language": "bg"
+          },
+          "language": "bg"
+        },
+        {
+          "name": "Burmese",
+          "match": {
+            "language": "my"
+          },
+          "language": "my"
+        },
+        {
+          "name": "Catalan",
+          "match": {
+            "language": "ca"
+          },
+          "language": "ca"
+        },
+        {
+          "name": "ce",
+          "match": {
+            "language": "ce"
+          },
+          "language": "ce"
+        },
+        {
+          "name": "ch",
+          "match": {
+            "language": "ch"
+          },
+          "language": "ch"
+        },
+        {
+          "name": "Chinese",
+          "match": {
+            "language": "zh"
+          },
+          "language": "zh"
+        },
+        {
+          "name": "Corsican",
+          "match": {
+            "language": "co"
+          },
+          "language": "co"
+        },
+        {
+          "name": "cr",
+          "match": {
+            "language": "cr"
+          },
+          "language": "cr"
+        },
+        {
+          "name": "Croatian",
+          "match": {
+            "language": "hr"
+          },
+          "language": "hr"
+        },
+        {
+          "name": "cu",
+          "match": {
+            "language": "cu"
+          },
+          "language": "cu"
+        },
+        {
+          "name": "cv",
+          "match": {
+            "language": "cv"
+          },
+          "language": "cv"
+        },
+        {
+          "name": "Czech",
+          "match": {
+            "language": "cs"
+          },
+          "language": "cs"
+        },
+        {
+          "name": "Danish",
+          "match": {
+            "language": "da"
+          },
+          "language": "da"
+        },
+        {
+          "name": "Divehi",
+          "match": {
+            "language": "dv"
+          },
+          "language": "dv"
+        },
+        {
+          "name": "Dutch",
+          "match": {
+            "language": "nl"
+          },
+          "language": "nl"
+        },
+        {
+          "name": "dz",
+          "match": {
+            "language": "dz"
+          },
+          "language": "dz"
+        },
+        {
+          "name": "English",
+          "match": {
+            "language": "en"
+          },
+          "language": "en"
+        },
+        {
+          "name": "Esperanto",
+          "match": {
+            "language": "eo"
+          },
+          "language": "eo"
+        },
+        {
+          "name": "Estonian",
+          "match": {
+            "language": "et"
+          },
+          "language": "et"
+        },
+        {
+          "name": "Ewe",
+          "match": {
+            "language": "ee"
+          },
+          "language": "ee"
+        },
+        {
+          "name": "Faroese",
+          "match": {
+            "language": "fo"
+          },
+          "language": "fo"
+        },
+        {
+          "name": "ff",
+          "match": {
+            "language": "ff"
+          },
+          "language": "ff"
+        },
+        {
+          "name": "Filipino",
+          "match": {
+            "language": "tl"
+          },
+          "language": "tl"
+        },
+        {
+          "name": "Finnish",
+          "match": {
+            "language": "fi"
+          },
+          "language": "fi"
+        },
+        {
+          "name": "fj",
+          "match": {
+            "language": "fj"
+          },
+          "language": "fj"
+        },
+        {
+          "name": "French",
+          "match": {
+            "language": "fr"
+          },
+          "language": "fr"
+        },
+        {
+          "name": "Galician",
+          "match": {
+            "language": "gl"
+          },
+          "language": "gl"
+        },
+        {
+          "name": "Ganda",
+          "match": {
+            "language": "lg"
+          },
+          "language": "lg"
+        },
+        {
+          "name": "Georgian",
+          "match": {
+            "language": "ka"
+          },
+          "language": "ka"
+        },
+        {
+          "name": "German",
+          "match": {
+            "language": "de"
+          },
+          "language": "de"
+        },
+        {
+          "name": "Greek",
+          "match": {
+            "language": "el"
+          },
+          "language": "el"
+        },
+        {
+          "name": "Guarani",
+          "match": {
+            "language": "gn"
+          },
+          "language": "gn"
+        },
+        {
+          "name": "Gujarati",
+          "match": {
+            "language": "gu"
+          },
+          "language": "gu"
+        },
+        {
+          "name": "gv",
+          "match": {
+            "language": "gv"
+          },
+          "language": "gv"
+        },
+        {
+          "name": "Haitian Creole",
+          "match": {
+            "language": "ht"
+          },
+          "language": "ht"
+        },
+        {
+          "name": "Hausa",
+          "match": {
+            "language": "ha"
+          },
+          "language": "ha"
+        },
+        {
+          "name": "Hebrew",
+          "match": {
+            "language": "he"
+          },
+          "language": "he"
+        },
+        {
+          "name": "Hindi",
+          "match": {
+            "language": "hi"
+          },
+          "language": "hi"
+        },
+        {
+          "name": "ho",
+          "match": {
+            "language": "ho"
+          },
+          "language": "ho"
+        },
+        {
+          "name": "Hungarian",
+          "match": {
+            "language": "hu"
+          },
+          "language": "hu"
+        },
+        {
+          "name": "hz",
+          "match": {
+            "language": "hz"
+          },
+          "language": "hz"
+        },
+        {
+          "name": "Icelandic",
+          "match": {
+            "language": "is"
+          },
+          "language": "is"
+        },
+        {
+          "name": "ie",
+          "match": {
+            "language": "ie"
+          },
+          "language": "ie"
+        },
+        {
+          "name": "Igbo",
+          "match": {
+            "language": "ig"
+          },
+          "language": "ig"
+        },
+        {
+          "name": "ii",
+          "match": {
+            "language": "ii"
+          },
+          "language": "ii"
+        },
+        {
+          "name": "ik",
+          "match": {
+            "language": "ik"
+          },
+          "language": "ik"
+        },
+        {
+          "name": "Indonesian",
+          "match": {
+            "language": "id"
+          },
+          "language": "id"
+        },
+        {
+          "name": "Interlingua",
+          "match": {
+            "language": "ia"
+          },
+          "language": "ia"
+        },
+        {
+          "name": "io",
+          "match": {
+            "language": "io"
+          },
+          "language": "io"
+        },
+        {
+          "name": "Irish",
+          "match": {
+            "language": "ga"
+          },
+          "language": "ga"
+        },
+        {
+          "name": "Italian",
+          "match": {
+            "language": "it"
+          },
+          "language": "it"
+        },
+        {
+          "name": "iu",
+          "match": {
+            "language": "iu"
+          },
+          "language": "iu"
+        },
+        {
+          "name": "Japanese",
+          "match": {
+            "language": "ja"
+          },
+          "language": "ja"
+        },
+        {
+          "name": "Javanese",
+          "match": {
+            "language": "jv"
+          },
+          "language": "jv"
+        },
+        {
+          "name": "Kannada",
+          "match": {
+            "language": "kn"
+          },
+          "language": "kn"
+        },
+        {
+          "name": "Kazakh",
+          "match": {
+            "language": "kk"
+          },
+          "language": "kk"
+        },
+        {
+          "name": "kg",
+          "match": {
+            "language": "kg"
+          },
+          "language": "kg"
+        },
+        {
+          "name": "Khmer",
+          "match": {
+            "language": "km"
+          },
+          "language": "km"
+        },
+        {
+          "name": "ki",
+          "match": {
+            "language": "ki"
+          },
+          "language": "ki"
+        },
+        {
+          "name": "Kinyarwanda",
+          "match": {
+            "language": "rw"
+          },
+          "language": "rw"
+        },
+        {
+          "name": "kj",
+          "match": {
+            "language": "kj"
+          },
+          "language": "kj"
+        },
+        {
+          "name": "kl",
+          "match": {
+            "language": "kl"
+          },
+          "language": "kl"
+        },
+        {
+          "name": "Korean",
+          "match": {
+            "language": "ko"
+          },
+          "language": "ko"
+        },
+        {
+          "name": "kr",
+          "match": {
+            "language": "kr"
+          },
+          "language": "kr"
+        },
+        {
+          "name": "ks",
+          "match": {
+            "language": "ks"
+          },
+          "language": "ks"
+        },
+        {
+          "name": "Kurdish",
+          "match": {
+            "language": "ku"
+          },
+          "language": "ku"
+        },
+        {
+          "name": "kv",
+          "match": {
+            "language": "kv"
+          },
+          "language": "kv"
+        },
+        {
+          "name": "kw",
+          "match": {
+            "language": "kw"
+          },
+          "language": "kw"
+        },
+        {
+          "name": "Kyrgyz",
+          "match": {
+            "language": "ky"
+          },
+          "language": "ky"
+        },
+        {
+          "name": "Lao",
+          "match": {
+            "language": "lo"
+          },
+          "language": "lo"
+        },
+        {
+          "name": "Latin",
+          "match": {
+            "language": "la"
+          },
+          "language": "la"
+        },
+        {
+          "name": "Latvian",
+          "match": {
+            "language": "lv"
+          },
+          "language": "lv"
+        },
+        {
+          "name": "li",
+          "match": {
+            "language": "li"
+          },
+          "language": "li"
+        },
+        {
+          "name": "Lingala",
+          "match": {
+            "language": "ln"
+          },
+          "language": "ln"
+        },
+        {
+          "name": "Lithuanian",
+          "match": {
+            "language": "lt"
+          },
+          "language": "lt"
+        },
+        {
+          "name": "lu",
+          "match": {
+            "language": "lu"
+          },
+          "language": "lu"
+        },
+        {
+          "name": "Luxembourgish",
+          "match": {
+            "language": "lb"
+          },
+          "language": "lb"
+        },
+        {
+          "name": "Macedonian",
+          "match": {
+            "language": "mk"
+          },
+          "language": "mk"
+        },
+        {
+          "name": "Malagasy",
+          "match": {
+            "language": "mg"
+          },
+          "language": "mg"
+        },
+        {
+          "name": "Malay",
+          "match": {
+            "language": "ms"
+          },
+          "language": "ms"
+        },
+        {
+          "name": "Malayalam",
+          "match": {
+            "language": "ml"
+          },
+          "language": "ml"
+        },
+        {
+          "name": "Maltese",
+          "match": {
+            "language": "mt"
+          },
+          "language": "mt"
+        },
+        {
+          "name": "Māori",
+          "match": {
+            "language": "mi"
+          },
+          "language": "mi"
+        },
+        {
+          "name": "Marathi",
+          "match": {
+            "language": "mr"
+          },
+          "language": "mr"
+        },
+        {
+          "name": "mh",
+          "match": {
+            "language": "mh"
+          },
+          "language": "mh"
+        },
+        {
+          "name": "Mongolian",
+          "match": {
+            "language": "mn"
+          },
+          "language": "mn"
+        },
+        {
+          "name": "na",
+          "match": {
+            "language": "na"
+          },
+          "language": "na"
+        },
+        {
+          "name": "nd",
+          "match": {
+            "language": "nd"
+          },
+          "language": "nd"
+        },
+        {
+          "name": "Nepali",
+          "match": {
+            "language": "ne"
+          },
+          "language": "ne"
+        },
+        {
+          "name": "ng",
+          "match": {
+            "language": "ng"
+          },
+          "language": "ng"
+        },
+        {
+          "name": "Norwegian",
+          "match": {
+            "language": "no"
+          },
+          "language": "no"
+        },
+        {
+          "name": "Norwegian Bokmål",
+          "match": {
+            "language": "nb"
+          },
+          "language": "nb"
+        },
+        {
+          "name": "Norwegian Nynorsk",
+          "match": {
+            "language": "nn"
+          },
+          "language": "nn"
+        },
+        {
+          "name": "nr",
+          "match": {
+            "language": "nr"
+          },
+          "language": "nr"
+        },
+        {
+          "name": "nv",
+          "match": {
+            "language": "nv"
+          },
+          "language": "nv"
+        },
+        {
+          "name": "Nyanja",
+          "match": {
+            "language": "ny"
+          },
+          "language": "ny"
+        },
+        {
+          "name": "Occitan",
+          "match": {
+            "language": "oc"
+          },
+          "language": "oc"
+        },
+        {
+          "name": "Odia",
+          "match": {
+            "language": "or"
+          },
+          "language": "or"
+        },
+        {
+          "name": "oj",
+          "match": {
+            "language": "oj"
+          },
+          "language": "oj"
+        },
+        {
+          "name": "Oromo",
+          "match": {
+            "language": "om"
+          },
+          "language": "om"
+        },
+        {
+          "name": "os",
+          "match": {
+            "language": "os"
+          },
+          "language": "os"
+        },
+        {
+          "name": "Pashto",
+          "match": {
+            "language": "ps"
+          },
+          "language": "ps"
+        },
+        {
+          "name": "Persian",
+          "match": {
+            "language": "fa"
+          },
+          "language": "fa"
+        },
+        {
+          "name": "pi",
+          "match": {
+            "language": "pi"
+          },
+          "language": "pi"
+        },
+        {
+          "name": "Polish",
+          "match": {
+            "language": "pl"
+          },
+          "language": "pl"
+        },
+        {
+          "name": "Portuguese",
+          "match": {
+            "language": "pt"
+          },
+          "language": "pt"
+        },
+        {
+          "name": "Punjabi",
+          "match": {
+            "language": "pa"
+          },
+          "language": "pa"
+        },
+        {
+          "name": "Quechua",
+          "match": {
+            "language": "qu"
+          },
+          "language": "qu"
+        },
+        {
+          "name": "rn",
+          "match": {
+            "language": "rn"
+          },
+          "language": "rn"
+        },
+        {
+          "name": "Romanian",
+          "match": {
+            "language": "ro"
+          },
+          "language": "ro"
+        },
+        {
+          "name": "Romansh",
+          "match": {
+            "language": "rm"
+          },
+          "language": "rm"
+        },
+        {
+          "name": "Russian",
+          "match": {
+            "language": "ru"
+          },
+          "language": "ru"
+        },
+        {
+          "name": "Samoan",
+          "match": {
+            "language": "sm"
+          },
+          "language": "sm"
+        },
+        {
+          "name": "Sanskrit",
+          "match": {
+            "language": "sa"
+          },
+          "language": "sa"
+        },
+        {
+          "name": "sc",
+          "match": {
+            "language": "sc"
+          },
+          "language": "sc"
+        },
+        {
+          "name": "Scottish Gaelic",
+          "match": {
+            "language": "gd"
+          },
+          "language": "gd"
+        },
+        {
+          "name": "se",
+          "match": {
+            "language": "se"
+          },
+          "language": "se"
+        },
+        {
+          "name": "Serbian",
+          "match": {
+            "language": "sr"
+          },
+          "language": "sr"
+        },
+        {
+          "name": "sg",
+          "match": {
+            "language": "sg"
+          },
+          "language": "sg"
+        },
+        {
+          "name": "Shona",
+          "match": {
+            "language": "sn"
+          },
+          "language": "sn"
+        },
+        {
+          "name": "Sindhi",
+          "match": {
+            "language": "sd"
+          },
+          "language": "sd"
+        },
+        {
+          "name": "Sinhala",
+          "match": {
+            "language": "si"
+          },
+          "language": "si"
+        },
+        {
+          "name": "Slovak",
+          "match": {
+            "language": "sk"
+          },
+          "language": "sk"
+        },
+        {
+          "name": "Slovenian",
+          "match": {
+            "language": "sl"
+          },
+          "language": "sl"
+        },
+        {
+          "name": "Somali",
+          "match": {
+            "language": "so"
+          },
+          "language": "so"
+        },
+        {
+          "name": "Southern Sotho",
+          "match": {
+            "language": "st"
+          },
+          "language": "st"
+        },
+        {
+          "name": "Spanish",
+          "match": {
+            "language": "es"
+          },
+          "language": "es"
+        },
+        {
+          "name": "ss",
+          "match": {
+            "language": "ss"
+          },
+          "language": "ss"
+        },
+        {
+          "name": "Sundanese",
+          "match": {
+            "language": "su"
+          },
+          "language": "su"
+        },
+        {
+          "name": "Swahili",
+          "match": {
+            "language": "sw"
+          },
+          "language": "sw"
+        },
+        {
+          "name": "Swedish",
+          "match": {
+            "language": "sv"
+          },
+          "language": "sv"
+        },
+        {
+          "name": "Tajik",
+          "match": {
+            "language": "tg"
+          },
+          "language": "tg"
+        },
+        {
+          "name": "Tamil",
+          "match": {
+            "language": "ta"
+          },
+          "language": "ta"
+        },
+        {
+          "name": "Tatar",
+          "match": {
+            "language": "tt"
+          },
+          "language": "tt"
+        },
+        {
+          "name": "Telugu",
+          "match": {
+            "language": "te"
+          },
+          "language": "te"
+        },
+        {
+          "name": "Thai",
+          "match": {
+            "language": "th"
+          },
+          "language": "th"
+        },
+        {
+          "name": "Tigrinya",
+          "match": {
+            "language": "ti"
+          },
+          "language": "ti"
+        },
+        {
+          "name": "Tongan",
+          "match": {
+            "language": "to"
+          },
+          "language": "to"
+        },
+        {
+          "name": "Tsonga",
+          "match": {
+            "language": "ts"
+          },
+          "language": "ts"
+        },
+        {
+          "name": "Tswana",
+          "match": {
+            "language": "tn"
+          },
+          "language": "tn"
+        },
+        {
+          "name": "Turkish",
+          "match": {
+            "language": "tr"
+          },
+          "language": "tr"
+        },
+        {
+          "name": "Turkmen",
+          "match": {
+            "language": "tk"
+          },
+          "language": "tk"
+        },
+        {
+          "name": "ty",
+          "match": {
+            "language": "ty"
+          },
+          "language": "ty"
+        },
+        {
+          "name": "Ukrainian",
+          "match": {
+            "language": "uk"
+          },
+          "language": "uk"
+        },
+        {
+          "name": "Urdu",
+          "match": {
+            "language": "ur"
+          },
+          "language": "ur"
+        },
+        {
+          "name": "Uyghur",
+          "match": {
+            "language": "ug"
+          },
+          "language": "ug"
+        },
+        {
+          "name": "Uzbek",
+          "match": {
+            "language": "uz"
+          },
+          "language": "uz"
+        },
+        {
+          "name": "ve",
+          "match": {
+            "language": "ve"
+          },
+          "language": "ve"
+        },
+        {
+          "name": "Vietnamese",
+          "match": {
+            "language": "vi"
+          },
+          "language": "vi"
+        },
+        {
+          "name": "vo",
+          "match": {
+            "language": "vo"
+          },
+          "language": "vo"
+        },
+        {
+          "name": "Walloon",
+          "match": {
+            "language": "wa"
+          },
+          "language": "wa"
+        },
+        {
+          "name": "Welsh",
+          "match": {
+            "language": "cy"
+          },
+          "language": "cy"
+        },
+        {
+          "name": "Western Frisian",
+          "match": {
+            "language": "fy"
+          },
+          "language": "fy"
+        },
+        {
+          "name": "Wolof",
+          "match": {
+            "language": "wo"
+          },
+          "language": "wo"
+        },
+        {
+          "name": "Xhosa",
+          "match": {
+            "language": "xh"
+          },
+          "language": "xh"
+        },
+        {
+          "name": "Yiddish",
+          "match": {
+            "language": "yi"
+          },
+          "language": "yi"
+        },
+        {
+          "name": "Yoruba",
+          "match": {
+            "language": "yo"
+          },
+          "language": "yo"
+        },
+        {
+          "name": "za",
+          "match": {
+            "language": "za"
+          },
+          "language": "za"
+        },
+        {
+          "name": "Zulu",
+          "match": {
+            "language": "zu"
+          },
+          "language": "zu"
+        }
+      ]
+    },
+    {
+      "key": "agi",
+      "ID": 166,
+      "name": "AGI",
+      "description": "Assess progress toward broadly capable general intelligence.",
+      "position": 320,
+      "scenes": []
+    }
+  ],
+  "retiredTopics": [
+    {
+      "ID": 231,
+      "name": "Computer Work",
+      "targetID": 196
+    }
+  ]
+}

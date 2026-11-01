@@ -1,0 +1,214 @@
+{
+  "scoreEvidenceScope": "all",
+  "scoreEvidence": "b762cf4bd4fce560a5b805ebe91a1334bff70905380548b690dedde17ac8e178",
+  "groups": [
+    {
+      "benchmarkName": "AA-Omniscience",
+      "targetID": 16375,
+      "sourceIDs": [
+        22182
+      ],
+      "reason": "Index and AA Index name the same overall index; 15 model scores coincide."
+    },
+    {
+      "benchmarkName": "Agents' Last Exam",
+      "targetID": 2779,
+      "sourceIDs": [
+        7491
+      ],
+      "reason": "Same Pass@1 metric and task description; one label only adds source attribution."
+    },
+    {
+      "benchmarkName": "Agents' Last Exam",
+      "targetID": 16514,
+      "sourceIDs": [
+        15226
+      ],
+      "reason": "Same Score metric and task description; one label only adds source attribution."
+    },
+    {
+      "benchmarkName": "BrowseComp",
+      "targetID": 14177,
+      "sourceIDs": [
+        2311
+      ],
+      "reason": "Same multi-agent launch result, quoted to one decimal in the chart and more precisely in the accompanying prose."
+    },
+    {
+      "benchmarkName": "BrowseComp",
+      "targetID": 15091,
+      "sourceIDs": [
+        8188
+      ],
+      "reason": "The labels differ only in the abbreviation for context management and table provenance."
+    },
+    {
+      "benchmarkName": "BrowseComp",
+      "targetID": 16857,
+      "sourceIDs": [
+        10499
+      ],
+      "reason": "Both identify the unqualified BrowseComp table metric; one label includes its table path."
+    },
+    {
+      "benchmarkName": "CC-OCR-Bench",
+      "targetID": 9364,
+      "sourceIDs": [
+        17172
+      ],
+      "reason": "Same overall split and default API evaluation from the same official figure; wording differs only in source attribution."
+    },
+    {
+      "benchmarkName": "CharadesSTA",
+      "targetID": 1109,
+      "sourceIDs": [
+        5407
+      ],
+      "reason": "Same standard split, API evaluation and video context/frame settings from the same figure."
+    },
+    {
+      "benchmarkName": "Charxiv Reasoning",
+      "targetID": 1330,
+      "sourceIDs": [
+        3173
+      ],
+      "reason": "Same With CI metric and task; one label only adds source attribution."
+    },
+    {
+      "benchmarkName": "Charxiv Reasoning",
+      "targetID": 19606,
+      "sourceIDs": [
+        5145
+      ],
+      "reason": "Same Without CI metric and task; one label only adds source attribution."
+    },
+    {
+      "benchmarkName": "GPQA Diamond",
+      "targetID": 13931,
+      "sourceIDs": [
+        17950
+      ],
+      "reason": "Same scientific reasoning Score metric; one label only adds source attribution."
+    },
+    {
+      "benchmarkName": "Humanity's Last Exam",
+      "targetID": 15476,
+      "sourceIDs": [
+        12774
+      ],
+      "reason": "Same multidisciplinary reasoning Score metric; one label only adds source attribution."
+    },
+    {
+      "benchmarkName": "IFBench",
+      "targetID": 8917,
+      "sourceIDs": [
+        16340
+      ],
+      "reason": "Same instruction-following Score metric; one label only adds source attribution."
+    },
+    {
+      "benchmarkName": "InfoVQA (val)",
+      "targetID": 20467,
+      "sourceIDs": [
+        6736
+      ],
+      "reason": "Same InfoVQA TEST split and default API evaluation from the same official figure."
+    },
+    {
+      "benchmarkName": "JobBench",
+      "targetID": 11144,
+      "sourceIDs": [
+        8838
+      ],
+      "reason": "Same professional-job Score metric; one label only adds source attribution."
+    },
+    {
+      "benchmarkName": "MMMU-Pro",
+      "targetID": 14106,
+      "sourceIDs": [
+        3046
+      ],
+      "reason": "Same full split and default API evaluation from the same official figure."
+    },
+    {
+      "benchmarkName": "MathVerse",
+      "targetID": 3760,
+      "sourceIDs": [
+        10864
+      ],
+      "reason": "Same mini split and default API evaluation from the same official figure."
+    },
+    {
+      "benchmarkName": "OSWorld",
+      "targetID": 16173,
+      "sourceIDs": [
+        10657
+      ],
+      "reason": "Same standard split and default API evaluation from the same official figure."
+    },
+    {
+      "benchmarkName": "ScreenSpot",
+      "targetID": 16551,
+      "sourceIDs": [
+        11340
+      ],
+      "reason": "Same standard split and default API evaluation from the same official figure."
+    },
+    {
+      "benchmarkName": "Tau3-Banking",
+      "targetID": 2255,
+      "sourceIDs": [
+        4144
+      ],
+      "reason": "Both conditions are labeled Banking; the second carries only a disambiguating import suffix."
+    },
+    {
+      "benchmarkName": "Terminal-Bench 2.1",
+      "targetID": 3951,
+      "sourceIDs": [
+        11919
+      ],
+      "reason": "Both conditions are labeled Best harness; the second carries only a disambiguating import suffix."
+    },
+    {
+      "benchmarkName": "Toolathlon",
+      "targetID": 5313,
+      "sourceIDs": [
+        7920
+      ],
+      "reason": "Both explicitly identify Verified pass@1 averaged over three runs; the second adds source attribution."
+    },
+    {
+      "benchmarkName": "Toolathlon-Verified",
+      "targetID": 13735,
+      "sourceIDs": [
+        16274
+      ],
+      "reason": "Both conditions are labeled Verified; the second carries only a disambiguating import suffix."
+    },
+    {
+      "benchmarkName": "SWE-Bench Pro",
+      "targetID": 6691,
+      "sourceIDs": [
+        11660
+      ],
+      "reason": "Same agentic coding Score metric; one label only expands the task description and source attribution."
+    },
+    {
+      "benchmarkName": "Visual Document Retrieval (DC10k, Earnings V2, ViDoRe V1/V2/V3 average)",
+      "targetID": 3618,
+      "sourceIDs": [
+        20588
+      ],
+      "reason": "Same Image-modality Avg Recall@5 over the same dataset mix and embedding-plus-reranking comparison."
+    },
+    {
+      "benchmarkName": "Visual Document Retrieval (DC10k, Earnings V2, ViDoRe V1/V2/V3 average)",
+      "targetID": 4841,
+      "sourceIDs": [
+        4576
+      ],
+      "reason": "Same Text-modality Avg Recall@5 over the same dataset mix and embedding-plus-reranking comparison."
+    }
+  ]
+}

@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Community proposals for new BenchPoll Topics. Thirty supports send a proposal to official review.">
+    <title>Topic proposals - BenchPoll</title>
+    <link rel="icon" href="/favicon.ico?v=benchpoll-brand-20260919" sizes="any">
+    <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
+    <link rel="stylesheet" href="/css/ui/tokens.css">
+    <link rel="stylesheet" href="/css/ui/tooltip.css">
+    <link rel="stylesheet" href="/css/site-palette.css?v=shared-controls-20261010">
+    <link rel="stylesheet" href="/css/typography.css?v=manrope-static-20261007">
+    <link rel="stylesheet" href="/css/topic-proposals.css?v=topic-proposal-limits-20261028">
+    <link rel="stylesheet" href="/css/ui/site-header.css">
+    <script type="module" src="/js/topic-proposals.js?v=topic-proposal-limits-20261028"></script>
+</head>
+<body class="tp-page">
+    <a class="tp-skip" href="#proposal-hall">Skip to proposals</a>
+    <header class="bp-site-header">
+        <div class="bp-site-header-inner">
+            <a class="bp-site-brand" href="/" aria-label="BenchPoll home"><img src="/assets/benchpoll-logo.svg" alt="BenchPoll" width="155" height="32"></a>
+            <nav id="proposals-site-links"></nav>
+        </div>
+    </header>
+    <main id="proposal-hall" class="tp-main" tabindex="-1">
+        <header class="tp-heading">
+            <div>
+                <h1>Topic proposals</h1>
+                <p>When 30 other people support a proposal, administrators review it for publication.</p>
+            </div>
+            <button id="open-proposal" class="bp-ui-action" data-ui-variant="primary" type="button" aria-haspopup="dialog" disabled><i class="fa-solid fa-plus" aria-hidden="true"></i><span>Propose a Topic</span></button>
+        </header>
+        <section class="tp-rules" aria-label="Collection rules">
+            <ul>
+                <li>Up to <strong>3 active supports</strong> and <strong>1 collecting proposal</strong> per account.</li>
+                <li>Collection lasts <strong>14 days</strong>. Review and closed proposals do not use these limits. Private Topics are unaffected.</li>
+                <li>While collecting, you can cancel support or edit or withdraw your own proposal. Editing resets all supports, not the deadline.</li>
+            </ul>
+        </section>
+        <section class="tp-quota" aria-label="Your proposal limits">
+            <p id="proposals-quota" aria-live="polite">Checking your limits...</p>
+            <button id="proposals-find-own" class="bp-ui-action" data-ui-variant="quiet" type="button" aria-haspopup="dialog" hidden><i class="fa-solid fa-pen" aria-hidden="true"></i><span>Your proposal</span></button>
+            <p id="proposals-quota-note" class="tp-quota-note"></p>
+        </section>
+        <div id="proposals-account-status" class="tp-notice" role="alert" hidden></div>
+        <p id="proposals-feedback" class="tp-feedback" role="status" aria-live="polite" hidden></p>
+        <section class="tp-collection" aria-labelledby="proposals-list-title">
+            <header class="tp-list-header"><h2 id="proposals-list-title">Community proposals</h2><div class="tp-list-tools"><span>Newest first</span><button id="proposals-refresh" class="bp-ui-action is-icon-only" data-ui-variant="quiet" type="button" aria-label="Refresh hall" data-tooltip="Refresh hall"><i class="fa-solid fa-rotate-right" aria-hidden="true"></i></button></div></header>
+            <div class="tp-tabs" role="tablist" aria-label="Proposal status">
+                <button id="proposals-tab-all" type="button" role="tab" aria-selected="true" aria-controls="proposals-list-region" data-proposals-view="all">All proposals</button>
+                <button id="proposals-tab-review" type="button" role="tab" aria-selected="false" aria-controls="proposals-list-region" data-proposals-view="review" tabindex="-1">In review</button>
+            </div>
+            <div id="proposals-list-region" aria-busy="true">
+                <ul id="proposals-list" class="tp-list"></ul>
+                <div id="proposals-list-status" class="tp-list-status" role="status"><i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i><span>Loading proposals...</span></div>
+            </div>
+            <footer class="tp-pagination">
+                <p id="proposals-page-error" role="alert" hidden></p>
+                <button id="proposals-load-more" class="bp-ui-action" data-ui-variant="secondary" type="button" hidden><i class="fa-solid fa-chevron-down" aria-hidden="true"></i><span>Load more proposals</span></button>
+            </footer>
+        </section>
+        <noscript><p>JavaScript is required to load Topic proposals. <a href="/">Back to Topics</a></p></noscript>
+    </main>
+    <dialog id="proposal-dialog" class="tp-dialog" aria-labelledby="proposal-dialog-title" aria-describedby="proposal-review-notice">
+        <header class="tp-dialog-heading">
+            <h2 id="proposal-dialog-title">Propose a Topic</h2>
+            <button id="proposal-close" class="bp-ui-action is-icon-only" data-ui-variant="quiet" type="button" aria-label="Close proposal" data-tooltip="Close proposal"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+        </header>
+        <form id="proposal-form" method="dialog" novalidate>
+            <div class="tp-field">
+                <label for="proposal-target">Proposal for</label>
+                <select id="proposal-target" class="bp-ui-input" aria-describedby="proposal-target-error"><option value="">New topic</option></select>
+                <p id="proposal-target-error" class="tp-field-error" hidden></p>
+                <div id="proposal-target-status" class="tp-form-status" role="status" hidden></div>
+            </div>
+            <div class="tp-field">
+                <div class="tp-field-label"><label for="proposal-name">Topic name</label><span id="proposal-name-count" class="tp-count">0 / 128</span></div>
+                <input id="proposal-name" class="bp-ui-input" name="name" type="text" required autocomplete="off" aria-describedby="proposal-name-count proposal-name-error" autofocus>
+                <p id="proposal-name-error" class="tp-field-error" hidden></p>
+            </div>
+            <div class="tp-field">
+                <div class="tp-field-label"><label for="proposal-description">One-sentence summary</label><span id="proposal-description-count" class="tp-count">0 / 180</span></div>
+                <textarea id="proposal-description" class="bp-ui-input" name="description" rows="3" required aria-describedby="proposal-description-count proposal-description-error"></textarea>
+                <p id="proposal-description-error" class="tp-field-error" hidden></p>
+            </div>
+            <p id="proposal-review-notice" class="tp-review-notice"><i class="fa-solid fa-users" aria-hidden="true"></i><span>30 supporters send your proposal to administrator review.</span></p>
+            <p id="proposal-edit-notice" class="tp-review-notice" hidden></p>
+            <div id="proposal-latest-version" class="tp-latest-version" hidden></div>
+            <p id="proposal-email-notice" class="tp-email-notice">You will receive the review result by email. We will use the verified address linked to your GitHub account.</p>
+            <div id="proposal-form-status" class="tp-form-status" role="alert" hidden></div>
+            <div id="proposal-sign-in-note" class="tp-sign-in-note" hidden></div>
+            <footer class="tp-dialog-actions">
+                <button id="proposal-editor-withdraw" class="bp-ui-action" data-ui-variant="quiet" type="button" hidden><i class="fa-solid fa-trash-can" aria-hidden="true"></i><span>Withdraw</span></button>
+                <button id="proposal-cancel" class="bp-ui-action" data-ui-variant="quiet" type="button">Cancel</button>
+                <button id="proposal-submit" class="bp-ui-action" data-ui-variant="primary" type="submit" disabled><i class="fa-solid fa-paper-plane" aria-hidden="true"></i><span>Publish proposal</span></button>
+            </footer>
+        </form>
+    </dialog>
+    <dialog id="proposal-withdraw-dialog" class="tp-dialog tp-withdraw-dialog" aria-labelledby="proposal-withdraw-title" aria-describedby="proposal-withdraw-notice">
+        <header class="tp-dialog-heading"><h2 id="proposal-withdraw-title">Withdraw proposal?</h2></header>
+        <p id="proposal-withdraw-name" class="tp-withdraw-name"></p>
+        <p id="proposal-withdraw-notice">Collection will stop and your proposal place will be freed. This cannot be undone.</p>
+        <div id="proposal-withdraw-status" class="tp-form-status" role="alert" hidden></div>
+        <footer class="tp-dialog-actions">
+            <button id="proposal-withdraw-cancel" class="bp-ui-action" data-ui-variant="quiet" type="button">Keep proposal</button>
+            <button id="proposal-withdraw-confirm" class="bp-ui-action" data-ui-variant="secondary" type="button"><i class="fa-solid fa-trash-can" aria-hidden="true"></i><span>Withdraw proposal</span></button>
+        </footer>
+    </dialog>
+</body>
+</html>

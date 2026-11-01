@@ -1,0 +1,310 @@
+{
+  "protectedIDs": [
+    2261,
+    22177,
+    22180,
+    22181,
+    22184,
+    22186
+  ],
+  "groups": [
+    {
+      "benchmarkName": "BrowseComp",
+      "conditions": [
+        {
+          "ID": 4413,
+          "name": "BrowseComp with context;official card figure=bench_12.png"
+        },
+        {
+          "ID": 17367,
+          "name": "BrowseComp with context;official card figure=bench_5.png"
+        }
+      ],
+      "reason": "Same named benchmark metric/protocol; condition labels differ in source attribution, chart filename, wording or redundant presentation metadata. Raw-score overlap is rechecked before merging; all source score records remain intact."
+    },
+    {
+      "benchmarkName": "GPQA Diamond",
+      "conditions": [
+        {
+          "ID": 1071,
+          "name": "graduatereasoning"
+        },
+        {
+          "ID": 1653,
+          "name": "GPQA Diamond;official release table;2026-02-05"
+        }
+      ],
+      "reason": "Same named benchmark metric/protocol; condition labels differ in source attribution, chart filename, wording or redundant presentation metadata. Raw-score overlap is rechecked before merging; all source score records remain intact."
+    },
+    {
+      "benchmarkName": "HRBench",
+      "conditions": [
+        {
+          "ID": 4608,
+          "name": "HRBench 8K; split/version=8K; Qwen official numeric figure; default API evaluation"
+        },
+        {
+          "ID": 9972,
+          "name": "HRBench 8K; split/version=8K; official figure; default evaluation via API calls"
+        }
+      ],
+      "reason": "Same named benchmark metric/protocol; condition labels differ in source attribution, chart filename, wording or redundant presentation metadata. Raw-score overlap is rechecked before merging; all source score records remain intact."
+    },
+    {
+      "benchmarkName": "HRBench",
+      "conditions": [
+        {
+          "ID": 10543,
+          "name": "HRBench 4K; split/version=4K; official figure; default evaluation via API calls"
+        },
+        {
+          "ID": 11276,
+          "name": "HRBench 4K; split/version=4K; Qwen official numeric figure; default API evaluation"
+        }
+      ],
+      "reason": "Same named benchmark metric/protocol; condition labels differ in source attribution, chart filename, wording or redundant presentation metadata. Raw-score overlap is rechecked before merging; all source score records remain intact."
+    },
+    {
+      "benchmarkName": "IFBench",
+      "conditions": [
+        {
+          "ID": 9344,
+          "name": "standard [6bc9b7b3def0]"
+        },
+        {
+          "ID": 10103,
+          "name": "standard;native radar radar-small"
+        }
+      ],
+      "reason": "Same named benchmark metric/protocol; condition labels differ in source attribution, chart filename, wording or redundant presentation metadata. Raw-score overlap is rechecked before merging; all source score records remain intact."
+    },
+    {
+      "benchmarkName": "MIABench",
+      "conditions": [
+        {
+          "ID": 6213,
+          "name": "MIABench; split/version=standard; official figure; default evaluation via API calls"
+        },
+        {
+          "ID": 12984,
+          "name": "MIABench; split/version=standard; Qwen official numeric figure; default API evaluation"
+        }
+      ],
+      "reason": "Same named benchmark metric/protocol; condition labels differ in source attribution, chart filename, wording or redundant presentation metadata. Raw-score overlap is rechecked before merging; all source score records remain intact."
+    },
+    {
+      "benchmarkName": "MMMU-Pro",
+      "conditions": [
+        {
+          "ID": 975,
+          "name": "2025December vision article;source table metric"
+        },
+        {
+          "ID": 3150,
+          "name": "Average Standard10 options and Vision [20924b038c11]"
+        }
+      ],
+      "reason": "Same named benchmark metric/protocol; condition labels differ in source attribution, chart filename, wording or redundant presentation metadata. Raw-score overlap is rechecked before merging; all source score records remain intact."
+    },
+    {
+      "benchmarkName": "MMMU-Pro",
+      "conditions": [
+        {
+          "ID": 2842,
+          "name": "withtools"
+        },
+        {
+          "ID": 9487,
+          "name": "MMMU Pro with tools;official release table;2026-02-05"
+        }
+      ],
+      "reason": "Same named benchmark metric/protocol; condition labels differ in source attribution, chart filename, wording or redundant presentation metadata. Raw-score overlap is rechecked before merging; all source score records remain intact."
+    },
+    {
+      "benchmarkName": "MMMU-Pro",
+      "conditions": [
+        {
+          "ID": 3695,
+          "name": "withouttools"
+        },
+        {
+          "ID": 3971,
+          "name": "MMMU Pro without tools;official release table;2026-02-05"
+        }
+      ],
+      "reason": "Same named benchmark metric/protocol; condition labels differ in source attribution, chart filename, wording or redundant presentation metadata. Raw-score overlap is rechecked before merging; all source score records remain intact."
+    },
+    {
+      "benchmarkName": "Multi-SWE-Bench",
+      "conditions": [
+        {
+          "ID": 12591,
+          "name": "Multi-SWE-Bench;official card figure=bench_1.png"
+        },
+        {
+          "ID": 18401,
+          "name": "Multi-SWE-Bench;official card figure=bench_12.png"
+        }
+      ],
+      "reason": "Same named benchmark metric/protocol; condition labels differ in source attribution, chart filename, wording or redundant presentation metadata. Raw-score overlap is rechecked before merging; all source score records remain intact."
+    },
+    {
+      "benchmarkName": "PinchBench",
+      "conditions": [
+        {
+          "ID": 11271,
+          "name": "pinchbench; avg"
+        },
+        {
+          "ID": 11674,
+          "name": "mimov2omni-research-native-chart-data; pinchbench; average"
+        }
+      ],
+      "reason": "Same named benchmark metric/protocol; condition labels differ in source attribution, chart filename, wording or redundant presentation metadata. Raw-score overlap is rechecked before merging; all source score records remain intact."
+    },
+    {
+      "benchmarkName": "SciCode",
+      "conditions": [
+        {
+          "ID": 13778,
+          "name": "standard without scientist background;subproblem resolve rate"
+        },
+        {
+          "ID": 22198,
+          "name": "Publisher subproblem resolve rate"
+        }
+      ],
+      "reason": "Same named benchmark metric/protocol; condition labels differ in source attribution, chart filename, wording or redundant presentation metadata. Raw-score overlap is rechecked before merging; all source score records remain intact."
+    },
+    {
+      "benchmarkName": "SciCode",
+      "conditions": [
+        {
+          "ID": 18270,
+          "name": "standard without scientist background;main problem resolve rate"
+        },
+        {
+          "ID": 22197,
+          "name": "Publisher main-problem resolve rate"
+        }
+      ],
+      "reason": "Same named benchmark metric/protocol; condition labels differ in source attribution, chart filename, wording or redundant presentation metadata. Raw-score overlap is rechecked before merging; all source score records remain intact."
+    },
+    {
+      "benchmarkName": "SWE-Bench Pro",
+      "conditions": [
+        {
+          "ID": 6171,
+          "name": "SWE-bench Pro;official card figure=bench_12.png"
+        },
+        {
+          "ID": 8159,
+          "name": "SWE-bench Pro;official card figure=bench_1.png"
+        }
+      ],
+      "reason": "Same named benchmark metric/protocol; condition labels differ in source attribution, chart filename, wording or redundant presentation metadata. Raw-score overlap is rechecked before merging; all source score records remain intact."
+    },
+    {
+      "benchmarkName": "SWE-Bench Pro",
+      "conditions": [
+        {
+          "ID": 15274,
+          "name": "public [b3a7b757295f]"
+        },
+        {
+          "ID": 20606,
+          "name": "Public;native radar radar-small"
+        }
+      ],
+      "reason": "Same named benchmark metric/protocol; condition labels differ in source attribution, chart filename, wording or redundant presentation metadata. Raw-score overlap is rechecked before merging; all source score records remain intact."
+    },
+    {
+      "benchmarkName": "Terminal-Bench 2.1",
+      "conditions": [
+        {
+          "ID": 696,
+          "name": "Ranked TB2.1 comparison; pass@1 averaged over 4 attempts per task"
+        },
+        {
+          "ID": 19484,
+          "name": "Resolved tasks on Terminal-Bench 2.1; card table as of 2026-07-21; pass@1 averaged over 4 attempts per task"
+        }
+      ],
+      "reason": "Same named benchmark metric/protocol; condition labels differ in source attribution, chart filename, wording or redundant presentation metadata. Raw-score overlap is rechecked before merging; all source score records remain intact."
+    },
+    {
+      "benchmarkName": "Terminal-Bench 2.1",
+      "conditions": [
+        {
+          "ID": 3951,
+          "name": "Best harness"
+        },
+        {
+          "ID": 7347,
+          "name": "Best harness;native radar radar-inkling [5288331d31f9]"
+        }
+      ],
+      "reason": "Same named benchmark metric/protocol; condition labels differ in source attribution, chart filename, wording or redundant presentation metadata. Raw-score overlap is rechecked before merging; all source score records remain intact."
+    },
+    {
+      "benchmarkName": "Terminal-Bench 2.1",
+      "conditions": [
+        {
+          "ID": 4548,
+          "name": "Z.ai GLM5.3 release table;Terminal Bench 2.1;Comparatorprotocol undisclosed;do notcopy GLM-specificfootnotes"
+        },
+        {
+          "ID": 4655,
+          "name": "Agentic terminal; Terminal Bench 2.1"
+        }
+      ],
+      "reason": "Same named benchmark metric/protocol; condition labels differ in source attribution, chart filename, wording or redundant presentation metadata. Raw-score overlap is rechecked before merging; all source score records remain intact."
+    },
+    {
+      "benchmarkName": "Terminal-Bench 2.1",
+      "conditions": [
+        {
+          "ID": 11919,
+          "name": "best harness [8aeacc8ce596]"
+        },
+        {
+          "ID": 18510,
+          "name": "Best harness;native radar radar-small"
+        }
+      ],
+      "reason": "Same named benchmark metric/protocol; condition labels differ in source attribution, chart filename, wording or redundant presentation metadata. Raw-score overlap is rechecked before merging; all source score records remain intact."
+    },
+    {
+      "benchmarkName": "VIBE-Pro",
+      "conditions": [
+        {
+          "ID": 15407,
+          "name": "VIBE-Pro average;official card figure=bench_12.png"
+        },
+        {
+          "ID": 20415,
+          "name": "VIBE-Pro average;official card figure=bench_1.png"
+        }
+      ],
+      "reason": "Same named benchmark metric/protocol; condition labels differ in source attribution, chart filename, wording or redundant presentation metadata. Raw-score overlap is rechecked before merging; all source score records remain intact."
+    },
+    {
+      "benchmarkName": "Vision2Web",
+      "conditions": [
+        {
+          "ID": 3821,
+          "name": "Agentic Multimodal Intelligence; Visual web development; metric=Score; source: Qwen3.8-Flash-Next official model card"
+        },
+        {
+          "ID": 7183,
+          "name": "Agentic Multimodal Intelligence; Visual web development; metric=Score"
+        },
+        {
+          "ID": 7522,
+          "name": "Vision2Web; metric=score"
+        }
+      ],
+      "reason": "Same named benchmark metric/protocol; condition labels differ in source attribution, chart filename, wording or redundant presentation metadata. Raw-score overlap is rechecked before merging; all source score records remain intact."
+    }
+  ]
+}

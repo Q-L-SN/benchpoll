@@ -1,9 +1,15 @@
-import { createSidebarNavigation } from './navigation/sidebar.js?v=sidebar-navigation-20260922';
+import { createSidebarNavigation } from './navigation/sidebar.js?v=comparison-experiment-20261007';
 import { navigationChannel } from './shared/navigation-channel.js';
 import { locationURL } from './navigation/model.js';
 import { postJSON as requestJSON } from './shared/http.js';
 import { workspaceChannel } from './shared/workspace-channel.js';
-import { buildContributionURL as buildContributeURL } from './shared/contribution-navigation.js?v=clean-20260908';
+import { createOverlayScrollbar } from './workspace/overlay-scrollbar.js';
+import { buildContributionURL as buildContributeURL } from './shared/contribution-navigation.js?v=taxonomy-20260929';
+import { createTaxonomyDrawer } from './shared/taxonomy-drawer.js?v=20260928';
+import { topicURL } from './shared/topics.js';
+import { createConfigSidebar } from './shared/config-sidebar.js';
+import { pageAccountWriteScope, isAccountWriteError } from './shared/account-identity.js';
+import { createToast } from './shared/toast.js';
 import * as S from '/js/shared.js';
 import * as G from '/js/global.js';
 
@@ -11,70 +17,40 @@ const treeContent = document.getElementById('tree-content');
 const taxonomyToggle = document.getElementById('taxonomy-toggle');
 const taxonomyClose = document.getElementById('taxonomy-close');
 const taxonomyScrim = document.getElementById('taxonomy-scrim');
+const setTaxonomyOpen = createTaxonomyDrawer(taxonomyToggle, document.querySelector('.bp-sidebar'));
 const loginButton = document.getElementById('login-button');
 const userProfile = document.getElementById('user-profile');
 const userProfilePicture = document.getElementById('user-profile-picture');
 const userProfileName = document.getElementById('user-profile-name');
-const accountDialogPicture = document.getElementById('account-dialog-picture');
-const accountDialogName = document.getElementById('account-dialog-name');
-const userAccountDialog = document.getElementById('user-account-dialog');
-const logoutButton = document.getElementById('logout-button');
-const deleteAccountButton = document.getElementById('delete-account-button');
-const logoutDialog = document.getElementById('logout-dialog');
-const deleteAccountDialog = document.getElementById('delete-account-dialog');
-const loginSuccessDialog = document.getElementById('login-success-dialog');
+const headerUserProfile = document.getElementById('header-user-profile');
+const headerLoginButton = document.getElementById('header-login-button');
 const logoutSuccessDialog = document.getElementById('logout-success-dialog');
 const deleteAccountSuccessDialog = document.getElementById('delete-account-success-dialog');
-const logoutThisDeviceButton = logoutDialog.querySelector('.dialog-logout-this-device-button');
-const logoutAllDevicesButton = logoutDialog.querySelector('.dialog-logout-all-devices-button');
-const deleteAccountConfirmButton = deleteAccountDialog.querySelector('.dialog-delete-account-button');
 const revokeGitHubAuthLink = document.getElementById('revoke-github-auth-link');
 const contributeButton = document.getElementById('contribute-button');
 const contributeDataButton = document.getElementById('contribute-data-button');
-const newCategoryButton = document.getElementById('new-category-button');
-const categoryIssueButton = document.getElementById('category-issue-button');
-const categoryActionsMenu = document.getElementById('category-actions-menu');
 
 let currentCategoryID = null;
 let currentCategoryPath = '';
 let currentCategoryName = '';
 let currentUserProfile = null;
-let currentTree = [];
 let navigationBusy = false;
 let profileSequence = 0;
 let lastWorkspaceURL = window.location.href;
+let signInToast;
+createOverlayScrollbar(document.getElementById('pie-home-slot'));
+createConfigSidebar();
 const sidebarNavigation = createSidebarNavigation({
     onNavigate(entry) {
-        const url = new URL(locationURL(entry), window.location.origin);
-        return selectCategory({ ID: entry.categoryID, name: entry.categoryName },
-            url.pathname.slice('/rankings/'.length), { contextValues: entry.contextValues, lineage: entry.lineage });
+        return selectTopic(entry);
     },
     onLogin: () => loginButton.click(),
     onSessionChange: () => { void loadUserProfile().catch(showNavigationError); }
 });
 navigationChannel.subscribe(() => { lastWorkspaceURL = window.location.href; });
 
-function displayURLPart(value) {
-    return encodeURIComponent(String(value ?? '').trim().replace(/\s+/g, '-'));
-}
-
-function appendCategoryPath(path, name) {
-    const part = displayURLPart(name);
-    return path ? `${path}/${part}` : part;
-}
-
 function rankingURL(path = currentCategoryPath) {
-    return path ? `/rankings/${path}` : '/';
-}
-
-async function postJSON(url, body = {}) {
-    const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-    });
-    if (response.status === 204) return null;
-    return G.checkErrorCodeInURL(response);
+    return path ? `/${path}` : '/';
 }
 
 async function prepareWorkspaceContextChange() {
@@ -100,245 +76,102 @@ function updateContributionLinks() {
     const authenticated = currentUserProfile !== null;
     contributeButton.hidden = !authenticated;
     contributeDataButton.hidden = !authenticated;
-    newCategoryButton.hidden = !authenticated;
-    categoryIssueButton.hidden = !authenticated || currentCategoryID === null;
-    categoryActionsMenu.hidden = !authenticated;
-    if (!authenticated) categoryActionsMenu.open = false;
-
     contributeButton.href = buildContributeURL('new_benchmark');
     contributeDataButton.href = buildContributeURL('benchmark_result', {
         pageURL: window.location.origin + rankingURL()
     });
-    newCategoryButton.href = buildContributeURL('new_category', {
-        parentPath: currentCategoryPath || '/',
-        parentName: currentCategoryName || 'Root',
-        pageURL: window.location.origin + rankingURL()
-    });
-    categoryIssueButton.href = buildContributeURL('delete_or_migrate_category', {
-        targetName: currentCategoryName,
-        categoryPath: currentCategoryPath,
-        targetCategoryID: currentCategoryID,
-        targetKind: 'category',
-        pageURL: window.location.origin + rankingURL()
-    });
 }
 
-function updateTreeSelection() {
-    treeContent.querySelectorAll('[data-category-id]').forEach(element => {
-        const selected = Number(element.dataset.categoryId) === Number(currentCategoryID);
-        element.classList.toggle('selected', selected);
-        element.setAttribute('aria-current', selected ? 'page' : 'false');
-        const group = element.closest('.tree-group');
-        if (group && element.classList.contains('tree-root-item')) {
-            group.classList.toggle('selected', selected);
-        }
-    });
-}
-
-function mergeCategoryTree(previous, incoming) {
-    const old = new Map(previous.map(category => [Number(category.ID), category]));
-    return incoming.map(category => {
-        const retained = old.get(Number(category.ID));
-        return { ...retained, ...category,
-            children: Array.isArray(category.children)
-                ? mergeCategoryTree(retained?.children ?? [], category.children) : retained?.children };
-    });
-}
-
-function showNavigationError() {
+function showNavigationError(error) {
     const feedback = document.getElementById('navigation-feedback');
-    feedback.textContent = 'Could not open this category or context. Try again.';
-    document.getElementById('navigation-retry').hidden = false;
+    feedback.textContent = isAccountWriteError(error) ? error.message : 'Could not open this topic. Please try again.';
+    treeContent.setAttribute('aria-busy', 'false');
 }
 
-async function selectCategory(category, path, { replace = false, contextValues, lineage } = {}) {
+function normalizeTopic(topic) {
+    const categoryID = Number(topic.categoryID ?? topic.ID);
+    const categoryName = String(topic.categoryName ?? topic.name ?? '');
+    if (!Number.isSafeInteger(categoryID) || categoryID < 1 || !categoryName) throw new TypeError('Invalid topic');
+    return { ...topic, categoryID, categoryName, isPrivate: topic.isPrivate === true,
+        lineage: [{ ID: categoryID, name: categoryName }], contextValues: topic.contextValues ?? {},
+        dimensions: topic.dimensions ?? [] };
+}
+
+function setCurrentTopic(topic) {
+    currentCategoryID = topic.categoryID;
+    currentCategoryName = topic.categoryName;
+    currentCategoryPath = (topic.url || topicURL(topic.categoryID, topic.categoryName, topic.isPrivate, topic.slug)).slice(1);
+    sidebarNavigation.setCurrentTopic(topic);
+    updateContributionLinks();
+}
+
+async function selectTopic(entry) {
     if (navigationBusy) return false;
     navigationBusy = true;
+    treeContent.setAttribute('aria-busy', 'true');
     try {
         if (!await prepareWorkspaceContextChange()) return false;
-        if (lineage) {
-            // Resolve the real taxonomy path as well, including lazy/unvisited nodes.
-            const payload = await requestJSON(`/api/get_page${rankingURL(path)}`, { treeOnly: true });
-            if (Number(payload.currentCategoryID) !== Number(category.ID)) throw new Error('Category changed');
-            currentTree = mergeCategoryTree(currentTree, payload.categoryTree);
-            lineage.slice(0, -1).forEach(parent => sidebarNavigation.rememberExpansion(parent.ID, true));
-        }
-        currentCategoryID = category?.ID ?? null;
-        currentCategoryPath = path || '';
-        currentCategoryName = category?.name ?? '';
-        const url = new URL(rankingURL(), window.location.origin);
-        if (contextValues !== undefined) {
-            Object.keys(contextValues).sort().forEach(key => url.searchParams.set(`context_${key}`, contextValues[key]));
-        }
-        window.history[replace ? 'replaceState' : 'pushState']({}, '', url);
-        if (lineage) renderTree();
-        else updateTreeSelection();
-        updateContributionLinks();
-        const pendingWorkspace = publishWorkspaceState({ contextValues });
+        const metadata = await requestJSON(entry.isPrivate ? '/api/get_private_category' : '/api/get_topic', { categoryID: entry.categoryID });
+        const topic = normalizeTopic({ ...metadata, isPrivate: entry.isPrivate === true });
+        if (topic.categoryID !== Number(entry.categoryID)) throw new Error('Topic identity changed');
+        const contextValues = entry.contextValues ?? {};
+        setCurrentTopic({ ...topic, contextValues });
+        const url = new URL(locationURL({ ...topic, contextValues }), window.location.origin);
+        window.history.pushState({}, '', url);
+        const pendingWorkspace = publishWorkspaceState({ contextValues, isPrivate: topic.isPrivate });
         setTaxonomyOpen(false);
         await pendingWorkspace;
         return true;
-    } catch {
-        showNavigationError();
+    } catch (error) {
+        showNavigationError(error);
         return false;
-    } finally { navigationBusy = false; }
+    } finally { navigationBusy = false; treeContent.setAttribute('aria-busy', 'false'); }
 }
 
-async function loadChildren(category) {
-    if (Array.isArray(category.children)) return category.children;
-    const payload = await postJSON('/api/load_benchmarks_and_subcategories', {
-        targetCategory: { ID: Number(category.ID) },
-        doNotGetChildren: false,
-        treeOnly: true
-    });
-    category.children = payload?.subcategories ?? [];
-    return category.children;
-}
-
-function makeCategoryRow(category, path) {
-    const hasChildren = Boolean(category.hasChildren);
-    category.expanded = sidebarNavigation.expansionFor(category.ID, Boolean(category.expanded));
-    const group = document.createElement('div');
-    group.className = 'tree-group';
-    if (category.expanded) group.classList.add('expanded');
-
-    const row = document.createElement('button');
-    row.type = 'button';
-    row.className = 'tree-root-item';
-    row.dataset.categoryId = String(category.ID);
-    row.dataset.path = path;
-
-    const expander = document.createElement('span');
-    expander.className = 'icon-folder';
-    expander.setAttribute('role', 'button');
-    expander.setAttribute('tabindex', '0');
-    expander.setAttribute('aria-label', `Toggle ${category.name}`);
-    expander.setAttribute('aria-expanded', String(Boolean(category.expanded)));
-    const label = document.createElement('span');
-    label.textContent = category.name;
-    row.append(expander, label);
-
-    const children = document.createElement('div');
-    children.className = 'tree-children';
-    children.hidden = !category.expanded;
-    group.append(row, children);
-
-    const renderChildren = entries => {
-        children.replaceChildren(...entries.map(child => makeCategoryNode(child, appendCategoryPath(path, child.name))));
-    };
-    if (Array.isArray(category.children)) renderChildren(category.children);
-    else if (category.expanded && hasChildren) {
-        // Restore expanded lazy branches after a full document reload as well.
-        void loadChildren(category).then(entries => {
-            if (!group.isConnected) return;
-            renderChildren(entries);
-            updateTreeSelection();
-            sidebarNavigation.updateTreeMarkers();
-            sidebarNavigation.restoreScroll();
-        }).catch(showNavigationError);
-    }
-
-    const toggle = async event => {
-        event.preventDefault();
-        event.stopPropagation();
-        const expanding = !group.classList.contains('expanded');
-        if (expanding) renderChildren(await loadChildren(category));
-        group.classList.toggle('expanded', expanding);
-        children.hidden = !expanding;
-        expander.setAttribute('aria-expanded', String(expanding));
-        category.expanded = expanding;
-        sidebarNavigation.rememberExpansion(category.ID, expanding);
-        sidebarNavigation.updateTreeMarkers();
-    };
-    expander.addEventListener('click', toggle);
-    expander.addEventListener('keydown', event => {
-        if (event.key === 'Enter' || event.key === ' ') void toggle(event);
-    });
-    row.addEventListener('click', event => {
-        if (event.target === expander) return;
-        void selectCategory(category, path);
-    });
-
-    if (!hasChildren) expander.hidden = true;
-    return group;
-}
-
-function makeCategoryNode(category, path) {
-    if (category.hasChildren) return makeCategoryRow(category, path);
-    const row = document.createElement('button');
-    row.type = 'button';
-    row.className = 'tree-leaf';
-    row.dataset.categoryId = String(category.ID);
-    row.dataset.path = path;
-    const label = document.createElement('span');
-    label.textContent = category.name;
-    row.append(label);
-    row.addEventListener('click', () => void selectCategory(category, path));
-    return row;
-}
-
-function renderTree() {
-    treeContent.replaceChildren(...currentTree.map(category => (
-        makeCategoryNode(category, appendCategoryPath('', category.name))
-    )));
-    updateTreeSelection();
-    sidebarNavigation.updateTreeMarkers();
-    sidebarNavigation.restoreScroll();
-}
-
-function findCategoryByID(entries, targetID) {
-    for (const category of entries) {
-        if (Number(category.ID) === Number(targetID)) return category;
-        const nested = Array.isArray(category.children)
-            ? findCategoryByID(category.children, targetID)
-            : null;
-        if (nested) return nested;
-    }
-    return null;
-}
-
-function setTaxonomyOpen(open) {
-    document.body.classList.toggle('taxonomy-open', open);
-    taxonomyToggle.setAttribute('aria-expanded', String(open));
-}
-
-function showUserProfile(profile) {
-    if (currentUserProfile && currentUserProfile.userID !== profile.userID) {
-        // Never keep an old account's editable workspace under a new session.
+function showUserProfile(profile, { refreshNavigation = true } = {}) {
+    try { pageAccountWriteScope.bind(profile.userID); }
+    catch (error) {
         sidebarNavigation.setAccount(null);
-        window.location.reload();
-        return;
+        throw error;
     }
     currentUserProfile = profile;
-    sidebarNavigation.setAccount(profile.userID);
+    if (refreshNavigation) sidebarNavigation.setAccount(profile.userID);
     const picture = String(profile?.userProfilePictureURL ?? '');
     userProfilePicture.style.backgroundImage = picture ? `url("${picture.replaceAll('"', '%22')}")` : '';
-    accountDialogPicture.style.backgroundImage = picture ? `url("${picture.replaceAll('"', '%22')}")` : '';
     userProfileName.textContent = profile.userName;
-    accountDialogName.textContent = profile.userName;
+    headerUserProfile.dataset.tooltip = profile.userName;
+    headerUserProfile.setAttribute('aria-label', `Your account: ${profile.userName}`);
+    headerUserProfile.querySelector('[data-account-picture]').style.backgroundImage = userProfilePicture.style.backgroundImage;
+    headerUserProfile.querySelector('[data-account-picture]').dataset.hasPicture = String(Boolean(picture));
     userProfile.hidden = false;
+    headerUserProfile.hidden = false;
     loginButton.hidden = true;
+    headerLoginButton.hidden = true;
     updateContributionLinks();
 }
 
 function clearUserProfile() {
+    if (currentUserProfile) pageAccountWriteScope.invalidate();
     currentUserProfile = null;
     sidebarNavigation.setAccount(null);
     userProfile.hidden = true;
+    headerUserProfile.hidden = true;
     loginButton.hidden = false;
+    headerLoginButton.hidden = false;
+    headerUserProfile.dataset.tooltip = '';
+    headerUserProfile.querySelector('[data-account-picture]').style.backgroundImage = '';
+    headerUserProfile.querySelector('[data-account-picture]').dataset.hasPicture = 'false';
     userProfileName.textContent = '';
     userProfilePicture.style.backgroundImage = '';
-    accountDialogName.textContent = '';
-    accountDialogPicture.style.backgroundImage = '';
     updateContributionLinks();
 }
 
 async function loadUserProfile() {
     const sequence = ++profileSequence;
-    const response = await fetch('/api/get_user_profile', {
+    const response = await (globalThis.__benchpollInitialReads?.take('/api/get_user_profile') ?? fetch('/api/get_user_profile', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
-    });
+    }));
     if (sequence !== profileSequence) return;
     if (response.status === 204) {
         clearUserProfile();
@@ -348,43 +181,58 @@ async function loadUserProfile() {
     if (sequence === profileSequence) showUserProfile(profile);
 }
 
-async function runAccountAction(url, dialog, successDialog) {
-    const actions = dialog.querySelector('[slot="actions"]');
-    actions.hidden = true;
+let accountCenterOpening = false;
+async function openCurrentAccount(event) {
+    if (!currentUserProfile || accountCenterOpening) return;
+    event?.currentTarget?.focus({ preventScroll: true });
+    const owner = String(currentUserProfile.userID);
+    accountCenterOpening = true;
     try {
-        await postJSON(url);
-        ++profileSequence;
-        clearUserProfile();
-        dialog.hidden = true;
-        successDialog.hidden = false;
-    } catch (error) {
-        actions.hidden = false;
-        throw error;
-    }
+        const { openAccountCenter } = await import('./shared/account-center.js');
+        if (!currentUserProfile || String(currentUserProfile.userID) !== owner) return;
+        if (pageAccountWriteScope.capture() !== owner) return;
+        const outcome = await openAccountCenter({ profile: { ...currentUserProfile },
+            onProfileSaved: profile => updateEffectiveProfile(profile, owner),
+            onSignedOut: () => {
+                if (currentUserProfile && String(currentUserProfile.userID) === owner) {
+                    ++profileSequence;
+                    clearUserProfile();
+                }
+            }
+        });
+        if (outcome?.action) window.location.reload();
+    } catch (error) { showNavigationError(error); }
+    finally { accountCenterOpening = false; }
 }
 
-async function initializeTree({ fromURL = false } = {}) {
-    const payload = await requestJSON(`/api/get_page${window.location.pathname}`, { treeOnly: true });
-    if (payload?.jump) {
-        window.location.replace('/');
-        return;
+async function initializeTopic({ fromURL = false } = {}) {
+    const privateMatch = window.location.pathname.match(/^\/personal\/([1-9]\d*)\/?$/);
+    const publicMatch = window.location.pathname.match(/^\/topics\/([1-9]\d*)(?:\/[^/]+)?\/?$/);
+    let topic;
+    if (privateMatch) {
+        topic = normalizeTopic({ ...await requestJSON('/api/get_private_category', { categoryID: Number(privateMatch[1]) }), isPrivate: true });
+    } else if (publicMatch) {
+        topic = normalizeTopic(await requestJSON('/api/get_topic', { categoryID: Number(publicMatch[1]) }));
+        if (topic.categoryID !== Number(publicMatch[1])) throw new Error('Topic identity changed');
+    } else if (/^\/[a-z0-9]+(?:-[a-z0-9]+)*\/?$/.test(window.location.pathname)) {
+        topic = normalizeTopic(await requestJSON('/api/get_topic', { slug: window.location.pathname.slice(1).replace(/\/$/, '') }));
+    } else {
+        const payload = await requestJSON(`/api/get_page${window.location.pathname}`, { treeOnly: true });
+        if (payload?.jump) { window.location.replace('/'); return; }
+        const selected = payload?.categoryTree?.find(entry => Number(entry.ID) === Number(payload.currentCategoryID));
+        if (!selected) throw new Error('Current topic is missing');
+        topic = normalizeTopic(selected);
     }
-    currentTree = mergeCategoryTree(currentTree, payload?.categoryTree ?? []);
-    currentCategoryID = payload?.currentCategoryID ?? null;
-    const selected = findCategoryByID(currentTree, currentCategoryID)
-        ?? (currentCategoryID === null && currentTree.length === 1 ? currentTree[0] : null);
-    currentCategoryID = selected?.ID ?? null;
-    currentCategoryName = selected?.name ?? '';
-    currentCategoryPath = window.location.pathname.startsWith('/rankings/')
-        ? window.location.pathname.slice('/rankings/'.length).replace(/^\/+|\/+$/g, '')
-        : selected ? appendCategoryPath('', selected.name) : '';
-    renderTree();
-    updateContributionLinks();
-    await publishWorkspaceState({ fromURL });
+    setCurrentTopic(topic);
+    const url = new URL(window.location.href);
+    url.pathname = topic.url || topicURL(topic.categoryID, topic.categoryName, topic.isPrivate, topic.slug);
+    url.searchParams.delete('view');
+    window.history.replaceState(window.history.state, '', url);
+    await publishWorkspaceState({ fromURL, isPrivate: topic.isPrivate });
 }
 
 // Back/forward changes the location, never the selected sidebar or pie mode.
-window.addEventListener('popstate', async () => {
+G.setHistoryNavigationHandler(async () => {
     const target = window.location.href;
     const contextAddress = input => {
         const url = new URL(input);
@@ -401,13 +249,21 @@ window.addEventListener('popstate', async () => {
     try {
         if (!await prepareWorkspaceContextChange()) return;
         history.replaceState(history.state, '', target);
-        await initializeTree({ fromURL: true });
+        await initializeTopic({ fromURL: true });
     } catch { showNavigationError(); }
     finally { navigationBusy = false; }
 });
 window.addEventListener('focus', () => { void loadUserProfile().catch(showNavigationError); });
 
 taxonomyToggle.addEventListener('click', () => setTaxonomyOpen(!document.body.classList.contains('taxonomy-open')));
+document.getElementById('bp-breadcrumb').addEventListener('click', event => {
+    if (event.target.closest('[data-taxonomy-trigger]') && window.matchMedia('(max-width: 760px)').matches) {
+        setTaxonomyOpen(true);
+    }
+});
+window.matchMedia('(max-width: 760px)').addEventListener('change', event => {
+    if (!event.matches) setTaxonomyOpen(false);
+});
 taxonomyClose.addEventListener('click', () => setTaxonomyOpen(false));
 taxonomyScrim.addEventListener('click', () => setTaxonomyOpen(false));
 window.addEventListener('keydown', event => {
@@ -415,33 +271,20 @@ window.addEventListener('keydown', event => {
 });
 
 loginButton.addEventListener('click', G.loginWithGitHub);
-userProfile.addEventListener('click', () => {
-    if (currentUserProfile) userAccountDialog.hidden = false;
+headerLoginButton.addEventListener('click', G.loginWithGitHub);
+userProfile.addEventListener('click', openCurrentAccount);
+headerUserProfile.addEventListener('click', openCurrentAccount);
+function updateEffectiveProfile(profile, owner) {
+    if (!profile || !currentUserProfile || String(currentUserProfile.userID) !== owner
+        || profile.userID != null && String(profile.userID) !== owner) return;
+    try { if (pageAccountWriteScope.capture() !== owner) return; } catch { return; }
+    ++profileSequence;
+    showUserProfile({ ...currentUserProfile, ...profile, userID: owner }, { refreshNavigation: false });
+}
+document.addEventListener('benchpoll:profile-updated', event => {
+    const profile = event.detail?.profile ?? event.detail;
+    if (profile?.userID != null) updateEffectiveProfile(profile, String(profile.userID));
 });
-logoutButton.addEventListener('click', async () => {
-    userAccountDialog.hidden = true;
-    logoutDialog.hidden = false;
-    const actions = logoutDialog.querySelector('[slot="actions"]');
-    actions.hidden = true;
-    try {
-        const payload = await postJSON('/api/get_device_count');
-        const count = Number(payload.deviceCount);
-        logoutThisDeviceButton.textContent = count > 1 ? 'Log out on this device only' : 'Log out';
-        logoutAllDevicesButton.textContent = `Log out on all ${count} devices`;
-        logoutAllDevicesButton.hidden = count <= 1;
-        actions.hidden = false;
-    } catch (error) {
-        logoutDialog.hidden = true;
-        throw error;
-    }
-});
-deleteAccountButton.addEventListener('click', () => {
-    userAccountDialog.hidden = true;
-    deleteAccountDialog.hidden = false;
-});
-logoutThisDeviceButton.addEventListener('click', () => runAccountAction('/api/logout', logoutDialog, logoutSuccessDialog));
-logoutAllDevicesButton.addEventListener('click', () => runAccountAction('/api/logout?all', logoutDialog, logoutSuccessDialog));
-deleteAccountConfirmButton.addEventListener('click', () => runAccountAction('/api/delete_account', deleteAccountDialog, deleteAccountSuccessDialog));
 
 document.querySelectorAll('.dialog-close-button').forEach(button => {
     button.addEventListener('click', () => {
@@ -449,7 +292,7 @@ document.querySelectorAll('.dialog-close-button').forEach(button => {
         if (dialog) dialog.hidden = true;
     });
 });
-[loginSuccessDialog, logoutSuccessDialog, deleteAccountSuccessDialog].forEach(dialog => {
+[logoutSuccessDialog, deleteAccountSuccessDialog].forEach(dialog => {
     dialog.querySelector('.dialog-close-button').addEventListener('click', () => window.location.reload());
 });
 
@@ -464,8 +307,11 @@ G.listenStorageChange('user-profile-update', async profileSignal => {
         logoutSuccessDialog.hidden = false;
         return;
     }
-    await loadUserProfile();
-    loginSuccessDialog.hidden = false;
+    try {
+        await loadUserProfile();
+        await publishWorkspaceState({ accountRefresh: true });
+        (signInToast ??= createToast()).show('Signed in');
+    } catch (error) { showNavigationError(error); }
 });
 
-await Promise.all([initializeTree(), loadUserProfile()]);
+await Promise.all([initializeTopic().catch(showNavigationError), loadUserProfile().catch(showNavigationError)]);

@@ -46,17 +46,17 @@ try {
             await page.getByText('2 recorded configurations', { exact: false }).waitFor();
             await page.screenshot({ path: `artifacts/frontend/comparison-evidence-${width}.png`, fullPage: true });
             await page.locator('#model-scores-dialog .dialog-close-button').click();
-            await page.locator('#model-comparison-mode').selectOption('matched');
+            await page.getByRole('button', { name: 'Matched conditions' }).click();
             assert.equal(await page.locator('#model-comparison-keys input:checked').count(), 0);
-            await page.getByRole('status').filter({ hasText: 'Select at least one key to compare.' }).waitFor();
+            await page.getByRole('status').filter({ hasText: 'Choose at least one field to compare.' }).waitFor();
             assert.equal(await page.locator('.bp-model-row').count(), 0);
             assert.ok(app.state.requests.filter(item => item.path === '/api/get_weighted_workspace').every(item => item.body.comparison?.mode !== 'matched'));
             await page.locator('#model-comparison-keys input[value="model"]').check();
             await page.waitForFunction(() => document.querySelector('.bp-model-score')?.textContent === '75.00');
             await page.screenshot({ path: `artifacts/frontend/comparison-${width}.png`, fullPage: true });
             await page.locator('#model-comparison-keys input[value="model"]').uncheck();
-            await page.waitForFunction(() => document.querySelector('#model-rows')?.textContent === 'Select at least one key to compare.');
-            await page.locator('#model-comparison-mode').selectOption('best');
+            await page.waitForFunction(() => document.querySelector('#model-rows')?.textContent === 'Choose at least one field to compare.');
+            await page.getByRole('button', { name: 'Best performance' }).click();
             assert.equal(await page.locator('#model-comparison-keys input[value="harness"]').isChecked(), true);
             assert.equal(await page.locator('#model-comparison-keys input[value="model"]').isChecked(), false);
             await page.waitForFunction(() => document.querySelector('.bp-model-score')?.textContent === '80.00');
@@ -143,7 +143,7 @@ try {
         await page.locator('#model-comparison-toggle').click();
         await page.locator('#model-comparison-keys input[value="harness"]').check();
         await page.waitForFunction(() => document.querySelectorAll('.bp-model-row').length === 2);
-        await page.locator('#model-comparison-mode').selectOption('matched');
+        await page.getByRole('button', { name: 'Matched conditions' }).click();
         await page.locator('#model-comparison-keys input[value="model"]').check();
         await page.waitForFunction(() => document.querySelector('.bp-model-score')?.textContent === '75.00');
         for (const model of app.state.comparisonModels) {
@@ -151,7 +151,7 @@ try {
         }
         await page.locator('#workspace-refresh').click();
         await page.locator('#model-comparison-keys input[value="runner"]').waitFor();
-        await page.locator('#model-comparison-mode').selectOption('best');
+        await page.getByRole('button', { name: 'Best performance' }).click();
         await page.getByRole('status').filter({ hasText: 'no longer available' }).waitFor();
         assert.equal(await page.locator('.bp-model-row').count(), 0);
         await page.locator('#model-comparison-keys input[value="harness"]').click();
@@ -187,13 +187,13 @@ try {
         await page.locator('#model-comparison-toggle').click();
         app.state.workspaceDelay = 200;
         await page.locator('#model-comparison-keys input[value="harness"]').check();
-        await page.locator('#model-comparison-mode').selectOption('matched');
+        await page.getByRole('button', { name: 'Matched conditions' }).click();
         await page.locator('#model-comparison-keys input[value="model"]').check();
         await page.waitForFunction(() => document.querySelector('.bp-model-score')?.textContent === '75.00');
-        assert.equal(await page.locator('#model-comparison-mode').inputValue(), 'matched');
+        assert.equal(await page.locator('#model-comparison-mode').getAttribute('data-mode'), 'matched');
         assert.equal(await page.locator('.bp-model-row').count(), 2);
         await page.locator('#model-comparison-keys input[value="model"]').uncheck();
-        await page.waitForFunction(() => document.querySelector('#model-rows')?.textContent === 'Select at least one key to compare.');
+        await page.waitForFunction(() => document.querySelector('#model-rows')?.textContent === 'Choose at least one field to compare.');
         assert.equal(await page.locator('.bp-model-row').count(), 0);
     });
     console.log('PASS rapid comparison changes only display the latest selection');

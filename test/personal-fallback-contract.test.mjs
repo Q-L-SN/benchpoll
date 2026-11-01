@@ -3,85 +3,54 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
 
-const read = relativePath => fs.readFileSync(new URL(`../${relativePath}`, import.meta.url), 'utf8');
-const migration = read('scripts/migrate-personal-fallback-rules.mjs');
-const integrity = read('scripts/check-ranking-integrity.mjs');
+const read = relativePath => fs.readFileSync(new URL('../' + relativePath, import.meta.url), 'utf8');
+const migration = read('scripts/migrate-ordered-benchmark-families.mjs');
 const ranking = read('ranking-service.js');
 const server = read('server.js');
 const home = read('private/home.html');
 const workspace = frontendSource('public/js/home-workspace.js');
 const styles = frontendStyles('public/css/home-v2.css');
 
-test('personal OR fallback schema is strict and tied to an existing personal pie weight', () => {
-    assert.match(migration, /022_personal_fallback_rules/);
-    assert.match(migration, /CREATE TABLE personal_pie_score_rules/);
-    assert.match(migration, /ENUM\('fallback_if_missing'\)/);
-    assert.match(migration, /FOREIGN KEY \(pie_ID, primary_benchmark_condition_ID\)[\s\S]*REFERENCES personal_pie_weights \(pie_ID, benchmark_condition_ID\)[\s\S]*ON DELETE CASCADE/);
-    assert.match(migration, /CREATE TABLE personal_pie_score_rule_components/);
-    assert.match(migration, /FOREIGN KEY \(fallback_benchmark_condition_ID\)[\s\S]*REFERENCES benchmark_conditions \(ID\)[\s\S]*ON DELETE RESTRICT/);
-    assert.match(migration, /CHECK \(primary_benchmark_condition_ID <> fallback_benchmark_condition_ID\)/);
-    assert.match(integrity, /personal fallback rule graphs with cycles/);
-    assert.match(integrity, /personal fallback component totals other than 100 percent/);
+test('ordered families replace weighted component storage and retain entrance-weight and condition foreign keys', () => {
+    assert.match(migration, /050_ordered_benchmark_families/);
+    assert.match(migration, /CREATE TABLE benchmark_families/);
+    assert.match(migration, /CREATE TABLE benchmark_family_members/);
+    assert.match(migration, /UNIQUE KEY uq_family_chain \(chain_hash\)/);
+    assert.match(migration, /FOREIGN KEY \(pie_ID,primary_benchmark_condition_ID\)[\s\S]*REFERENCES personal_pie_weights/);
+    assert.match(migration, /DROP TABLE personal_pie_score_rule_components/);
+    assert.doesNotMatch(ranking, /personal_pie_score_rule_components/);
 });
 
-test('personal pie API requires and persists fallback rules without a compatibility default', () => {
-    const endpoint = server.slice(
-        server.indexOf("API.post('/save_personal_pie'"),
-        server.indexOf("page.get('/login'", server.indexOf("API.post('/save_personal_pie'"))
-    );
+test('personal API requires explicit ordered rules and saves immutable family references atomically', () => {
+    const endpoint = server.slice(server.indexOf("API.post('/save_personal_pie'"), server.indexOf("page.get('/login'", server.indexOf("API.post('/save_personal_pie'")));
     assert.match(endpoint, /fallbackRules:\s*req\.body\.fallbackRules/);
     assert.doesNotMatch(endpoint, /fallbackRules:\s*req\.body\.fallbackRules\s*\?\?/);
     assert.match(ranking, /validateFallbackRules\(fallbackRules, normalizedEntries\)/);
-    assert.match(ranking, /INSERT INTO personal_pie_score_rules/);
-    assert.match(ranking, /INSERT INTO personal_pie_score_rule_components/);
-    assert.match(ranking, /pie_fallback_cycle_not_allowed/);
+    assert.match(ranking, /ensureBenchmarkFamily\(connection, rule\.primaryConditionID, rule\.entries\)/);
+    assert.match(ranking, /INSERT INTO personal_pie_score_rules[\s\S]*family_ID/);
+    assert.doesNotMatch(ranking, /pie_fallback_cycle_not_allowed|MAX_FALLBACK/);
 });
 
-test('homepage edits Fallback inline and saves it atomically with the personal pie', () => {
-    assert.doesNotMatch(home, /id="fallback-rule-dialog"/);
-    assert.doesNotMatch(home, /id="fallback-rule-search"/);
-    assert.match(home, /id="inline-fallback-enabled"/);
-    assert.match(home, /id="inline-fallback-personal-control"/);
-    assert.match(home, /id="public-fallback-toggle"/);
-    assert.match(home, /id="inline-fallback-guide"/);
-    assert.match(home, /id="inline-fallback-remove"/);
-    assert.match(home, /id="inline-fallback-chart"/);
-    assert.match(home, /<strong>Fallback<\/strong>/);
-    assert.doesNotMatch(home, /OR fallback/i);
-    assert.doesNotMatch(workspace, /openFallbackRuleEditor|fallbackEditorState|fallbackRuleDialog/);
-    assert.match(workspace, /personalFallbackRules:\s*\[\]/);
-    assert.match(workspace, /publicFallbackRules:\s*\[\]/);
-    assert.match(workspace, /serverPersonalFallbackRules:\s*\[\]/);
-    assert.match(workspace, /fallbackRules,\s*comparison: state\.comparisonRequest/);
-    assert.match(workspace, /function snapshotPersonalPie\(\)/);
-    assert.match(workspace, /fallbackRules:\s*cloneFallbackRules\(state\.personalFallbackRules\)/);
-    assert.match(workspace, /function renderInlineFallback\(\)/);
-    assert.match(workspace, /function isInlineFallbackTargetActive\(\)/);
-    assert.match(workspace, /function addObjectToFallbackMix\(object\)/);
-    assert.match(workspace, /function removeSelectedFallbackComponent\(\)/);
-    assert.match(workspace, /if \(fallbackTargetActive\) \{\s*addObjectToFallbackMix\(object\)/);
-    assert.match(workspace, /function adjustSelectedFallbackWeight\(deltaBasisPoints\)/);
-    assert.match(workspace, /const retainedSegments = new Set\(\)/);
-    assert.match(workspace, /insertBefore\(segment, currentAtIndex \?\? null\)/);
-    assert.match(workspace, /fallbackWheelCommitTimer = window\.setTimeout\([\s\S]*WHEEL_WEIGHT_COMMIT_IDLE_MS/);
-    assert.match(workspace, /showFallbackIcon = state\.mode === 'personal' && hasFallback/);
-    assert.match(workspace, /showFallbackIcon \? 'fallback' : ''/);
-    assert.match(workspace, /function publicFallbackRuleFor\(primaryConditionID\)/);
-    assert.match(workspace, /publicFallbackToggle\.addEventListener\('click'/);
-    assert.match(styles, /\.bp-inline-fallback-chart\s*\{[^}]*display:\s*flex[^}]*overflow:\s*hidden/s);
-    assert.match(styles, /\.bp-inline-fallback-chart\.is-target-active\s*\{/);
-    assert.match(styles, /\.bp-inline-fallback-segment\s*\{[^}]*flex:\s*0 0 var\(--bp-fallback-weight\)/s);
-    assert.match(styles, /\.bp-pie-fallback-icon\s*\{/);
-    assert.doesNotMatch(styles, /\.bp-fallback-dialog\s*\{/);
+test('homepage uses an ordered inline editor, not a weighted fallback dialog or wheel target', () => {
+    assert.doesNotMatch(home, /id="fallback-rule-dialog"|id="inline-fallback-remove"/);
+    for (const id of ['inline-fallback-toggle', 'inline-fallback-settings', 'inline-fallback-personal-control', 'public-fallback-toggle', 'inline-fallback-chart']) assert.ok(home.includes('id="' + id + '"'));
+    assert.doesNotMatch(home, /inline-fallback-enabled|bp-fallback-switch/);
+    assert.match(workspace, /function addObjectToFallbackChain\(object\)/);
+    assert.match(workspace, /function moveFallbackMember\(conditionID, targetIndex\)/);
+    assert.match(workspace, /function removeFallbackMember\(conditionID\)/);
+    assert.match(workspace, /createFamilyView/);
+    assert.doesNotMatch(workspace, /adjustSelectedFallbackWeight|MAX_FALLBACK_COMPONENTS|fallbackWheelCommitTimer/);
+    assert.match(styles, /\.bp-family-chain/);
+    assert.match(styles, /\.bp-family-composition-bar/);
 });
 
-test('public scoring receives aggregated rules while personal scoring keeps its own rules', () => {
-    const workspaceBuilder = ranking.slice(
-        ranking.indexOf('export async function getRankingWorkspace'),
-        ranking.indexOf('function validatePieEntries')
-    );
-    assert.match(workspaceBuilder, /personal:\s*scoreComparison\([\s\S]*fallbackRules:\s*personalSourceFallbackRules/);
-    assert.match(workspaceBuilder, /publicPie:\s*\{[\s\S]*fallbackRules:\s*decorateFallbackRules\(publicPie\.fallbackRules/);
-    const publicCall = workspaceBuilder.slice(workspaceBuilder.indexOf('public: scoreComparison'));
-    assert.match(publicCall, /fallbackRules:\s*publicPie\.fallbackRules, fallbackScope: 'public'/);
+test('public scoring receives whole family shares and personal scoring receives explicit rules plus the community mix', () => {
+    assert.match(ranking, /calculate\('personal', personalScoringEntries, PIE_TOTAL_BASIS_POINTS,\s*\{ fallbackRules: personalExpanded \? \[\] : personalFallbackRules, familyComposition: personalEffectiveComposition/);
+    assert.match(ranking, /const personalEffectiveComposition = personalExpanded\?\.familyComposition \?\? personalCommunityComposition/);
+    assert.match(ranking, /calculate\('public', publicEffectiveEntries,\s*publicExpanded \? PIE_TOTAL_BASIS_POINTS : publicPie\.participantCount \* PIE_TOTAL_BASIS_POINTS/);
+    assert.match(ranking, /const build = \(\) => scoreComparison\(models, entries, total, rules, compareOptions, preparedGroups\)/);
+    assert.match(ranking, /\{ familyComposition: publicEffectiveComposition, fallbackScope: 'public'/);
+    assert.match(ranking, /const personalFallbackRules = decorateFallbackRules\(personalSourceFallbackRules, conditionsByID\)/);
+    assert.match(ranking, /communityFallbackComposition: personalCommunityComposition/);
+    assert.match(ranking, /familyKey\(group\.primaryConditionID, family\.entries\)/);
 });

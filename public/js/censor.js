@@ -1,6 +1,9 @@
 import * as G from '/js/global.js';
 import { buildContributionURL } from './shared/contribution-navigation.js?v=clean-20260908';
 import { initializeOverlays } from './shared/overlays.js';
+import { postJSON as postSyncJSON, postWriteJSON } from './shared/http.js?v=write-replay-20261008';
+import { pageAccountWriteScope, canonicalAccountID, accountWriteError, isAccountWriteError } from './shared/account-identity.js';
+import { protectModelName } from './shared/model-name.js?v=model-name-translation-20261006';
 
 initializeOverlays([...document.querySelectorAll('.moderation-overlay')]);
 
@@ -21,7 +24,8 @@ const workspaceViews = {
     queue: document.getElementById('queue-view'),
     explorer: document.getElementById('explorer-view'),
     audit: document.getElementById('audit-view'),
-    messages: document.getElementById('messages-view')
+    messages: document.getElementById('messages-view'),
+    sync: document.getElementById('sync-view')
 };
 const explorerFilter = document.getElementById('explorer-filter');
 const explorerEntity = document.getElementById('explorer-entity');
@@ -65,6 +69,7 @@ const auditRequestBefore = document.getElementById('audit-request-before');
 const auditRequestAfter = document.getElementById('audit-request-after');
 const auditSQL = document.getElementById('audit-sql');
 const auditResponse = document.getElementById('audit-response');
+for (const value of [editorPreview, sqlPreview, auditRequestBefore, auditRequestAfter, auditSQL, auditResponse]) protectModelName(value);
 
 let activeEditorLog = null;
 let activeEditorType = null;
@@ -79,6 +84,14 @@ let auditState = { page: 1, totalPages: 1, loaded: false, requestID: 0, rows: []
 let reviewerCapabilities = { userID: null, role: null, isSenior: false, messagesAvailable: false };
 let activeExplorerRow = null;
 let messagesLoaded = false;
+let syncLoaded = false;
+let syncRequestID = 0;
+let logsRequestID = 0;
+let messagesRequestID = 0;
+let recordRequestID = 0;
+let auditDetailRequestID = 0;
+let editorRevision = 0;
+const overlaySessions = new WeakMap();
 
 const issueTypeLabels = {
     correct_or_add_info: 'Correct or Add Information',
@@ -97,6 +110,12 @@ const requestFields = {
     ],
     new_benchmark: [],
     new_model: [],
+    score_field: [],
+    score_field_option: [],
+    new_topic: [
+        { name: 'name', label: 'Public Topic Name', type: 'text', required: true, maxLength: 128 },
+        { name: 'description', label: 'Summary', type: 'textarea', required: true, maxLength: 180, wide: true }
+    ],
     new_category: [
         { name: 'name', label: 'Category Name', type: 'text', required: true, maxLength: 128 },
         { name: 'parentPath', label: 'Parent Category Path', type: 'text', maxLength: 512 },
@@ -137,13 +156,34 @@ function formatDate(value) {
     }).format(new Date(value));
 }
 
+const retryableReviewWrites = new Set(['/api/send_admin_message', '/api/review_moderation_log',
+    '/api/apply_moderation_log', '/api/escalate_moderation_log', '/api/resolve_score_sync_conflict']);
+
 async function postJSON(path, body) {
-    const response = await fetch(path, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
+    try { return await pageAccountWriteScope.write(retryableReviewWrites.has(path) ? postWriteJSON : postSyncJSON, path, body); }
+    catch (error) {
+        if (isAccountWriteError(error) || [401, 403].includes(error.status)) {
+            pageAccountWriteScope.invalidate();
+            const notice = document.getElementById('moderation-account-notice');
+            notice.textContent = moderationErrorMessage(error);
+            notice.hidden = false;
+        }
+        throw error;
+    }
+}
+
+function moderationErrorMessage(error, fallback = 'The request could not be completed. Try again.') {
+    if (isAccountWriteError(error)) return error.message;
+    if (error.status === 401) return 'Your session ended. Refresh this page before continuing.';
+    if (error.status === 403) return 'Your review access changed. Refresh this page before continuing.';
+    if (error.status === 409) return 'The request changed or conflicts with current data. Refresh it before trying again.';
+    return fallback;
+}
+
+async function showModerationFailure(error, fallback) {
+    await G.showAlert(moderationErrorMessage(error, fallback), {
+        title: isAccountWriteError(error) || [401, 403].includes(error.status) ? 'Refresh required' : 'Request could not be completed'
     });
-    return G.checkErrorCodeInURL(response);
 }
 
 function humanizeKey(key) {
@@ -173,7 +213,7 @@ function createInspectButton(label, onClick) {
     const button = document.createElement('button');
     button.className = 'inspect-row-button';
     button.type = 'button';
-    button.title = label;
+    button.dataset.tooltip = label;
     button.setAttribute('aria-label', label);
     const icon = document.createElement('i');
     icon.className = 'fa-solid fa-magnifying-glass';
@@ -187,7 +227,7 @@ function createRowActionButton(label, iconName, className, onClick) {
     const button = document.createElement('button');
     button.className = `inspect-row-button ${className}`;
     button.type = 'button';
-    button.title = label;
+    button.dataset.tooltip = label;
     button.setAttribute('aria-label', label);
     const icon = document.createElement('i');
     icon.className = iconName;
@@ -243,7 +283,7 @@ function getHeading(log) {
             ? firstName
             : `${firstName} + ${log.content.models.length - 1} more`;
     }
-    if (type === 'new_category') {
+    if (type === 'new_category' || type === 'new_topic') {
         return log.content.name;
     }
     if (type === 'benchmark_result' && Array.isArray(log.content.results)) {
@@ -266,8 +306,14 @@ function getTypeLabel(type) {
         return 'New Benchmark';
     case 'new_category':
         return 'New Category or Context';
+    case 'new_topic':
+        return 'Public Topic';
     case 'new_model':
         return 'New Model';
+    case 'score_field':
+        return 'Score Field';
+    case 'score_field_option':
+        return 'Score Field Option';
     case 'benchmark_result':
         return 'Benchmark Result';
     case 'feedback':
@@ -297,6 +343,7 @@ function createField(name, value) {
         fieldValue.append(link);
     } else if (typeof value === 'object') {
         fieldValue.classList.add('json-value');
+        protectModelName(fieldValue);
         fieldValue.textContent = JSON.stringify(value, null, 2);
     } else {
         fieldValue.textContent = String(value);
@@ -316,6 +363,10 @@ function appendContentFields(fields, log) {
         postJSON('/api/get_reported_discussion', { postID: log.content.postID })
             .then(response => response.json()).then(post => { preview.textContent = JSON.stringify(post, null, 2); })
             .catch(() => { preview.textContent = 'Could not load reported content. Reload before reviewing.'; });
+    } else if (type === 'score_field' || type === 'score_field_option') {
+        fields.append(...createField('Operation', log.content.operation),
+            ...createField('Field', log.content.definition ?? { fieldID: log.content.fieldID, label: log.content.label, excluded: log.content.excluded }),
+            ...createField('Target ID', log.content.targetID), ...createField('Revision', log.content.revision), ...createField('Notes', log.content.notes));
     } else if (type === 'new_benchmark') {
         fields.append(...createField('Batch Size', log.content.benchmarks?.length ?? 0));
         (log.content.benchmarks ?? []).forEach((benchmark, index) => {
@@ -331,6 +382,9 @@ function appendContentFields(fields, log) {
             ...createField('Page URL', log.content.pageURL),
             ...createField('Feedback', log.content.details)
         );
+    } else if (type === 'new_topic') {
+        fields.append(...createField('Proposal ID', log.content.proposalID), ...createField('Summary', log.content.description));
+        if (log.content.parentTopicID !== undefined) fields.append(...createField('Parent topic ID', log.content.parentTopicID));
     } else if (type === 'new_category') {
         fields.append(
             ...createField('Request', log.content.requestKind === 'context' ? 'Add context' : 'Add category'),
@@ -421,14 +475,25 @@ function createLogItem(log) {
     const heading = document.createElement('span');
     heading.className = 'log-heading';
     heading.textContent = getHeading(log);
+    const requestType = normalizeRequestType(log.content.type);
+    const modelName = requestType === 'new_model' ? log.content.models?.[0]?.name
+        : requestType === 'benchmark_result' ? log.content.results?.[0]?.model?.name
+            : requestType === 'entity_change' && log.content.targetKind === 'model' ? entityChangeTargetName(log.content) : null;
+    if (modelName && heading.textContent.includes(modelName)) {
+        const title = heading.textContent;
+        const offset = title.indexOf(modelName);
+        const name = protectModelName(document.createElement('span')); name.textContent = modelName;
+        heading.replaceChildren(document.createTextNode(title.slice(0, offset)), name,
+            document.createTextNode(title.slice(offset + modelName.length)));
+    }
     title.append(type, status, heading);
 
     const meta = document.createElement('div');
     meta.className = 'log-meta';
     const issueReference = log.content.github?.issueNumber
-        ? `GitHub #${log.content.github.issueNumber} · `
+        ? `GitHub #${log.content.github.issueNumber}, `
         : '';
-    meta.textContent = `${issueReference}moderation #${log.ID} by ${log.userName ?? log.content.github?.authorLogin ?? log.user_id} · ${formatDate(log.created_at)}`;
+    meta.textContent = `${issueReference}moderation #${log.ID} by ${log.userName ?? log.content.github?.authorLogin ?? log.user_id}, ${formatDate(log.created_at)}`;
 
     const fields = document.createElement('div');
     fields.className = 'field-grid';
@@ -468,6 +533,7 @@ function renderLogs(logs) {
 }
 
 async function loadLogs() {
+    const requestID = ++logsRequestID;
     logList.replaceChildren();
     const loading = document.createElement('div');
     loading.className = 'empty-state';
@@ -475,19 +541,25 @@ async function loadLogs() {
     logList.append(loading);
     statusFilter.disabled = true;
     try {
+        if (reviewerCapabilities.userID === null) await loadAdminCapabilities();
         const data = await postJSON('/api/list_moderation_logs', { status: statusFilter.value });
-        if (data) {
+        if (data && requestID === logsRequestID) {
             renderLogs(data.logs);
         }
-    } catch {
-        loading.textContent = 'The contribution queue could not be loaded.';
+    } catch (error) {
+        if (requestID === logsRequestID) loading.textContent = moderationErrorMessage(error, 'The contribution queue could not be loaded.');
     } finally {
-        statusFilter.disabled = false;
+        if (requestID === logsRequestID) statusFilter.disabled = false;
     }
 }
 
 async function loadAdminCapabilities() {
-    reviewerCapabilities = await postJSON('/api/admin_capabilities', {});
+    const capabilities = await postSyncJSON('/api/admin_capabilities', {});
+    if (typeof capabilities?.userID !== 'string' || canonicalAccountID(capabilities.userID) !== capabilities.userID) {
+        throw accountWriteError('account_identity_required');
+    }
+    pageAccountWriteScope.bind(capabilities.userID);
+    reviewerCapabilities = capabilities;
     auditAction.querySelectorAll('option').forEach(option => {
         if (['direct_create', 'direct_update', 'direct_delete', 'admin_message'].includes(option.value)) {
             option.hidden = !reviewerCapabilities.isSenior;
@@ -497,13 +569,35 @@ async function loadAdminCapabilities() {
     messagesTab.hidden = !(reviewerCapabilities.isSenior && reviewerCapabilities.messagesAvailable);
     composeMessageButton.disabled = !reviewerCapabilities.messagesAvailable;
     if (!reviewerCapabilities.messagesAvailable) {
-        composeMessageButton.title = 'Run the admin messages database migration to enable messaging.';
+        composeMessageButton.dataset.tooltip = 'Run the admin messages database migration to enable messaging.';
     }
 }
+
+function revealActiveWorkspaceTab() {
+    const view = activeWorkspaceView;
+    // Measure after native keyboard focus scrolling; ignore a superseded view.
+    requestAnimationFrame(() => {
+        if (view !== activeWorkspaceView) return;
+        const tab = workspaceTabs.find(tab => tab.dataset.workspaceView === view);
+        if (!tab) return;
+        const tabs = tab.parentElement;
+        const bounds = tabs.getBoundingClientRect();
+        const target = tab.getBoundingClientRect();
+        const offset = target.left < bounds.left ? target.left - bounds.left
+            : target.right > bounds.right ? target.right - bounds.right : 0;
+        tabs.scrollTo({ left: tabs.scrollLeft + offset,
+            behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
+    });
+}
+window.addEventListener('resize', revealActiveWorkspaceTab);
 
 function setActiveWorkspaceView(view) {
     if (!Object.hasOwn(workspaceViews, view)) {
         return;
+    }
+    if (view !== activeWorkspaceView) {
+        recordRequestID += 1;
+        auditDetailRequestID += 1;
     }
     activeWorkspaceView = view;
     workspaceTabs.forEach(tab => {
@@ -515,6 +609,7 @@ function setActiveWorkspaceView(view) {
     Object.entries(workspaceViews).forEach(([key, panel]) => {
         panel.hidden = key !== view;
     });
+    revealActiveWorkspaceTab();
     if (view === 'explorer' && !explorerState.loaded) {
         loadExplorer();
     }
@@ -524,7 +619,60 @@ function setActiveWorkspaceView(view) {
     if (view === 'messages' && reviewerCapabilities.isSenior && !messagesLoaded) {
         loadAdminMessages();
     }
+    if (view === 'sync' && !syncLoaded) void loadSyncConflicts();
 }
+
+async function loadSyncConflicts() {
+    const requestID = ++syncRequestID;
+    const list = document.getElementById('sync-list');
+    const summary = document.getElementById('sync-summary');
+    summary.textContent = 'Loading source conflicts...';
+    try {
+        const data = await postJSON('/api/list_score_sync_conflicts', {});
+        if (requestID !== syncRequestID) return;
+        list.replaceChildren();
+        summary.textContent = data.conflicts.length ? `${data.conflicts.length} source change${data.conflicts.length === 1 ? '' : 's'}${data.hasMore ? ', more will appear after review' : ''}` : 'No source changes need review.';
+        for (const conflict of data.conflicts) {
+            const item = document.createElement('article'); item.className = 'log-item';
+            const body = document.createElement('div');
+            const title = document.createElement('h3'); title.className = 'log-heading';
+            const modelName = protectModelName(document.createElement('span')); modelName.textContent = conflict.modelName;
+            title.append(modelName, document.createTextNode(`, ${conflict.benchmarkName}, ${conflict.conditionName}`));
+            const meta = document.createElement('p'); meta.className = 'log-meta';
+            meta.textContent = conflict.status === 'accept_source' ? 'Official update approved, waiting for the next sync.'
+                : conflict.incoming_row === null ? 'The official source removed a manually corrected score.' : 'The official source changed after a manual correction.';
+            const fields = document.createElement('div'); fields.className = 'field-grid';
+            fields.append(...createField('Current score', conflict.currentScore),
+                ...createField('Current status', conflict.currentStatus), ...createField('Manual action', conflict.manualOverride),
+                ...createField('Current fields', conflict.currentFields), ...createField('Current notes', conflict.currentNotes),
+                ...createField('Official update', conflict.incoming_row ?? 'Removed from the official source'));
+            body.append(title, meta, fields);
+            const actions = document.createElement('div'); actions.className = 'log-actions';
+            const resolve = async choice => {
+                actions.querySelectorAll('button').forEach(button => { button.disabled = true; });
+                try {
+                    const result = await postJSON('/api/resolve_score_sync_conflict', { rowKey: conflict.row_key,
+                        resultID: conflict.result_ID, incomingHash: conflict.incoming_hash, choice });
+                    if (!['kept_correction', 'accept_source'].includes(result.status)) throw new Error('Invalid source review response');
+                    auditState.loaded = false;
+                    await loadSyncConflicts();
+                } catch (error) {
+                    meta.textContent = moderationErrorMessage(error, 'Review could not be saved. Refresh this list before trying again.');
+                    actions.querySelectorAll('button').forEach(button => { button.disabled = false; });
+                }
+            };
+            if (conflict.status === 'pending') {
+                actions.append(createActionButton('approve', conflict.incoming_row === null ? 'Accept source removal' : 'Accept official update', 'fa-check', () => resolve('source')));
+                if (conflict.incoming_row !== null) actions.append(createActionButton('edit', 'Keep manual correction', 'fa-shield-halved', () => resolve('correction')));
+            }
+            item.append(body, actions); list.append(item);
+        }
+        syncLoaded = true;
+    } catch {
+        if (requestID === syncRequestID) summary.textContent = 'Source conflicts could not be loaded. Try refreshing.';
+    }
+}
+document.getElementById('sync-refresh').addEventListener('click', () => { void loadSyncConflicts(); });
 
 function populateExplorerEntities(entities) {
     const selected = explorerEntity.value;
@@ -552,16 +700,17 @@ const EXPLORER_CONTRIBUTION_FORMS = Object.freeze({
         update: row => buildContributionURL('edit_model', { targetModelID: row.id }),
         delete: row => buildContributionURL('edit_model', { targetModelID: row.id, operation: 'delete' })
     },
-    model_conditions: {
-        update: row => buildContributionURL('edit_model', { targetModelID: row.modelID })
+    score_fields: {
+        create: () => buildContributionURL('score_field'),
+        update: row => buildContributionURL('score_field', { fieldID: row.id })
+    },
+    score_field_options: {
+        update: row => buildContributionURL('score_field_option', { fieldID: row.fieldID, fieldOptionID: row.id })
     },
     benchmark_results: {
         create: () => buildContributionURL('benchmark_result'),
         update: row => buildContributionURL('edit_result', { targetResultID: row.id }),
         delete: row => buildContributionURL('edit_result', { targetResultID: row.id, operation: 'delete' })
-    },
-    categories: {
-        create: () => buildContributionURL('new_category')
     }
 });
 
@@ -584,6 +733,7 @@ function openRecordDetails(row, label) {
     activeExplorerRow = row;
     recordEyebrow.textContent = label;
     recordTitle.textContent = row.name ?? row.modelName ?? row.benchmarkName ?? `Record #${row.id ?? ''}`;
+    protectModelName(recordTitle, explorerEntity.value === 'models' || row.name == null && row.modelName != null);
     recordDetails.replaceChildren();
     Object.entries(row).forEach(([key, value]) => {
         const name = document.createElement('div');
@@ -591,6 +741,8 @@ function openRecordDetails(row, label) {
         name.textContent = humanizeKey(key);
         const content = document.createElement('div');
         content.className = 'record-value';
+        if (key === 'modelName' || explorerEntity.value === 'models' && key === 'name'
+            || typeof value === 'object') protectModelName(content);
         if (typeof value === 'string' && /^https?:\/\//.test(value)) {
             const link = document.createElement('a');
             link.href = value;
@@ -605,20 +757,25 @@ function openRecordDetails(row, label) {
     });
     recordEdit.hidden = !explorerContributionURL('update', row);
     recordDelete.hidden = !explorerContributionURL('delete', row);
-    recordOverlay.hidden = false;
+    openOverlay(recordOverlay);
 }
 
 async function openExplorerRecord(summaryRow, label) {
+    const requestID = ++recordRequestID;
+    const entity = explorerEntity.value;
+    const current = () => requestID === recordRequestID && activeWorkspaceView === 'explorer'
+        && explorerEntity.value === entity;
     try {
         const data = await postJSON('/api/admin_data_record', {
-            entity: explorerEntity.value,
+            entity,
             id: summaryRow.id
         });
-        if (!data?.row) {
+        if (!data?.row || !current()) {
             return;
         }
         openRecordDetails(data.row, label);
     } catch (error) {
+        if (!current()) return;
         await G.showAlert(error?.message
             ?? 'This record could not be loaded. It may have changed or been removed.', {
             title: 'Record unavailable'
@@ -633,7 +790,7 @@ function renderExplorer(data) {
         && Boolean(EXPLORER_CONTRIBUTION_FORMS[data.entity]);
     explorerAdd.hidden = !createURL;
     explorerAccessLabel.textContent = formEditing ? 'Changes use reviewed forms' : 'Read only';
-    explorerAccessMark.title = formEditing
+    explorerAccessMark.dataset.tooltip = formEditing
         ? 'Supported changes open the standard contribution form'
         : 'Read-only data access';
     explorerAccessMark.classList.toggle('direct-access', formEditing);
@@ -669,7 +826,8 @@ function renderExplorer(data) {
                 const cell = document.createElement('td');
                 const value = formatValue(row[column.key], column.type);
                 cell.textContent = value;
-                cell.title = value.replaceAll('\n', ' ');
+                if (column.key === 'modelName' || data.entity === 'models' && column.key === 'name') protectModelName(cell);
+                cell.dataset.tooltip = value.replaceAll('\n', ' ');
                 tableRow.append(cell);
             });
             const inspectCell = document.createElement('td');
@@ -704,13 +862,14 @@ function renderExplorer(data) {
     explorerState.loaded = true;
     const first = data.total === 0 ? 0 : (data.page - 1) * data.pageSize + 1;
     const last = Math.min(data.total, data.page * data.pageSize);
-    explorerSummary.textContent = `${data.label} · showing ${first}–${last} of ${data.total}`;
+    explorerSummary.textContent = `${data.label}, showing ${first}–${last} of ${data.total}`;
     explorerPage.textContent = `Page ${data.page} of ${data.totalPages}`;
     explorerPrev.disabled = data.page <= 1;
     explorerNext.disabled = data.page >= data.totalPages;
 }
 
 async function loadExplorer() {
+    recordRequestID += 1;
     const requestID = ++explorerState.requestID;
     explorerAdd.hidden = true;
     renderTableMessage(explorerBody, Math.max(2, explorerHead.querySelectorAll('th').length), 'Loading records...', 'table-loading');
@@ -747,25 +906,29 @@ function auditActionLabel(action) {
 }
 
 async function openAuditDetails(summaryRow) {
+    const requestID = ++auditDetailRequestID;
+    const current = () => requestID === auditDetailRequestID && activeWorkspaceView === 'audit';
     let row;
     try {
         row = await postJSON('/api/get_moderation_audit_log', { ID: Number(summaryRow.ID) });
     } catch {
+        if (!current()) return;
         await G.showAlert('This audit record could not be loaded.', { title: 'Audit unavailable' });
         return;
     }
+    if (!current()) return;
     const contributionID = row.moderation_log_ID ?? row.request_before?.moderationLogID ?? null;
     auditDetailTitle.textContent = contributionID === null
-        ? `${auditActionLabel(row.action_type)} · ${row.request_summary}`
-        : `${auditActionLabel(row.action_type)} · contribution #${contributionID}`;
-    auditDetailMeta.textContent = `Audit #${row.ID} · ${row.outcome} · reviewer #${row.reviewer_user_ID} · ${formatDate(row.created_at)} · ${row.duration_ms} ms`;
+        ? `${auditActionLabel(row.action_type)}, ${row.request_summary}`
+        : `${auditActionLabel(row.action_type)}, contribution #${contributionID}`;
+    auditDetailMeta.textContent = `Audit #${row.ID}, ${row.outcome}, reviewer #${row.reviewer_user_ID}, ${formatDate(row.created_at)}, ${row.duration_ms} ms`;
     auditRequestBefore.textContent = JSON.stringify(row.request_before, null, 2);
     auditRequestAfter.textContent = row.request_after === null
         ? 'No post-action snapshot was recorded.'
         : JSON.stringify(row.request_after, null, 2);
     auditSQL.textContent = row.executed_sql;
     auditResponse.textContent = JSON.stringify(row.database_response, null, 2);
-    auditOverlay.hidden = false;
+    openOverlay(auditOverlay);
 }
 
 function renderAuditLogs(data) {
@@ -790,9 +953,9 @@ function renderAuditLogs(data) {
             const contribution = document.createElement('td');
             const contributionID = row.moderation_log_ID;
             contribution.textContent = contributionID
-                ? `#${contributionID} · ${row.request_summary}`
+                ? `#${contributionID}, ${row.request_summary}`
                 : row.request_summary;
-            contribution.title = `${row.request_type}: ${row.request_summary}`;
+            contribution.dataset.tooltip = `${row.request_type}: ${row.request_summary}`;
             const transition = document.createElement('td');
             const transitionLabel = document.createElement('span');
             transitionLabel.className = 'status-transition';
@@ -819,6 +982,7 @@ function renderAuditLogs(data) {
 }
 
 async function loadAuditLogs() {
+    auditDetailRequestID += 1;
     const requestID = ++auditState.requestID;
     renderTableMessage(auditBody, 7, 'Loading audit records...', 'table-loading');
     auditSummary.textContent = 'Loading audit records...';
@@ -843,10 +1007,12 @@ async function loadAuditLogs() {
 }
 
 function renderAdminMessages(messages) {
+    const requestID = messagesRequestID;
     messageList.replaceChildren();
     const unreadCount = messages.filter(message => !message.isRead).length;
     messageUnreadCount.hidden = unreadCount === 0;
     messageUnreadCount.textContent = String(unreadCount);
+    if (activeWorkspaceView === 'messages') revealActiveWorkspaceTab();
     if (messages.length === 0) {
         const empty = document.createElement('div');
         empty.className = 'empty-state';
@@ -878,7 +1044,9 @@ function renderAdminMessages(messages) {
                 try {
                     await postJSON('/api/mark_admin_message_read', { messageID: Number(message.ID) });
                     message.isRead = true;
-                    renderAdminMessages(messages);
+                    if (requestID === messagesRequestID) renderAdminMessages(messages);
+                } catch (error) {
+                    if (requestID === messagesRequestID) await showModerationFailure(error, 'The message could not be marked as read. Try again.');
                 } finally {
                     readButton.disabled = false;
                 }
@@ -893,6 +1061,8 @@ async function loadAdminMessages() {
     if (!reviewerCapabilities.isSenior || !reviewerCapabilities.messagesAvailable) {
         return;
     }
+    const requestID = ++messagesRequestID;
+    messagesLoaded = false;
     messageList.replaceChildren();
     const loading = document.createElement('div');
     loading.className = 'empty-state';
@@ -900,10 +1070,11 @@ async function loadAdminMessages() {
     messageList.append(loading);
     try {
         const data = await postJSON('/api/list_admin_messages', {});
+        if (requestID !== messagesRequestID) return;
         renderAdminMessages(data.messages);
         messagesLoaded = true;
     } catch {
-        loading.textContent = 'Messages could not be loaded.';
+        if (requestID === messagesRequestID) loading.textContent = 'Messages could not be loaded.';
     }
 }
 
@@ -928,30 +1099,14 @@ async function reviewLog(ID, status) {
     if (!confirmed) {
         return;
     }
-    fetch('/api/review_moderation_log', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ID, status })
-    })
-    .then(handleModerationResponse)
-    .then(async data => {
-        if (data !== undefined) {
-            await showModerationEmailStatus(data.emailNotification);
-            auditState.loaded = false;
-            loadLogs();
-        }
-    });
-}
-
-function handleModerationResponse(response) {
-    if (response.status === 409) {
-        return response.json().then(async data => {
-            await G.showAlert(`The request could not be completed: ${data.error ?? 'data conflict'}.`, {
-                title: 'Request conflict'
-            });
-        });
+    try {
+        const data = await postJSON('/api/review_moderation_log', { ID, status });
+        await showModerationEmailStatus(data.emailNotification);
+        auditState.loaded = false;
+        await loadLogs();
+    } catch (error) {
+        await showModerationFailure(error, 'The review could not be saved. Try again.');
     }
-    return G.checkErrorCodeInURL(response);
 }
 
 async function showModerationEmailStatus(notification) {
@@ -969,6 +1124,18 @@ async function showModerationEmailStatus(notification) {
             title: 'Email queued'
         });
     }
+}
+
+function openOverlay(overlay) {
+    const session = (overlaySessions.get(overlay) ?? 0) + 1;
+    overlaySessions.set(overlay, session);
+    overlay.querySelectorAll('button[type="submit"]').forEach(button => { button.disabled = false; });
+    overlay.hidden = false;
+    return session;
+}
+
+function isCurrentOverlay(overlay, session) {
+    return !overlay.hidden && overlaySessions.get(overlay) === session;
 }
 
 function closeOverlay(overlay) {
@@ -1028,7 +1195,7 @@ function renderEditorFields() {
     };
     editorFields.replaceChildren();
     activeEditorUsesJSON = Number(draft.schemaVersion) >= 3
-        || ['new_benchmark', 'new_model', 'benchmark_result'].includes(type);
+        || ['new_benchmark', 'new_model', 'benchmark_result', 'score_field', 'score_field_option'].includes(type);
     if (activeEditorUsesJSON) {
         const label = document.createElement('label');
         label.className = 'editor-field wide';
@@ -1070,6 +1237,10 @@ function collectEditorContent(type = editorType.value) {
         throw new Error('The moderation request schema version is missing.');
     }
     const content = { schemaVersion, type };
+    if (type === 'new_topic') {
+        content.proposalID = editorDrafts[type].proposalID;
+        if (editorDrafts[type].parentTopicID !== undefined) content.parentTopicID = editorDrafts[type].parentTopicID;
+    }
     requestFields[type].forEach(definition => {
         const input = editorFields.querySelector(`[name="${definition.name}"]`);
         content[definition.name] = definition.type === 'checkbox' ? input.checked : input.value.trim();
@@ -1079,21 +1250,25 @@ function collectEditorContent(type = editorType.value) {
 
 function openEditor(log) {
     activeEditorLog = log;
-    activeEditorPreviewToken = null;
-    activeEditorPreviewFingerprint = null;
+    invalidateEditorPreview();
     const initialContent = stripModerationMetadata(log.content);
+    if (initialContent.type === 'new_topic' && !editorType.querySelector('option[value="new_topic"]')) {
+        const option = document.createElement('option');
+        option.value = 'new_topic'; option.textContent = 'Public Topic';
+        editorType.append(option);
+    }
     activeEditorType = initialContent.type;
     editorDrafts = { [initialContent.type]: initialContent };
     editorType.value = initialContent.type;
     renderEditorFields();
-    editorOverlay.hidden = false;
+    openOverlay(editorOverlay);
     editorType.focus();
 }
 
 function openEscalation(log) {
     activeEscalationLog = log;
     escalateNote.value = '';
-    escalateOverlay.hidden = false;
+    openOverlay(escalateOverlay);
     escalateNote.focus();
 }
 
@@ -1102,24 +1277,25 @@ function editorContentFingerprint(content) {
 }
 
 function invalidateEditorPreview() {
+    editorRevision += 1;
     activeEditorPreviewToken = null;
     activeEditorPreviewFingerprint = null;
 }
 
-function previewSQL(log, content) {
+async function previewSQL(log, content) {
     sqlPreview.textContent = 'Generating SQL preview...';
-    sqlOverlay.hidden = false;
+    const session = openOverlay(sqlOverlay);
+    const editorSession = overlaySessions.get(editorOverlay);
+    const revision = editorRevision;
+    const current = () => isCurrentOverlay(sqlOverlay, session) && (content === undefined
+        || isCurrentOverlay(editorOverlay, editorSession) && activeEditorLog === log && editorRevision === revision);
     const body = { ID: log.ID };
     if (content !== undefined) {
         body.content = content;
     }
-    return fetch('/api/preview_moderation_sql', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-    })
-    .then(handleModerationResponse)
-    .then(data => {
+    try {
+        const data = await postJSON('/api/preview_moderation_sql', body);
+        if (!current()) return undefined;
         if (data?.sql) {
             sqlPreview.textContent = data.sql;
         }
@@ -1130,7 +1306,13 @@ function previewSQL(log, content) {
                 : null;
         }
         return data;
-    });
+    } catch (error) {
+        if (!current()) return undefined;
+        if (content !== undefined && activeEditorLog?.ID === log.ID) invalidateEditorPreview();
+        sqlPreview.textContent = moderationErrorMessage(error, 'The SQL preview could not be generated. Try again.');
+        await showModerationFailure(error, 'The SQL preview could not be generated. Try again.');
+        return undefined;
+    }
 }
 
 editorType.addEventListener('change', async () => {
@@ -1146,6 +1328,7 @@ editorType.addEventListener('change', async () => {
         }
     }
     activeEditorType = editorType.value;
+    invalidateEditorPreview();
     renderEditorFields();
 });
 
@@ -1175,6 +1358,12 @@ editorForm.addEventListener('submit', async event => {
     if (!activeEditorLog || !editorForm.reportValidity()) {
         return;
     }
+    const submitButton = editorForm.querySelector('button[type="submit"]');
+    if (submitButton.disabled) return;
+    const session = overlaySessions.get(editorOverlay);
+    const ID = activeEditorLog.ID;
+    const revision = editorRevision;
+    const previewToken = activeEditorPreviewToken;
     let editedContent;
     try {
         editedContent = collectEditorContent();
@@ -1184,7 +1373,7 @@ editorForm.addEventListener('submit', async event => {
         });
         return;
     }
-    if (!activeEditorPreviewToken
+    if (!previewToken
         || activeEditorPreviewFingerprint !== editorContentFingerprint(editedContent)) {
         await G.showAlert('Preview the SQL execution plan after your latest edit before applying it.', {
             title: 'Fresh preview required'
@@ -1195,58 +1384,58 @@ editorForm.addEventListener('submit', async event => {
         title: 'Apply edited request?',
         confirmLabel: 'Apply request'
     });
-    if (!confirmed) {
+    if (!confirmed || !isCurrentOverlay(editorOverlay, session) || editorRevision !== revision
+        || activeEditorPreviewToken !== previewToken) {
         return;
     }
-    const submitButton = editorForm.querySelector('button[type="submit"]');
     submitButton.disabled = true;
-    fetch('/api/apply_moderation_log', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            ID: activeEditorLog.ID,
+    try {
+        const data = await postJSON('/api/apply_moderation_log', {
+            ID,
             content: editedContent,
-            previewToken: activeEditorPreviewToken
-        })
-    })
-    .then(handleModerationResponse)
-    .then(async data => {
+            previewToken
+        });
         if (data?.status === 'approved') {
-            await showModerationEmailStatus(data.emailNotification);
             auditState.loaded = false;
-            closeOverlay(editorOverlay);
-            loadLogs();
+            if (isCurrentOverlay(editorOverlay, session) && editorRevision === revision) {
+                await showModerationEmailStatus(data.emailNotification);
+                if (isCurrentOverlay(editorOverlay, session) && editorRevision === revision) closeOverlay(editorOverlay);
+            }
+            await loadLogs();
         }
-    })
-    .finally(() => {
-        submitButton.disabled = false;
-    });
+    } catch (error) {
+        if (isCurrentOverlay(editorOverlay, session)) await showModerationFailure(error, 'The edited request could not be applied. Try again.');
+    } finally {
+        if (overlaySessions.get(editorOverlay) === session) submitButton.disabled = false;
+    }
 });
 
-escalateForm.addEventListener('submit', event => {
+escalateForm.addEventListener('submit', async event => {
     event.preventDefault();
     if (!activeEscalationLog || !escalateForm.reportValidity()) {
         return;
     }
     const submitButton = escalateForm.querySelector('button[type="submit"]');
+    if (submitButton.disabled) return;
+    const session = overlaySessions.get(escalateOverlay);
+    const ID = activeEscalationLog.ID;
+    const note = escalateNote.value.trim();
     submitButton.disabled = true;
-    fetch('/api/escalate_moderation_log', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ID: activeEscalationLog.ID, note: escalateNote.value.trim() })
-    })
-    .then(handleModerationResponse)
-    .then(data => {
+    try {
+        const data = await postJSON('/api/escalate_moderation_log', { ID, note });
         if (data?.status === 'escalated') {
             auditState.loaded = false;
-            closeOverlay(escalateOverlay);
-            statusFilter.value = 'escalated';
-            loadLogs();
+            if (isCurrentOverlay(escalateOverlay, session) && escalateNote.value.trim() === note) {
+                closeOverlay(escalateOverlay);
+                statusFilter.value = 'escalated';
+            }
+            await loadLogs();
         }
-    })
-    .finally(() => {
-        submitButton.disabled = false;
-    });
+    } catch (error) {
+        if (isCurrentOverlay(escalateOverlay, session)) await showModerationFailure(error, 'The request could not be escalated. Try again.');
+    } finally {
+        if (overlaySessions.get(escalateOverlay) === session) submitButton.disabled = false;
+    }
 });
 
 document.querySelectorAll('[data-close-overlay]').forEach(button => {
@@ -1340,7 +1529,7 @@ composeMessageButton.addEventListener('click', () => {
         return;
     }
     messageComposeBody.value = '';
-    messageComposeOverlay.hidden = false;
+    openOverlay(messageComposeOverlay);
     messageComposeBody.focus();
 });
 
@@ -1350,17 +1539,22 @@ messageComposeForm.addEventListener('submit', async event => {
         return;
     }
     const submitButton = messageComposeForm.querySelector('button[type="submit"]');
+    if (submitButton.disabled) return;
+    const session = overlaySessions.get(messageComposeOverlay);
+    const body = messageComposeBody.value.trim();
     submitButton.disabled = true;
     try {
-        await postJSON('/api/send_admin_message', { body: messageComposeBody.value.trim() });
-        closeOverlay(messageComposeOverlay);
+        await postJSON('/api/send_admin_message', { body });
+        if (isCurrentOverlay(messageComposeOverlay, session) && messageComposeBody.value.trim() === body) closeOverlay(messageComposeOverlay);
         auditState.loaded = false;
         messagesLoaded = false;
         if (activeWorkspaceView === 'messages') {
             await loadAdminMessages();
         }
+    } catch (error) {
+        if (isCurrentOverlay(messageComposeOverlay, session)) await showModerationFailure(error, 'The message could not be sent. Your draft is still here; try again.');
     } finally {
-        submitButton.disabled = false;
+        if (overlaySessions.get(messageComposeOverlay) === session) submitButton.disabled = false;
     }
 });
 
@@ -1374,8 +1568,10 @@ statusFilter.addEventListener('change', loadLogs);
 async function initializeModerationWorkspace() {
     try {
         await loadAdminCapabilities();
-    } catch {
+    } catch (error) {
         composeMessageButton.disabled = true;
+        logList.textContent = moderationErrorMessage(error, 'Review access could not be loaded. Refresh this page to try again.');
+        return;
     }
     setActiveWorkspaceView('queue');
     await loadLogs();

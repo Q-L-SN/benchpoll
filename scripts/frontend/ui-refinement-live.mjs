@@ -1,0 +1,48 @@
+import assert from 'node:assert/strict';
+import { chromium } from 'playwright';
+
+const browser = await chromium.launch({ headless: true });
+const page = await browser.newPage({ viewport: { width: 1440, height: 950 }, reducedMotion: 'reduce' });
+const errors = [];
+page.on('pageerror', error => errors.push(error.message));
+await page.addInitScript(() => localStorage.setItem('benchpoll-welcome-seen-v1', '1'));
+try {
+    await page.goto('https://benchpoll.com/');
+    await page.locator('#model-comparison-toggle:not([disabled])').waitFor();
+    assert.equal(await page.locator('#configured-search-wrap').isVisible(), false);
+    const indexResponse = page.waitForResponse(response => response.url().endsWith('/api/get_category_navigation'));
+    await page.locator('#navigation-search-toggle').click();
+    const response = await indexResponse;
+    assert.equal(response.status(), 200);
+    const data = await response.json();
+    assert.ok(data.items.length);
+    const category = data.items.at(-1);
+    await page.locator('#configured-search').fill(category.categoryName);
+    await page.locator(`[data-search-category-id="${category.categoryID}"]`).waitFor();
+    await page.locator('#navigation-search-close').click();
+    await page.locator('[data-navigation-view="configured"]').click();
+    assert.equal(await page.locator('#configured-search-wrap').isVisible(), false);
+    await page.locator('#navigation-search-toggle').click();
+    assert.equal(await page.locator('#configured-search').isVisible(), true);
+    await page.locator('#navigation-search-close').click();
+    await page.locator('[data-navigation-view="all"]').click();
+    await page.locator('#model-comparison-toggle').click();
+    await page.screenshot({ path: 'artifacts/ui-refinement/live-desktop.png' });
+    await page.locator('#model-comparison-close').click();
+    await page.locator('#discussion-entry').click();
+    await page.locator('#discussion-feed[aria-busy="false"]').waitFor();
+    assert.equal(await page.locator('#discussion-error').isVisible(), false);
+    await page.locator('#discussion-close').click();
+    await page.setViewportSize({ width: 390, height: 844 });
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
+    const logo = await page.locator('.bp-sidebar > .bp-brand').boundingBox();
+    const beta = await page.locator('#beta-feedback-link').boundingBox();
+    assert.ok(beta.x >= logo.x + logo.width + 4);
+    await page.screenshot({ path: 'artifacts/ui-refinement/live-mobile.png' });
+    await page.locator('#beta-feedback-link').click();
+    await page.waitForURL('**/contribute/feedback*');
+    const entry = await page.evaluate(() => Object.keys(sessionStorage).filter(key => key.startsWith('benchpoll:contribution-entry:')).map(key => JSON.parse(sessionStorage.getItem(key))).find(item => item.path === '/contribute/feedback'));
+    assert.match(entry.values.details, /BenchPoll Beta feedback/);
+    assert.deepEqual(errors, []);
+    console.log(JSON.stringify({ live: true, searchableCategories: data.items.length, betaPrefill: true, pageErrors: errors }));
+} finally { await browser.close(); }

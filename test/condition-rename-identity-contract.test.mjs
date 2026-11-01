@@ -1,5 +1,8 @@
+import { normalizeScoreFieldRequests, normalizeFieldContribution } from '../score-field-service.js';
+import { assertPrimaryCondition } from '../benchmark-primary-condition.js';
 import { normalizeModelParameters, modelParameterLabel, parameterRowsToObject } from '../public/js/shared/model-parameters.js';
 import { frontendSource } from './helpers/frontend-source.mjs';
+import { selectableBenchmarkConditionSQL } from '../benchmark-condition-visibility.js';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -19,7 +22,7 @@ function between(source, startMarker, endMarker) {
 }
 
 function loadContributionContract() {
-    const sandbox = vm.createContext({ normalizeModelParameters, modelParameterLabel, parameterRowsToObject, URL, crypto, structuredClone });
+    const sandbox = vm.createContext({ assertPrimaryCondition, normalizeScoreFieldRequests, normalizeFieldContribution, normalizeModelParameters, modelParameterLabel, parameterRowsToObject, URL, crypto, structuredClone });
     const normalization = between(server, 'function normalizeString(', 'function parseModerationContent(');
     const changeDiff = between(server, 'function canonicalChangeValue(', 'function entityChildSetChanges(');
     const moderationEdit = between(
@@ -36,7 +39,7 @@ function loadContributionContract() {
     return sandbox.contract;
 }
 
-function benchmarkCondition({ ID = 101, name = 'pass@1' } = {}) {
+function benchmarkCondition({ ID = 101, name = 'pass@1', isPrimary = ID === 101 } = {}) {
     return {
         ID,
         name,
@@ -45,13 +48,9 @@ function benchmarkCondition({ ID = 101, name = 'pass@1' } = {}) {
         usesPercentageScale: true,
         scoreMin: null,
         scoreMax: null,
-        isDefault: name.trim().toLowerCase() === 'default'
+        isDefault: name.trim().toLowerCase() === 'default',
+        isPrimary
     };
-}
-
-function modelCondition({ ID = 201, name = 'high reasoning' } = {}) {
-    const parameters = name === 'default' ? {} : { effort: name };
-    return { ID, parameters, name: modelParameterLabel(parameters), isDefault: name === 'default' };
 }
 
 function benchmarkChangeRequest(condition = benchmarkCondition()) {
@@ -64,13 +63,12 @@ function benchmarkChangeRequest(condition = benchmarkCondition()) {
         proposed: {
             name: 'IdentityBench',
             introductionURL: '',
-            tags: ['Benchmark'],
             conditions: [condition]
         }
     };
 }
 
-function modelChangeRequest(condition = modelCondition()) {
+function modelChangeRequest() {
     return {
         type: 'entity_change',
         targetKind: 'model',
@@ -83,16 +81,34 @@ function modelChangeRequest(condition = modelCondition()) {
             vendor: {
                 existingVendorID: 7,
                 existingVendorRef: null
-            },
-            conditions: [condition]
+            }
         }
+    };
+}
+
+function contextTemplateRequest() {
+    return {
+        type: 'new_category',
+        requestKind: 'context',
+        clientRef: 'context-budget',
+        name: 'Budget',
+        parentPath: 'topics/54/reasoning',
+        parentCategoryID: 54,
+        parentCategoryRef: null,
+        pageURL: 'https://benchpoll.com/topics/54/reasoning',
+        details: 'Keep these topic-specific context notes during moderation.',
+        contextOrder: [{ clientRef: 'new-budget', dimensionID: null, dimensionRef: null, isNew: true }],
+        options: [
+            { key: 'any', name: 'Any', isDefault: true, isNeutral: true },
+            { key: 'standard', name: 'Standard', isDefault: false, isNeutral: false }
+        ]
     };
 }
 
 function storedEntityChange(contract, request, beforeConditionName) {
     const normalized = contract.buildContributionContent(request);
     const before = structuredClone(normalized.after);
-    if (request.targetKind === 'model') before.conditions[0] = modelCondition({ ID: before.conditions[0].ID, name: beforeConditionName });
+    if (request.targetKind === 'model') before.name = beforeConditionName;
     else {
         before.conditions[0].name = beforeConditionName;
         before.conditions[0].isDefault = beforeConditionName.trim().toLowerCase() === 'default';
@@ -104,7 +120,7 @@ function storedEntityChange(contract, request, beforeConditionName) {
     };
 }
 
-test('external benchmark and model change requests preserve condition IDs by object identity', () => {
+test('benchmark changes preserve condition IDs and model changes preserve identity', () => {
     const contract = loadContributionContract();
     const benchmarkRequest = benchmarkChangeRequest();
     benchmarkRequest.proposed.conditions = [
@@ -118,13 +134,28 @@ test('external benchmark and model change requests preserve condition IDs by obj
     assert.equal(benchmark.after.conditions[0].name, 'pass@2');
     assert.equal(benchmark.after.conditions[1].ID, 101);
     assert.equal(benchmark.after.conditions[1].name, 'pass@1');
-    assert.equal(model.after.conditions[0].ID, 201);
+    assert.equal(Object.hasOwn(model.after, 'conditions'), false);
     assert.equal(model.after.vendorID, 7);
-    assert.equal(model.after.conditions[0].name, 'effort=high reasoning');
+
+});
+
+test('primary changes support imported benchmark families larger than a new-submission batch', () => {
+    const contract = loadContributionContract();
+    const request = benchmarkChangeRequest();
+    request.proposed.conditions = Array.from({ length: 2000 }, (_, index) => benchmarkCondition({
+        ID: index + 1, name: `condition ${index + 1}`, isPrimary: index === 1999
+    }));
+    const content = contract.buildContributionContent(request);
+    assert.equal(content.after.conditions.length, 2000);
+    assert.equal(content.after.conditions.find(condition => condition.isPrimary).ID, 2000);
+    request.proposed.conditions = Array.from({ length: 4097 }, (_, index) => benchmarkCondition({
+        ID: index + 1, name: `condition ${index + 1}`, isPrimary: index === 0
+    }));
+    assert.throws(() => contract.buildContributionContent(request), error => error.body.error === 'invalid_benchmark_condition_count');
 });
 
 test('client change proposal builders keep each hydrated condition ID on that condition', () => {
-    const sandbox = vm.createContext({ normalizeModelParameters, modelParameterLabel, parameterRowsToObject,
+    const sandbox = vm.createContext({ normalizeScoreFieldRequests, normalizeFieldContribution, normalizeModelParameters, modelParameterLabel, parameterRowsToObject,
         normalizedText: value => String(value ?? '').trim(),
         isLiteralDefaultCondition: value => String(value ?? '').trim().toLowerCase() === 'default',
         integerOrNull: value => Number.isInteger(Number(value)) ? Number(value) : null,
@@ -134,14 +165,10 @@ test('client change proposal builders keep each hydrated condition ID on that co
         evaluationScoreBounds: () => ({ min: null, max: null }),
         evaluationStoredTargetValue: () => null
     });
-    vm.runInContext(`${between(client, 'function configurationValues(', 'function configurationRows(')}\n${between(
+    vm.runInContext(`${between(
         client,
         'function evaluationProfileChangeProposal(',
         'function evaluationChangeProposal('
-    )}\n${between(
-        client,
-        'function modelConfigurationChangeProposal(',
-        'function modelChangeProposal('
     )}\nthis.benchmarkCondition = evaluationProfileChangeProposal({
         ID: 101,
         name: 'pass@2',
@@ -150,17 +177,15 @@ test('client change proposal builders keep each hydrated condition ID on that co
         scoreMax: null,
         scoreDirection: 'higher',
         targetValue: null
-    }, {});
-    this.modelCondition = modelConfigurationChangeProposal({ ID: 201, parameterRows: [{ key: 'effort', value: 'high reasoning' }] });`, sandbox);
+    }, {});`, sandbox);
 
     assert.equal(sandbox.benchmarkCondition.ID, 101);
     assert.equal(sandbox.benchmarkCondition.name, 'pass@2');
-    assert.equal(sandbox.modelCondition.ID, 201);
-    assert.equal(sandbox.modelCondition.name, 'effort=high reasoning');
+
 });
 
 test('change-form restoration follows condition IDs after another row is removed', () => {
-    const sandbox = vm.createContext({ structuredClone });
+    const sandbox = vm.createContext({ normalizeScoreFieldRequests, normalizeFieldContribution, structuredClone });
     vm.runInContext(`${between(
         client,
         'function setNested(',
@@ -188,13 +213,12 @@ test('change-form restoration follows condition IDs after another row is removed
 });
 
 test('model change submission converts vendorID to the one allowed external vendor locator', () => {
-    const sandbox = vm.createContext({
+    const sandbox = vm.createContext({ normalizeScoreFieldRequests, normalizeFieldContribution,
         mode: 'edit_model',
         currentChangeProposal: () => ({
             vendorID: 7,
             name: 'IdentityModel',
-            introductionURL: '',
-            conditions: [modelCondition()]
+            introductionURL: ''
         })
     });
     vm.runInContext(`${between(
@@ -209,7 +233,7 @@ test('model change submission converts vendorID to the one allowed external vend
         'existingVendorID',
         'existingVendorRef'
     ]);
-    assert.equal(sandbox.proposal.conditions[0].ID, 201);
+    assert.equal(Object.hasOwn(sandbox.proposal, 'conditions'), false);
 });
 
 test('model changes reject unused vendor fields instead of silently discarding them', () => {
@@ -226,6 +250,7 @@ test('model changes reject unused vendor fields instead of silently discarding t
 
 test('canonical moderation records revalidate without using the external request shape', () => {
     const contract = loadContributionContract();
+    const contextTemplate = contextTemplateRequest();
     const canonicalRecords = [
         contract.buildContributionContent({
             type: 'feedback',
@@ -243,19 +268,7 @@ test('canonical moderation records revalidate without using the external request
             sourceURL: 'https://example.com/source',
             details: 'The benchmark metadata needs a correction.'
         }),
-        contract.buildContributionContent({
-            type: 'new_category',
-            requestKind: 'category',
-            clientRef: 'category-one',
-            name: 'New category',
-            parentPath: 'AI Evaluation',
-            parentCategoryID: 1,
-            parentCategoryRef: null,
-            pageURL: '',
-            details: '',
-            contextOrder: [],
-            options: []
-        }),
+        contract.buildContributionContent(contextTemplate),
         contract.buildContributionContent({
             type: 'new_benchmark',
             benchmarks: [{
@@ -264,7 +277,6 @@ test('canonical moderation records revalidate without using the external request
                 existingBenchmarkRef: null,
                 name: 'CanonicalBench',
                 introductionURL: '',
-                tags: ['Benchmark'],
                 reviewerNotes: '',
                 conditions: [{
                     clientRef: 'condition-one',
@@ -274,7 +286,8 @@ test('canonical moderation records revalidate without using the external request
                     usesPercentageScale: true,
                     scoreMin: null,
                     scoreMax: null,
-                    isDefault: true
+                    isDefault: true,
+                    isPrimary: true
                 }]
             }]
         }),
@@ -292,13 +305,7 @@ test('canonical moderation records revalidate without using the external request
                     existingVendorRef: null,
                     name: '',
                     logoKey: ''
-                },
-                conditions: [{
-                    clientRef: 'model-condition-one',
-                    parameters: {},
-                    name: 'default',
-                    isDefault: true
-                }]
+                }
             }]
         }),
         contract.buildContributionContent({
@@ -308,8 +315,7 @@ test('canonical moderation records revalidate without using the external request
                 clientRef: 'result-one',
                 modelID: 22,
                 modelRef: null,
-                modelConditionID: 201,
-                modelConditionRef: null,
+                scoreFields: [],
                 benchmarkID: 12,
                 benchmarkRef: null,
                 benchmarkConditionID: 101,
@@ -328,6 +334,30 @@ test('canonical moderation records revalidate without using the external request
         const revalidated = contract.normalizeStoredModerationContent(record);
         assert.equal(revalidated.type, record.type);
         assert.equal(revalidated.schemaVersion, record.schemaVersion);
+        if (record.type === 'new_category') {
+            assert.equal(revalidated.requestKind, 'context');
+            assert.equal(revalidated.schemaVersion, 5);
+            assert.equal(revalidated.parentCategoryID, contextTemplate.parentCategoryID);
+            assert.equal(revalidated.details, contextTemplate.details);
+            assert.deepEqual(structuredClone(revalidated), structuredClone(record));
+            assert.throws(
+                () => contract.normalizeStoredModerationContent({ ...record, schemaVersion: 4 }),
+                error => error?.status === 409 && error?.body?.error === 'stored_submission_schema_mismatch'
+            );
+        }
+    }
+});
+
+test('legacy category creation is retired for both external and canonical moderation records', () => {
+    const contract = loadContributionContract();
+    const request = { ...contextTemplateRequest(), requestKind: 'category', contextOrder: [], options: [] };
+    for (const validate of [
+        () => contract.buildContributionContent(request),
+        () => contract.normalizeStoredModerationContent({ ...request, schemaVersion: 5 })
+    ]) {
+        assert.throws(validate, error => error?.status === 410
+            && error?.body?.error === 'topic_hierarchy_removed'
+            && error?.body?.url === '/#new-topic');
     }
 });
 
@@ -356,7 +386,7 @@ test('the reviewer simple-field editor retains the canonical schema version', ()
         ['[name="contentJSON"]', null],
         ['[name="details"]', { value: 'Updated reviewer feedback.' }]
     ]);
-    const sandbox = vm.createContext({
+    const sandbox = vm.createContext({ normalizeScoreFieldRequests, normalizeFieldContribution,
         editorFields: { querySelector: selector => fields.get(selector) ?? null },
         editorType: { value: 'feedback' },
         editorDrafts: { feedback: { schemaVersion: 1, type: 'feedback' } },
@@ -429,10 +459,10 @@ test('an in-use benchmark condition may be renamed because only removal requires
             throw new Error(`Unexpected dependency query during a rename: ${statement}`);
         }
     };
-    const sandbox = vm.createContext({
+    const sandbox = vm.createContext({ normalizeScoreFieldRequests, normalizeFieldContribution,
         slugifyIdentifier: value => String(value).trim().toLowerCase().replace(/[^a-z0-9]+/g, '-')
     });
-    vm.runInContext(`${between(
+    vm.runInContext(`${between(server, 'function assertBenchmarkConditionNameLengths(', 'function normalizeBenchmarkCondition(')}\n${between(server, 'function assertUniqueChangeConditionNames(', 'function normalizeBenchmarkChangeCondition(')}\n${between(
         server,
         'function entityChildSetChanges(',
         'async function validateEntityChangeProposal('
@@ -455,8 +485,9 @@ test('an in-use benchmark condition may be renamed because only removal requires
     );
 });
 
-test('new scores reject inactive benchmarks even if a condition row is still active', async () => {
-    const sandbox = vm.createContext({});
+test('new scores reject archived benchmarks even if a condition can be selected', async () => {
+    const sandbox = vm.createContext({ normalizeScoreFieldRequests, normalizeFieldContribution,
+        selectableBenchmarkConditionSQL });
     vm.runInContext(`${between(
         server,
         'async function validateModelResultForSubmission(',
@@ -469,18 +500,16 @@ test('new scores reject inactive benchmarks even if a condition row is still act
             if (statement.startsWith('SELECT ID, is_active FROM models')) {
                 return [[{ ID: 22, is_active: 1 }], []];
             }
-            if (statement.startsWith('SELECT ID, model_ID, is_active FROM model_conditions')) {
-                return [[{ ID: 201, model_ID: 22, is_active: 1 }], []];
-            }
             if (statement.startsWith('SELECT ID, is_active FROM benchmarks')) {
                 return [[{ ID: 12, is_active: 0 }], []];
             }
-            if (statement.startsWith('SELECT ID, benchmark_ID, uses_percentage_scale, is_active')) {
+            if (statement.startsWith('SELECT benchmark_conditions.ID, benchmark_conditions.benchmark_ID')) {
                 return [[{
                     ID: 101,
                     benchmark_ID: 12,
                     uses_percentage_scale: 1,
-                    is_active: 1
+                    selectable: 1,
+                    benchmarkActive: 0
                 }], []];
             }
             throw new Error(`Unexpected score validation query: ${statement}`);
@@ -492,7 +521,7 @@ test('new scores reject inactive benchmarks even if a condition row is still act
             type: 'benchmark_result',
             results: [{
                 modelID: 22,
-                modelConditionID: 201,
+                scoreFields: [],
                 benchmarkID: 12,
                 benchmarkConditionID: 101,
                 rawScore: 80, source: {  }
@@ -502,22 +531,49 @@ test('new scores reject inactive benchmarks even if a condition row is still act
     );
 });
 
+test('changing primary preserves distinct stored keys for unchanged duplicate labels, but rejects newly introduced duplicates', async () => {
+    const sandbox = vm.createContext({
+        slugifyIdentifier: value => String(value).trim().toLowerCase().replace(/[^a-z0-9]+/g, '-')
+    });
+    vm.runInContext(`${between(server, 'function assertBenchmarkConditionNameLengths(', 'function normalizeBenchmarkCondition(')}\n${between(server, 'function assertUniqueChangeConditionNames(', 'function normalizeBenchmarkChangeCondition(')}\n${between(
+        server, 'function entityChildSetChanges(', 'async function validateEntityChangeProposal('
+    )}\nthis.validate = assertBenchmarkConditionSetCanChange;`, sandbox);
+    const before = { conditions: [benchmarkCondition({ ID: 101, name: 'same display label' }),
+        benchmarkCondition({ ID: 102, name: 'same display label', isPrimary: false })] };
+    const connection = { async execute() { return [[{ ID: 101, conditionKey: 'imported-a' },
+        { ID: 102, conditionKey: 'imported-b' }], []]; } };
+    const after = { conditions: before.conditions.map(condition => ({ ...condition, isPrimary: condition.ID === 102 })) };
+    const plan = await sandbox.validate(connection, 12, before, after);
+    assert.equal(plan.conditionKeys.get(101), 'imported-a');
+    assert.equal(plan.conditionKeys.get(102), 'imported-b');
+    const differentBefore = { conditions: [before.conditions[0], { ...before.conditions[1], name: 'another label' }] };
+    await assert.rejects(sandbox.validate(connection, 12, differentBefore, after),
+        error => error.body.error === 'duplicate_benchmark_condition');
+    const added = { conditions: [...before.conditions, benchmarkCondition({ ID: null, name: 'same display label', isPrimary: false })] };
+    await assert.rejects(sandbox.validate(connection, 12, before, added),
+        error => error.body.error === 'duplicate_benchmark_condition');
+});
+
 function loadApplyContract(state) {
-    const sandbox = vm.createContext({ crypto, normalizeModelParameters,
+    const sandbox = vm.createContext({ normalizeScoreFieldRequests, normalizeFieldContribution, crypto, normalizeModelParameters,
         loadBenchmarkChangeTarget: async () => structuredClone(state.benchmarkCurrent),
         loadModelChangeTarget: async () => structuredClone(state.modelCurrent),
         assertEntityChangeIsCurrent() {},
-        validateEntityChangeProposal: async () => {},
-        syncBenchmarkTags: async () => {},
+        validateEntityChangeProposal: async (connection, content, before) => {
+            if (!Object.hasOwn(before, 'conditions')) return;
+            return { conditionKeys: new Map(content.after.conditions.map(condition => [condition.ID,
+                before.conditions.find(row => row.ID === condition.ID)?.name === condition.name
+                    ? connection.benchmarkRows.find(row => row.ID === condition.ID)?.conditionKey
+                    : String(condition.name).trim().toLowerCase().replace(/[^a-z0-9]+/g, '-')])) };
+        },
         slugifyIdentifier: value => String(value).trim().toLowerCase().replace(/[^a-z0-9]+/g, '-'),
         insertSubmittedBenchmarkCondition: async () => {
             state.benchmarkInserts += 1;
-        },
-        insertSubmittedModelCondition: async () => {
-            state.modelInserts += 1;
         }
     });
-    vm.runInContext(`${between(server, 'function modelConditionKey(', 'function normalizeModelCondition(')}\n${between(
+    vm.runInContext(`${between(server, 'function canonicalChangeValue(', 'function entityChildSetChanges(')}
+    ${between(server, 'function withoutLegacyBenchmarkTags(', 'function assertSingleConditionMutation(')}
+    ${between(
         server,
         'function assertSingleConditionMutation(',
         'function entityChangeResultContent('
@@ -539,19 +595,22 @@ function createChangeConnection({ benchmarkRows = [], modelRows = [] } = {}) {
             const statement = String(sql).replace(/\s+/g, ' ').trim();
             statements.push({ statement, params: structuredClone(params) });
             if (statement.startsWith('UPDATE benchmarks ')) return mutationResult();
-            if (statement.startsWith('UPDATE benchmark_conditions SET condition_key = ?, is_default = 0 WHERE')) {
+            if (statement.startsWith('UPDATE benchmark_conditions SET condition_key = ?, is_default = 0, is_primary = 0 WHERE')) {
                 const row = benchmarkRows.find(candidate => candidate.ID === params[1] && candidate.benchmarkID === params[2]);
                 if (!row) return mutationResult(0);
                 row.conditionKey = params[0];
                 row.isDefault = false;
+                row.isPrimary = false;
                 return mutationResult();
             }
             if (statement.startsWith('UPDATE benchmark_conditions SET condition_key = ?, name = ?')) {
-                const row = benchmarkRows.find(candidate => candidate.ID === params[8] && candidate.benchmarkID === params[9]);
+                const row = benchmarkRows.find(candidate => candidate.ID === params[10] && candidate.benchmarkID === params[11]);
                 if (!row) return mutationResult(0);
                 row.conditionKey = params[0];
                 row.name = params[1];
-                row.isDefault = Boolean(params[7]);
+                row.differenceExplanation = params[2];
+                row.isDefault = Boolean(params[8]);
+                row.isPrimary = Boolean(params[9]);
                 return mutationResult();
             }
             throw new Error(`Unexpected SQL in condition identity test: ${statement}`);
@@ -641,61 +700,20 @@ test('two benchmark conditions can exchange names without exchanging identities'
     assert.equal(state.benchmarkInserts, 0);
 });
 
-test('model condition rename updates the existing row without inserting a replacement', async () => {
-    const before = {
-        vendorID: 7,
-        name: 'IdentityModel',
-        introductionURL: '',
-        conditions: [modelCondition({ name: 'medium reasoning' })]
-    };
-    const state = {
-        benchmarkCurrent: null,
-        modelCurrent: before,
-        benchmarkInserts: 0,
-        modelInserts: 0
-    };
-    const connection = createChangeConnection({
-        modelRows: [{ ID: 201, modelID: 22, conditionKey: 'medium-reasoning', name: 'medium reasoning' }]
-    });
-    connection.execute = async function execute(sql, params = []) {
-        const statement = String(sql).replace(/\s+/g, ' ').trim();
-        this.statements.push({ statement, params: structuredClone(params) });
-        if (statement.startsWith('SELECT name FROM organizations vendors ')) return [[{ name: 'Vendor' }], []];
-        if (statement.startsWith('SELECT ID FROM models WHERE slug =')) return [[], []];
-        if (statement.startsWith('UPDATE models ')) return mutationResult();
-        if (statement.startsWith('UPDATE model_conditions SET condition_key = ?, is_default = 0 WHERE')) {
-            const row = this.modelRows.find(candidate => candidate.ID === params[1] && candidate.modelID === params[2]);
-            if (!row) return mutationResult(0);
-            row.conditionKey = params[0];
-            return mutationResult();
-        }
-        if (statement.startsWith('UPDATE model_conditions SET condition_key = ?, name = ?')) {
-            const row = this.modelRows.find(candidate => candidate.ID === params[4] && candidate.modelID === params[5]);
-            if (!row) return mutationResult(0);
-            row.conditionKey = params[0];
-            row.name = params[1];
-            row.parameters = JSON.parse(params[2]);
-            row.isDefault = Boolean(params[3]);
-            return mutationResult();
-        }
-        throw new Error(`Unexpected SQL in model identity test: ${statement}`);
-    };
-    const contract = loadApplyContract(state);
-
-    await contract.applyModelChange(connection, {
-        targetID: 22,
-        operation: 'update',
-        before,
-        after: {
-            ...before,
-            conditions: [modelCondition({ name: 'high reasoning' })]
-        }
-    });
-
-    assert.equal(connection.modelRows[0].ID, 201);
-    assert.equal(connection.modelRows[0].name, 'effort=high reasoning');
-    assert.deepEqual(connection.modelRows[0].parameters, { effort: 'high reasoning' });
-    assert.equal(state.modelInserts, 0);
+test('model rename updates identity without altering score assignments', async () => {
+    const before = { vendorID: 7, name: 'Before', introductionURL: '', notes: '' };
+    const state = { modelCurrent: before };
+    const calls = [];
+    const db = { async execute(sql, params) {
+        calls.push({ sql, params });
+        if (sql.includes('SELECT name FROM organizations')) return [[{ name: 'Lab' }]];
+        if (sql.includes('SELECT ID FROM models WHERE slug')) return [[]];
+        if (sql.includes('UPDATE models')) return mutationResult();
+        throw Error(sql);
+    } };
+    await loadApplyContract(state).applyModelChange(db, { targetID: 22, operation: 'update', before, after: { ...before, name: 'After' } });
+    assert.equal(calls.filter(call => call.sql.includes('UPDATE models')).length, 1);
+    assert.ok(calls.every(call => !/benchmark_results|model_conditions/.test(call.sql)));
 });
 
 test('condition updates fail explicitly when the persisted row is not matched', async () => {

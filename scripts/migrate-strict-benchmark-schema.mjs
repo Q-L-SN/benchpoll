@@ -78,21 +78,20 @@ async function createCanonicalTables(connection) {
             score_min DECIMAL(18,6) NULL,
             score_max DECIMAL(18,6) NULL,
             is_default TINYINT(1) NOT NULL DEFAULT 0,
-            is_active TINYINT(1) NOT NULL DEFAULT 1,
+            deleted_at DATETIME NULL,
             default_marker TINYINT GENERATED ALWAYS AS (
-                CASE WHEN is_default = 1 AND is_active = 1 THEN 1 ELSE NULL END
+                CASE WHEN is_default = 1 THEN 1 ELSE NULL END
             ) STORED,
             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             PRIMARY KEY (ID),
             UNIQUE KEY uq_benchmark_conditions_key (benchmark_ID, condition_key),
             UNIQUE KEY uq_benchmark_conditions_default (benchmark_ID, default_marker),
-            KEY idx_benchmark_conditions_active (benchmark_ID, is_active, name),
+            KEY idx_benchmark_conditions_name (benchmark_ID, deleted_at, name),
             CONSTRAINT fk_benchmark_conditions_benchmark
                 FOREIGN KEY (benchmark_ID) REFERENCES benchmarks (ID) ON DELETE CASCADE,
             CONSTRAINT chk_benchmark_conditions_percentage CHECK (uses_percentage_scale IN (0, 1)),
             CONSTRAINT chk_benchmark_conditions_default CHECK (is_default IN (0, 1)),
-            CONSTRAINT chk_benchmark_conditions_active CHECK (is_active IN (0, 1)),
             CONSTRAINT chk_benchmark_conditions_range CHECK (
                 (uses_percentage_scale = 1 AND score_min IS NULL AND score_max IS NULL)
                 OR
@@ -233,7 +232,7 @@ async function copyCanonicalData(connection) {
     await connection.query(`
         INSERT INTO benchmark_conditions
             (ID, benchmark_ID, condition_key, name, score_direction, target_value,
-             uses_percentage_scale, score_min, score_max, is_default, is_active,
+             uses_percentage_scale, score_min, score_max, is_default, deleted_at,
              created_at, updated_at)
         SELECT evaluation_profiles.ID,
                evaluation_profiles.object_ID,
@@ -265,7 +264,8 @@ async function copyCanonicalData(connection) {
                    ELSE evaluation_profiles.score_max
                END,
                evaluation_profiles.is_default,
-               evaluation_profiles.is_active,
+               CASE WHEN evaluation_profiles.profile_key = CONCAT('retired-', evaluation_profiles.ID)
+                   THEN evaluation_profiles.updated_at ELSE NULL END,
                evaluation_profiles.created_at,
                evaluation_profiles.updated_at
         FROM evaluation_profiles`);
@@ -603,7 +603,7 @@ async function assertCanonicalSchema(connection) {
         benchmark_conditions: [
             'ID', 'benchmark_ID', 'condition_key', 'name', 'score_direction',
             'target_value', 'uses_percentage_scale', 'score_min', 'score_max',
-            'is_default', 'is_active', 'default_marker', 'created_at', 'updated_at'
+            'is_default', 'deleted_at', 'default_marker', 'created_at', 'updated_at'
         ],
         benchmark_tags: [
             'ID', 'tag_key', 'name', 'is_active', 'created_at', 'updated_at'
@@ -665,7 +665,7 @@ async function assertCanonicalSchema(connection) {
              WHERE is_active = 1 AND (
                  SELECT COUNT(*) FROM benchmark_conditions
                  WHERE benchmark_conditions.benchmark_ID = benchmarks.ID
-                   AND benchmark_conditions.is_active = 1
+                   AND benchmark_conditions.deleted_at IS NULL
                    AND benchmark_conditions.is_default = 1
              ) > 1) +
             (SELECT COUNT(*) FROM models

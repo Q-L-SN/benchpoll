@@ -1,0 +1,68 @@
+/* Keep selection focus inside the control rather than adding an outer halo. */
+body :is(select, [role="combobox"], .bp-template-control, .picker-summary, .picker-search input):focus {
+    outline: none;
+    box-shadow: none;
+    transition-property: background-color, border-color, color, box-shadow;
+}
+
+body :is(select, [role="combobox"], .bp-template-control, .picker-summary, .picker-search input):focus-visible {
+    outline: 2px solid var(--bp-purple);
+    outline-offset: -3px;
+}
+
+body :is(input[list], .bp-filter-search, .picker-panel input[type="search"],
+    .score-field-editor > input[type="search"]):focus {
+    outline: none;
+    box-shadow: none;
+    transition-property: background-color, border-color, color, box-shadow;
+}
+
+body :is(input[list], .bp-filter-search, .picker-panel input[type="search"],
+    .score-field-editor > input[type="search"]):focus-visible {
+    outline: 2px solid var(--bp-purple);
+    outline-offset: -3px;
+}
+
+body :is([role="option"], .picker-option, .bp-template-choice, .bp-filter-search-result):focus {
+    outline: none;
+    box-shadow: none;
+    transition-property: background-color, color;
+}
+
+body :is([role="option"], .picker-option, .bp-template-choice, .bp-filter-search-result):focus-visible {
+    outline: 2px solid var(--bp-purple);
+    outline-offset: -3px;
+}
+
+body :is(.segmented-button, .bp-mode-option, .bp-scoring-switch button,
+    .bp-comparison-mode-switch button, .bp-navigation-views button,
+    .bp-mobile-panels button, .discussion-sort button):focus {
+    outline: none;
+    box-shadow: none;
+    transition-property: background-color, color;
+}
+
+body :is(.segmented-button, .bp-mode-option, .bp-scoring-switch button,
+    .bp-comparison-mode-switch button, .bp-navigation-views button,
+    .bp-mobile-panels button, .discussion-sort button):focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: -3px;
+}
+
+.bp-contribute .tag-editor input:focus {
+    outline: none;
+    box-shadow: none;
+}
+
+@media (forced-colors: active) {
+    body :is(select, [role="combobox"], .bp-template-control, .picker-summary,
+        .picker-search input, input[list], .bp-filter-search,
+        .picker-panel input[type="search"], .score-field-editor > input[type="search"],
+        [role="option"], .picker-option,
+        .bp-template-choice, .bp-filter-search-result, .segmented-button,
+        .bp-mode-option, .bp-scoring-switch button, .bp-comparison-mode-switch button,
+        .bp-navigation-views button, .bp-mobile-panels button,
+        .discussion-sort button):focus-visible {
+        outline-color: Highlight;
+    }
+}

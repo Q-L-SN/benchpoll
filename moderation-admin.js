@@ -1,4 +1,6 @@
 import mysql from 'mysql2';
+import { currentScoreSQL } from './score-aggregation.js';
+import { canonicalAccountID } from './public/js/shared/account-identity.js';
 
 const AUDIT_ACTIONS = new Set(['approve', 'edit_and_approve', 'reject', 'escalate', 'admin_message']);
 const SENIOR_AUDIT_ACTIONS = new Set(['admin_message']);
@@ -13,25 +15,48 @@ const EXPLORER_ENTITIES = {
             { key: 'conditionCount', label: 'Conditions' },
             { key: 'resultCount', label: 'Results' },
             { key: 'isActive', label: 'Active', type: 'boolean' },
+            { key: 'requestOfficialSync', label: 'Sync requested', type: 'boolean' },
+            { key: 'scoresUpdatedAt', label: 'Scores updated', type: 'date' },
             { key: 'updatedAt', label: 'Updated', type: 'date' }
         ],
         select: `
             benchmarks.ID AS id, benchmarks.name,
             benchmarks.introduction_url AS introductionURL, benchmarks.notes,
+            benchmarks.description, benchmarks.request_official_sync AS requestOfficialSync,
+            benchmarks.official_sync_url AS officialSyncURL, benchmarks.official_sync_instructions AS officialSyncInstructions,
+            benchmarks.scores_updated_at AS scoresUpdatedAt,
             benchmarks.is_active AS isActive,
             (SELECT COUNT(*) FROM benchmark_conditions
              WHERE benchmark_conditions.benchmark_ID = benchmarks.ID) AS conditionCount,
             (SELECT COUNT(*) FROM benchmark_results
              WHERE benchmark_results.benchmark_ID = benchmarks.ID
-               AND benchmark_results.status = 'accepted') AS resultCount,
-            (SELECT GROUP_CONCAT(benchmark_tags.name ORDER BY benchmark_tags.name SEPARATOR ', ')
-             FROM benchmark_tag_links
-             JOIN benchmark_tags ON benchmark_tags.ID = benchmark_tag_links.tag_ID
-             WHERE benchmark_tag_links.benchmark_ID = benchmarks.ID) AS tags,
+               AND ${currentScoreSQL()}) AS resultCount,
             benchmarks.created_at AS createdAt, benchmarks.updated_at AS updatedAt`,
         from: 'FROM benchmarks',
         search: "CONCAT_WS(' ', benchmarks.ID, benchmarks.name, COALESCE(benchmarks.introduction_url, ''))",
         orderBy: 'benchmarks.updated_at DESC, benchmarks.ID DESC'
+    },
+    score_sync_jobs: {
+        label: 'Official score sync jobs', actionKeys: [],
+        columns: [{ key: 'id', label: 'ID' }, { key: 'sourceKey', label: 'Source' },
+            { key: 'enabled', label: 'Enabled', type: 'boolean' }, { key: 'intervalSeconds', label: 'Interval (seconds)' },
+            { key: 'lastStatus', label: 'Status' }, { key: 'nextRunAt', label: 'Next run', type: 'date' }],
+        select: 'ID AS id,source_key AS sourceKey,enabled,interval_seconds AS intervalSeconds,last_status AS lastStatus,next_run_at AS nextRunAt,registered_by AS registeredBy,updated_at AS updatedAt',
+        from: 'FROM score_sync_jobs', search: "CONCAT_WS(' ',ID,source_key,last_status)", orderBy: 'ID'
+    },
+    score_sync_runs: {
+        label: 'Official score sync runs', actionKeys: [],
+        columns: [{ key: 'id', label: 'ID' }, { key: 'jobID', label: 'Job' }, { key: 'status', label: 'Status' },
+            { key: 'startedAt', label: 'Started', type: 'date' }, { key: 'completedAt', label: 'Completed', type: 'date' }],
+        select: 'ID AS id,job_ID AS jobID,status,source_revision AS sourceRevision,summary,error_message AS errorMessage,started_at AS startedAt,completed_at AS completedAt',
+        from: 'FROM score_sync_runs', search: "CONCAT_WS(' ',ID,job_ID,status,source_revision)", orderBy: 'ID DESC'
+    },
+    score_sync_registry_events: {
+        label: 'Official sync registration log', actionKeys: [],
+        columns: [{ key: 'id', label: 'ID' }, { key: 'jobID', label: 'Job' },
+            { key: 'operator', label: 'Operator' }, { key: 'createdAt', label: 'Time', type: 'date' }],
+        select: 'ID AS id,job_ID AS jobID,operator,configuration,created_at AS createdAt',
+        from: 'FROM score_sync_registry_events', search: "CONCAT_WS(' ',ID,job_ID,operator)", orderBy: 'ID DESC'
     },
     benchmark_conditions: {
         label: 'Benchmark conditions',
@@ -43,7 +68,7 @@ const EXPLORER_ENTITIES = {
             { key: 'scoreDirection', label: 'Direction' },
             { key: 'usesPercentageScale', label: 'Percentage', type: 'boolean' },
             { key: 'isDefault', label: 'Default', type: 'boolean' },
-            { key: 'isActive', label: 'Active', type: 'boolean' }
+            { key: 'deletedAt', label: 'Deleted at' }
         ],
         select: `
             benchmark_conditions.ID AS id,
@@ -51,16 +76,17 @@ const EXPLORER_ENTITIES = {
             benchmarks.name AS benchmarkName,
             benchmark_conditions.condition_key AS conditionKey,
             benchmark_conditions.name,
+            benchmark_conditions.difference_explanation AS differenceExplanation,
             benchmark_conditions.score_direction AS scoreDirection,
             benchmark_conditions.target_value AS targetValue,
             benchmark_conditions.uses_percentage_scale AS usesPercentageScale,
             benchmark_conditions.score_min AS scoreMin,
             benchmark_conditions.score_max AS scoreMax,
             benchmark_conditions.is_default AS isDefault,
-            benchmark_conditions.is_active AS isActive,
+            benchmark_conditions.deleted_at AS deletedAt,
             (SELECT COUNT(*) FROM benchmark_results
              WHERE benchmark_results.benchmark_condition_ID = benchmark_conditions.ID
-               AND benchmark_results.status = 'accepted') AS resultCount,
+               AND ${currentScoreSQL()}) AS resultCount,
             (SELECT COUNT(*) FROM personal_pie_weights
              WHERE personal_pie_weights.benchmark_condition_ID = benchmark_conditions.ID) AS weightCount,
             benchmark_conditions.created_at AS createdAt,
@@ -77,7 +103,6 @@ const EXPLORER_ENTITIES = {
             { key: 'id', label: 'ID' },
             { key: 'vendorName', label: 'Vendor' },
             { key: 'name', label: 'Model' },
-            { key: 'conditionCount', label: 'Conditions' },
             { key: 'resultCount', label: 'Results' },
             { key: 'isActive', label: 'Active', type: 'boolean' }
         ],
@@ -86,41 +111,26 @@ const EXPLORER_ENTITIES = {
             vendors.name AS vendorName, vendors.slug AS vendorSlug,
             models.slug, models.name, models.introduction_url AS introductionURL, models.notes,
             models.is_active AS isActive,
-            (SELECT COUNT(*) FROM model_conditions
-             WHERE model_conditions.model_ID = models.ID) AS conditionCount,
             (SELECT COUNT(*) FROM benchmark_results
              WHERE benchmark_results.model_ID = models.ID
-               AND benchmark_results.status = 'accepted') AS resultCount,
+               AND ${currentScoreSQL()}) AS resultCount,
             models.created_at AS createdAt, models.updated_at AS updatedAt`,
         from: 'FROM models JOIN organizations vendors ON vendors.ID = models.vendor_ID',
         search: "CONCAT_WS(' ', models.ID, vendors.name, models.name, models.slug, COALESCE(models.introduction_url, ''))",
         orderBy: 'models.updated_at DESC, models.ID DESC'
     },
-    model_conditions: {
-        label: 'Model conditions',
-        actionKeys: ['modelID'],
-        columns: [
-            { key: 'id', label: 'ID' },
-            { key: 'vendorName', label: 'Vendor' },
-            { key: 'modelName', label: 'Model' },
-            { key: 'name', label: 'Condition' },
-            { key: 'isDefault', label: 'Default', type: 'boolean' },
-            { key: 'isActive', label: 'Active', type: 'boolean' }
-        ],
-        select: `
-            model_conditions.ID AS id, model_conditions.model_ID AS modelID,
-            vendors.name AS vendorName, models.name AS modelName,
-            model_conditions.condition_key AS conditionKey, model_conditions.name, model_conditions.parameters,
-            model_conditions.is_default AS isDefault, model_conditions.is_active AS isActive,
-            (SELECT COUNT(*) FROM benchmark_results
-             WHERE benchmark_results.model_condition_ID = model_conditions.ID
-               AND benchmark_results.status = 'accepted') AS resultCount,
-            model_conditions.created_at AS createdAt, model_conditions.updated_at AS updatedAt`,
-        from: `FROM model_conditions
-               JOIN models ON models.ID = model_conditions.model_ID
-               JOIN organizations vendors ON vendors.ID = models.vendor_ID`,
-        search: "CONCAT_WS(' ', model_conditions.ID, vendors.name, models.name, model_conditions.name, model_conditions.condition_key)",
-        orderBy: 'model_conditions.updated_at DESC, model_conditions.ID DESC'
+    score_fields: {
+        label: 'Score fields', actionKeys: [],
+        columns: [{ key: 'id', label: 'ID' }, { key: 'name', label: 'Field' }, { key: 'type', label: 'Type' }, { key: 'isActive', label: 'Active', type: 'boolean' }],
+        select: 'score_fields.ID AS id, name, field_type AS type, allow_empty AS allowEmpty, exclude_missing AS excludeMissing, exclude_empty AS excludeEmpty, revision, is_active AS isActive',
+        from: 'FROM score_fields', search: "CONCAT_WS(' ', ID, name)", orderBy: 'ID DESC'
+    },
+    score_field_options: {
+        label: 'Score field options', actionKeys: ['fieldID'],
+        columns: [{ key: 'id', label: 'ID' }, { key: 'fieldName', label: 'Field' }, { key: 'label', label: 'Value' }, { key: 'excluded', label: 'Excluded', type: 'boolean' }],
+        select: 'score_field_options.ID AS id, field_ID AS fieldID, score_fields.name AS fieldName, label, excluded, score_field_options.revision, score_field_options.is_active AS isActive',
+        from: 'FROM score_field_options JOIN score_fields ON score_fields.ID = score_field_options.field_ID',
+        search: "CONCAT_WS(' ', score_field_options.ID, score_fields.name, label)", orderBy: 'score_field_options.ID DESC'
     },
     benchmark_results: {
         label: 'Benchmark results',
@@ -135,11 +145,9 @@ const EXPLORER_ENTITIES = {
         ],
         select: `
             benchmark_results.ID AS id, benchmark_results.model_ID AS modelID,
-            benchmark_results.model_condition_ID AS modelConditionID,
             benchmark_results.benchmark_ID AS benchmarkID,
             benchmark_results.benchmark_condition_ID AS benchmarkConditionID,
             vendors.name AS vendorName, models.name AS modelName,
-            model_conditions.name AS modelCondition,
             benchmarks.name AS benchmarkName,
             benchmark_conditions.name AS benchmarkCondition,
             benchmark_results.raw_score AS rawScore,
@@ -147,7 +155,7 @@ const EXPLORER_ENTITIES = {
             benchmark_results.source_type AS sourceType,
             benchmark_results.source_title AS sourceTitle,
             benchmark_results.benchmark_condition_snapshot AS benchmarkConditionSnapshot,
-            benchmark_results.model_condition_snapshot AS modelConditionSnapshot,
+            benchmark_results.score_fields AS scoreFields,
             benchmark_results.submitted_by AS submittedBy,
             benchmark_results.moderation_log_ID AS moderationLogID,
             benchmark_results.status, benchmark_results.accepted_at AS acceptedAt,
@@ -156,30 +164,10 @@ const EXPLORER_ENTITIES = {
         from: `FROM benchmark_results
                JOIN models ON models.ID = benchmark_results.model_ID
                JOIN organizations vendors ON vendors.ID = models.vendor_ID
-               JOIN model_conditions ON model_conditions.ID = benchmark_results.model_condition_ID
                JOIN benchmarks ON benchmarks.ID = benchmark_results.benchmark_ID
                JOIN benchmark_conditions ON benchmark_conditions.ID = benchmark_results.benchmark_condition_ID`,
-        search: "CONCAT_WS(' ', benchmark_results.ID, vendors.name, models.name, model_conditions.name, benchmarks.name, benchmark_conditions.name, COALESCE(benchmark_results.source_title, ''), benchmark_results.source_url)",
+        search: "CONCAT_WS(' ', benchmark_results.ID, vendors.name, models.name, benchmarks.name, benchmark_conditions.name, COALESCE(benchmark_results.source_title, ''), benchmark_results.source_url)",
         orderBy: 'benchmark_results.updated_at DESC, benchmark_results.ID DESC'
-    },
-    benchmark_tags: {
-        label: 'Benchmark tags',
-        actionKeys: [],
-        columns: [
-            { key: 'id', label: 'ID' },
-            { key: 'name', label: 'Tag' },
-            { key: 'benchmarkCount', label: 'Benchmarks' },
-            { key: 'isActive', label: 'Active', type: 'boolean' }
-        ],
-        select: `
-            benchmark_tags.ID AS id, benchmark_tags.tag_key AS tagKey,
-            benchmark_tags.name, benchmark_tags.is_active AS isActive,
-            (SELECT COUNT(*) FROM benchmark_tag_links
-             WHERE benchmark_tag_links.tag_ID = benchmark_tags.ID) AS benchmarkCount,
-            benchmark_tags.created_at AS createdAt, benchmark_tags.updated_at AS updatedAt`,
-        from: 'FROM benchmark_tags',
-        search: "CONCAT_WS(' ', benchmark_tags.ID, benchmark_tags.name, benchmark_tags.tag_key)",
-        orderBy: 'benchmark_tags.name, benchmark_tags.ID'
     },
     vendors: {
         label: 'Organizations',
@@ -202,25 +190,22 @@ const EXPLORER_ENTITIES = {
         orderBy: 'vendors.name, vendors.ID'
     },
     categories: {
-        label: 'Categories',
-        actionKeys: ['parentID'],
+        label: 'Topics',
+        actionKeys: [],
         columns: [
             { key: 'id', label: 'ID' },
-            { key: 'name', label: 'Category' },
-            { key: 'parentName', label: 'Parent' },
-            { key: 'childCount', label: 'Children' },
+            { key: 'name', label: 'Topic' },
             { key: 'isActive', label: 'Active', type: 'boolean' }
         ],
         select: `
-            categories.ID AS id, categories.parent_ID AS parentID, categories.notes,
-            categories.name, parent.name AS parentName, categories.is_active AS isActive,
-            (SELECT COUNT(*) FROM categories AS child WHERE child.parent_ID = categories.ID) AS childCount,
+            categories.ID AS id, categories.notes,
+            categories.name, categories.is_active AS isActive,
             (SELECT COUNT(*) FROM ranking_dimensions
              WHERE ranking_dimensions.scope_category_ID = categories.ID) AS contextCount,
             categories.created_at AS createdAt, categories.updated_at AS updatedAt`,
-        from: 'FROM categories LEFT JOIN categories AS parent ON parent.ID = categories.parent_ID',
-        search: "CONCAT_WS(' ', categories.ID, categories.name, COALESCE(parent.name, ''))",
-        orderBy: 'categories.parent_ID, categories.name, categories.ID'
+        from: 'FROM categories',
+        search: "CONCAT_WS(' ', categories.ID, categories.name)",
+        orderBy: 'categories.name, categories.ID'
     },
     ranking_dimensions: {
         label: 'Context dimensions',
@@ -424,6 +409,8 @@ export function createModerationAuditRecorder(connection) {
 
 export function moderationRequestSummary(content) {
     const type = String(content?.type ?? 'unknown');
+    if (type === 'score_field') return `${content.operation}: ${content.definition.name}`;
+    if (type === 'score_field_option') return `${content.operation}: ${content.label}`;
     if (type === 'discussion_report') return `Discussion report #${content.postID}: ${content.reason}`;
     if (type === 'new_benchmark') {
         const items = Array.isArray(content.benchmarks) ? content.benchmarks : [];
@@ -450,14 +437,17 @@ export function moderationRequestSummary(content) {
         return `${action} ${kind}: ${name}`;
     }
     if (type === 'admin_message') return 'Message to senior reviewers';
+    if (type === 'score_sync_conflict') return `Review official source change for score #${content.resultID}`;
     return String(content?.name ?? content?.targetName ?? (type === 'feedback' ? 'BenchPoll feedback' : type));
 }
 
 export function moderationAuditSnapshot(log, content, status = log.status) {
+    const submittedBy = log.user_id == null ? null : canonicalAccountID(log.user_id);
+    if (log.user_id != null && !submittedBy) throw new Error('A valid contributor user ID is required for moderation auditing.');
     return {
         moderationLogID: Number(log.ID),
         status,
-        submittedBy: log.user_id === null || log.user_id === undefined ? null : Number(log.user_id),
+        submittedBy,
         reportCount: Number(log.report_count ?? 0),
         createdAt: log.created_at ?? null,
         updatedAt: log.updated_at ?? null,
@@ -469,8 +459,8 @@ export async function insertModerationAuditLog(connection, recorder, details) {
     if (!AUDIT_ACTIONS.has(details.actionType)) {
         throw new Error(`Unsupported moderation audit action: ${details.actionType}`);
     }
-    const reviewerUserID = Number(details.reviewerUserID);
-    if (!Number.isSafeInteger(reviewerUserID) || reviewerUserID < 1) {
+    const reviewerUserID = canonicalAccountID(details.reviewerUserID);
+    if (!reviewerUserID) {
         throw new Error('A valid reviewer user ID is required for moderation auditing.');
     }
     const outcome = details.outcome ?? 'success';

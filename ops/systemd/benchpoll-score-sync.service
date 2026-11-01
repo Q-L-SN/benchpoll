@@ -1,0 +1,31 @@
+[Unit]
+Description=BenchPoll trusted official score-source synchronization
+After=network-online.target mysql.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=benchpoll-sync
+Group=benchpoll-sync
+WorkingDirectory=/home/ubuntu/benchpoll
+EnvironmentFile=/etc/benchpoll-score-sync.env
+Environment=DOTENV_CONFIG_PATH=/dev/null
+ExecStart=/usr/bin/node /home/ubuntu/benchpoll/scripts/run-score-sync.mjs
+TimeoutStartSec=25min
+UMask=0077
+StateDirectory=benchpoll-score-sync
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadOnlyPaths=/home/ubuntu/benchpoll
+ReadWritePaths=/var/lib/benchpoll-score-sync
+
+[Install]
+WantedBy=multi-user.target

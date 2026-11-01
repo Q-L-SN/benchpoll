@@ -1,0 +1,568 @@
+{
+  "version": "20260930",
+  "defaultCategory": "intelligence",
+  "neutralOption": {
+    "key": "any",
+    "name": "Any"
+  },
+  "categories": [
+    {
+      "key": "intelligence",
+      "parent": null,
+      "name": "Intelligence",
+      "position": 10,
+      "existingID": 54
+    },
+    {
+      "key": "research",
+      "parent": "intelligence",
+      "name": "Research",
+      "position": 10,
+      "existingID": 167
+    },
+    {
+      "key": "mathematics",
+      "parent": "research",
+      "name": "Mathematics",
+      "position": 10,
+      "existingID": 168
+    },
+    {
+      "key": "physics",
+      "parent": "research",
+      "name": "Physics",
+      "position": 20,
+      "existingID": 169
+    },
+    {
+      "key": "chemistry",
+      "parent": "research",
+      "name": "Chemistry",
+      "position": 30
+    },
+    {
+      "key": "biology",
+      "parent": "research",
+      "name": "Biology and Medicine",
+      "position": 40,
+      "existingID": 170
+    },
+    {
+      "key": "execution",
+      "parent": "intelligence",
+      "name": "Task Execution",
+      "position": 20
+    },
+    {
+      "key": "computer",
+      "parent": "execution",
+      "name": "Computer",
+      "position": 10
+    },
+    {
+      "key": "mobile",
+      "parent": "execution",
+      "name": "Phone and Tablet",
+      "position": 20
+    },
+    {
+      "key": "robotics",
+      "parent": "execution",
+      "name": "Robotics",
+      "position": 30
+    },
+    {
+      "key": "industrial",
+      "parent": "execution",
+      "name": "Industrial Equipment and Laboratories",
+      "position": 40
+    },
+    {
+      "key": "programming",
+      "parent": "intelligence",
+      "name": "Programming",
+      "position": 30
+    },
+    {
+      "key": "knowledge",
+      "parent": "intelligence",
+      "name": "Knowledge",
+      "position": 40
+    },
+    {
+      "key": "hallucination",
+      "parent": "intelligence",
+      "name": "Hallucination Resistance",
+      "position": 50
+    },
+    {
+      "key": "reasoning",
+      "parent": "intelligence",
+      "name": "Reasoning",
+      "position": 60
+    },
+    {
+      "key": "prediction",
+      "parent": "intelligence",
+      "name": "Prediction and Decision-Making",
+      "position": 70
+    },
+    {
+      "key": "tools",
+      "parent": "intelligence",
+      "name": "Tool Use",
+      "position": 80
+    },
+    {
+      "key": "agi",
+      "parent": null,
+      "name": "AGI",
+      "position": 20,
+      "existingID": 166
+    },
+    {
+      "key": "creation",
+      "parent": null,
+      "name": "Creation and Expression",
+      "position": 30
+    },
+    {
+      "key": "writing",
+      "parent": "creation",
+      "name": "Writing",
+      "position": 10
+    },
+    {
+      "key": "literature",
+      "parent": "writing",
+      "name": "Literature",
+      "position": 10,
+      "existingID": 171,
+      "previousName": "Literary Writing"
+    },
+    {
+      "key": "technical",
+      "parent": "writing",
+      "name": "Technical Writing",
+      "position": 20
+    },
+    {
+      "key": "audiovisual",
+      "parent": "creation",
+      "name": "Audiovisual",
+      "position": 20
+    },
+    {
+      "key": "image",
+      "parent": "audiovisual",
+      "name": "Image",
+      "position": 10,
+      "existingID": 172
+    },
+    {
+      "key": "video",
+      "parent": "audiovisual",
+      "name": "Video",
+      "position": 20,
+      "existingID": 173
+    },
+    {
+      "key": "audio",
+      "parent": "audiovisual",
+      "name": "Audio",
+      "position": 30
+    },
+    {
+      "key": "3d",
+      "parent": "audiovisual",
+      "name": "3D",
+      "position": 40
+    },
+    {
+      "key": "interfaces",
+      "parent": "audiovisual",
+      "name": "User Interfaces",
+      "position": 50
+    },
+    {
+      "key": "chat",
+      "parent": "creation",
+      "name": "Chat",
+      "position": 30
+    },
+    {
+      "key": "emotional",
+      "parent": "chat",
+      "name": "Emotional Intelligence",
+      "position": 10
+    }
+  ],
+  "dimensions": {
+    "computer": [
+      {
+        "key": "operating_system",
+        "name": "Operating System",
+        "options": [
+          {
+            "key": "macos",
+            "name": "macOS"
+          },
+          {
+            "key": "windows",
+            "name": "Windows"
+          },
+          {
+            "key": "linux",
+            "name": "Linux"
+          }
+        ]
+      }
+    ],
+    "mobile": [
+      {
+        "key": "operating_system",
+        "name": "Operating System",
+        "options": [
+          {
+            "key": "ios",
+            "name": "iOS"
+          },
+          {
+            "key": "android",
+            "name": "Android"
+          }
+        ]
+      }
+    ],
+    "programming": [
+      {
+        "key": "language_framework",
+        "name": "Language and Framework",
+        "options": [
+          {
+            "key": "python",
+            "name": "Python"
+          },
+          {
+            "key": "javascript",
+            "name": "JavaScript"
+          },
+          {
+            "key": "typescript",
+            "name": "TypeScript"
+          },
+          {
+            "key": "java",
+            "name": "Java"
+          },
+          {
+            "key": "c",
+            "name": "C"
+          },
+          {
+            "key": "cpp",
+            "name": "C++"
+          },
+          {
+            "key": "csharp",
+            "name": "C#"
+          },
+          {
+            "key": "go",
+            "name": "Go"
+          },
+          {
+            "key": "rust",
+            "name": "Rust"
+          },
+          {
+            "key": "swift",
+            "name": "Swift"
+          },
+          {
+            "key": "kotlin",
+            "name": "Kotlin"
+          },
+          {
+            "key": "php",
+            "name": "PHP"
+          },
+          {
+            "key": "ruby",
+            "name": "Ruby"
+          },
+          {
+            "key": "scala",
+            "name": "Scala"
+          },
+          {
+            "key": "r",
+            "name": "R"
+          },
+          {
+            "key": "julia",
+            "name": "Julia"
+          },
+          {
+            "key": "dart",
+            "name": "Dart"
+          },
+          {
+            "key": "lua",
+            "name": "Lua"
+          },
+          {
+            "key": "sql",
+            "name": "SQL"
+          },
+          {
+            "key": "bash",
+            "name": "Bash"
+          },
+          {
+            "key": "powershell",
+            "name": "PowerShell"
+          },
+          {
+            "key": "matlab",
+            "name": "MATLAB"
+          },
+          {
+            "key": "haskell",
+            "name": "Haskell"
+          },
+          {
+            "key": "elixir",
+            "name": "Elixir"
+          },
+          {
+            "key": "ocaml",
+            "name": "OCaml"
+          },
+          {
+            "key": "react",
+            "name": "React"
+          },
+          {
+            "key": "nextjs",
+            "name": "Next.js"
+          },
+          {
+            "key": "vue",
+            "name": "Vue"
+          },
+          {
+            "key": "nuxt",
+            "name": "Nuxt"
+          },
+          {
+            "key": "angular",
+            "name": "Angular"
+          },
+          {
+            "key": "svelte",
+            "name": "Svelte"
+          },
+          {
+            "key": "sveltekit",
+            "name": "SvelteKit"
+          },
+          {
+            "key": "express",
+            "name": "Express"
+          },
+          {
+            "key": "nestjs",
+            "name": "NestJS"
+          },
+          {
+            "key": "django",
+            "name": "Django"
+          },
+          {
+            "key": "flask",
+            "name": "Flask"
+          },
+          {
+            "key": "fastapi",
+            "name": "FastAPI"
+          },
+          {
+            "key": "spring",
+            "name": "Spring"
+          },
+          {
+            "key": "spring_boot",
+            "name": "Spring Boot"
+          },
+          {
+            "key": "aspnet_core",
+            "name": "ASP.NET Core"
+          },
+          {
+            "key": "laravel",
+            "name": "Laravel"
+          },
+          {
+            "key": "rails",
+            "name": "Ruby on Rails"
+          },
+          {
+            "key": "flutter",
+            "name": "Flutter"
+          },
+          {
+            "key": "react_native",
+            "name": "React Native"
+          },
+          {
+            "key": "swiftui",
+            "name": "SwiftUI"
+          },
+          {
+            "key": "jetpack_compose",
+            "name": "Jetpack Compose"
+          },
+          {
+            "key": "pytorch",
+            "name": "PyTorch"
+          },
+          {
+            "key": "tensorflow",
+            "name": "TensorFlow"
+          },
+          {
+            "key": "jax",
+            "name": "JAX"
+          }
+        ]
+      }
+    ],
+    "image": [
+      {
+        "key": "reference_image",
+        "name": "Reference Image",
+        "options": [
+          {
+            "key": "none",
+            "name": "None"
+          },
+          {
+            "key": "single",
+            "name": "Single"
+          },
+          {
+            "key": "multiple",
+            "name": "Multiple"
+          }
+        ]
+      },
+      {
+        "key": "realtime",
+        "name": "Real-time",
+        "options": [
+          {
+            "key": "no",
+            "name": "No"
+          },
+          {
+            "key": "yes",
+            "name": "Yes"
+          }
+        ]
+      }
+    ],
+    "video": [
+      {
+        "key": "reference_image",
+        "name": "Reference Image",
+        "options": [
+          {
+            "key": "none",
+            "name": "None"
+          },
+          {
+            "key": "present",
+            "name": "Present"
+          }
+        ]
+      },
+      {
+        "key": "reference_video",
+        "name": "Reference Video",
+        "options": [
+          {
+            "key": "none",
+            "name": "None"
+          },
+          {
+            "key": "present",
+            "name": "Present"
+          }
+        ]
+      },
+      {
+        "key": "realtime",
+        "name": "Real-time",
+        "options": [
+          {
+            "key": "no",
+            "name": "No"
+          },
+          {
+            "key": "yes",
+            "name": "Yes"
+          }
+        ]
+      }
+    ],
+    "audio": [
+      {
+        "key": "realtime",
+        "name": "Real-time",
+        "options": [
+          {
+            "key": "no",
+            "name": "No"
+          },
+          {
+            "key": "yes",
+            "name": "Yes"
+          }
+        ]
+      }
+    ],
+    "3d": [
+      {
+        "key": "reference_content",
+        "name": "Reference Content",
+        "options": [
+          {
+            "key": "none",
+            "name": "None"
+          },
+          {
+            "key": "present",
+            "name": "Present"
+          }
+        ]
+      }
+    ],
+    "interfaces": [
+      {
+        "key": "reference_content",
+        "name": "Reference Content",
+        "options": [
+          {
+            "key": "none",
+            "name": "None"
+          },
+          {
+            "key": "present",
+            "name": "Present"
+          }
+        ]
+      }
+    ]
+  }
+}

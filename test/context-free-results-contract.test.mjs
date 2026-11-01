@@ -48,7 +48,7 @@ test('score submissions reject legacy context instead of silently translating it
     const scoreForm = between(
         contributionClient,
         'function resultsStep(',
-        'function categoryDetailsStep('
+        'function reportDetailsStep('
     );
     const scorePayload = between(
         contributionClient,

@@ -45,7 +45,7 @@ async function mismatchCounts(connection) {
     const [[benchmarkRow]] = await connection.query(`
         SELECT COUNT(*) AS count
         FROM benchmark_conditions
-        WHERE is_active = 1
+        WHERE deleted_at IS NULL
           AND is_default <> (LOWER(TRIM(name)) = 'default')`);
     const [[modelRow]] = await connection.query(`
         SELECT COUNT(*) AS count
@@ -55,7 +55,7 @@ async function mismatchCounts(connection) {
     const [[keyRow]] = await connection.query(`
         SELECT
             (SELECT COUNT(*) FROM benchmark_conditions
-             WHERE is_active = 1
+             WHERE deleted_at IS NULL
                AND (condition_key = 'default') <> (LOWER(TRIM(name)) = 'default')) +
             (SELECT COUNT(*) FROM model_conditions
              WHERE is_active = 1

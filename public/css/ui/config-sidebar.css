@@ -1,0 +1,245 @@
+.bp-home #config-sidebar { --bp-sidebar: var(--bp-surface-soft); border: 0; background: var(--bp-surface-soft); }
+.bp-home #config-site-links { display: none; }
+.bp-home .bp-sidebar-brand-links { margin-bottom: 12px; }
+.bp-home #topic-create-title { margin: 0 0 4px; color: var(--bp-ink); font-size: 14px; line-height: 20px; }
+.bp-home .bp-page-heading {
+    align-items: center;
+    justify-content: flex-start;
+    gap: 0;
+}
+.bp-home .bp-page-heading h1 {
+    margin: 0;
+    text-wrap: initial;
+    overflow-wrap: anywhere;
+    letter-spacing: 0;
+}
+.bp-heading-copy { flex: 1; min-width: 0; }
+.bp-home .bp-breadcrumb { flex-wrap: wrap; gap: 6px 10px; }
+.bp-home .bp-context-row { flex-wrap: wrap; }
+.bp-home .bp-context-actions { flex-wrap: wrap; max-width: 100%; margin-left: auto; }
+.bp-home .bp-topic-creator-slot { display: inline-flex; min-width: 0; max-width: 160px; }
+body.bp-home #config-sidebar-toggle {
+    flex: 0 0 36px;
+    width: 36px;
+    height: 36px;
+    margin-right: 10px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    color: var(--bp-muted);
+}
+body.bp-home #config-sidebar-toggle > .bp-sidebar-toggle-direction { flex-basis: 8px; width: 8px; font-size: 11px; }
+.bp-config-sidebar-toggle:disabled { opacity: .55; cursor: default; }
+.bp-config-header-account { display: none; flex: 0 0 36px; margin-left: 12px; }
+.bp-home .bp-config-account {
+    display: inline-grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+}
+.bp-home .bp-config-account.is-icon-only { padding: 0; }
+.bp-config-account [data-account-picture] {
+    display: grid;
+    place-items: center;
+    flex: 0 0 28px;
+    width: 28px;
+    height: 28px;
+    aspect-ratio: 1;
+    overflow: hidden;
+    border-radius: 50%;
+    background: var(--bp-line) center / cover no-repeat;
+}
+.bp-config-account [data-has-picture="true"] > i { visibility: hidden; }
+.bp-config-account[hidden] { display: none; }
+.bp-home .bp-context-identity { flex: 1 1 320px; flex-wrap: wrap; gap: 8px 12px; }
+.bp-home .bp-context-identity > .bp-topic-directory-link { flex: 0 0 auto; min-height: 44px; white-space: nowrap; }
+.bp-home .bp-mode-switch[data-ui-component="segmented"] { min-width: 0; width: 100%; }
+.bp-home #pie-card .bp-mode-switch[data-ui-component="segmented"] > button {
+    flex: 1 1 50%;
+    min-height: 40px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+.bp-home :is(#tree-content, #category-search-results, #configured-content) > :is(.bp-topic-row, .bp-category-search-result, .bp-configured-row) {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 76px;
+    margin-bottom: 7px;
+    padding: 10px;
+    border: 1px solid var(--bp-line-strong);
+    border-radius: 6px;
+    background: var(--bp-surface);
+    color: var(--bp-text);
+    text-decoration: none;
+    font-size: 13px;
+    line-height: 1.5;
+}
+.bp-topic-row > span:first-child, .bp-category-search-result > span:first-child { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.bp-topic-copy { display: grid; gap: 4px; }
+.bp-topic-copy > span:first-child, .bp-configured-name { font-weight: 650; line-height: 18px; }
+.bp-topic-copy small { color: var(--bp-muted); font-size: 11px; line-height: 1.4; }
+.bp-home :is(.bp-topic-copy, .bp-configured-copy) > .bp-topic-summary { display: -webkit-box; min-width: 0; max-height: 32px; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; color: var(--bp-muted); font-size: 11px; line-height: 16px; font-weight: 400; overflow-wrap: anywhere; }
+.bp-home :is(#tree-content, #category-search-results, #configured-content) > :is(.bp-topic-row, .bp-category-search-result, .bp-configured-row):hover { border-color: #aeb6bf; background: var(--bp-surface); color: var(--bp-ink); }
+.bp-home :is(#tree-content, #category-search-results, #configured-content) > :is(.bp-topic-row, .bp-category-search-result, .bp-configured-row).selected { border-color: #b8c0c8; background: #e1e5e9; box-shadow: none; color: var(--bp-ink); }
+.bp-home .selected :is(.bp-topic-copy > span:first-child, .bp-configured-name) { font-weight: 750; }
+.bp-home .selected :is(.bp-topic-copy, .bp-configured-copy) > .bp-topic-summary { color: var(--bp-text); }
+.bp-home .bp-navigation-views[data-ui-component="segmented"] { min-width: 0; }
+body.bp-home #config-sidebar .bp-navigation-views { background: transparent; box-shadow: none; }
+body.bp-home #config-sidebar .bp-navigation-views::before { display: none; background: none; box-shadow: none; }
+body.bp-home #config-sidebar .bp-navigation-views > button,
+body.bp-home #config-sidebar .bp-navigation-views > button:is(:hover, :active, [aria-pressed="true"], [aria-selected="true"]) { background: transparent; box-shadow: none; }
+body.bp-home #config-sidebar .bp-navigation-views > button:is(:hover, [aria-pressed="true"], [aria-selected="true"]) { color: var(--bp-accent); }
+body.bp-home #config-sidebar .bp-navigation-views > button > i { color: inherit; }
+body.bp-home #config-sidebar .bp-navigation-views > button:is([aria-pressed="true"], [aria-selected="true"]) > .fa-regular { font-weight: 900; }
+body.bp-home .bp-navigation-views[data-ui-component="segmented"] > button {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 40px;
+    padding-inline: 3px;
+    font-size: 11px;
+}
+.bp-navigation-views button > i { display: none; }
+.bp-home :is(.bp-config-sidebar-toggle, .bp-config-account, .bp-topic-row):focus-visible {
+    outline: 2px solid var(--bp-accent);
+    outline-offset: -2px;
+}
+
+@media (min-width: 761px) {
+    .bp-home .bp-shell {
+        --bp-config-sidebar-space: var(--bp-sidebar-width);
+        --bp-config-discussion-space: 0px;
+        grid-template-columns: var(--bp-config-sidebar-space) minmax(0, 1fr) var(--bp-config-discussion-space);
+        transition: grid-template-columns 300ms cubic-bezier(.2, .7, .2, 1);
+    }
+    .bp-home.config-sidebar-collapsed .bp-shell { --bp-config-sidebar-space: 0px; }
+    .bp-home.discussion-open .bp-shell { --bp-config-sidebar-space: 0px; --bp-config-discussion-space: var(--discussion-width); }
+    .bp-home .bp-shell > .bp-sidebar {
+        width: var(--bp-sidebar-width);
+        overflow: hidden;
+        transition: transform 300ms cubic-bezier(.2, .7, .2, 1), visibility 0s;
+    }
+    .bp-home:is(.config-sidebar-collapsed, .discussion-open) .bp-shell > .bp-sidebar {
+        transform: translateX(-100%);
+        visibility: hidden;
+        transition: transform 300ms cubic-bezier(.2, .7, .2, 1), visibility 0s 300ms;
+    }
+    .bp-home .bp-workspace { width: min(1640px, calc(100vw - var(--bp-sidebar-width))); max-width: 100%; margin-inline: auto; }
+    .bp-home .bp-page-heading { align-items: center; min-height: 40px; padding-top: 0; margin-bottom: 12px; }
+    .bp-home .bp-page-heading h1 { font-size: 26px; line-height: 32px; }
+    .bp-home #workspace-brand-slot {
+        display: flex;
+        align-items: center;
+        width: 0;
+        height: 40px;
+        min-width: 0;
+        overflow: hidden;
+        flex: 0 0 auto;
+        transition: width 300ms cubic-bezier(.2, .7, .2, 1);
+    }
+    .bp-home.config-brand-in-header #workspace-brand-slot { width: 175px; }
+    .bp-home #workspace-brand-slot .bp-brand { width: 155px; flex-shrink: 0; margin: 0; }
+    .bp-home:is(.config-sidebar-collapsed, .discussion-open) .bp-config-header-account { display: block; }
+    body.bp-home #config-sidebar-toggle {
+        min-width: 0;
+        overflow: hidden;
+        transition: flex-basis 300ms cubic-bezier(.2, .7, .2, 1), width 300ms cubic-bezier(.2, .7, .2, 1), margin-right 300ms cubic-bezier(.2, .7, .2, 1), opacity 150ms ease, visibility 0s;
+    }
+    body.bp-home.discussion-open #config-sidebar-toggle {
+        flex-basis: 0;
+        width: 0;
+        margin-right: 0;
+        padding-inline: 0;
+        opacity: 0;
+        visibility: hidden;
+        transition-delay: 0s, 0s, 0s, 0s, 300ms;
+    }
+    .bp-home.discussion-open .bp-page-heading { align-items: center; gap: 0; }
+    .bp-home .bp-workspace-grid { scrollbar-width: thin; }
+}
+
+@media (min-width: 761px) and (max-width: 1100px) {
+    .bp-navigation-views button > span { display: none; }
+    .bp-navigation-views button > i { display: inline; }
+}
+
+@media (max-width: 760px) {
+    .bp-home .bp-context-row {
+        position: sticky;
+        top: 60px;
+        z-index: 16;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-rows: auto auto auto;
+        align-items: center;
+        gap: 0 4px;
+        padding: 0;
+        background: var(--bp-surface-soft);
+    }
+    .bp-home .bp-context-identity {
+        grid-area: 1 / 1 / 4 / -1;
+        display: grid;
+        grid-template-columns: subgrid;
+        grid-template-rows: subgrid;
+        align-items: center;
+        min-width: 0;
+        gap: 0 4px;
+        padding: 8px 0;
+    }
+    .bp-home .bp-context-identity .bp-breadcrumb { grid-area: 1 / 1; flex-wrap: nowrap; align-items: center; gap: 4px; }
+    .bp-home .bp-breadcrumb-current {
+        flex: 0 1 auto;
+        min-width: 0;
+        max-width: 100%;
+        padding-inline-end: 14px;
+        overflow: hidden;
+        overflow-wrap: normal;
+        white-space: nowrap;
+        text-overflow: clip;
+        -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 14px), transparent);
+        mask-image: linear-gradient(to right, #000 calc(100% - 14px), transparent);
+    }
+    .bp-home .bp-breadcrumb:has(:focus-visible) { outline: 2px solid var(--bp-accent); outline-offset: 2px; border-radius: 3px; }
+    .bp-home .bp-breadcrumb .bp-private-context-label { flex: none; }
+    .bp-home #bp-breadcrumb > #workspace-update-indicator { flex: 0 0 18px; width: 18px; min-width: 18px; }
+    .bp-home .bp-context-identity .bp-workspace-topic-summary { grid-area: 2 / 1 / 3 / -1; width: 100%; margin-top: 2px; }
+    .bp-home .bp-context-identity > .bp-topic-creator-slot { grid-area: 3 / 1 / 4 / -1; margin-top: 2px; }
+    .bp-home .bp-context-actions {
+        grid-area: 1 / 2;
+        align-self: center;
+        flex: none;
+        flex-wrap: nowrap;
+        gap: 0;
+        margin: 8px 0 0;
+    }
+    .bp-home .bp-context-actions > :is(.bp-square-button, .bp-discussion-entry) { flex: 0 0 44px; width: 44px; min-width: 44px; height: 44px; padding: 0; }
+    .bp-home .bp-context-actions > .bp-discussion-entry { justify-content: center; }
+    .bp-home #discussion-entry [data-discussion-count] { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+    .bp-home .bp-mobile-panels { top: calc(60px + var(--bp-mobile-topic-height, 68px)); }
+    .bp-home:not(.taxonomy-open) #config-sidebar { background: #fffffff5; border-bottom: 1px solid #dfe3e6; }
+    @supports ((backdrop-filter: blur(20px)) or (-webkit-backdrop-filter: blur(20px))) {
+        .bp-home:not(.taxonomy-open) #config-sidebar { background: #ffffffd9; -webkit-backdrop-filter: blur(20px) saturate(1.2); backdrop-filter: blur(20px) saturate(1.2); }
+    }
+    .bp-home:not(.taxonomy-open) #config-site-links { display: flex; margin-left: auto; }
+    .bp-home.taxonomy-open #config-site-links, .bp-home.taxonomy-open #config-sidebar .bp-sidebar-footer { display: none; }
+    .bp-home:not(.taxonomy-open) #config-sidebar > .bp-brand { flex: 0 0 auto; }
+    .bp-home:not(.taxonomy-open) #config-sidebar > .bp-brand img { width: 130px; transform: translateY(-1px); }
+    .bp-home #config-site-links > #taxonomy-toggle span { display: none; }
+    .bp-home .bp-context-identity > .bp-topic-directory-link { display: none; }
+    body.bp-home #config-sidebar-toggle { display: none; }
+    .bp-home #workspace-brand-slot { display: none; }
+    .bp-home .bp-page-heading { align-items: flex-start; min-height: 64px; }
+    .bp-home .bp-page-heading h1 { font-size: 22px; line-height: 28px; }
+    .bp-home .bp-config-header-account { display: none; }
+    .bp-home .bp-config-account { width: 44px; height: 44px; }
+    body.bp-home .bp-navigation-views[data-ui-component="segmented"] > button { min-height: 44px; }
+    .bp-home .bp-sidebar > .bp-brand { max-width: calc(100% - 48px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .bp-home .bp-shell, .bp-home .bp-shell > .bp-sidebar, .bp-home #workspace-brand-slot,
+    body.bp-home #config-sidebar-toggle { transition: none; }
+}

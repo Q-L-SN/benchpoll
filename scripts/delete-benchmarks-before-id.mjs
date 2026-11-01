@@ -3,20 +3,39 @@
 import 'dotenv/config';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import mysql from 'mysql2/promise';
 
-const APPLY = process.argv.includes('--apply');
-const beforeArgument = process.argv.find(argument => argument.startsWith('--before-id='));
-const beforeID = Number(beforeArgument?.slice('--before-id='.length));
-const confirmation = process.argv.find(argument => argument.startsWith('--confirm='))
-    ?.slice('--confirm='.length);
 const TOTAL_WEIGHT = 10000;
 
-if (!Number.isSafeInteger(beforeID) || beforeID <= 0) {
-    throw new Error('Pass a positive integer with --before-id=<ID>.');
+export function parseCleanupOptions(args) {
+    const apply = args.includes('--apply');
+    const beforeID = Number(args.find(argument => argument.startsWith('--before-id='))
+        ?.slice('--before-id='.length));
+    const confirmation = args.find(argument => argument.startsWith('--confirm='))
+        ?.slice('--confirm='.length);
+    if (!Number.isSafeInteger(beforeID) || beforeID <= 0) {
+        throw new Error('Pass a positive integer with --before-id=<ID>.');
+    }
+    if (apply && confirmation !== `delete-benchmarks-before-${beforeID}`) {
+        throw new Error(`Pass --confirm=delete-benchmarks-before-${beforeID} to apply this cleanup.`);
+    }
+    return { apply, beforeID };
 }
-if (APPLY && confirmation !== `delete-benchmarks-before-${beforeID}`) {
-    throw new Error(`Pass --confirm=delete-benchmarks-before-${beforeID} to apply this cleanup.`);
+
+export async function assertLegacyBenchmarkCleanupCompatible(connection) {
+    const [tables] = await connection.execute(`
+        SELECT TABLE_NAME AS name FROM information_schema.TABLES
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME IN ('topic_scenes', 'personal_pie_topic_weights', 'topic_reference_lock')
+        ORDER BY TABLE_NAME`);
+    if (tables.length > 0) {
+        const error = new Error('This legacy cleanup does not support topic scenes or references '
+            + `(${tables.map(table => table.name).join(', ')}). No benchmarks or weights were changed. `
+            + 'Use a scene/reference-aware cleanup instead; benchmark-only normalization can destroy reference weights.');
+        error.code = 'UNSUPPORTED_TOPIC_REFERENCE_CLEANUP';
+        throw error;
+    }
 }
 
 function databaseConfig() {
@@ -34,7 +53,7 @@ function databaseConfig() {
     };
 }
 
-function normalizedRemainingWeights(rows) {
+export function normalizedRemainingWeights(rows) {
     if (rows.length === 0) {
         return [];
     }
@@ -73,7 +92,8 @@ function normalizedRemainingWeights(rows) {
     return projected;
 }
 
-async function loadSummary(connection) {
+export async function loadSummary(connection, beforeID) {
+    await assertLegacyBenchmarkCleanupCompatible(connection);
     const [[counts]] = await connection.execute(`
         SELECT
             (SELECT COUNT(*) FROM benchmarks WHERE ID < ?) AS benchmarkCount,
@@ -121,7 +141,7 @@ async function loadSummary(connection) {
     };
 }
 
-async function loadBackup(connection) {
+async function loadBackup(connection, beforeID) {
     const [benchmarks] = await connection.execute(
         'SELECT * FROM benchmarks WHERE ID < ? ORDER BY ID',
         [beforeID]
@@ -168,7 +188,7 @@ async function loadBackup(connection) {
     return { benchmarks, conditions, tagLinks, results, pieWeights };
 }
 
-async function writeBackup(backup) {
+async function writeBackup(backup, beforeID) {
     const directory = path.resolve('data', 'backups');
     await fs.mkdir(directory, { recursive: true });
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -184,13 +204,14 @@ async function writeBackup(backup) {
     return backupPath;
 }
 
-async function applyCleanup(connection) {
-    const summary = await loadSummary(connection);
+export async function applyCleanup(connection, beforeID) {
+    const summary = await loadSummary(connection, beforeID);
     if (summary.benchmarkCount === 0) {
         return { ...summary, deletedBenchmarks: 0, backupPath: null };
     }
     await connection.beginTransaction();
     try {
+        await assertLegacyBenchmarkCleanupCompatible(connection);
         const [affectedRows] = await connection.execute(`
             SELECT personal_pies.ID AS pie_ID,
                    personal_pie_weights.benchmark_condition_ID,
@@ -212,7 +233,7 @@ async function applyCleanup(connection) {
             )
             ORDER BY personal_pies.ID, personal_pie_weights.benchmark_condition_ID
             FOR UPDATE`, [beforeID]);
-        const backupPath = await writeBackup(await loadBackup(connection));
+        const backupPath = await writeBackup(await loadBackup(connection, beforeID), beforeID);
         const rowsByPie = new Map();
         for (const row of affectedRows) {
             const pieID = Number(row.pie_ID);
@@ -288,30 +309,38 @@ async function applyCleanup(connection) {
     }
 }
 
-const connection = await mysql.createConnection(databaseConfig());
-const lockName = `benchpoll_delete_benchmarks_before_${beforeID}`;
-try {
-    if (!APPLY) {
-        console.log(JSON.stringify({
-            dryRun: true,
-            beforeID,
-            ...(await loadSummary(connection))
-        }, null, 2));
-    } else {
-        const [[lock]] = await connection.query('SELECT GET_LOCK(?, 30) AS acquired', [lockName]);
-        if (Number(lock.acquired) !== 1) {
-            throw new Error('Could not acquire the benchmark cleanup lock.');
-        }
-        try {
+async function main() {
+    const { apply, beforeID } = parseCleanupOptions(process.argv.slice(2));
+    const connection = await mysql.createConnection(databaseConfig());
+    const lockName = `benchpoll_delete_benchmarks_before_${beforeID}`;
+    try {
+        if (!apply) {
             console.log(JSON.stringify({
-                dryRun: false,
+                dryRun: true,
                 beforeID,
-                ...(await applyCleanup(connection))
+                ...(await loadSummary(connection, beforeID))
             }, null, 2));
-        } finally {
-            await connection.query('SELECT RELEASE_LOCK(?)', [lockName]);
+        } else {
+            await assertLegacyBenchmarkCleanupCompatible(connection);
+            const [[lock]] = await connection.query('SELECT GET_LOCK(?, 30) AS acquired', [lockName]);
+            if (Number(lock.acquired) !== 1) {
+                throw new Error('Could not acquire the benchmark cleanup lock.');
+            }
+            try {
+                console.log(JSON.stringify({
+                    dryRun: false,
+                    beforeID,
+                    ...(await applyCleanup(connection, beforeID))
+                }, null, 2));
+            } finally {
+                await connection.query('SELECT RELEASE_LOCK(?)', [lockName]);
+            }
         }
+    } finally {
+        await connection.end();
     }
-} finally {
-    await connection.end();
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+    await main();
 }

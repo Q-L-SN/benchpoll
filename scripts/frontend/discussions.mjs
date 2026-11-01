@@ -1,4 +1,5 @@
 import { benchmarks, categories, workspace } from './fixtures.mjs';
+import { normalizeDiscussionPost, normalizeDiscussionDeletion } from '../../discussion-service.js';
 
 export function discussionFixture(path, body, state) {
     state.discussionPosts ??= [{ ID: 801, parentID: null, categoryID: 1, categoryName: 'Language models', contextID: 1,
@@ -8,6 +9,7 @@ export function discussionFixture(path, body, state) {
     if (path === '/api/search_discussion_benchmarks') return { benchmarks: benchmarks.filter(item => item.name.toLowerCase().includes(body.query.toLowerCase())) };
     if (path === '/api/get_discussion_summary') return { count: state.discussionPosts.filter(post => post.parentID === null).length };
     if (path === '/api/create_discussion_post') {
+        normalizeDiscussionPost(body);
         const ID = 801 + state.discussionPosts.length;
         state.discussionPosts.unshift({ ...state.discussionPosts[0], ID, text: body.text, parentID: body.parentID,
             authorName: 'Preview account', isOwn: true, upvotes: 0, downvotes: 0, myVote: 0,
@@ -15,6 +17,7 @@ export function discussionFixture(path, body, state) {
         return { ID, threadID: body.parentID ?? ID };
     }
     if (path === '/api/delete_discussion_post') {
+        normalizeDiscussionDeletion(body);
         const post = state.discussionPosts.find(post => post.ID === body.postID);
         if (!post?.isOwn) throw new Error('discussion_delete_forbidden');
         post.isDeleted = true; post.text = ''; post.mentions = []; post.upvotes = post.downvotes = 0;
@@ -33,6 +36,7 @@ export function discussionFixture(path, body, state) {
         if (body.benchmarkID) posts = posts.filter(post => post.mentions.some(mention => mention.benchmarkID === body.benchmarkID));
         return { context: workspace(state, body).context, categories: [categories[0], ...categories[0].children],
             contexts: [{ ID: 1, values: { budget: 'standard' } }], authenticated: state.authenticated,
+            userID: state.authenticated ? state.userID : null,
             root: body.threadID ? state.discussionPosts.find(post => post.ID === body.threadID) : null,
             posts, total: posts.length, hasMore: false };
     }

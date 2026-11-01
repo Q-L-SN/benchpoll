@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <meta name="referrer" content="no-referrer">
+    <title>Account &amp; privacy - BenchPoll</title>
+    <link rel="icon" href="/favicon.ico?v=benchpoll-brand-20260919" sizes="any">
+    <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
+    <link rel="stylesheet" href="/css/global.css">
+    <link rel="stylesheet" href="/css/site-palette.css?v=shared-controls-20261010">
+    <link rel="stylesheet" href="/css/typography.css?v=manrope-static-20261007">
+    <link rel="stylesheet" href="/css/account-privacy.css?v=20261017">
+    <link rel="stylesheet" href="/css/ui/site-header.css">
+    <script type="module" src="/js/account-privacy.js?v=20261028"></script>
+</head>
+<body class="bp-account-privacy" data-account-privacy>
+    <a class="ap-skip" href="#account-privacy">Skip to account &amp; privacy</a>
+    <header class="bp-site-header">
+        <div class="bp-site-header-inner">
+            <a class="bp-site-brand" href="/" aria-label="BenchPoll home"><img src="/assets/benchpoll-logo.svg" alt="BenchPoll" width="155" height="32"></a>
+            <nav id="privacy-site-links"></nav>
+        </div>
+    </header>
+    <main id="account-privacy" class="ap-main" tabindex="-1">
+        <div class="ap-heading">
+            <h1>Account &amp; privacy</h1>
+            <nav aria-label="Legal documents"><a href="/terms" target="_blank" rel="noopener noreferrer">Terms</a><a href="/privacy" target="_blank" rel="noopener noreferrer">Privacy</a><a href="/cookies" target="_blank" rel="noopener noreferrer">Cookies</a><a href="/community-guidelines" target="_blank" rel="noopener noreferrer">Community</a></nav>
+        </div>
+        <div class="ap-session">
+            <p id="privacy-status" role="status" aria-live="polite" aria-atomic="true">Loading account status...</p>
+            <button id="refresh-status" class="bp-ui-action" data-ui-variant="quiet" type="button" disabled><i class="fa-solid fa-rotate-right" aria-hidden="true"></i><span class="bp-ui-action-label">Refresh status</span></button>
+        </div>
+        <div class="ap-processing-notice">
+            <i class="fa-solid fa-shield-halved" aria-hidden="true"></i>
+            <div><p>Saved weights in public categories contribute to Public Weights. Private categories do not.</p><p><a href="/privacy#providers" target="_blank" rel="noopener noreferrer">How your account data is handled</a>.</p></div>
+        </div>
+        <noscript><p class="ap-noscript">JavaScript is required for these forms. <a href="/privacy#operator">View privacy contact information</a>.</p></noscript>
+
+        <section class="ap-section" aria-labelledby="account-heading">
+            <div class="ap-section-label"><h2 id="account-heading">Sign in</h2><p id="account-explanation">GitHub is needed to save account settings, not to send a privacy request.</p></div>
+            <div class="ap-section-body">
+                <p id="accepted-terms" hidden>Current Terms accepted. Privacy Policy acknowledged.</p>
+                <p id="legal-versions" class="ap-secondary">See the Terms and Privacy Policy for their current versions.</p>
+                <form id="consent-form" method="post" autocomplete="off" novalidate>
+                    <fieldset id="consent-fields" disabled>
+                        <legend class="ap-sr-only">Terms and eligibility confirmations</legend>
+                        <label class="ap-choice" for="accepted-terms-check"><input id="accepted-terms-check" type="checkbox" required aria-describedby="terms-acknowledgment"><span>I agree to the <a href="/terms" target="_blank" rel="noopener noreferrer">Terms of Use</a> and acknowledge the <a href="/privacy" target="_blank" rel="noopener noreferrer">Privacy Policy</a>.</span></label>
+                        <p id="terms-acknowledgment" class="ap-choice-note">This acknowledgment is not blanket consent to optional processing or data transfers.</p>
+                        <label class="ap-choice" for="eligible-age"><input id="eligible-age" type="checkbox" required><span>I am at least 16 and legally eligible to use BenchPoll where I live.</span></label>
+                        <button id="submit-consent" class="bp-ui-action" data-ui-variant="primary" type="submit"><i id="consent-icon" class="fa-brands fa-github" aria-hidden="true"></i><span id="consent-label" class="bp-ui-action-label">Continue with GitHub</span></button>
+                    </fieldset>
+                </form>
+                <p id="consent-result" class="ap-result" role="status" aria-live="polite" aria-atomic="true" hidden></p>
+            </div>
+        </section>
+
+        <section class="ap-section" aria-labelledby="research-heading">
+            <div class="ap-section-label"><h2 id="research-heading">Private categories</h2></div>
+            <div class="ap-section-body">
+                <p>Private categories are not used for research, including research into public topics, even when you previously opted in. Authorized operators can still access them to operate, support and secure the service.</p>
+                <p>Past choices and any past research records are not automatically erased. You can <a href="/account/privacy#request">ask about past use</a> or suggest public topics in the proposal hall.</p>
+            </div>
+        </section>
+
+        <section id="request" class="ap-section" aria-labelledby="request-heading">
+            <div class="ap-section-label"><h2 id="request-heading">Privacy request</h2><p>No GitHub account or sign-in required.</p><p>Requests are reviewed. Submitting one does not automatically delete data.</p></div>
+            <div class="ap-section-body">
+                <form id="request-form" method="post" autocomplete="off" novalidate>
+                    <fieldset id="request-fields">
+                        <legend class="ap-sr-only">Your privacy request</legend>
+                        <div class="ap-field"><label for="request-email">Contact email</label><input id="request-email" class="bp-ui-input" name="email" type="email" inputmode="email" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="254" required aria-describedby="request-email-help"><p id="request-email-help" class="ap-secondary">Used to handle this request and any necessary verification.</p></div>
+                        <fieldset id="request-type" class="ap-radios"><legend>Request type</legend>
+                            <label class="ap-choice"><input type="radio" name="requestType" value="access" required><span>Access my data</span></label>
+                            <label class="ap-choice"><input type="radio" name="requestType" value="correction"><span>Correct my data</span></label>
+                            <label class="ap-choice"><input type="radio" name="requestType" value="erasure"><span>Request erasure</span></label>
+                            <label class="ap-choice"><input type="radio" name="requestType" value="objection"><span>Object to processing</span></label>
+                            <label class="ap-choice"><input type="radio" name="requestType" value="other"><span>Other privacy request</span></label>
+                        </fieldset>
+                        <div class="ap-field"><label for="request-message">Request details</label><textarea id="request-message" class="bp-ui-input" name="message" rows="5" maxlength="4000" required aria-describedby="request-message-help"></textarea><p id="request-message-help" class="ap-secondary">Briefly describe the request and include only a minimal account or record reference, if relevant. Do not send passwords, identity documents or unrelated personal data. Maximum 4,000 characters.</p></div>
+                        <button id="submit-request" class="bp-ui-action" data-ui-variant="primary" type="submit" disabled><i class="fa-solid fa-paper-plane" aria-hidden="true"></i><span class="bp-ui-action-label">Submit request</span></button>
+                    </fieldset>
+                </form>
+                <p id="request-result" class="ap-result" role="status" aria-live="polite" aria-atomic="true" hidden></p>
+            </div>
+        </section>
+
+        <section id="senior-queue-section" class="ap-section" aria-labelledby="queue-heading" hidden>
+            <div class="ap-section-label"><h2 id="queue-heading">Private request queue</h2><p>Senior operators only.</p></div>
+            <div class="ap-section-body">
+                <details id="privacy-queue">
+                    <summary>Privacy requests</summary>
+                    <p class="ap-operator-notice">Follow up manually through a verified contact channel. Saving a status or resolution does not send email, verify the supplied address or erase data.</p>
+                    <p class="ap-secondary">Review dates are internal handling targets. Legal deadlines depend on the applicable law.</p>
+                    <div class="ap-queue-toolbar"><button id="refresh-queue" class="bp-ui-action" data-ui-variant="quiet" type="button"><i class="fa-solid fa-rotate-right" aria-hidden="true"></i><span class="bp-ui-action-label">Refresh queue</span></button><p id="queue-count" class="ap-secondary"></p></div>
+                    <ul id="queue-list" class="ap-queue-list" aria-label="Privacy requests"></ul>
+                    <button id="more-requests" class="bp-ui-action" data-ui-variant="quiet" type="button" hidden><i class="fa-solid fa-chevron-down" aria-hidden="true"></i><span class="bp-ui-action-label">More requests</span></button>
+                    <p id="queue-result" class="ap-result" role="status" aria-live="polite" aria-atomic="true" hidden></p>
+                    <section id="queue-detail" class="ap-queue-detail" aria-labelledby="queue-reference" hidden>
+                        <h3 id="queue-reference" tabindex="-1"></h3>
+                        <dl class="ap-request-metadata"><div><dt>Account</dt><dd id="queue-account"></dd></div><div><dt>Contact email (unverified)</dt><dd id="queue-email"></dd></div><div><dt>Type</dt><dd id="queue-type"></dd></div><div><dt>Received</dt><dd id="queue-created"></dd></div><div><dt>Review by (internal target)</dt><dd id="queue-due"></dd></div></dl>
+                        <p id="queue-message" class="ap-request-message"></p>
+                        <form id="queue-update-form" method="post" autocomplete="off" novalidate>
+                            <fieldset id="queue-update-fields">
+                                <legend class="ap-sr-only">Update selected privacy request</legend>
+                                <fieldset class="ap-radios"><legend>Handling status</legend><label class="ap-choice"><input type="radio" name="handlingStatus" value="open"><span>Open</span></label><label class="ap-choice"><input type="radio" name="handlingStatus" value="in_review"><span>In review</span></label><label class="ap-choice"><input type="radio" name="handlingStatus" value="closed"><span>Closed</span></label></fieldset>
+                                <div class="ap-field"><label for="queue-resolution">Handling record</label><textarea id="queue-resolution" class="bp-ui-input" rows="4" maxlength="2000" aria-describedby="queue-resolution-help"></textarea><p id="queue-resolution-help" class="ap-secondary">Required when closing a request. Record verification, follow-up and outcome. Private operator record, not an outgoing email. Maximum 2,000 characters.</p></div>
+                                <button id="update-request" class="bp-ui-action" data-ui-variant="secondary" type="submit"><i class="fa-solid fa-check" aria-hidden="true"></i><span class="bp-ui-action-label">Save handling record</span></button>
+                            </fieldset>
+                        </form>
+                        <p id="queue-update-result" class="ap-result" role="status" aria-live="polite" aria-atomic="true" hidden></p>
+                    </section>
+                </details>
+            </div>
+        </section>
+
+        <section class="ap-footer"><h2>Operator contact</h2><p id="operator-name">Operator details are loading.</p><a id="operator-email" href="mailto:privacy@benchpoll.com">privacy@benchpoll.com</a><p id="operator-contact-note" class="ap-secondary">The privacy request form is available without signing in. General questions: <a href="mailto:support@benchpoll.com">support@benchpoll.com</a>.</p></section>
+    </main>
+</body>
+</html>

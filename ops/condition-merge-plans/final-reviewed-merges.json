@@ -1,0 +1,709 @@
+{
+  "groups": [
+    {
+      "benchmarkName": "HR-Bench 4K",
+      "targetID": 502,
+      "sourceIDs": [
+        16085
+      ],
+      "targetName": "HR-Bench 4K; official full table; Python image tools; GLM crop+search aligned with GLM team",
+      "reason": "Same 4K full-table cohort and tool setup; self-tested star is per-result source metadata."
+    },
+    {
+      "benchmarkName": "persian_qa",
+      "targetID": 521,
+      "sourceIDs": [
+        599
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "ChatDoctor",
+      "targetID": 536,
+      "sourceIDs": [
+        1560
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "PyTorch",
+      "targetID": 715,
+      "sourceIDs": [
+        9829
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "DS1000",
+      "targetID": 741,
+      "sourceIDs": [
+        1010
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "RAG benchmark (Apple-10K-2022)",
+      "targetID": 957,
+      "sourceIDs": [
+        10806
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "Movies Summary",
+      "targetID": 996,
+      "sourceIDs": [
+        487
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "Korean_QA_gen_datasets_Korean_QA_gen_datasets",
+      "targetID": 1034,
+      "sourceIDs": [
+        674
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "polish_summ_test_1k",
+      "targetID": 1139,
+      "sourceIDs": [
+        1421
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "AVERAGE DOMAINS (WITHOUT MULTILINGUAL DOMAIN)",
+      "targetID": 1159,
+      "sourceIDs": [
+        11201
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "GerDaLIR",
+      "targetID": 1320,
+      "sourceIDs": [
+        8352
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "norwegian_snl_summ_test_1k",
+      "targetID": 1361,
+      "sourceIDs": [
+        4293
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "Medical Instruction",
+      "targetID": 1443,
+      "sourceIDs": [
+        7851
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "miracl-japanese-small-corpus_miracl-japanese-small-corpus",
+      "targetID": 1523,
+      "sourceIDs": [
+        1705
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "greek_civics_qa",
+      "targetID": 1551,
+      "sourceIDs": [
+        10430
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "mrtydi-v1.1-korean-fixed_mrtydi-v1.1-korean-fixed",
+      "targetID": 1588,
+      "sourceIDs": [
+        2908
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "dan_news_summ_test_1k",
+      "targetID": 1636,
+      "sourceIDs": [
+        12135
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "hc3_french_ood_faq_fr_gouv_hc3_french_ood_faq_fr_gouv",
+      "targetID": 1792,
+      "sourceIDs": [
+        3092
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "Kijiji.ca",
+      "targetID": 1847,
+      "sourceIDs": [
+        1575
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "dutch_policy_qa_test",
+      "targetID": 1947,
+      "sourceIDs": [
+        14782
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "chatml-OpenHermes2.5-dpo-binarized-alpha-french_chatml-OpenHermes2.5-dpo-binarized-alpha-french_1k",
+      "targetID": 1972,
+      "sourceIDs": [
+        3814
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "5G",
+      "targetID": 2046,
+      "sourceIDs": [
+        4155
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "LegalBench Corporate Lobbying",
+      "targetID": 2119,
+      "sourceIDs": [
+        5110
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "SIFO",
+      "targetID": 2314,
+      "sourceIDs": [
+        5026,
+        18224
+      ],
+      "targetName": "SIFO; split/version=multi-turn; default API-based evaluation",
+      "reason": "Same SIFO multi-turn split and default API evaluation; model-card numeric figure wording is source provenance."
+    },
+    {
+      "benchmarkName": "sakura_japanese_dataset_sakura_japanese_dataset",
+      "targetID": 2371,
+      "sourceIDs": [
+        2214
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "hungarian_summ_1k",
+      "targetID": 2410,
+      "sourceIDs": [
+        562
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "russian_gazeta_1k",
+      "targetID": 2425,
+      "sourceIDs": [
+        3067
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "Covid QA",
+      "targetID": 2431,
+      "sourceIDs": [
+        5282
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "HC3 Finance",
+      "targetID": 2472,
+      "sourceIDs": [
+        1177
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "OneSignal",
+      "targetID": 2491,
+      "sourceIDs": [
+        4195
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "Terminal-Bench Science 0.1",
+      "targetID": 2589,
+      "sourceIDs": [
+        3298,
+        4270,
+        5156,
+        6678,
+        8071,
+        9588,
+        10432,
+        13137,
+        13392,
+        14134,
+        19596
+      ],
+      "targetName": "v0.1; All Domains; 70 tasks; 3 trials/task; resolution rate",
+      "reason": "Same v0.1 all-domain resolution-rate cohort and three-trial protocol; row UUID identifies the individual leaderboard score and remains in result evidence."
+    },
+    {
+      "benchmarkName": "portuguese_xlsum_test",
+      "targetID": 2603,
+      "sourceIDs": [
+        5371
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "arabic_news",
+      "targetID": 2608,
+      "sourceIDs": [
+        13013
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "Trade-the-event",
+      "targetID": 2675,
+      "sourceIDs": [
+        1950
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "Indian Financial News",
+      "targetID": 2690,
+      "sourceIDs": [
+        8603
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "FinanceBench",
+      "targetID": 2792,
+      "sourceIDs": [
+        10550
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "OlmOCR Bench v1.0",
+      "targetID": 2898,
+      "sourceIDs": [
+        3181,
+        4421,
+        4649,
+        7198,
+        7260,
+        7804,
+        9405,
+        10334,
+        10447,
+        11336,
+        17173,
+        20092
+      ],
+      "targetName": "Nanonets IDP leaderboard v1.5; olmocr overall",
+      "reason": "Same OlmOCR overall metric and leaderboard cohort; model rank is source metadata retained in the original result snapshot."
+    },
+    {
+      "benchmarkName": "fujiki_49k_japanese_dataset_fujiki_49k_japanese_dataset_1k",
+      "targetID": 3049,
+      "sourceIDs": [
+        14286
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "HR-Bench 8K",
+      "targetID": 3142,
+      "sourceIDs": [
+        2321
+      ],
+      "reason": "Same full-table HR-Bench 8K cohort and tool setup; star is source/self-test provenance retained in result evidence."
+    },
+    {
+      "benchmarkName": "bengali_summ_test_1k",
+      "targetID": 3244,
+      "sourceIDs": [
+        2059
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "korean_dialog_summary_korean_dialog_summary_1k",
+      "targetID": 3535,
+      "sourceIDs": [
+        2729
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "czech_summ",
+      "targetID": 3578,
+      "sourceIDs": [
+        8999
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "skquad_test_1k",
+      "targetID": 3747,
+      "sourceIDs": [
+        2950
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "QMSum",
+      "targetID": 3757,
+      "sourceIDs": [
+        3932
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "thai_summ_test_1k",
+      "targetID": 3812,
+      "sourceIDs": [
+        4719
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "FiQA Personal Finance",
+      "targetID": 3822,
+      "sourceIDs": [
+        5991
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "japanese-conala_japanese-conala",
+      "targetID": 3897,
+      "sourceIDs": [
+        2987
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "german_legal_sentences_german_legal_sentences",
+      "targetID": 3927,
+      "sourceIDs": [
+        7871
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "Cohere",
+      "targetID": 4115,
+      "sourceIDs": [
+        6602
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "dutch_squad_test_1k",
+      "targetID": 4183,
+      "sourceIDs": [
+        3399
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "MeetingBank-transcript",
+      "targetID": 4319,
+      "sourceIDs": [
+        4306
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "IDP Core Bench v1.0",
+      "targetID": 4397,
+      "sourceIDs": [
+        4984,
+        5575,
+        6603,
+        8752,
+        10196,
+        11049,
+        12596,
+        16419,
+        17627,
+        17659,
+        19632,
+        20034
+      ],
+      "targetName": "Nanonets IDP leaderboard v1.5; idp overall",
+      "reason": "Same IDP overall metric and leaderboard cohort; rank is a per-model source annotation, retained in each score's original condition snapshot."
+    },
+    {
+      "benchmarkName": "Health4CA",
+      "targetID": 4577,
+      "sourceIDs": [
+        1173
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "News stocks",
+      "targetID": 4591,
+      "sourceIDs": [
+        5097
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "viet_quad_test_1k",
+      "targetID": 4684,
+      "sourceIDs": [
+        894
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "Korean-Human-Judgements_Korean-Human-Judgements",
+      "targetID": 5153,
+      "sourceIDs": [
+        3039
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "German_Poems_German_Poems",
+      "targetID": 5244,
+      "sourceIDs": [
+        2593
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "deepsearchQA (F1)",
+      "targetID": 5890,
+      "sourceIDs": [
+        17055
+      ],
+      "reason": "Same official full-table F1 metric; star only denotes self-tested scores in the original result evidence."
+    },
+    {
+      "benchmarkName": "Stock News Sentiment",
+      "targetID": 6237,
+      "sourceIDs": [
+        6260
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "Toolathlon-Verified",
+      "targetID": 6570,
+      "sourceIDs": [
+        1729,
+        7424,
+        9623,
+        10080,
+        12028,
+        16053,
+        18132
+      ],
+      "targetName": "Verified June 30 2026; metric=Pass^3",
+      "reason": "Same frozen Verified June 30 release and Pass^3 metric, distinct from Pass@3; result date is score-level provenance."
+    },
+    {
+      "benchmarkName": "Dialogsum-german_Dialogsum-german",
+      "targetID": 6610,
+      "sourceIDs": [
+        1606
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "georgian_faq_1k",
+      "targetID": 6613,
+      "sourceIDs": [
+        6506
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "Terminal-Bench",
+      "targetID": 6856,
+      "sourceIDs": [
+        18582
+      ],
+      "reason": "Same eight-run mean pass-rate and evaluator commit; asterisk only identifies externally reported score provenance, retained per result."
+    },
+    {
+      "benchmarkName": "Mental Health Consulting",
+      "targetID": 7201,
+      "sourceIDs": [
+        5852
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "grade_school_math_korean_grade_school_math_korean_1k",
+      "targetID": 7222,
+      "sourceIDs": [
+        7004
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "Alpaca_french_mixtral_Alpaca_french_mixtral_1k",
+      "targetID": 7240,
+      "sourceIDs": [
+        4020
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "slovak_summ_test_1k",
+      "targetID": 7469,
+      "sourceIDs": [
+        1941
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "LegalBench Consumer Contracts QA",
+      "targetID": 8244,
+      "sourceIDs": [
+        7796
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "emotional_response_spanish_dataset_emotional_response_spanish_dataset",
+      "targetID": 8312,
+      "sourceIDs": [
+        6599
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "russian_reviews",
+      "targetID": 8780,
+      "sourceIDs": [
+        3193
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "spanish_passage_retrieval_s2p",
+      "targetID": 9358,
+      "sourceIDs": [
+        13427
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "function-calling-assistant-spanish-pofi-v2_function-calling-assistant-spanish-pofi-v2",
+      "targetID": 9792,
+      "sourceIDs": [
+        8570
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "Finance Alpaca",
+      "targetID": 10874,
+      "sourceIDs": [
+        801
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "Terminal-Bench",
+      "targetID": 11163,
+      "sourceIDs": [
+        18677
+      ],
+      "targetName": "Terminal-Bench; metric ACC; split/version=Terminus-2; Kimi official card; Terminus-2 evaluator",
+      "reason": "Same Terminus-2 ACC protocol; asterisk only describes which individual scores were excerpted from a public report."
+    },
+    {
+      "benchmarkName": "AILA casedocs",
+      "targetID": 11541,
+      "sourceIDs": [
+        4466
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "german_OpenOrca_german_OpenOrca_1k",
+      "targetID": 12468,
+      "sourceIDs": [
+        2168
+      ],
+      "reason": "Same NDCG@10 and top-10-from-up-to-100 retrieval protocol; names differ only by equivalent wording."
+    },
+    {
+      "benchmarkName": "SIFO",
+      "targetID": 15984,
+      "sourceIDs": [
+        15471,
+        17779
+      ],
+      "targetName": "SIFO; split/version=single-turn; default API-based evaluation",
+      "reason": "Same SIFO single-turn split and default API evaluation; Qwen/model-card numeric figure wording is source provenance."
+    },
+    {
+      "benchmarkName": "ResearchRubrics (score)",
+      "targetID": 17599,
+      "sourceIDs": [
+        17992
+      ],
+      "targetName": "ResearchRubrics (score); official full table",
+      "reason": "Same full-table score metric; self-tested star is per-result source metadata."
+    },
+    {
+      "benchmarkName": "Toolathlon-Verified",
+      "targetID": 18242,
+      "sourceIDs": [
+        743,
+        5900,
+        7826,
+        8269,
+        8966,
+        9721,
+        12170,
+        13619,
+        16360
+      ],
+      "targetName": "Verified June 30 2026; metric=Pass@1",
+      "reason": "Same frozen Verified June 30 release and Pass@1 metric; result date is score-level provenance, with agent configuration already on score fields."
+    },
+    {
+      "benchmarkName": "Toolathlon-Verified",
+      "targetID": 19578,
+      "sourceIDs": [
+        473,
+        4833,
+        5304,
+        6080,
+        6799,
+        7418,
+        15841
+      ],
+      "targetName": "Verified June 30 2026; metric=Pass@3",
+      "reason": "Same frozen Verified June 30 release and Pass@3 metric; result date is score-level provenance, with agent configuration already on score fields."
+    }
+  ]
+}

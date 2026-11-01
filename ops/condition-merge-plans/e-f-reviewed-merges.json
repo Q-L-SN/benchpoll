@@ -1,0 +1,253 @@
+{
+  "groups": [
+    {
+      "benchmarkName": "AVERAGE MULTILINGUAL (BY DATASET)",
+      "targetID": 565,
+      "sourceIDs": [
+        549
+      ],
+      "reason": "Same NDCG@10 retrieval metric and top-10-from-up-to-100 protocol; condition names only reorder equivalent wording."
+    },
+    {
+      "benchmarkName": "hebrew_qa_test_1k",
+      "targetID": 577,
+      "sourceIDs": [
+        3902
+      ],
+      "reason": "Same NDCG@10 retrieval metric and top-10-from-up-to-100 protocol; condition names only reorder equivalent wording."
+    },
+    {
+      "benchmarkName": "urdu_summ_test_1k",
+      "targetID": 622,
+      "sourceIDs": [
+        1687
+      ],
+      "reason": "Same NDCG@10 retrieval metric and top-10-from-up-to-100 protocol; condition names only reorder equivalent wording."
+    },
+    {
+      "benchmarkName": "Doordash",
+      "targetID": 908,
+      "sourceIDs": [
+        2077
+      ],
+      "reason": "Same NDCG@10 retrieval metric and top-10-from-up-to-100 protocol; condition names only reorder equivalent wording."
+    },
+    {
+      "benchmarkName": "Dialog Sum",
+      "targetID": 1686,
+      "sourceIDs": [
+        4697
+      ],
+      "reason": "Same NDCG@10 retrieval metric and top-10-from-up-to-100 protocol; condition names only reorder equivalent wording."
+    },
+    {
+      "benchmarkName": "LeetCodePython",
+      "targetID": 1767,
+      "sourceIDs": [
+        5793
+      ],
+      "reason": "Same NDCG@10 retrieval metric and top-10-from-up-to-100 protocol; condition names only reorder equivalent wording."
+    },
+    {
+      "benchmarkName": "german-formatted-oasst1_german-formatted-oasst1_1k",
+      "targetID": 1829,
+      "sourceIDs": [
+        1115
+      ],
+      "reason": "Same NDCG@10 retrieval metric and top-10-from-up-to-100 protocol; condition names only reorder equivalent wording."
+    },
+    {
+      "benchmarkName": "jpwiki_test",
+      "targetID": 1978,
+      "sourceIDs": [
+        2650
+      ],
+      "reason": "Same NDCG@10 retrieval metric and top-10-from-up-to-100 protocol; condition names only reorder equivalent wording."
+    },
+    {
+      "benchmarkName": "ConvFinQA",
+      "targetID": 2258,
+      "sourceIDs": [
+        2534
+      ],
+      "reason": "Same NDCG@10 retrieval metric and top-10-from-up-to-100 protocol; condition names only reorder equivalent wording."
+    },
+    {
+      "benchmarkName": "All news finance",
+      "targetID": 2343,
+      "sourceIDs": [
+        8938
+      ],
+      "reason": "Same NDCG@10 retrieval metric and top-10-from-up-to-100 protocol; condition names only reorder equivalent wording."
+    },
+    {
+      "benchmarkName": "ilpost_test_1k",
+      "targetID": 2954,
+      "sourceIDs": [
+        3740
+      ],
+      "reason": "Same NDCG@10 retrieval metric and top-10-from-up-to-100 protocol; condition names only reorder equivalent wording."
+    },
+    {
+      "benchmarkName": "FinQA",
+      "targetID": 3045,
+      "sourceIDs": [
+        7940
+      ],
+      "reason": "Same NDCG@10 retrieval metric and top-10-from-up-to-100 protocol; condition names only reorder equivalent wording."
+    },
+    {
+      "benchmarkName": "guanaco-spanish-dataset_guanaco-spanish-dataset",
+      "targetID": 3062,
+      "sourceIDs": [
+        5088
+      ],
+      "reason": "Same NDCG@10 retrieval metric and top-10-from-up-to-100 protocol; condition names only reorder equivalent wording."
+    },
+    {
+      "benchmarkName": "Stocks Event",
+      "targetID": 3087,
+      "sourceIDs": [
+        4033
+      ],
+      "reason": "Same NDCG@10 retrieval metric and top-10-from-up-to-100 protocol; condition names only reorder equivalent wording."
+    },
+    {
+      "benchmarkName": "SummScreenFD",
+      "targetID": 3264,
+      "sourceIDs": [
+        6092
+      ],
+      "reason": "Same NDCG@10 retrieval metric and top-10-from-up-to-100 protocol; condition names only reorder equivalent wording."
+    },
+    {
+      "benchmarkName": "rojtvheadlines_1k",
+      "targetID": 3319,
+      "sourceIDs": [
+        7096
+      ],
+      "reason": "Same NDCG@10 retrieval metric and top-10-from-up-to-100 protocol; condition names only reorder equivalent wording."
+    },
+    {
+      "benchmarkName": "AVERAGE DOMAINS (WITH MULTILINGUAL DOMAIN)",
+      "targetID": 3906,
+      "sourceIDs": [
+        4010
+      ],
+      "reason": "Same NDCG@10 retrieval metric and top-10-from-up-to-100 protocol; condition names only reorder equivalent wording."
+    },
+    {
+      "benchmarkName": "QA Conv",
+      "targetID": 4070,
+      "sourceIDs": [
+        1830
+      ],
+      "reason": "Same NDCG@10 retrieval metric and top-10-from-up-to-100 protocol; condition names only reorder equivalent wording."
+    },
+    {
+      "benchmarkName": "turkish_HistQuAD_test_1k",
+      "targetID": 4097,
+      "sourceIDs": [
+        11841
+      ],
+      "reason": "Same NDCG@10 retrieval metric and top-10-from-up-to-100 protocol; condition names only reorder equivalent wording."
+    },
+    {
+      "benchmarkName": "swedish_swefaq",
+      "targetID": 4975,
+      "sourceIDs": [
+        10818
+      ],
+      "reason": "Same NDCG@10 retrieval metric and top-10-from-up-to-100 protocol; condition names only reorder equivalent wording."
+    },
+    {
+      "benchmarkName": "TAT-QA",
+      "targetID": 5155,
+      "sourceIDs": [
+        3115
+      ],
+      "reason": "Same NDCG@10 retrieval metric and top-10-from-up-to-100 protocol; condition names only reorder equivalent wording."
+    },
+    {
+      "benchmarkName": "paraphrasing_french_paraphrasing_french",
+      "targetID": 5726,
+      "sourceIDs": [
+        12256
+      ],
+      "reason": "Same NDCG@10 retrieval metric and top-10-from-up-to-100 protocol; condition names only reorder equivalent wording."
+    },
+    {
+      "benchmarkName": "mmarco-japanese-hard-negatives_mmarco-japanese-hard-negatives_1k",
+      "targetID": 7393,
+      "sourceIDs": [
+        7549
+      ],
+      "reason": "Same NDCG@10 retrieval metric and top-10-from-up-to-100 protocol; condition names only reorder equivalent wording."
+    },
+    {
+      "benchmarkName": "codechef-cpp_5doc",
+      "targetID": 8076,
+      "sourceIDs": [
+        11165
+      ],
+      "reason": "Same NDCG@10 retrieval metric and top-10-from-up-to-100 protocol; condition names only reorder equivalent wording."
+    },
+    {
+      "benchmarkName": "alpaca-spanish_alpaca-spanish",
+      "targetID": 8585,
+      "sourceIDs": [
+        7426
+      ],
+      "reason": "Same NDCG@10 retrieval metric and top-10-from-up-to-100 protocol; condition names only reorder equivalent wording."
+    },
+    {
+      "benchmarkName": "Biology_German_DHBW_Biology_German_DHBW",
+      "targetID": 9851,
+      "sourceIDs": [
+        6022
+      ],
+      "reason": "Same NDCG@10 retrieval metric and top-10-from-up-to-100 protocol; condition names only reorder equivalent wording."
+    },
+    {
+      "benchmarkName": "MTEB task: mteb/imdb",
+      "targetID": 10837,
+      "sourceIDs": [
+        10643,
+        14084
+      ],
+      "reason": "Same ImdbClassification F1 metric, default config/test split/revision; recovered original name confirms the hashed source metric is F1."
+    },
+    {
+      "benchmarkName": "AVERAGE MULTILINGUAL (BY LANGUAGE)",
+      "targetID": 11782,
+      "sourceIDs": [
+        1938
+      ],
+      "reason": "Same NDCG@10 retrieval metric and top-10-from-up-to-100 protocol; condition names only reorder equivalent wording."
+    },
+    {
+      "benchmarkName": "MTEB task: mteb/imdb",
+      "targetID": 13452,
+      "sourceIDs": [
+        6141,
+        20705
+      ],
+      "reason": "Same ImdbClassification AP metric, default config/test split/revision; recovered original name confirms the hashed source metric is AP."
+    },
+    {
+      "benchmarkName": "MathVista_MINI",
+      "targetID": 19724,
+      "sourceIDs": [
+        3628,
+        10886,
+        11537,
+        13110,
+        16808,
+        20026,
+        20554
+      ],
+      "targetName": "MathVista mini; metric=accuracy; default API evaluation",
+      "reason": "Same MathVista mini test split and accuracy metric under default API evaluation; Qwen figure and asterisk comparator text are source provenance, not separate tasks."
+    }
+  ]
+}

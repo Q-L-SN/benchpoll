@@ -1,3 +1,5 @@
+import { searchItems } from '../shared/search.js';
+
 function escapeHTML(value) {
     return String(value ?? '')
         .replaceAll('&', '&amp;')
@@ -94,23 +96,7 @@ function normalizedSearch(value) {
 }
 
 function rankedMatches(items, query, label) {
-    const normalizedQuery = normalizedSearch(query);
-    return items
-        .map(item => {
-            const itemLabel = label(item);
-            const normalizedLabel = normalizedSearch(itemLabel);
-            const matchIndex = normalizedQuery ? normalizedLabel.indexOf(normalizedQuery) : 0;
-            return { item, itemLabel, normalizedLabel, matchIndex, startsWith: normalizedLabel.startsWith(normalizedQuery) };
-        })
-        .filter(candidate => candidate.matchIndex >= 0)
-        .sort((left, right) => (
-            Number(right.startsWith) - Number(left.startsWith)
-            || left.matchIndex - right.matchIndex
-            || left.itemLabel.length - right.itemLabel.length
-            || left.itemLabel.localeCompare(right.itemLabel)
-        ))
-        .slice(0, 8)
-        .map(candidate => candidate.item);
+    return searchItems(items, query, label, { limit: 8 });
 }
 
 export { escapeHTML, option, finiteOrNull, integerOrNull, entityKey, sameEntityID, entityLocator, pendingBadge, evaluationScoreBounds, evaluationDisplayScoreBounds, evaluationStoredTargetValue, normalizedConditionName, isLiteralDefaultCondition, normalizedIdentifierKey, normalizedSearch, rankedMatches };

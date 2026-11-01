@@ -1,7 +1,15 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFile } from 'node:fs/promises';
 import { modelScoreScale } from '../public/js/workspace/model-list.js';
 import { scoreModels } from '../ranking-service.js';
+
+test('horizontal score bars do not render standalone zero-reference lines', async () => {
+    for (const path of ['public/js/workspace/model-list.js', 'public/css/ui/workspace.css', 'public/css/site-palette.css']) {
+        const source = await readFile(new URL(`../${path}`, import.meta.url), 'utf8');
+        assert.doesNotMatch(source, /bp-score-zero/, path);
+    }
+});
 
 test('model chart scale includes 0-100 even when empty or all scores are inside it', () => {
     for (const rows of [[], [{ lower: 40, upper: 60 }], [{ lower: 0, upper: 100 }]]) {
@@ -41,4 +49,18 @@ test('missing benchmark scores still contribute 0-100 without clipping known sco
     const scale = modelScoreScale(ranked);
     assert.equal(scale.min, -25);
     assert.equal(scale.max, 125);
+});
+
+test('first-place bar scaling changes only display coordinates in either score mode', () => {
+    const rows = [{ lower: 60, upper: 90, comparable: true }, { lower: -20, upper: 100, comparable: true }];
+    const before = structuredClone(rows);
+    const range = modelScoreScale(rows, { min: -20, max: 100 }, { fillTopBar: true });
+    assert.equal(range.min, -20);
+    assert.equal(range.max, 60);
+    assert.equal(range.barStart, -20);
+    assert.equal(range.position(rows[0].lower), 100);
+    const available = modelScoreScale([{ lower: 75, upper: 75, comparable: true }], { min: 0, max: 100 }, { fillTopBar: true });
+    assert.equal(available.max, 75);
+    assert.equal(available.position(75), 100);
+    assert.deepEqual(rows, before);
 });

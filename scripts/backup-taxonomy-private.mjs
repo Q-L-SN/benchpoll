@@ -1,0 +1,21 @@
+import { spawn } from 'node:child_process';
+import { mkdir, chmod, stat } from 'node:fs/promises';
+import { createWriteStream, createReadStream } from 'node:fs';
+import { createGzip } from 'node:zlib';
+import { pipeline } from 'node:stream/promises';
+import { createHash } from 'node:crypto';
+const directory = '/var/backups/benchpoll';
+await mkdir(directory, { recursive: true, mode: 0o700 });
+const path = `${directory}/pre-taxonomy-private-${new Date().toISOString().replace(/[:.]/g, '-')}.sql.gz`;
+const dump = spawn('mysqldump', ['--single-transaction', '--routines', '--triggers', '--events', '--hex-blob', '--set-gtid-purged=OFF', '-uroot', 'benchmarks']);
+let errorOutput = '';
+dump.stderr.on('data', chunk => { errorOutput += chunk; });
+const completion = new Promise((resolve, reject) => {
+    dump.on('error', reject);
+    dump.on('exit', code => code === 0 ? resolve() : reject(new Error(`mysqldump exit ${code}: ${errorOutput}`)));
+});
+await Promise.all([pipeline(dump.stdout, createGzip({ level: 1 }), createWriteStream(path, { mode: 0o600 })), completion]);
+await chmod(path, 0o600);
+const hash = createHash('sha256');
+for await (const chunk of createReadStream(path)) hash.update(chunk);
+console.log(JSON.stringify({ path, bytes: (await stat(path)).size, sha256: hash.digest('hex') }));

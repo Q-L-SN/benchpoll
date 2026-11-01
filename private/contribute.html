@@ -7,16 +7,18 @@
     <link rel="icon" href="/favicon.ico?v=benchpoll-brand-20260919" sizes="any">
     <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png?v=benchpoll-brand-20260919">
     <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
-    <link rel="stylesheet" href="/css/global.css">
-    <link rel="stylesheet" href="/css/home-v2.css?v=frontend-20260905">
-    <link rel="stylesheet" href="/css/contribute.css?v=merge-20260906">
-    <script src="/js/contribute.js?v=model-parameters-20260912" type="module"></script>
-    <link rel="stylesheet" href="/css/model-comparison.css?v=20260912">
+    <link rel="stylesheet" href="/css/global.css?v=help-popovers-20261008">
+    <link rel="stylesheet" href="/css/home-v2.css?v=fallback-controls-20261009">
+    <link rel="stylesheet" href="/css/contribute.css?v=contribution-catalog-20261028">
+    <script src="/js/contribute.js?v=contribution-catalog-20261028" type="module"></script>
+    <link rel="stylesheet" href="/css/model-comparison.css?v=help-popovers-20261008">
+    <link rel="stylesheet" href="/css/site-palette.css?v=field-spacing-20261013">
+    <link rel="stylesheet" href="/css/typography.css?v=manrope-static-20261007">
 </head>
 <body class="bp-home bp-contribute">
     <global-dialog id="submit-success-dialog" hidden>
         <div slot="title">Submission received</div>
-        <div slot="body">Your contribution is waiting for review. We’ll email the verified address from your GitHub account when the review is complete.</div>
+        <div slot="body">Your contribution is waiting for review. Email notifications are currently unavailable.</div>
         <div slot="actions">
             <global-dialog-action class="dialog-close-button main">Done</global-dialog-action>
         </div>
@@ -35,6 +37,39 @@
             <global-dialog-action class="dialog-close-button main">Got it</global-dialog-action>
         </div>
     </global-dialog>
+    <global-dialog id="contribution-guide-dialog" hidden>
+        <div slot="title">How contribution works</div>
+        <div slot="body" class="contribution-guide">
+            <p class="contribution-guide-intro">Add a published result or report an error. Include a source so reviewers can check it.</p>
+            <nav aria-label="Contribution guide sections"><a href="#guide-start">Start</a><a href="#guide-benchmarks">Benchmarks</a><a href="#guide-scores">Scores</a><a href="#guide-changes">Changes</a><a href="#guide-review">Review</a></nav>
+            <section id="guide-start">
+                <h3>Search first.</h3>
+                <p>Choose an existing model or benchmark. If it is missing, use the add option in the search results, then return to your draft.</p>
+                <p><strong>You do not have to wait for approval.</strong> Your draft can reference your own pending additions.</p>
+            </section>
+            <section id="guide-benchmarks">
+                <h3>Describe what makes the test different.</h3>
+                <p>Add a version to the existing benchmark. Choose a primary version and explain the differences.</p>
+                <p><strong>Model settings are not test versions.</strong> Put harness and reasoning effort with the score instead.</p>
+            </section>
+            <section id="guide-scores">
+                <h3>Report the score, not your interpretation.</h3>
+                <p>Choose the model and version. Enter the published score in its original units. Include the source URL; it covers every row in this submission.</p>
+                <p>Add run settings only if the source provides them. Do not guess.</p>
+                <p>Tests updated from official sources do not accept new manual scores. You can still request a correction. Only the latest successful update counts.</p>
+            </section>
+            <section id="guide-changes">
+                <h3>Say what is wrong.</h3>
+                <p>Change only the incorrect fields. Give a reason for removal or merging duplicates. Requests do not apply immediately.</p>
+            </section>
+            <section id="guide-review">
+                <h3>Submit for review.</h3>
+                <p><strong>Submitted does not mean published.</strong> A reviewer checks the request before it changes public data.</p>
+                <a href="/how-it-works" target="_blank" rel="noopener">How rankings work <i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i></a>
+            </section>
+        </div>
+        <div slot="actions"><global-dialog-action class="dialog-close-button main">Back to form</global-dialog-action></div>
+    </global-dialog>
     <global-dialog id="contribution-account-dialog" class="bp-account-dialog" hidden>
         <div slot="title">Your account</div>
         <div slot="body" class="bp-account-dialog-body">
@@ -46,13 +81,16 @@
                 </span>
             </div>
             <div class="bp-account-operations">
+                <a class="bp-account-action bp-quiet-action" href="/account/privacy" target="_blank" rel="noopener">
+                    <i class="fa-solid fa-shield-halved" aria-hidden="true"></i><span>Privacy &amp; account choices</span>
+                </a>
                 <button id="contribution-account-logout" class="bp-account-action" type="button">
                     <i class="fa-solid fa-arrow-right-from-bracket" aria-hidden="true"></i>
                     <span>Log out</span>
                 </button>
                 <button id="contribution-account-delete" class="bp-account-action danger" type="button">
                     <i class="fa-solid fa-user-xmark" aria-hidden="true"></i>
-                    <span>Delete account</span>
+                    <span>Deactivate account</span>
                 </button>
             </div>
         </div>
@@ -69,43 +107,38 @@
         </div>
     </global-dialog>
     <global-dialog id="contribution-delete-confirm-dialog" hidden>
-        <div slot="title">Delete your BenchPoll account?</div>
-        <div slot="body">This action cannot be undone.</div>
+        <div slot="title">Deactivate your BenchPoll account?</div>
+        <div slot="body">This ends all sessions and removes saved comparison profiles, but retains weights, private categories and review records. Signing in again reactivates the account. For a data-erasure request, see the <a href="/privacy#rights" target="_blank" rel="noopener">Privacy Policy</a>.</div>
         <div slot="actions">
             <global-dialog-action class="dialog-close-button">Cancel</global-dialog-action>
-            <global-dialog-action id="contribution-delete-confirm" class="danger">Delete</global-dialog-action>
+            <global-dialog-action id="contribution-delete-confirm" class="danger">Deactivate</global-dialog-action>
         </div>
     </global-dialog>
 
     <div class="bp-shell">
-        <aside class="bp-sidebar contribution-sidebar" aria-label="Benchmark taxonomy">
+        <aside class="bp-sidebar contribution-sidebar" aria-label="Contribution navigation">
             <a class="bp-brand" href="/" aria-label="BenchPoll home">
                 <img class="bp-brand-lockup" src="/assets/benchpoll-logo.svg" alt="BenchPoll" width="155" height="32">
             </a>
-            <button id="contribution-taxonomy-toggle" class="bp-taxonomy-toggle" type="button" aria-label="Open categories" aria-expanded="false">
+            <button id="contribution-taxonomy-toggle" class="bp-taxonomy-toggle" type="button" aria-label="Open contribution menu" aria-expanded="false">
                 <i class="fa-solid fa-bars" aria-hidden="true"></i>
             </button>
-            <button id="contribution-taxonomy-close" class="bp-taxonomy-close" type="button" aria-label="Close categories">
+            <button id="contribution-taxonomy-close" class="bp-taxonomy-close" type="button" aria-label="Close contribution menu">
                 <i class="fa-solid fa-xmark" aria-hidden="true"></i>
             </button>
 
-            <div class="contribution-tree-heading">
-                <span>Categories</span>
-                <small id="tree-mode-note">Reference only</small>
-            </div>
-            <nav id="contribution-tree" class="bp-taxonomy contribution-tree" aria-label="Categories" aria-disabled="true">
-                <div class="tree-loading">Loading categories...</div>
-            </nav>
-            <section id="contribution-template-picker" class="contribution-template-picker" hidden aria-live="polite"></section>
-
             <div class="bp-sidebar-actions contribution-sidebar-actions">
-                <a class="bp-sidebar-action" href="/">
+                <button id="contribution-back" class="bp-sidebar-action" type="button">
                     <i class="fa-solid fa-arrow-left" aria-hidden="true"></i>
-                    <span>Back to workspace</span>
-                </a>
-                <button id="contribution-help" class="bp-sidebar-action" type="button">
+                    <span>Back</span>
+                </button>
+                <button id="contribution-help" class="bp-sidebar-action" type="button" disabled data-help-action="follow" data-help-text="See what to submit, which source to include, and what happens during review.">
                     <i class="fa-regular fa-circle-question" aria-hidden="true"></i>
                     <span>Contribution guide</span>
+                </button>
+                <button id="contribution-bulk-import" class="bp-sidebar-action" type="button">
+                    <i class="fa-solid fa-file-import" aria-hidden="true"></i>
+                    <span>Request bulk import</span>
                 </button>
                 <a class="bp-sidebar-action" href="/contribute/feedback">
                     <i class="fa-regular fa-message" aria-hidden="true"></i>
@@ -120,34 +153,35 @@
                 </button>
                 <button id="contribution-login" class="bp-login-button" type="button" hidden>
                     <i class="fa-brands fa-github" aria-hidden="true"></i>
-                    <span>Login with GitHub</span>
+                    <span>Sign in with GitHub</span>
                 </button>
             </div>
+            <footer class="bp-sidebar-footer" style="flex-wrap: wrap; row-gap: 8px;">
+                <span aria-label="Copyright 2026 BenchPoll">&copy; 2026</span>
+                <nav aria-label="Legal and social links" style="flex-wrap: wrap; white-space: normal;">
+                    <a href="/terms" target="_blank" rel="noopener">Terms</a>
+                    <a href="/privacy" target="_blank" rel="noopener">Privacy</a>
+                    <a href="/cookies" target="_blank" rel="noopener">Cookies</a>
+                    <a href="/community-guidelines" target="_blank" rel="noopener">Community</a>
+                    <a href="https://x.com/BenchPoll" target="_blank" rel="noopener" aria-label="BenchPoll on X">X</a>
+                </nav>
+            </footer>
         </aside>
-        <button id="contribution-taxonomy-scrim" class="bp-taxonomy-scrim" type="button" aria-label="Close categories"></button>
+        <button id="contribution-taxonomy-scrim" class="bp-taxonomy-scrim" type="button" aria-label="Close contribution menu"></button>
 
         <main class="contribution-workspace">
             <header class="contribution-topbar">
                 <div class="contribution-heading-copy">
-                    <nav class="contribution-breadcrumb" aria-label="Breadcrumb">
-                        <a href="/">Contribute</a>
-                        <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
-                        <span id="contribute-breadcrumb-label">Contribution</span>
-                    </nav>
                     <h1 id="contribute-title">Improve BenchPoll</h1>
-                    <p id="contribute-subtitle">Add evidence that can be reviewed and reproduced.</p>
+                    <p id="contribute-subtitle">Add a published result or suggest a correction.</p>
                 </div>
-                <button id="contribution-page-help" class="quiet-button contribution-help-button" type="button">
-                    <i class="fa-regular fa-circle-question" aria-hidden="true"></i>
-                    <span>How contribution works</span>
-                </button>
             </header>
 
             <section id="entry-missing" class="contribution-message" hidden>
                 <i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i>
                 <div>
-                    <h2>Open a contribution entry point</h2>
-                    <p>Start from a category, benchmark, or model leaderboard so the right context is attached.</p>
+                    <h2>Start from the item you want to change</h2>
+                    <p>Open a benchmark or model and choose Change information. To add something new, use the buttons above the rankings.</p>
                     <a class="primary-button" href="/">Return to BenchPoll</a>
                 </div>
             </section>
@@ -155,11 +189,12 @@
             <section id="auth-missing" class="contribution-message" hidden>
                 <i class="fa-solid fa-lock" aria-hidden="true"></i>
                 <div>
-                    <h2>Log in to contribute</h2>
+                    <h2>Sign in to contribute</h2>
                     <p>Your draft stays in this page. Sign in with GitHub to submit it for review.</p>
+                    <p>Read our <a href="/terms" target="_blank" rel="noopener">Terms</a> and <a href="/privacy" target="_blank" rel="noopener">Privacy Policy</a> before signing in or submitting.</p>
                     <button id="auth-login-button" class="primary-button" type="button">
                         <i class="fa-brands fa-github" aria-hidden="true"></i>
-                        <span>Login with GitHub</span>
+                        <span>Sign in with GitHub</span>
                     </button>
                 </div>
             </section>
@@ -169,7 +204,7 @@
                     <section id="contribution-step" class="contribution-step" aria-live="polite"></section>
                     <aside class="submission-email-notice">
                         <i class="fa-regular fa-envelope" aria-hidden="true"></i>
-                        <span><strong>You’ll receive the review result by email.</strong> We’ll use the verified address linked to your GitHub account.</span>
+                        <span><strong>Your contribution will be reviewed.</strong> Email notifications are currently unavailable.</span>
                     </aside>
                     <footer class="contribution-navigation">
                         <button id="submit-contribution" class="primary-button" type="submit">
@@ -182,7 +217,6 @@
         </main>
     </div>
 
-    <datalist id="known-tag-options"></datalist>
     <datalist id="evaluation-name-options"></datalist>
     <template id="empty-template"></template>
 </body>

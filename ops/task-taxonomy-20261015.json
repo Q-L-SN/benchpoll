@@ -1,0 +1,1721 @@
+{
+  "version": "20261015-management-memory",
+  "defaultCategory": "intelligence",
+  "preservePersonalPies": true,
+  "neutralOption": {
+    "key": "any",
+    "name": "Any"
+  },
+  "categories": [
+    {
+      "key": "intelligence",
+      "parent": null,
+      "name": "Intelligence",
+      "position": 10,
+      "existingID": 54
+    },
+    {
+      "key": "work",
+      "parent": "intelligence",
+      "name": "Professional Work",
+      "position": 10
+    },
+    {
+      "key": "software",
+      "parent": "work",
+      "name": "Software",
+      "position": 10,
+      "existingID": 180
+    },
+    {
+      "key": "office",
+      "parent": "work",
+      "name": "Office & Data",
+      "position": 20,
+      "existingID": 196
+    },
+    {
+      "key": "diagnosis",
+      "parent": "work",
+      "name": "Diagnosis",
+      "position": 30,
+      "existingID": 197
+    },
+    {
+      "key": "law",
+      "parent": "work",
+      "name": "Law",
+      "position": 40,
+      "existingID": 198
+    },
+    {
+      "key": "security",
+      "parent": "work",
+      "name": "Security",
+      "position": 50,
+      "existingID": 199
+    },
+    {
+      "key": "training",
+      "parent": "work",
+      "name": "AI Training",
+      "position": 60
+    },
+    {
+      "key": "teaching",
+      "parent": "work",
+      "name": "Teaching",
+      "position": 70,
+      "existingID": 216
+    },
+    {
+      "key": "service",
+      "parent": "work",
+      "name": "Customer Service",
+      "position": 80,
+      "existingID": 207
+    },
+    {
+      "key": "engineering",
+      "parent": "work",
+      "name": "Engineering",
+      "position": 90,
+      "existingID": 195
+    },
+    {
+      "key": "business",
+      "parent": "intelligence",
+      "name": "Management",
+      "position": 20,
+      "existingID": 202,
+      "previousName": "Business"
+    },
+    {
+      "key": "research",
+      "parent": "intelligence",
+      "name": "Research",
+      "position": 30,
+      "existingID": 167
+    },
+    {
+      "key": "mathematics",
+      "parent": "research",
+      "name": "Mathematics",
+      "position": 10,
+      "existingID": 168
+    },
+    {
+      "key": "physics",
+      "parent": "research",
+      "name": "Physics",
+      "position": 20,
+      "existingID": 169
+    },
+    {
+      "key": "chemistry",
+      "parent": "research",
+      "name": "Chemistry",
+      "position": 30,
+      "existingID": 174
+    },
+    {
+      "key": "biology",
+      "parent": "research",
+      "name": "Biomed",
+      "position": 40,
+      "existingID": 170
+    },
+    {
+      "key": "execution",
+      "parent": "intelligence",
+      "name": "Actions",
+      "position": 40,
+      "existingID": 175
+    },
+    {
+      "key": "computer",
+      "parent": "execution",
+      "name": "Computer",
+      "position": 10,
+      "existingID": 176
+    },
+    {
+      "key": "mobile",
+      "parent": "execution",
+      "name": "Mobile",
+      "position": 20,
+      "existingID": 177
+    },
+    {
+      "key": "robotics",
+      "parent": "execution",
+      "name": "Robotics",
+      "position": 30,
+      "existingID": 178
+    },
+    {
+      "key": "driving",
+      "parent": "execution",
+      "name": "Driving",
+      "position": 40
+    },
+    {
+      "key": "industrial",
+      "parent": "execution",
+      "name": "Industry & Labs",
+      "position": 50,
+      "existingID": 179
+    },
+    {
+      "key": "forecast",
+      "parent": "intelligence",
+      "name": "Forecast & Decide",
+      "position": 50
+    },
+    {
+      "key": "investing",
+      "parent": "forecast",
+      "name": "Live Investing",
+      "position": 10
+    },
+    {
+      "key": "planning",
+      "parent": "intelligence",
+      "name": "Planning",
+      "position": 60,
+      "existingID": 184
+    },
+    {
+      "key": "collaboration",
+      "parent": "intelligence",
+      "name": "Collaboration",
+      "position": 70,
+      "existingID": 204
+    },
+    {
+      "key": "human",
+      "parent": "collaboration",
+      "name": "Human + AI",
+      "position": 10,
+      "existingID": 205
+    },
+    {
+      "key": "multi_agent",
+      "parent": "collaboration",
+      "name": "Multi-Agent",
+      "position": 20,
+      "existingID": 206
+    },
+    {
+      "key": "learning",
+      "parent": "intelligence",
+      "name": "Self-Learning",
+      "position": 80,
+      "existingID": 208
+    },
+    {
+      "key": "retrieval",
+      "parent": "intelligence",
+      "name": "Knowledge & Retrieval",
+      "position": 90,
+      "existingID": 209,
+      "previousName": "Retrieval"
+    },
+    {
+      "key": "culture",
+      "parent": "retrieval",
+      "name": "Culture",
+      "position": 10
+    },
+    {
+      "key": "hallucination",
+      "parent": "intelligence",
+      "name": "Low Hallucination",
+      "position": 100,
+      "existingID": 182
+    },
+    {
+      "key": "long_context",
+      "parent": "intelligence",
+      "name": "Memory & Context",
+      "position": 110,
+      "existingID": 215,
+      "previousName": "Long Context"
+    },
+    {
+      "key": "multimodal",
+      "parent": "intelligence",
+      "name": "Multimodal",
+      "position": 120,
+      "existingID": 210
+    },
+    {
+      "key": "image_understanding",
+      "parent": "multimodal",
+      "name": "Image",
+      "position": 10,
+      "existingID": 211
+    },
+    {
+      "key": "video_understanding",
+      "parent": "multimodal",
+      "name": "Video",
+      "position": 20,
+      "existingID": 212
+    },
+    {
+      "key": "audio_understanding",
+      "parent": "multimodal",
+      "name": "Audio",
+      "position": 30,
+      "existingID": 213
+    },
+    {
+      "key": "live_understanding",
+      "parent": "multimodal",
+      "name": "Live AV",
+      "position": 40,
+      "existingID": 214
+    },
+    {
+      "key": "creation",
+      "parent": null,
+      "name": "Creation",
+      "position": 20,
+      "existingID": 186
+    },
+    {
+      "key": "audiovisual",
+      "parent": "creation",
+      "name": "Media",
+      "position": 10,
+      "existingID": 189
+    },
+    {
+      "key": "image",
+      "parent": "audiovisual",
+      "name": "Image",
+      "position": 10,
+      "existingID": 172
+    },
+    {
+      "key": "video",
+      "parent": "audiovisual",
+      "name": "Video",
+      "position": 20,
+      "existingID": 173
+    },
+    {
+      "key": "audio",
+      "parent": "audiovisual",
+      "name": "Audio",
+      "position": 30,
+      "existingID": 190
+    },
+    {
+      "key": "3d",
+      "parent": "audiovisual",
+      "name": "3D",
+      "position": 40,
+      "existingID": 191
+    },
+    {
+      "key": "interfaces",
+      "parent": "audiovisual",
+      "name": "Interfaces",
+      "position": 50,
+      "existingID": 192
+    },
+    {
+      "key": "communication",
+      "parent": "creation",
+      "name": "Communication",
+      "position": 20,
+      "existingID": 193
+    },
+    {
+      "key": "clarity",
+      "parent": "communication",
+      "name": "Clarity",
+      "position": 10,
+      "existingID": 217
+    },
+    {
+      "key": "emotional",
+      "parent": "communication",
+      "name": "EQ",
+      "position": 20,
+      "existingID": 194
+    },
+    {
+      "key": "support",
+      "parent": "communication",
+      "name": "Emotional Support",
+      "position": 30
+    },
+    {
+      "key": "language_writing",
+      "parent": "creation",
+      "name": "Language & Writing",
+      "position": 30,
+      "existingID": 218
+    },
+    {
+      "key": "writing",
+      "parent": "language_writing",
+      "name": "Writing",
+      "position": 10,
+      "existingID": 187
+    },
+    {
+      "key": "language",
+      "parent": "language_writing",
+      "name": "Language",
+      "position": 20,
+      "existingID": 219
+    },
+    {
+      "key": "agi",
+      "parent": null,
+      "name": "AGI",
+      "position": 30,
+      "existingID": 166
+    }
+  ],
+  "dimensions": {
+    "software": [
+      {
+        "key": "language_framework",
+        "name": "Language / Framework",
+        "options": [
+          {
+            "key": "python",
+            "name": "Python"
+          },
+          {
+            "key": "javascript",
+            "name": "JavaScript"
+          },
+          {
+            "key": "typescript",
+            "name": "TypeScript"
+          },
+          {
+            "key": "java",
+            "name": "Java"
+          },
+          {
+            "key": "c",
+            "name": "C"
+          },
+          {
+            "key": "cpp",
+            "name": "C++"
+          },
+          {
+            "key": "csharp",
+            "name": "C#"
+          },
+          {
+            "key": "go",
+            "name": "Go"
+          },
+          {
+            "key": "rust",
+            "name": "Rust"
+          },
+          {
+            "key": "swift",
+            "name": "Swift"
+          },
+          {
+            "key": "kotlin",
+            "name": "Kotlin"
+          },
+          {
+            "key": "php",
+            "name": "PHP"
+          },
+          {
+            "key": "ruby",
+            "name": "Ruby"
+          },
+          {
+            "key": "scala",
+            "name": "Scala"
+          },
+          {
+            "key": "r",
+            "name": "R"
+          },
+          {
+            "key": "julia",
+            "name": "Julia"
+          },
+          {
+            "key": "dart",
+            "name": "Dart"
+          },
+          {
+            "key": "lua",
+            "name": "Lua"
+          },
+          {
+            "key": "sql",
+            "name": "SQL"
+          },
+          {
+            "key": "bash",
+            "name": "Bash"
+          },
+          {
+            "key": "powershell",
+            "name": "PowerShell"
+          },
+          {
+            "key": "matlab",
+            "name": "MATLAB"
+          },
+          {
+            "key": "haskell",
+            "name": "Haskell"
+          },
+          {
+            "key": "elixir",
+            "name": "Elixir"
+          },
+          {
+            "key": "ocaml",
+            "name": "OCaml"
+          },
+          {
+            "key": "react",
+            "name": "React"
+          },
+          {
+            "key": "nextjs",
+            "name": "Next.js"
+          },
+          {
+            "key": "vue",
+            "name": "Vue"
+          },
+          {
+            "key": "nuxt",
+            "name": "Nuxt"
+          },
+          {
+            "key": "angular",
+            "name": "Angular"
+          },
+          {
+            "key": "svelte",
+            "name": "Svelte"
+          },
+          {
+            "key": "sveltekit",
+            "name": "SvelteKit"
+          },
+          {
+            "key": "express",
+            "name": "Express"
+          },
+          {
+            "key": "nestjs",
+            "name": "NestJS"
+          },
+          {
+            "key": "django",
+            "name": "Django"
+          },
+          {
+            "key": "flask",
+            "name": "Flask"
+          },
+          {
+            "key": "fastapi",
+            "name": "FastAPI"
+          },
+          {
+            "key": "spring",
+            "name": "Spring"
+          },
+          {
+            "key": "spring_boot",
+            "name": "Spring Boot"
+          },
+          {
+            "key": "aspnet_core",
+            "name": "ASP.NET Core"
+          },
+          {
+            "key": "laravel",
+            "name": "Laravel"
+          },
+          {
+            "key": "rails",
+            "name": "Ruby on Rails"
+          },
+          {
+            "key": "flutter",
+            "name": "Flutter"
+          },
+          {
+            "key": "react_native",
+            "name": "React Native"
+          },
+          {
+            "key": "swiftui",
+            "name": "SwiftUI"
+          },
+          {
+            "key": "jetpack_compose",
+            "name": "Jetpack Compose"
+          },
+          {
+            "key": "pytorch",
+            "name": "PyTorch"
+          },
+          {
+            "key": "tensorflow",
+            "name": "TensorFlow"
+          },
+          {
+            "key": "jax",
+            "name": "JAX"
+          }
+        ]
+      }
+    ],
+    "engineering": [
+      {
+        "key": "tool_language",
+        "name": "Tool / Language",
+        "options": [
+          {
+            "key": "python",
+            "name": "Python"
+          },
+          {
+            "key": "cpp",
+            "name": "C++"
+          },
+          {
+            "key": "julia",
+            "name": "Julia"
+          },
+          {
+            "key": "matlab",
+            "name": "MATLAB"
+          },
+          {
+            "key": "modelica",
+            "name": "Modelica"
+          },
+          {
+            "key": "vhdl",
+            "name": "VHDL"
+          },
+          {
+            "key": "verilog",
+            "name": "Verilog"
+          },
+          {
+            "key": "systemverilog",
+            "name": "SystemVerilog"
+          },
+          {
+            "key": "spice",
+            "name": "SPICE"
+          },
+          {
+            "key": "openscad",
+            "name": "OpenSCAD"
+          },
+          {
+            "key": "freecad",
+            "name": "FreeCAD"
+          },
+          {
+            "key": "opencascade",
+            "name": "Open CASCADE"
+          },
+          {
+            "key": "simulink",
+            "name": "Simulink"
+          },
+          {
+            "key": "comsol",
+            "name": "COMSOL"
+          },
+          {
+            "key": "ansys",
+            "name": "Ansys"
+          },
+          {
+            "key": "solidworks",
+            "name": "SOLIDWORKS"
+          },
+          {
+            "key": "autocad",
+            "name": "AutoCAD"
+          },
+          {
+            "key": "fusion",
+            "name": "Autodesk Fusion"
+          },
+          {
+            "key": "kicad",
+            "name": "KiCad"
+          },
+          {
+            "key": "altium",
+            "name": "Altium Designer"
+          }
+        ]
+      }
+    ],
+    "computer": [
+      {
+        "key": "operating_system",
+        "name": "OS",
+        "options": [
+          {
+            "key": "windows",
+            "name": "Windows"
+          },
+          {
+            "key": "macos",
+            "name": "macOS"
+          },
+          {
+            "key": "linux",
+            "name": "Linux"
+          }
+        ]
+      }
+    ],
+    "mobile": [
+      {
+        "key": "operating_system",
+        "name": "OS",
+        "options": [
+          {
+            "key": "android",
+            "name": "Android"
+          }
+        ]
+      }
+    ],
+    "image_understanding": [
+      {
+        "key": "count",
+        "name": "Count",
+        "options": [
+          {
+            "key": "single",
+            "name": "Single"
+          },
+          {
+            "key": "multiple",
+            "name": "Multiple"
+          }
+        ]
+      },
+      {
+        "key": "task",
+        "name": "Task",
+        "options": [
+          {
+            "key": "ocr",
+            "name": "Text extraction"
+          }
+        ]
+      }
+    ],
+    "video_understanding": [
+      {
+        "key": "count",
+        "name": "Count",
+        "options": [
+          {
+            "key": "single",
+            "name": "Single"
+          },
+          {
+            "key": "multiple",
+            "name": "Multiple"
+          }
+        ]
+      },
+      {
+        "key": "task",
+        "name": "Task",
+        "options": [
+          {
+            "key": "accessibility",
+            "name": "Accessibility"
+          }
+        ]
+      }
+    ],
+    "audio_understanding": [
+      {
+        "key": "task",
+        "name": "Task",
+        "options": [
+          {
+            "key": "transcription",
+            "name": "Transcription"
+          }
+        ]
+      }
+    ],
+    "live_understanding": [
+      {
+        "key": "task",
+        "name": "Task",
+        "options": [
+          {
+            "key": "transcription",
+            "name": "Transcription"
+          },
+          {
+            "key": "accessibility",
+            "name": "Accessibility"
+          }
+        ]
+      }
+    ],
+    "image": [
+      {
+        "key": "realtime",
+        "name": "Real-time",
+        "options": [
+          {
+            "key": "no",
+            "name": "No"
+          },
+          {
+            "key": "yes",
+            "name": "Yes"
+          }
+        ]
+      },
+      {
+        "key": "output",
+        "name": "Output",
+        "options": [
+          {
+            "key": "bitmap",
+            "name": "Bitmap"
+          },
+          {
+            "key": "vector",
+            "name": "Vector"
+          }
+        ]
+      },
+      {
+        "key": "reference_image",
+        "name": "Reference Image",
+        "options": [
+          {
+            "key": "none",
+            "name": "None"
+          },
+          {
+            "key": "single",
+            "name": "Single"
+          },
+          {
+            "key": "multiple",
+            "name": "Multiple"
+          }
+        ]
+      }
+    ],
+    "video": [
+      {
+        "key": "realtime",
+        "name": "Real-time",
+        "options": [
+          {
+            "key": "no",
+            "name": "No"
+          },
+          {
+            "key": "yes",
+            "name": "Yes"
+          }
+        ]
+      },
+      {
+        "key": "output",
+        "name": "Output",
+        "options": [
+          {
+            "key": "finished_video",
+            "name": "Finished video"
+          },
+          {
+            "key": "project_file",
+            "name": "Project file"
+          }
+        ]
+      },
+      {
+        "key": "reference_video",
+        "name": "Reference Video",
+        "options": [
+          {
+            "key": "none",
+            "name": "None"
+          },
+          {
+            "key": "present",
+            "name": "Present"
+          }
+        ]
+      },
+      {
+        "key": "reference_image",
+        "name": "Reference Image",
+        "options": [
+          {
+            "key": "none",
+            "name": "None"
+          },
+          {
+            "key": "present",
+            "name": "Present"
+          }
+        ]
+      }
+    ],
+    "audio": [
+      {
+        "key": "realtime",
+        "name": "Real-time",
+        "options": [
+          {
+            "key": "no",
+            "name": "No"
+          },
+          {
+            "key": "yes",
+            "name": "Yes"
+          }
+        ]
+      }
+    ],
+    "3d": [
+      {
+        "key": "reference_content",
+        "name": "Reference",
+        "options": [
+          {
+            "key": "none",
+            "name": "None"
+          },
+          {
+            "key": "present",
+            "name": "Present"
+          }
+        ]
+      }
+    ],
+    "interfaces": [
+      {
+        "key": "reference_content",
+        "name": "Reference",
+        "options": [
+          {
+            "key": "none",
+            "name": "None"
+          },
+          {
+            "key": "present",
+            "name": "Present"
+          }
+        ]
+      }
+    ],
+    "language": [
+      {
+        "key": "language",
+        "name": "Language",
+        "options": [
+          {
+            "key": "aa",
+            "name": "aa"
+          },
+          {
+            "key": "ab",
+            "name": "ab"
+          },
+          {
+            "key": "ae",
+            "name": "ae"
+          },
+          {
+            "key": "af",
+            "name": "Afrikaans"
+          },
+          {
+            "key": "ak",
+            "name": "Akan"
+          },
+          {
+            "key": "tw",
+            "name": "Akan"
+          },
+          {
+            "key": "sq",
+            "name": "Albanian"
+          },
+          {
+            "key": "am",
+            "name": "Amharic"
+          },
+          {
+            "key": "ar",
+            "name": "Arabic"
+          },
+          {
+            "key": "an",
+            "name": "Aragonese"
+          },
+          {
+            "key": "hy",
+            "name": "Armenian"
+          },
+          {
+            "key": "as",
+            "name": "Assamese"
+          },
+          {
+            "key": "av",
+            "name": "av"
+          },
+          {
+            "key": "ay",
+            "name": "Aymara"
+          },
+          {
+            "key": "az",
+            "name": "Azerbaijani"
+          },
+          {
+            "key": "ba",
+            "name": "ba"
+          },
+          {
+            "key": "bm",
+            "name": "Bambara"
+          },
+          {
+            "key": "bn",
+            "name": "Bangla"
+          },
+          {
+            "key": "eu",
+            "name": "Basque"
+          },
+          {
+            "key": "be",
+            "name": "Belarusian"
+          },
+          {
+            "key": "bh",
+            "name": "Bhojpuri"
+          },
+          {
+            "key": "bi",
+            "name": "bi"
+          },
+          {
+            "key": "bo",
+            "name": "bo"
+          },
+          {
+            "key": "bs",
+            "name": "Bosnian"
+          },
+          {
+            "key": "br",
+            "name": "Breton"
+          },
+          {
+            "key": "bg",
+            "name": "Bulgarian"
+          },
+          {
+            "key": "my",
+            "name": "Burmese"
+          },
+          {
+            "key": "ca",
+            "name": "Catalan"
+          },
+          {
+            "key": "ce",
+            "name": "ce"
+          },
+          {
+            "key": "ch",
+            "name": "ch"
+          },
+          {
+            "key": "zh",
+            "name": "Chinese"
+          },
+          {
+            "key": "co",
+            "name": "Corsican"
+          },
+          {
+            "key": "cr",
+            "name": "cr"
+          },
+          {
+            "key": "hr",
+            "name": "Croatian"
+          },
+          {
+            "key": "cu",
+            "name": "cu"
+          },
+          {
+            "key": "cv",
+            "name": "cv"
+          },
+          {
+            "key": "cs",
+            "name": "Czech"
+          },
+          {
+            "key": "da",
+            "name": "Danish"
+          },
+          {
+            "key": "dv",
+            "name": "Divehi"
+          },
+          {
+            "key": "nl",
+            "name": "Dutch"
+          },
+          {
+            "key": "dz",
+            "name": "dz"
+          },
+          {
+            "key": "en",
+            "name": "English"
+          },
+          {
+            "key": "eo",
+            "name": "Esperanto"
+          },
+          {
+            "key": "et",
+            "name": "Estonian"
+          },
+          {
+            "key": "ee",
+            "name": "Ewe"
+          },
+          {
+            "key": "fo",
+            "name": "Faroese"
+          },
+          {
+            "key": "ff",
+            "name": "ff"
+          },
+          {
+            "key": "tl",
+            "name": "Filipino"
+          },
+          {
+            "key": "fi",
+            "name": "Finnish"
+          },
+          {
+            "key": "fj",
+            "name": "fj"
+          },
+          {
+            "key": "fr",
+            "name": "French"
+          },
+          {
+            "key": "gl",
+            "name": "Galician"
+          },
+          {
+            "key": "lg",
+            "name": "Ganda"
+          },
+          {
+            "key": "ka",
+            "name": "Georgian"
+          },
+          {
+            "key": "de",
+            "name": "German"
+          },
+          {
+            "key": "el",
+            "name": "Greek"
+          },
+          {
+            "key": "gn",
+            "name": "Guarani"
+          },
+          {
+            "key": "gu",
+            "name": "Gujarati"
+          },
+          {
+            "key": "gv",
+            "name": "gv"
+          },
+          {
+            "key": "ht",
+            "name": "Haitian Creole"
+          },
+          {
+            "key": "ha",
+            "name": "Hausa"
+          },
+          {
+            "key": "he",
+            "name": "Hebrew"
+          },
+          {
+            "key": "hi",
+            "name": "Hindi"
+          },
+          {
+            "key": "ho",
+            "name": "ho"
+          },
+          {
+            "key": "hu",
+            "name": "Hungarian"
+          },
+          {
+            "key": "hz",
+            "name": "hz"
+          },
+          {
+            "key": "is",
+            "name": "Icelandic"
+          },
+          {
+            "key": "ie",
+            "name": "ie"
+          },
+          {
+            "key": "ig",
+            "name": "Igbo"
+          },
+          {
+            "key": "ii",
+            "name": "ii"
+          },
+          {
+            "key": "ik",
+            "name": "ik"
+          },
+          {
+            "key": "id",
+            "name": "Indonesian"
+          },
+          {
+            "key": "ia",
+            "name": "Interlingua"
+          },
+          {
+            "key": "io",
+            "name": "io"
+          },
+          {
+            "key": "ga",
+            "name": "Irish"
+          },
+          {
+            "key": "it",
+            "name": "Italian"
+          },
+          {
+            "key": "iu",
+            "name": "iu"
+          },
+          {
+            "key": "ja",
+            "name": "Japanese"
+          },
+          {
+            "key": "jv",
+            "name": "Javanese"
+          },
+          {
+            "key": "kn",
+            "name": "Kannada"
+          },
+          {
+            "key": "kk",
+            "name": "Kazakh"
+          },
+          {
+            "key": "kg",
+            "name": "kg"
+          },
+          {
+            "key": "km",
+            "name": "Khmer"
+          },
+          {
+            "key": "ki",
+            "name": "ki"
+          },
+          {
+            "key": "rw",
+            "name": "Kinyarwanda"
+          },
+          {
+            "key": "kj",
+            "name": "kj"
+          },
+          {
+            "key": "kl",
+            "name": "kl"
+          },
+          {
+            "key": "ko",
+            "name": "Korean"
+          },
+          {
+            "key": "kr",
+            "name": "kr"
+          },
+          {
+            "key": "ks",
+            "name": "ks"
+          },
+          {
+            "key": "ku",
+            "name": "Kurdish"
+          },
+          {
+            "key": "kv",
+            "name": "kv"
+          },
+          {
+            "key": "kw",
+            "name": "kw"
+          },
+          {
+            "key": "ky",
+            "name": "Kyrgyz"
+          },
+          {
+            "key": "lo",
+            "name": "Lao"
+          },
+          {
+            "key": "la",
+            "name": "Latin"
+          },
+          {
+            "key": "lv",
+            "name": "Latvian"
+          },
+          {
+            "key": "li",
+            "name": "li"
+          },
+          {
+            "key": "ln",
+            "name": "Lingala"
+          },
+          {
+            "key": "lt",
+            "name": "Lithuanian"
+          },
+          {
+            "key": "lu",
+            "name": "lu"
+          },
+          {
+            "key": "lb",
+            "name": "Luxembourgish"
+          },
+          {
+            "key": "mk",
+            "name": "Macedonian"
+          },
+          {
+            "key": "mg",
+            "name": "Malagasy"
+          },
+          {
+            "key": "ms",
+            "name": "Malay"
+          },
+          {
+            "key": "ml",
+            "name": "Malayalam"
+          },
+          {
+            "key": "mt",
+            "name": "Maltese"
+          },
+          {
+            "key": "mi",
+            "name": "Māori"
+          },
+          {
+            "key": "mr",
+            "name": "Marathi"
+          },
+          {
+            "key": "mh",
+            "name": "mh"
+          },
+          {
+            "key": "mn",
+            "name": "Mongolian"
+          },
+          {
+            "key": "na",
+            "name": "na"
+          },
+          {
+            "key": "nd",
+            "name": "nd"
+          },
+          {
+            "key": "ne",
+            "name": "Nepali"
+          },
+          {
+            "key": "ng",
+            "name": "ng"
+          },
+          {
+            "key": "no",
+            "name": "Norwegian"
+          },
+          {
+            "key": "nb",
+            "name": "Norwegian Bokmål"
+          },
+          {
+            "key": "nn",
+            "name": "Norwegian Nynorsk"
+          },
+          {
+            "key": "nr",
+            "name": "nr"
+          },
+          {
+            "key": "nv",
+            "name": "nv"
+          },
+          {
+            "key": "ny",
+            "name": "Nyanja"
+          },
+          {
+            "key": "oc",
+            "name": "Occitan"
+          },
+          {
+            "key": "or",
+            "name": "Odia"
+          },
+          {
+            "key": "oj",
+            "name": "oj"
+          },
+          {
+            "key": "om",
+            "name": "Oromo"
+          },
+          {
+            "key": "os",
+            "name": "os"
+          },
+          {
+            "key": "ps",
+            "name": "Pashto"
+          },
+          {
+            "key": "fa",
+            "name": "Persian"
+          },
+          {
+            "key": "pi",
+            "name": "pi"
+          },
+          {
+            "key": "pl",
+            "name": "Polish"
+          },
+          {
+            "key": "pt",
+            "name": "Portuguese"
+          },
+          {
+            "key": "pa",
+            "name": "Punjabi"
+          },
+          {
+            "key": "qu",
+            "name": "Quechua"
+          },
+          {
+            "key": "rn",
+            "name": "rn"
+          },
+          {
+            "key": "ro",
+            "name": "Romanian"
+          },
+          {
+            "key": "rm",
+            "name": "Romansh"
+          },
+          {
+            "key": "ru",
+            "name": "Russian"
+          },
+          {
+            "key": "sm",
+            "name": "Samoan"
+          },
+          {
+            "key": "sa",
+            "name": "Sanskrit"
+          },
+          {
+            "key": "sc",
+            "name": "sc"
+          },
+          {
+            "key": "gd",
+            "name": "Scottish Gaelic"
+          },
+          {
+            "key": "se",
+            "name": "se"
+          },
+          {
+            "key": "sr",
+            "name": "Serbian"
+          },
+          {
+            "key": "sg",
+            "name": "sg"
+          },
+          {
+            "key": "sn",
+            "name": "Shona"
+          },
+          {
+            "key": "sd",
+            "name": "Sindhi"
+          },
+          {
+            "key": "si",
+            "name": "Sinhala"
+          },
+          {
+            "key": "sk",
+            "name": "Slovak"
+          },
+          {
+            "key": "sl",
+            "name": "Slovenian"
+          },
+          {
+            "key": "so",
+            "name": "Somali"
+          },
+          {
+            "key": "st",
+            "name": "Southern Sotho"
+          },
+          {
+            "key": "es",
+            "name": "Spanish"
+          },
+          {
+            "key": "ss",
+            "name": "ss"
+          },
+          {
+            "key": "su",
+            "name": "Sundanese"
+          },
+          {
+            "key": "sw",
+            "name": "Swahili"
+          },
+          {
+            "key": "sv",
+            "name": "Swedish"
+          },
+          {
+            "key": "tg",
+            "name": "Tajik"
+          },
+          {
+            "key": "ta",
+            "name": "Tamil"
+          },
+          {
+            "key": "tt",
+            "name": "Tatar"
+          },
+          {
+            "key": "te",
+            "name": "Telugu"
+          },
+          {
+            "key": "th",
+            "name": "Thai"
+          },
+          {
+            "key": "ti",
+            "name": "Tigrinya"
+          },
+          {
+            "key": "to",
+            "name": "Tongan"
+          },
+          {
+            "key": "ts",
+            "name": "Tsonga"
+          },
+          {
+            "key": "tn",
+            "name": "Tswana"
+          },
+          {
+            "key": "tr",
+            "name": "Turkish"
+          },
+          {
+            "key": "tk",
+            "name": "Turkmen"
+          },
+          {
+            "key": "ty",
+            "name": "ty"
+          },
+          {
+            "key": "uk",
+            "name": "Ukrainian"
+          },
+          {
+            "key": "ur",
+            "name": "Urdu"
+          },
+          {
+            "key": "ug",
+            "name": "Uyghur"
+          },
+          {
+            "key": "uz",
+            "name": "Uzbek"
+          },
+          {
+            "key": "ve",
+            "name": "ve"
+          },
+          {
+            "key": "vi",
+            "name": "Vietnamese"
+          },
+          {
+            "key": "vo",
+            "name": "vo"
+          },
+          {
+            "key": "wa",
+            "name": "Walloon"
+          },
+          {
+            "key": "cy",
+            "name": "Welsh"
+          },
+          {
+            "key": "fy",
+            "name": "Western Frisian"
+          },
+          {
+            "key": "wo",
+            "name": "Wolof"
+          },
+          {
+            "key": "xh",
+            "name": "Xhosa"
+          },
+          {
+            "key": "yi",
+            "name": "Yiddish"
+          },
+          {
+            "key": "yo",
+            "name": "Yoruba"
+          },
+          {
+            "key": "za",
+            "name": "za"
+          },
+          {
+            "key": "zu",
+            "name": "Zulu"
+          }
+        ]
+      },
+      {
+        "key": "task",
+        "name": "Task",
+        "options": [
+          {
+            "key": "translation_target",
+            "name": "Translation target"
+          }
+        ]
+      }
+    ]
+  },
+  "retiredCategories": [
+    {
+      "ID": 183,
+      "name": "Logic"
+    },
+    {
+      "ID": 200,
+      "name": "Money"
+    },
+    {
+      "ID": 201,
+      "name": "Finance"
+    },
+    {
+      "ID": 203,
+      "name": "Manual Work"
+    },
+    {
+      "ID": 235,
+      "name": "Real World"
+    }
+  ]
+}

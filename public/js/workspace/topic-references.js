@@ -1,0 +1,214 @@
+import { createAction } from '../shared/ui-components.js';
+import { orderedScenes, sceneURL, searchTopicGroups } from '../navigation/scenes.js';
+import { isTopicReference, referenceLabel, topicLabelText, renderTopicLabel } from '../shared/topic-label.js';
+
+export { isTopicReference, referenceLabel };
+export function topicReferenceError(error) {
+    return {
+        topic_reference_cycle: 'This reference would create a circular dependency. Remove it before saving.',
+        topic_reference_depth_limit: 'This reference chain is too deep. Choose a more direct topic.',
+        topic_reference_size_limit: 'This reference graph is too large. Remove a reference before saving.',
+        topic_reference_not_found: 'A referenced topic is no longer available. Remove it or choose another.',
+        private_topic_reference_not_public: 'Private topics cannot be referenced by public-topic weights.'
+    }[error?.payload?.error] || '';
+}
+const node = (tag, className, text) => {
+    const element = document.createElement(tag); element.className = className;
+    if (text !== undefined) element.textContent = text;
+    return element;
+};
+
+export function referenceGroups(targets, query = '') {
+    const groups = new Map();
+    for (const target of targets) {
+        const key = Number(target.categoryID);
+        if (!groups.has(key)) groups.set(key, { categoryID: key, name: target.topicName || target.name,
+            isPrivate: target.isPrivate === true, targets: [] });
+        groups.get(key).targets.push(target);
+    }
+    const topics = [...groups.values()].map(group => {
+        // A scene-bearing topic has no selectable root, even if an older response includes it.
+        const concrete = group.targets.some(target => target.sceneID != null)
+            ? group.targets.filter(target => target.sceneID != null) : group.targets;
+        const hasScenes = concrete.some(target => target.sceneID != null);
+        return { ...group, targets: concrete, hasScenes, description: hasScenes ? '' : concrete[0]?.description,
+            scenes: hasScenes ? concrete.map(target => ({ ...target, name: target.sceneName, target })) : [] };
+    });
+    return searchTopicGroups(topics, query).map(({ topic, scenes, topicMatch }) => ({ ...topic,
+        collapsed: topic.hasScenes && topicMatch && !scenes.length,
+        targets: topic.hasScenes ? (scenes.length ? scenes : orderedScenes(topic.scenes)).map(scene => scene.target) : topic.targets }));
+}
+
+export function validateReferenceTargets(payload) {
+    if (!Array.isArray(payload?.targets)) throw new TypeError('Invalid topic reference targets');
+    const ids = new Set();
+    for (const item of payload.targets) {
+        if (!Number.isSafeInteger(item?.contextID) || item.contextID < 1
+            || !Number.isSafeInteger(item.categoryID) || item.categoryID < 1
+            || (item.sceneID != null && item.sceneID !== item.contextID)
+            || typeof item.name !== 'string' || !item.name.trim()
+            || typeof item.topicName !== 'string' || typeof item.isPrivate !== 'boolean'
+            || typeof item.hasWeights !== 'boolean' || !sceneURL(item.url, item.sceneID)
+            || ids.has(item.contextID)) throw new TypeError('Invalid topic reference target');
+        ids.add(item.contextID);
+    }
+    return payload.targets;
+}
+
+export function referenceIssueMessage(issue) {
+    const reasons = {
+        cycle: 'Circular reference', circular: 'Circular reference', reference_cycle: 'Circular reference',
+        empty: 'No weights in the referenced topic', empty_target: 'No weights in the referenced topic',
+        missing: 'Referenced topic no longer exists', missing_target: 'Referenced topic no longer exists',
+        inaccessible: 'Referenced topic is not accessible', private: 'Private topic cannot enter public weights',
+        private_target: 'Private topic cannot enter public weights', unavailable: 'Referenced topic is unavailable',
+        depth_limit: 'Reference chain exceeds the depth limit', size_limit: 'Reference graph exceeds the size limit'
+    };
+    return `${issue.name || 'Referenced topic'}: ${reasons[issue.reason] || 'Reference could not be resolved'}.`;
+}
+
+export function createTopicReferencePicker({ request, getScope, getCurrentContextID, getEntries, isPrivate, onAdd }) {
+    const dialog = node('dialog', 'bp-reference-dialog'); dialog.id = 'topic-reference-dialog';
+    dialog.setAttribute('aria-labelledby', 'topic-reference-title');
+    const header = node('header', 'bp-reference-header');
+    const title = node('h2', '', 'Add a topic'); title.id = 'topic-reference-title';
+    const close = createAction({ label: 'Close topic selector', icon: 'fa-solid fa-xmark', iconOnly: true, variant: 'quiet' });
+    header.append(title, close);
+    const search = node('input', 'bp-ui-input'); search.type = 'search'; search.placeholder = 'Search topics or scenes';
+    search.setAttribute('aria-label', 'Search topics or scenes'); search.maxLength = 120;
+    const back = createAction({ label: 'All topics', icon: 'fa-solid fa-arrow-left', variant: 'quiet' });
+    back.hidden = true;
+    const status = node('p', 'bp-reference-status'); status.setAttribute('role', 'status');
+    const list = node('div', 'bp-reference-options');
+    dialog.append(header, search, back, status, list); document.body.append(dialog);
+    let targets = [], scope = '', selectedCategory = null, controller = null, sequence = 0, returnFocus = null, adding = false;
+    const valid = () => dialog.open && scope === getScope();
+    function hide() { ++sequence; controller?.abort(); dialog.close(); returnFocus?.focus({ preventScroll: true }); }
+    close.addEventListener('click', hide);
+    dialog.addEventListener('cancel', () => { ++sequence; controller?.abort(); });
+    dialog.addEventListener('close', () => { ++sequence; controller?.abort(); });
+    back.addEventListener('click', () => { selectedCategory = null; render(); search.focus(); });
+    search.addEventListener('input', () => { selectedCategory = null; render(); });
+
+    function appendTarget(target) {
+        const row = node('div', 'bp-reference-option'); row.dataset.contextId = String(target.contextID);
+        const copy = node('div', 'bp-reference-option-copy');
+        const name = node('strong', '');
+        renderTopicLabel(name, topicLabelText(target));
+        copy.append(name);
+        if (target.description) copy.append(node('small', '', target.description));
+        const alreadyAdded = getEntries().some(entry => Number(entry.conditionID) === -target.contextID);
+        const unavailable = target.contextID === getCurrentContextID() ? 'Cannot reference this same scene or topic'
+            : target.isPrivate && !isPrivate() ? 'Private topics cannot enter public-topic weights'
+                : !target.hasWeights ? 'This topic has no weights yet' : '';
+        const add = createAction({ label: alreadyAdded ? 'Added' : 'Add', icon: alreadyAdded ? 'fa-solid fa-check' : 'fa-solid fa-plus', variant: 'quiet' });
+        add.disabled = Boolean(alreadyAdded || unavailable || adding);
+        if (unavailable) { row.dataset.tooltip = unavailable; row.tabIndex = 0; }
+        add.addEventListener('click', async () => {
+            if (!valid() || adding) return;
+            adding = true; render();
+            try {
+                if (await onAdd({ ...target, name: referenceLabel(target), ID: -target.contextID,
+                    conditionID: -target.contextID, referenceContextID: target.contextID, type: 'topic' }) && valid()) hide();
+                else if (valid()) status.textContent = 'Could not add this reference. Check your current weights.';
+            } catch (error) { if (valid()) status.textContent = error.message || 'Could not add this reference.'; }
+            finally { adding = false; if (valid()) render(); }
+        });
+        row.append(copy, add); list.append(row);
+    }
+
+    function render() {
+        if (!valid()) return;
+        const groups = referenceGroups(targets, search.value);
+        list.replaceChildren(); back.hidden = selectedCategory === null;
+        title.textContent = selectedCategory ? groups.find(group => group.categoryID === selectedCategory)?.name || 'Choose a scene' : 'Add a topic';
+        status.textContent = selectedCategory ? 'Choose a scene to reference.' : '';
+        for (const group of groups) {
+            if (selectedCategory && group.categoryID !== selectedCategory) continue;
+            if (group.collapsed && !selectedCategory) {
+                const choose = createAction({ label: group.name, icon: 'fa-solid fa-chevron-right', variant: 'quiet', className: 'bp-reference-topic' });
+                choose.setAttribute('aria-label', group.name);
+                renderTopicLabel(choose.querySelector('span'), topicLabelText(group));
+                choose.setAttribute('aria-expanded', 'false');
+                choose.addEventListener('click', () => {
+                    selectedCategory = group.categoryID; render(); list.querySelector('button:not(:disabled)')?.focus();
+                });
+                list.append(choose);
+            } else group.targets.forEach(appendTarget);
+        }
+        if (!list.children.length) status.textContent = 'No matching topics or scenes.';
+    }
+
+    return {
+        async open(trigger) {
+            controller?.abort(); controller = new globalThis.AbortController();
+            const current = ++sequence; scope = getScope(); targets = []; selectedCategory = null; adding = false;
+            returnFocus = trigger; search.value = ''; list.replaceChildren(); back.hidden = true;
+            title.textContent = 'Add a topic'; status.textContent = 'Loading topics...'; dialog.showModal(); search.focus();
+            try {
+                const result = await request({}, { signal: controller.signal });
+                if (current !== sequence || !valid()) return;
+                targets = validateReferenceTargets(result).filter(target => isPrivate() || !target.isPrivate); render();
+            } catch (error) {
+                if (current !== sequence || !valid() || error.name === 'AbortError') return;
+                status.textContent = 'Could not load topics.';
+                const retry = createAction({ label: 'Retry', icon: 'fa-solid fa-rotate-right', variant: 'quiet' });
+                retry.addEventListener('click', () => { hide(); void this.open(trigger); }); list.append(retry);
+            }
+        },
+        close: hide,
+        refresh() { if (dialog.open && !valid()) hide(); else render(); }
+    };
+}
+
+export function renderTopicReferences(host, { entries, issues = [], effectiveEntries, dirty = false, personal, selectedID, onSelect, onRemove }) {
+    const expanded = host.querySelector('details')?.open === true;
+    host.replaceChildren();
+    const references = entries.filter(isTopicReference);
+    host.hidden = !references.length && !issues.length;
+    for (const entry of references) {
+        const row = node('div', 'bp-reference-weight'); row.dataset.referenceId = String(entry.referenceContextID ?? -entry.conditionID);
+        row.classList.toggle('is-selected', Number(entry.conditionID) === Number(selectedID));
+        const select = createAction({ label: referenceLabel(entry), variant: 'quiet', className: 'bp-reference-select' });
+        select.setAttribute('aria-label', referenceLabel(entry));
+        renderTopicLabel(select.querySelector('span'), topicLabelText(entry));
+        select.setAttribute('aria-pressed', String(Number(entry.conditionID) === Number(selectedID)));
+        select.addEventListener('click', () => onSelect({ ...entry, ID: Number(entry.conditionID) }));
+        const weight = node('strong', 'bp-reference-weight-value', `${Number((entry.weightBasisPoints / 100).toFixed(2))}%`);
+        row.append(select, weight);
+        const href = sceneURL(entry.url, entry.sceneID);
+        if (href) {
+            const visit = createAction({ label: `Open ${referenceLabel(entry)}`, icon: 'fa-solid fa-arrow-up-right-from-square',
+                href, iconOnly: true, variant: 'quiet' });
+            visit.target = '_blank'; visit.rel = 'noopener'; row.append(visit);
+        }
+        if (personal) {
+            const remove = createAction({ label: `Remove ${referenceLabel(entry)}`, icon: 'fa-solid fa-xmark', iconOnly: true, variant: 'quiet' });
+            remove.addEventListener('click', () => onRemove({ ...entry, ID: Number(entry.conditionID) })); row.append(remove);
+        }
+        host.append(row);
+    }
+    if (dirty) {
+        const note = node('p', 'bp-reference-status', 'Reference composition will update with this preview.'); note.setAttribute('role', 'status'); host.append(note);
+    } else {
+        if (issues.length) {
+            const warnings = node('div', 'bp-reference-warnings'); warnings.setAttribute('role', 'status');
+            for (const issue of issues) warnings.append(node('p', '', referenceIssueMessage(issue)));
+            host.append(warnings);
+        }
+        if (references.length && Array.isArray(effectiveEntries)) {
+            const details = node('details', 'bp-reference-composition'); details.open = expanded;
+            details.append(node('summary', '', 'Underlying benchmarks'));
+            const list = node('ul', '');
+            for (const entry of effectiveEntries) {
+                const row = node('li', '');
+                row.append(node('span', '', entry.conditionID < 0 ? `${entry.name || 'Unavailable topic'} (unresolved)`
+                    : [entry.name, entry.conditionName !== 'default' && entry.conditionName].filter(Boolean).join(' / ')),
+                    node('strong', '', `${Number((Number(entry.weightBasisPoints ?? Number(entry.weight) * 100) / 100).toFixed(2))}%`));
+                list.append(row);
+            }
+            if (!list.children.length) list.append(node('li', '', 'No resolved benchmarks.'));
+            details.append(list); host.append(details);
+        }
+    }
+}

@@ -1,16 +1,16 @@
 body.dialog-page {
-    --bg-body: #f5f6f2;
+    --bg-body: var(--bp-surface-soft);
     --bg-panel: #ffffff;
-    --text-primary: #172d28;
-    --text-secondary: #698f7c;
-    --text-muted: #8aa899;
-    --accent-color: #246650;
-    --accent-strong: #164b39;
-    --accent-soft: #e7f0e9;
+    --text-primary: var(--bp-ink);
+    --text-secondary: var(--bp-muted);
+    --text-muted: var(--bp-faint);
+    --accent-color: var(--bp-purple);
+    --accent-strong: var(--bp-purple-dark);
+    --accent-soft: var(--bp-purple-soft);
     --nav-height: 62px;
     min-height: 100vh;
     overflow: hidden;
-    background: #f5f6f2;
+    background: var(--bp-surface-soft);
 }
 
 body.dialog-page global-dialog {
@@ -31,7 +31,7 @@ body.dialog-page global-dialog::part(content) {
 }
 
 body.dialog-page [slot="body"] a {
-    color: #296a4a;
+    color: var(--bp-purple);
     text-decoration-color: #c7dbd1;
     text-underline-offset: 3px;
 }
@@ -41,10 +41,10 @@ body.dialog-page [slot="body"] p + p {
 }
 
 .dialog-login-button {
-    --button-background: #296a4a;
-    --button-hover-background: #296a4a;
-    --button-border-color: #296a4a;
-    --button-hover-border-color: #296a4a;
+    --button-background: var(--bp-purple);
+    --button-hover-background: var(--bp-purple);
+    --button-border-color: var(--bp-purple);
+    --button-hover-border-color: var(--bp-purple);
     --button-color: #ffffff;
     --button-hover-color: #ffffff;
 }

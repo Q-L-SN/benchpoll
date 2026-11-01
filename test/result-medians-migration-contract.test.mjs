@@ -40,8 +40,7 @@ test('new score approval appends accepted evidence instead of replacing its peer
     assert.doesNotMatch(applyResult, /multiple_accepted_results/);
 });
 
-test('ranking service groups accepted score samples and computes their median', () => {
-    assert.match(rankingService, /medianOfFiniteNumbers\(samples\)/);
-    assert.match(rankingService, /sampleCount: samples\.length/);
+test('ranking service does not reject multiple accepted observations', () => {
+    // Median and deduplication behavior is exercised by score-aggregation.test.mjs.
     assert.doesNotMatch(rankingService, /multiple_accepted_results/);
 });

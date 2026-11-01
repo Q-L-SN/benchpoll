@@ -2,6 +2,10 @@ import { frontendSource } from './helpers/frontend-source.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
+import vm from 'node:vm';
+import { entityKey, normalizedSearch, rankedMatches } from '../public/js/contribution/fields.js';
+import { validateContributionCatalog } from '../public/js/contribution/contracts.js';
+import { contributionPath, contributionRoute } from '../public/js/shared/contribution-navigation.js';
 
 const source = frontendSource('public/js/contribute.js');
 const html = fs.readFileSync(new URL('../private/contribute.html', import.meta.url), 'utf8');
@@ -22,13 +26,41 @@ test('contribution forms are one-page forms without a progress stepper or review
     assert.doesNotMatch(source, /currentStep|nextStep|previousStep|reviewStep/);
 });
 
+test('retired category creation is not offered as a contribution form or route', () => {
+    assert.doesNotMatch(source, /new_category|function categoryDetailsStep\(/);
+    assert.throws(() => contributionPath('new_category'), /Unknown contribution form/);
+    assert.equal(contributionRoute('/contribute/categories/new'), null);
+    assert.equal(contributionPath('new_benchmark'), '/contribute/benchmarks/new');
+    assert.deepEqual(contributionRoute('/contribute/scores/new'), { mode: 'benchmark_result' });
+});
+
+test('contribution field-title annotations contain only Optional', () => {
+    const titles = [...source.matchAll(/<label\b[^>]*>\s*<span>([\s\S]*?)<\/span>/g)];
+    const annotations = titles.flatMap(([, title]) => [...title.matchAll(/<small\b[^>]*>([^<]*)<\/small>/g)]
+        .map(([, text]) => text.trim()));
+    assert.ok(annotations.length > 0, 'Keep the optional field annotations');
+    assert.deepEqual([...new Set(annotations)], ['Optional']);
+    assert.match(source, /Description <small>Optional<\/small>/);
+    assert.match(source, /Introduction <small>Optional<\/small>/);
+    assert.match(source, /Public notes <small>Optional<\/small>/);
+    assert.doesNotMatch(`${html}\n${source}`,
+        /<(?:span|small)\b[^>]*>\s*\(?required\)?\s*<\/(?:span|small)>/i);
+});
+
+test('plain-text feedback keeps its label and validation without an annotation', () => {
+    const feedback = sourceBetween('function feedbackDetailsStep(', 'function discussionReportStep(');
+    assert.match(feedback, /<span>Your message<\/span>/);
+    assert.match(feedback, /<textarea required minlength="10" maxlength="\$\{feedbackMessageLimit\(feedbackInstructions\)\}"[^>]*data-bind="feedback"/);
+    assert.match(feedback, /id="feedback-guidance"[^>]*translate="yes"/);
+    assert.match(feedback, /aria-describedby="feedback-guidance"/);
+});
+
 test('every contribution operation ends with a notes control', () => {
     const notesHelper = sourceBetween('function changeReviewNotesField(', 'function changeDeleteStep(');
     const deleteForm = sourceBetween('function changeDeleteStep(', 'function evaluationDetailsStep(');
     const benchmarkForm = sourceBetween('function evaluationDetailsStep(', 'function vendorSuggestions(');
     const modelForm = sourceBetween('function subjectDetailsStep(', 'function renderResultModelSuggestions(');
-    const scoreForm = sourceBetween('function resultsStep(', 'function categoryDetailsStep(');
-    const categoryForm = sourceBetween('function categoryDetailsStep(', 'function contextOptionsEditor(');
+    const scoreForm = sourceBetween('function resultsStep(', 'function reportDetailsStep(');
     const reportForm = sourceBetween('function reportDetailsStep(', 'function feedbackDetailsStep(');
     const feedbackForm = sourceBetween('function feedbackDetailsStep(', 'function normalizedText(');
 
@@ -37,13 +69,12 @@ test('every contribution operation ends with a notes control', () => {
     assert.ok(benchmarkForm.lastIndexOf('reviewerNotesField') > benchmarkForm.lastIndexOf('Introduction URL'));
     assert.ok(modelForm.lastIndexOf('reviewerNotesField') > modelForm.lastIndexOf('Introduction URL'));
     assert.ok(scoreForm.lastIndexOf('reviewerNotesField') > scoreForm.lastIndexOf('data-field="sourceURL"'));
-    assert.ok(categoryForm.lastIndexOf('data-final-notes') > categoryForm.lastIndexOf('contextOrderEditor'));
     assert.ok(reportForm.lastIndexOf('data-final-notes') > reportForm.lastIndexOf('data-field="sourceURL"'));
     assert.match(feedbackForm, /data-final-notes/);
 });
 
 test('new benchmark defaults to percentage scale without filling score bounds', () => {
-    const makeEvaluation = sourceBetween('function makeEvaluation(', 'function makeConfiguration(');
+    const makeEvaluation = sourceBetween('function makeEvaluation(', 'function makeSubject(');
     assert.match(makeEvaluation, /usesPercentageScale:\s*true/);
     assert.match(makeEvaluation, /scoreMin:\s*''/);
     assert.match(makeEvaluation, /scoreMax:\s*''/);
@@ -82,56 +113,78 @@ test('custom normalization requires both anchors but does not constrain entered 
     assert.doesNotMatch(submissionValidation, /to \+∞|−∞ to/);
 });
 
-test('benchmark names remain single-line while model configurations use key-value inputs', () => {
+test('condition names remain single-line with a separate optional public explanation', () => {
     const benchmarkRows = sourceBetween('function conditionRows(', 'function changeOperationSelector(');
-    const modelRows = sourceBetween('function configurationRows(', 'function subjectDetailsStep(');
     assert.match(benchmarkRows, /<input required[^>]*data-condition-input/);
-    assert.match(modelRows, /data-bind="modelParameter" data-field="key"/);
-    assert.match(modelRows, /data-bind="modelParameter" data-field="value"/);
-    assert.doesNotMatch(benchmarkRows, /textarea|Score direction|Status/);
-    assert.doesNotMatch(modelRows, /textarea|Thinking effort|Status/);
+    assert.doesNotMatch(benchmarkRows, /Score direction|Status/);
+    assert.match(benchmarkRows, /<textarea[^>]*data-field="differenceExplanation"[^>]*maxlength="10000"/);
+    assert.match(benchmarkRows, /maxlength="\$\{Math\.max\(60, originalConditionName\(profile\)/);
+    assert.match(source, /mountScoreFields/);
+    assert.doesNotMatch(source, /function configurationRows|function makeConfiguration/);
 });
 
-test('existing benchmark links append a blank condition on the change form; model addition stays supported', () => {
-    const benchmarkSelection = sourceBetween('async function loadChangeTarget(', 'async function loadUser(');
-    const modelSelection = sourceBetween('function setSubjectModel(', 'function clearSubjectModel(');
-    assert.match(benchmarkSelection, /param\('addCondition'\) === '1'/);
-    assert.match(benchmarkSelection, /condition\.name = ''/);
-    assert.match(benchmarkSelection, /condition\.isDefault = false/);
-    assert.match(benchmarkSelection, /conditions\.push\(condition\)/);
-    assert.match(modelSelection, /const configuration = makeConfiguration\(1\)/);
-    assert.match(modelSelection, /configuration\.name = ''/);
-    assert.match(modelSelection, /configuration\.isDefault = false/);
-    assert.match(modelSelection, /subject\.conditions = \[configuration\]/);
+test('existing benchmarks navigate to append a condition; existing models navigate to edit identity', () => {
+    const hydration = sourceBetween('async function loadChangeTarget(', 'async function loadUser(');
+    const selection = sourceBetween('function setSubjectModel(', 'function clearSubjectModel(');
+    assert.match(hydration, /param\('addCondition'\) === '1'/);
+    assert.match(hydration, /conditions\.push\(condition\)/);
+    assert.match(selection, /edit_model/);
 });
 
-test('condition payloads derive default identity from the name and never from row order', () => {
-    const benchmarkPayload = sourceBetween('function evaluationPayload(', 'function configurationPayload(');
-    const modelPayload = sourceBetween('function configurationPayload(', 'function resultsPayload(');
-    const conditionInput = sourceBetween(
-        "const conditionInput = event.target.closest('[data-condition-input], [data-configuration-input]');",
-        'decorateChangedFields();'
-    );
-    assert.match(benchmarkPayload, /isDefault:\s*isLiteralDefaultCondition\(profile\.name\)/);
-    assert.match(modelPayload, /configurationValues\(configuration\)/);
-    assert.match(sourceBetween('function configurationValues(', 'function configurationRows('), /Object\.keys\(parameters\)\.length === 0/);
-    assert.doesNotMatch(benchmarkPayload, /index\s*===\s*0|literalDefaultIndex/);
-    assert.doesNotMatch(modelPayload, /index\s*===\s*0|literalDefaultIndex/);
-    assert.match(conditionInput, /profile\.isDefault = isDefault/);
-    assert.match(conditionInput, /configuration\.isDefault = isDefault/);
-    assert.doesNotMatch(source, /removedDefault[\s\S]{0,180}conditions\[0\]\.isDefault = true/);
+test('benchmark condition defaults derive from their name, never from row order', () => {
+    const payload = sourceBetween('function evaluationPayload(', 'function subjectPayload(');
+    assert.match(payload, /isDefault:\s*isLiteralDefaultCondition\(profile\.name\)/);
+    assert.doesNotMatch(payload, /index\s*===\s*0|literalDefaultIndex/);
 });
 
-test('tag editor supports inline tags, Tab for known matches, and click-only creation', () => {
-    assert.match(source, /class="tag-chip"/);
-    assert.match(source, /event\.key === 'Tab'[\s\S]*tagSuggestions/);
-    assert.match(source, /class="create-tag-option"/);
-    assert.match(source, /data-select-tag/);
-    assert.match(source, /Add the unfinished text as a tag or clear it before leaving this field/);
+test('benchmark contribution forms, matching, and payloads have no tag dependencies', () => {
+    const entry = fs.readFileSync(new URL('../public/js/contribute.js', import.meta.url), 'utf8');
+    const contract = fs.readFileSync(new URL('../public/js/contribution/contracts.js', import.meta.url), 'utf8');
+    assert.doesNotMatch(`${entry}\n${contract}\n${html}\n${css}`,
+        /knownTags|known-tag-options|data-(?:tag|select-tag|remove-tag)|tag-editor|tag-suggestions|\.tags\b|\btags\s*:/i);
+    assert.match(entry, /const benchmarkSearchFields = object => \[object\.name, \.\.\.object\.conditions\.map\(condition => condition\.name\)\]/);
+    assert.match(entry, /condition => \[object\.name, condition\.name\]/);
+});
+
+test('the contribution catalog requires contexts and score fields but not benchmark tags', () => {
+    const condition = { isPrimary: true, scoreSource: null, differenceExplanation: '' };
+    const data = { benchmarks: [{ name: 'Example', conditions: [condition] }], models: [], vendors: [],
+        categories: [], rankingDimensions: [{ options: [] }], scoreFields: [] };
+    assert.equal(validateContributionCatalog(data), data);
+    assert.equal(validateContributionCatalog({ ...data, knownTags: 'ignored', benchmarks: [{ ...data.benchmarks[0], tags: null }] }).benchmarks.length, 1);
+    for (const field of ['categories', 'rankingDimensions', 'scoreFields']) {
+        assert.throws(() => validateContributionCatalog({ ...data, [field]: undefined }), /must be an array/);
+    }
+    assert.throws(() => validateContributionCatalog({ ...data, rankingDimensions: [{}] }), /options must be an array/);
+    assert.throws(() => validateContributionCatalog({ ...data, benchmarks: [{ conditions: [] }] }), /exactly one primary/);
+});
+
+test('new-model vendor suggestions count the full catalog and keep query relevance', () => {
+    const vendors = [
+        { ID: 1, name: 'Alpha Beta' }, { ID: 2, name: 'Beta Systems' }, { ID: 3, name: 'Beta' },
+        ...Array.from({ length: 8 }, (_, index) => ({ ID: 10 + index, name: `Vendor ${index + 1}` })),
+        { ID: 'pending:vendor', name: 'Pending Lab' }, { name: 'Missing A' }, { ID: null, name: 'Missing B' }
+    ];
+    const models = [
+        ...Array.from({ length: 12 }, (_, index) => ({ ID: index + 1, vendorID: '17' })),
+        ...Array.from({ length: 9 }, (_, index) => ({ ID: index + 20, vendorID: 1 })),
+        { ID: 'pending:model', vendorID: 'pending:vendor' },
+        { ID: 40, vendorID: 2 }, { ID: 41, vendorID: 3 },
+        { ID: 42, vendorID: null }, { ID: 43 }, { ID: 44, vendorID: '' }
+    ];
+    const sandbox = { catalog: { vendors, models }, mode: 'new_model', entityKey, normalizedSearch, rankedMatches, vendorSearchFields: vendor => vendor.name };
+    const suggestions = vm.runInNewContext(`(${sourceBetween('function vendorSuggestions(', 'function modelSuggestions(')})`, sandbox);
+    const names = query => Array.from(suggestions(query), vendor => vendor.name);
+    assert.deepEqual(names('  '), ['Vendor 8', 'Alpha Beta', 'Beta', 'Beta Systems', 'Pending Lab', 'Missing A', 'Missing B', 'Vendor 1']);
+    assert.deepEqual(names('beta'), Array.from(rankedMatches(vendors, 'beta', vendor => vendor.name), vendor => vendor.name));
+    assert.deepEqual(names('beta'), ['Beta', 'Beta Systems', 'Alpha Beta']);
+    assert.equal(vendors[0].name, 'Alpha Beta', 'The original vendor catalog is not sorted in place');
+    sandbox.mode = 'edit_model';
+    assert.deepEqual(names(''), vendors.slice(0, 8).map(vendor => vendor.name));
 });
 
 test('new score form uses one shared source URL but emits it on every result', () => {
-    const form = sourceBetween('function resultsStep(', 'function categoryDetailsStep(');
+    const form = sourceBetween('function resultsStep(', 'function reportDetailsStep(');
     const payload = sourceBetween('function resultsPayload(', 'function submissionPayload(');
     assert.match(form, /draft\.results\.length > 1 \? 'All source URLs' : 'Source URL'/);
     assert.equal((form.match(/data-field="sourceURL"/g) ?? []).length, 1);
@@ -151,14 +204,14 @@ test('score entry accepts signed text without native number-wheel mutation', () 
 
 test('score repeater adds below the list and copies a score to a fresh final row', () => {
     const scoreCard = sourceBetween('function resultCard(', 'function resultsStep(');
-    const scoreForm = sourceBetween('function resultsStep(', 'function categoryDetailsStep(');
+    const scoreForm = sourceBetween('function resultsStep(', 'function reportDetailsStep(');
     const copy = sourceBetween('function copyResult(', 'function resultCard(');
     const action = sourceBetween("} else if (action === 'add-result')", "} else if (action === 'remove-result')");
     assert.match(scoreCard, /data-action="copy-result"[^>]*aria-label="Copy as a new score"/);
     assert.ok(scoreForm.indexOf('class="repeater-list"') < scoreForm.indexOf('data-action="add-result"'));
     assert.ok(scoreForm.indexOf('data-action="add-result"') < scoreForm.indexOf('class="result-submission-notes"'));
     assert.match(copy, /const identity = makeResult\(draft\.results\.length\)/);
-    assert.match(copy, /draft\.results\.push\(\{[\s\S]*\.\.\.source,[\s\S]*clientRef: identity\.clientRef/);
+    assert.match(copy, /draft\.results\.push\(\{[\s\S]*\.\.\.structuredClone\(source\),[\s\S]*clientRef: identity\.clientRef/);
     assert.match(action, /copyResult\(Number\(actionTarget\.dataset\.index\)\)/);
     assert.match(action, /data-result-card="\$\{copiedIndex\}"/);
 });
@@ -167,8 +220,7 @@ test('server-backed contribution choices refresh every time their controls open'
     const request = sourceBetween('async function requestContributionCatalog(', 'async function refreshContributionCatalog(');
     const refresh = sourceBetween('function refreshCatalogForControl(', 'function copyResult(');
     const focus = sourceBetween("stepSurface.addEventListener('focusin'", "stepSurface.addEventListener('toggle'");
-    const toggle = sourceBetween("stepSurface.addEventListener('toggle'", "stepSurface.addEventListener('pointerdown'");
-    const parentSelection = sourceBetween('async function beginParentSelection(', 'function selectedContextLabel(');
+    const toggle = sourceBetween("stepSurface.addEventListener('toggle'", "stepSurface.addEventListener('focusout'");
     assert.match(request, /cache:\s*'no-store'/);
     assert.match(request, /return validateContributionCatalog\(await response\.json\(\)\)/);
     assert.match(refresh, /refreshContributionCatalog\(\)/);
@@ -176,17 +228,15 @@ test('server-backed contribution choices refresh every time their controls open'
     assert.match(refresh, /showError\(error\.message/);
     assert.doesNotMatch(refresh, /renderCurrentStep|loadCatalog/);
     assert.match(focus, /if \(evaluationName\) \{[\s\S]*refreshSuggestionControl\(evaluationName\)/);
-    assert.match(focus, /if \(tagInput\) \{[\s\S]*refreshSuggestionControl\(tagInput\)/);
     assert.match(focus, /if \(subjectModelName\) \{[\s\S]*refreshSuggestionControl\(subjectModelName\)/);
     assert.match(focus, /if \(resultModelQuery\) \{[\s\S]*refreshSuggestionControl\(resultModelQuery\)/);
     assert.match(focus, /if \(resultObjectQuery\) \{[\s\S]*refreshSuggestionControl\(resultObjectQuery\)/);
-    assert.equal((focus.match(/refreshSuggestionControl\(/g) ?? []).length, 5);
+    assert.equal((focus.match(/refreshSuggestionControl\(/g) ?? []).length, 4);
     assert.match(source, /data-catalog-picker="vendor"/);
-    assert.match(source, /data-catalog-picker="model-condition"/);
+    assert.match(source, /refresh: refreshContributionCatalog/);
     assert.match(source, /data-catalog-picker="benchmark-condition"/);
     assert.match(toggle, /picker\?\.open/);
     assert.match(toggle, /refreshCatalogForControl\(picker/);
-    assert.match(parentSelection, /await refreshContributionCatalog\(\)/);
 });
 
 test('existing score choices validate on blur and selected models use vendor marks without status badges', () => {
@@ -215,7 +265,7 @@ test('existing score choices validate on blur and selected models use vendor mar
 });
 
 test('percentage scores remain raw 0-100 values in the client payload', () => {
-    const storedScore = sourceBetween('function resultStoredScore(', 'function addConfigurationLink(');
+    const storedScore = sourceBetween('function resultStoredScore(', 'function addProfileLink(');
     assert.match(storedScore, /return displayScore/);
     assert.doesNotMatch(storedScore, /\/\s*100|\*\s*0\.01/);
 });
@@ -251,7 +301,7 @@ test('benchmark change hydration preserves every existing condition score contra
 
 test('client maps only canonical condition-protection errors', () => {
     assert.match(source, /benchmark_condition_in_use:/);
-    assert.match(source, /model_condition_in_use:/);
+    assert.doesNotMatch(source, /model_condition_in_use:/);
     assert.doesNotMatch(source, /benchmark_condition_range_conflicts_with_results:/);
     assert.doesNotMatch(source, /evaluation_profile_in_use:|model_configuration_in_use:/);
 });

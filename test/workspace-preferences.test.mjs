@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readWorkspacePreferences, writeWorkspacePreferences } from '../public/js/workspace/preferences.js';
+import { createWorkspaceState } from '../public/js/workspace/state.js';
 
 const storageKey = 'benchpoll-workspace-preferences-v1';
-const defaults = { mode: 'public', publicFallbackVisible: false };
+const defaults = { mode: 'public', personalFallbackExpanded: false, scoreMode: 'available' };
 
 function memoryStorage(initialValue = null) {
     const values = new Map(initialValue === null ? [] : [[storageKey, initialValue]]);
@@ -13,16 +14,44 @@ function memoryStorage(initialValue = null) {
     };
 }
 
-test('workspace preferences preserve the public visibility while switching modes through a round trip', () => {
+test('new workspace state and absent preferences both default to Estimated score', () => {
+    const state = createWorkspaceState();
+    assert.equal(state.scoreMode, 'available');
+    assert.equal(state.scoreMode, readWorkspacePreferences(memoryStorage()).scoreMode);
+});
+
+test('both explicitly saved scoring modes survive preference reads and writes', () => {
+    for (const scoreMode of ['range', 'available']) {
+        const preferences = { ...defaults, mode: 'personal', personalFallbackExpanded: true, scoreMode };
+        const storage = memoryStorage(JSON.stringify(preferences));
+        assert.deepEqual(readWorkspacePreferences(storage), preferences);
+        assert.equal(writeWorkspacePreferences(readWorkspacePreferences(storage), storage), true);
+        assert.deepEqual(JSON.parse(storage.getItem(storageKey)), preferences);
+        assert.deepEqual(readWorkspacePreferences(storage), preferences);
+    }
+});
+
+test('invalid scoring preferences default to Estimated score without discarding other valid fields', () => {
+    for (const scoreMode of [undefined, null, '', 'RANGE', 'AVAILABLE', 'other', true, false, 0, 1, [], {}]) {
+        const preferences = { mode: 'personal', personalFallbackExpanded: true, scoreMode };
+        const expected = { ...defaults, mode: 'personal', personalFallbackExpanded: true };
+        const storage = memoryStorage(JSON.stringify(preferences));
+        assert.deepEqual(readWorkspacePreferences(storage), expected);
+        assert.equal(writeWorkspacePreferences(preferences, storage), true);
+        assert.deepEqual(JSON.parse(storage.getItem(storageKey)), expected);
+    }
+});
+
+test('workspace preferences preserve personal fallback expansion while switching modes through a round trip', () => {
     const storage = memoryStorage();
-    const preferences = { mode: 'personal', publicFallbackVisible: true };
+    const preferences = { ...defaults, mode: 'personal', personalFallbackExpanded: true, scoreMode: 'available' };
     assert.equal(writeWorkspacePreferences(preferences, storage), true);
     assert.deepEqual(readWorkspacePreferences(storage), preferences);
 
     preferences.mode = 'public';
     assert.equal(writeWorkspacePreferences(preferences, storage), true);
     assert.deepEqual(readWorkspacePreferences(storage), {
-        mode: 'public', publicFallbackVisible: true
+        ...preferences, mode: 'public'
     });
 });
 
@@ -35,17 +64,18 @@ test('absent, malformed, and non-object stored values use the default preference
 test('partial preferences retain valid fields and supply independent defaults for missing fields', () => {
     for (const [value, expected] of [
         [{}, defaults],
-        [{ mode: 'personal' }, { mode: 'personal', publicFallbackVisible: false }],
-        [{ publicFallbackVisible: true }, { mode: 'public', publicFallbackVisible: true }]
+        [{ mode: 'personal' }, { ...defaults, mode: 'personal' }],
+        [{ publicFallbackVisible: true }, defaults],
+        [{ personalFallbackExpanded: true }, { ...defaults, personalFallbackExpanded: true }]
     ]) {
         assert.deepEqual(readWorkspacePreferences(memoryStorage(JSON.stringify(value))), expected);
     }
 });
 
-test('legacy preferences retain public visibility and discard personal visibility', () => {
+test('legacy inline fallback visibility is discarded on read and write', () => {
     for (const [value, expected] of [
-        [{ mode: 'personal', fallbackVisible: { personal: false } }, { mode: 'personal', publicFallbackVisible: false }],
-        [{ fallbackVisible: { personal: false, public: true } }, { mode: 'public', publicFallbackVisible: true }],
+        [{ mode: 'personal', fallbackVisible: { personal: false } }, { ...defaults, mode: 'personal' }],
+        [{ fallbackVisible: { personal: false, public: true } }, defaults],
         [{ fallbackVisible: { personal: true, public: false } }, defaults]
     ]) {
         const storage = memoryStorage(JSON.stringify(value));
@@ -56,18 +86,18 @@ test('legacy preferences retain public visibility and discard personal visibilit
     }
 });
 
-test('explicit public visibility takes precedence over legacy visibility, including false', () => {
+test('retired public fallback expansion never reopens a modal', () => {
     for (const publicFallbackVisible of [false, true]) {
         const storage = memoryStorage(JSON.stringify({
             mode: 'personal', publicFallbackVisible,
             fallbackVisible: { personal: !publicFallbackVisible, public: !publicFallbackVisible }
         }));
-        assert.deepEqual(readWorkspacePreferences(storage), { mode: 'personal', publicFallbackVisible });
+        assert.deepEqual(readWorkspacePreferences(storage), { ...defaults, mode: 'personal' });
     }
     const storage = memoryStorage(JSON.stringify({
         publicFallbackVisible: 'false', fallbackVisible: { public: true }
     }));
-    assert.deepEqual(readWorkspacePreferences(storage), { mode: 'public', publicFallbackVisible: true });
+    assert.deepEqual(readWorkspacePreferences(storage), defaults);
 });
 
 test('invalid modes and non-boolean visibility values never become active preferences', () => {
@@ -77,10 +107,10 @@ test('invalid modes and non-boolean visibility values never become active prefer
     }
     for (const invalidValue of ['true', 'false', 0, 1, null, [], {}]) {
         const storage = memoryStorage(JSON.stringify({
-            mode: 'personal', publicFallbackVisible: invalidValue, fallbackVisible: { public: invalidValue }
+            mode: 'personal', publicFallbackVisible: invalidValue, personalFallbackExpanded: invalidValue, fallbackVisible: { public: invalidValue }
         }));
         assert.deepEqual(readWorkspacePreferences(storage), {
-            mode: 'personal', publicFallbackVisible: false
+            ...defaults, mode: 'personal'
         });
     }
     for (const invalidMap of [null, false, 0, 'true', []]) {
@@ -88,12 +118,27 @@ test('invalid modes and non-boolean visibility values never become active prefer
     }
 });
 
+test('scoring mode owns chart scaling and obsolete fillTopBar preferences are discarded', () => {
+    const storage = memoryStorage(JSON.stringify({ scoreMode: 'available', fillTopBar: true }));
+    assert.deepEqual(readWorkspacePreferences(storage), { ...defaults, scoreMode: 'available' });
+    assert.deepEqual(readWorkspacePreferences(memoryStorage(JSON.stringify({ scoreMode: 'other', fillTopBar: 'true' }))), defaults);
+    assert.equal(writeWorkspacePreferences({ scoreMode: 'available', fillTopBar: true }, storage), true);
+    assert.deepEqual(JSON.parse(storage.getItem(storageKey)), { ...defaults, scoreMode: 'available' });
+});
+
+test('obsolete version-grouping preferences are discarded on read and write', () => {
+    const storage = memoryStorage(JSON.stringify({ groupBenchmarkVersions: true }));
+    assert.deepEqual(readWorkspacePreferences(storage), defaults);
+    assert.equal(writeWorkspacePreferences({ groupBenchmarkVersions: true }, storage), true);
+    assert.deepEqual(JSON.parse(storage.getItem(storageKey)), defaults);
+});
+
 test('storage read and write failures leave callers with usable in-memory preferences', () => {
     const storage = {
         getItem() { throw new Error('Storage access denied'); },
         setItem() { throw new Error('Storage quota exceeded'); }
     };
-    const preferences = { mode: 'personal', publicFallbackVisible: true };
+    const preferences = { ...defaults, mode: 'personal', personalFallbackExpanded: true };
     const before = structuredClone(preferences);
     assert.deepEqual(readWorkspacePreferences(storage), defaults);
     assert.equal(writeWorkspacePreferences(preferences, storage), false);
@@ -109,7 +154,7 @@ test('default session storage access is protected even when the global getter th
         Object.defineProperty(globalThis, 'sessionStorage', { configurable: true, value: storage });
         assert.equal(writeWorkspacePreferences({ mode: 'personal' }), true);
         assert.deepEqual(readWorkspacePreferences(), {
-            mode: 'personal', publicFallbackVisible: false
+            ...defaults, mode: 'personal'
         });
 
         Object.defineProperty(globalThis, 'sessionStorage', {
@@ -134,13 +179,13 @@ test('separate reads do not share mutable objects or change the stored preferenc
         const second = readWorkspacePreferences(storage);
         assert.notEqual(first, second);
         first.mode = 'personal';
-        first.publicFallbackVisible = true;
+        first.personalFallbackExpanded = true;
         assert.deepEqual(second, defaults);
         assert.deepEqual(readWorkspacePreferences(storage), defaults);
     }
 });
 
-test('writes persist only the mode and public visibility, excluding personal rules and draft data', () => {
+test('writes persist only viewing preferences, excluding personal rules and draft data', () => {
     const storage = memoryStorage();
     const workspace = {
         mode: 'personal',
@@ -157,7 +202,7 @@ test('writes persist only the mode and public visibility, excluding personal rul
     };
     assert.equal(writeWorkspacePreferences(workspace, storage), true);
     assert.deepEqual(JSON.parse(storage.getItem(storageKey)), {
-        mode: 'personal', publicFallbackVisible: false
+        ...defaults, mode: 'personal'
     });
     assert.equal(workspace.fallbackVisible.categoryID, 7);
     assert.equal(workspace.personalEntries[0].weightBasisPoints, 10000);
@@ -167,7 +212,7 @@ test('writes normalize invalid or missing fields before storing them', () => {
     const storage = memoryStorage();
     assert.equal(writeWorkspacePreferences({ mode: 'other', publicFallbackVisible: true }, storage), true);
     assert.deepEqual(JSON.parse(storage.getItem(storageKey)), {
-        mode: 'public', publicFallbackVisible: true
+        ...defaults
     });
     assert.equal(writeWorkspacePreferences(undefined, storage), true);
     assert.deepEqual(JSON.parse(storage.getItem(storageKey)), defaults);

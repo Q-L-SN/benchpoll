@@ -1,9 +1,14 @@
+import { normalizeScoreFieldRequests, normalizeFieldContribution } from '../score-field-service.js';
+import { assertPrimaryCondition } from '../benchmark-primary-condition.js';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import test from 'node:test';
 import vm from 'node:vm';
-import { scoreEvidenceKey } from '../score-aggregation.js';
+import { currentScoreSQL, scoreEvidenceKey } from '../score-aggregation.js';
+import { assertScoreSourcePolicy, recordSyncedScoreEdit } from '../score-source-policy.js';
+import { selectableBenchmarkConditionSQL } from '../benchmark-condition-visibility.js';
+import { markBenchmarkScoresUpdated } from '../benchmark-details.js';
 
 import {
     PIE_TOTAL_BASIS_POINTS,
@@ -22,15 +27,15 @@ function sourceBetween(startMarker, endMarker) {
 }
 
 function loadSubmissionContract() {
-    const sandbox = vm.createContext({ URL, crypto, structuredClone });
+    const sandbox = vm.createContext({ assertPrimaryCondition, normalizeScoreFieldRequests, normalizeFieldContribution, URL, crypto, structuredClone });
     const source = sourceBetween('function normalizeString(', 'function parseModerationContent(');
     vm.runInContext(`${source}\nthis.contract = { buildContributionContent };`, sandbox);
     return sandbox.contract;
 }
 
 function loadPersistenceContract(overrides = {}) {
-    const sandbox = vm.createContext({
-        scoreEvidenceKey,
+    const sandbox = vm.createContext({ normalizeScoreFieldRequests, normalizeFieldContribution,
+        currentScoreSQL, scoreEvidenceKey, assertScoreSourcePolicy, recordSyncedScoreEdit, markBenchmarkScoresUpdated,
         parseJSONColumn: value => typeof value === 'string' ? JSON.parse(value) : value,
         JSON,
         Number,
@@ -52,6 +57,7 @@ function loadPersistenceContract(overrides = {}) {
         async resolveResultBenchmarkCondition(_connection, result) {
             return {
                 ID: result.benchmarkConditionID,
+                score_source: null,
                 benchmark_ID: result.benchmarkID,
                 name: 'default',
                 uses_percentage_scale: 1,
@@ -64,19 +70,12 @@ function loadPersistenceContract(overrides = {}) {
         async loadResultModel(_connection, result) {
             return result.modelID;
         },
-        async loadResultModelCondition(_connection, result, modelID) {
-            return {
-                ID: result.modelConditionID,
-                model_ID: modelID,
-                parameters: {},
-                name: 'default'
-            };
-        },
+        async resolveScoreFields(_connection, fields) { return fields; },
         ...overrides
     });
     const benchmarkPersistence = sourceBetween(
         'async function insertSubmittedBenchmarkCondition(',
-        'async function insertSubmittedModelCondition('
+        'async function applyModelBatch('
     );
     const snapshots = sourceBetween(
         'function benchmarkConditionSnapshot(',
@@ -96,7 +95,8 @@ function loadPersistenceContract(overrides = {}) {
 }
 
 function loadResultConditionResolver() {
-    const sandbox = vm.createContext({ Boolean, Number });
+    const sandbox = vm.createContext({ normalizeScoreFieldRequests, normalizeFieldContribution,
+        selectableBenchmarkConditionSQL, Boolean, Number });
     const source = sourceBetween(
         'async function resolveResultBenchmarkCondition(',
         'async function loadResultModel('
@@ -113,6 +113,7 @@ function benchmarkCondition(overrides = {}) {
         targetValue: null,
         usesPercentageScale: true,
         isDefault: true,
+        isPrimary: true,
         ...overrides
     };
 }
@@ -126,7 +127,10 @@ function newBenchmarkSubmission() {
             existingBenchmarkRef: null,
             name: 'CanonicalBench',
             introductionURL: 'https://example.com/canonical-bench',
-            tags: ['Benchmark', 'Reasoning', 'benchmark'],
+            description: 'A public benchmark introduction.',
+            requestOfficialSync: true,
+            officialSyncURL: 'https://example.com/official-results',
+            officialSyncInstructions: 'Use the current leaderboard.',
             reviewerNotes: '',
             conditions: [
                 benchmarkCondition(),
@@ -136,7 +140,8 @@ function newBenchmarkSubmission() {
                     usesPercentageScale: false,
                     scoreMin: -20,
                     scoreMax: 80,
-                    isDefault: false
+                    isDefault: false,
+                    isPrimary: false
                 })
             ]
         }]
@@ -151,8 +156,7 @@ function benchmarkResultSubmission() {
             clientRef: 'result-one',
             modelID: 4,
             modelRef: null,
-            modelConditionID: 5,
-            modelConditionRef: null,
+            scoreFields: [],
             benchmarkID: 6,
             benchmarkRef: null,
             benchmarkConditionID: 7,
@@ -167,8 +171,7 @@ function benchmarkResultSubmission() {
             clientRef: 'result-two',
             modelID: 8,
             modelRef: null,
-            modelConditionID: 9,
-            modelConditionRef: null,
+            scoreFields: [],
             benchmarkID: 10,
             benchmarkRef: null,
             benchmarkConditionID: 11,
@@ -187,10 +190,10 @@ function normalizedSQL(sql) {
     return String(sql).replace(/\s+/g, ' ').trim();
 }
 
-test('canonical benchmark submission persists conditions, multiple tags, and explicit custom anchors', async () => {
+test('canonical benchmark submission persists conditions and explicit custom anchors without tags', async () => {
     const content = loadSubmissionContract().buildContributionContent(newBenchmarkSubmission());
     assert.equal(content.type, 'new_benchmark');
-    assert.deepEqual(Array.from(content.benchmarks[0].tags), ['Benchmark', 'Reasoning']);
+    assert.equal(Object.hasOwn(content.benchmarks[0], 'tags'), false);
     assert.equal(content.benchmarks[0].conditions[0].usesPercentageScale, true);
     assert.equal(content.benchmarks[0].conditions[0].scoreMin, null);
     assert.equal(content.benchmarks[0].conditions[0].scoreMax, null);
@@ -198,7 +201,6 @@ test('canonical benchmark submission persists conditions, multiple tags, and exp
     assert.equal(content.benchmarks[0].conditions[1].scoreMax, 80);
 
     const calls = [];
-    let nextTagID = 100;
     const connection = {
         async execute(sql, params = []) {
             const statement = normalizedSQL(sql);
@@ -209,18 +211,7 @@ test('canonical benchmark submission persists conditions, multiple tags, and exp
             if (statement.startsWith('INSERT INTO benchmarks ')) {
                 return [{ insertId: 41 }, []];
             }
-            if (statement.startsWith('SELECT ID, name, is_active FROM benchmark_tags')) {
-                return [[], []];
-            }
-            if (statement.startsWith('INSERT INTO benchmark_tags ')) {
-                nextTagID += 1;
-                return [{ insertId: nextTagID }, []];
-            }
-            if (statement.startsWith('SELECT 1 FROM benchmark_tag_links')) {
-                return [[], []];
-            }
-            if (statement.startsWith('INSERT INTO benchmark_tag_links ')
-                || statement.startsWith('INSERT INTO benchmark_conditions ')) {
+            if (statement.startsWith('INSERT INTO benchmark_conditions ')) {
                 return [{ affectedRows: 1 }, []];
             }
             throw new Error(`Unexpected SQL: ${statement}`);
@@ -233,24 +224,25 @@ test('canonical benchmark submission persists conditions, multiple tags, and exp
     assert.deepEqual(benchmarkInsert.params, [
         'CanonicalBench',
         'https://example.com/canonical-bench',
-        ''
+        '',
+        'A public benchmark introduction.', true, 'https://example.com/official-results', 'Use the current leaderboard.'
     ]);
     const conditionInserts = calls.filter(call => (
         call.statement.startsWith('INSERT INTO benchmark_conditions ')
     ));
     assert.equal(conditionInserts.length, 2);
-    assert.deepEqual(conditionInserts[0].params.slice(5, 8), [1, null, null]);
-    assert.deepEqual(conditionInserts[1].params.slice(5, 8), [0, -20, 80]);
-    assert.equal(calls.filter(call => (
-        call.statement.startsWith('INSERT INTO benchmark_tag_links ')
-    )).length, 2);
+    assert.deepEqual(conditionInserts.map(call => call.params[3]), ['', '']);
+    assert.deepEqual(conditionInserts.map(call => call.params[10]), [1, 0]);
+    assert.deepEqual(conditionInserts[0].params.slice(6, 9), [1, null, null]);
+    assert.deepEqual(conditionInserts[1].params.slice(6, 9), [0, -20, 80]);
+    assert.ok(calls.every(call => !/benchmark_tags|benchmark_tag_links/.test(call.statement)));
     assert.ok(calls.every(call => !/\bobjects\b|evaluation_profiles|evaluation_results/.test(call.statement)));
 });
 
 test('canonical result persistence is context-free and keeps a source on every score row', async () => {
     const contract = loadSubmissionContract();
     const content = contract.buildContributionContent(benchmarkResultSubmission());
-    assert.equal(content.schemaVersion, 8);
+    assert.equal(content.schemaVersion, 9);
     assert.equal(Object.hasOwn(content, 'context'), false);
 
     const legacy = {
@@ -266,17 +258,22 @@ test('canonical result persistence is context-free and keeps a source on every s
     const calls = [];
     const stored = [];
     const connection = {
+        async query(sql, params) {
+            assert.match(sql, /^UPDATE benchmarks SET scores_updated_at=UTC_TIMESTAMP\(3\)/);
+            calls.push({ statement: normalizedSQL(sql), params });
+            return [{ affectedRows: params[0].length }];
+        },
         async execute(sql, params = []) {
             const statement = normalizedSQL(sql);
             calls.push({ statement, params: structuredClone(params) });
-            if (statement.startsWith('SELECT ID FROM organizations') || statement.startsWith('SELECT ID FROM model_conditions')) {
+            if (statement.startsWith('SELECT ID FROM organizations') || statement.startsWith('SELECT ID FROM models')) {
                 return [[{ ID: 1 }], []];
             }
-            if (statement.startsWith('SELECT source_url, raw_score FROM benchmark_results')) {
-                return [stored.filter(row => row.modelConditionID === params[0] && row.benchmarkConditionID === params[1]), []];
+            if (statement.startsWith('SELECT source_url, raw_score, score_fields FROM benchmark_results')) {
+                return [stored.filter(row => row.modelID === params[0] && row.benchmarkConditionID === params[1]), []];
             }
             if (statement.startsWith('INSERT INTO benchmark_results ')) {
-                stored.push({ modelConditionID: params[1], benchmarkConditionID: params[3], raw_score: params[4], source_url: params[5] });
+                stored.push({ modelID: params[0], benchmarkConditionID: params[2], raw_score: params[3], source_url: params[4], score_fields: JSON.parse(params[9]) });
                 return [{ insertId: calls.length }, []];
             }
             throw new Error(`Unexpected SQL: ${statement}`);
@@ -298,17 +295,17 @@ test('canonical result persistence is context-free and keeps a source on every s
     assert.equal(calls.some(call => call.statement.startsWith('SELECT ID FROM benchmark_results ')), false);
     assert.match(inserts[0].statement, /source_url, source_type, source_title/);
     assert.doesNotMatch(inserts[0].statement, /ranking_context_ID/);
-    assert.equal(inserts[0].params[5], 'https://example.com/results/one');
-    assert.equal(inserts[0].params[6], 'vendor_official');
-    assert.equal(inserts[1].params[5], 'https://example.com/results/two');
-    assert.equal(inserts[1].params[6], 'third_party_lab');
-    assert.notEqual(inserts[0].params[5], inserts[1].params[5]);
+    assert.equal(inserts[0].params[4], 'https://example.com/results/one');
+    assert.equal(inserts[0].params[5], 'vendor_official');
+    assert.equal(inserts[1].params[4], 'https://example.com/results/two');
+    assert.equal(inserts[1].params[5], 'third_party_lab');
+    assert.notEqual(inserts[0].params[4], inserts[1].params[4]);
     assert.doesNotMatch(inserts[0].statement, /provider/);
-    assert.equal(JSON.parse(inserts[0].params[9]).conditionID, content.results[0].benchmarkConditionID);
-    assert.equal(JSON.parse(inserts[1].params[9]).conditionID, content.results[1].benchmarkConditionID);
-    assert.equal(inserts[0].params.length, 13);
-    assert.equal(inserts[0].params[8], content.results[0].notes);
-    assert.equal(inserts[1].params[8], content.results[1].notes);
+    assert.equal(JSON.parse(inserts[0].params[8]).conditionID, content.results[0].benchmarkConditionID);
+    assert.equal(JSON.parse(inserts[1].params[8]).conditionID, content.results[1].benchmarkConditionID);
+    assert.equal(inserts[0].params.length, 12);
+    assert.equal(inserts[0].params[7], content.results[0].notes);
+    assert.equal(inserts[1].params[7], content.results[1].notes);
     const anotherSource = structuredClone(content);
     anotherSource.results = [anotherSource.results[0]];
     anotherSource.results[0].source.url = 'https://example.net/another-report';
@@ -360,36 +357,55 @@ test('custom scores may exceed normalization anchors while percentage scores rem
     );
 });
 
-test('public weights average participants across the subtree and drive model score intervals', async () => {
+test('public weights average local configurations without combining independent topics', async () => {
+    const contexts = [
+        { ID: 10, category_ID: 1, context_values: '{"tools":"any"}' },
+        { ID: 11, category_ID: 1, context_values: '{"tools":"allowed"}' },
+        { ID: 12, category_ID: 2, context_values: '{}' }
+    ];
+    const pies = [
+        { pie_ID: 1, context_ID: 10, benchmark_condition_ID: 21, weight_basis_points: 6000 },
+        { pie_ID: 1, context_ID: 10, benchmark_condition_ID: 22, weight_basis_points: 4000 },
+        { pie_ID: 2, context_ID: 11, benchmark_condition_ID: 21, weight_basis_points: 2000 },
+        { pie_ID: 2, context_ID: 11, benchmark_condition_ID: 22, weight_basis_points: 8000 },
+        { pie_ID: 3, context_ID: 12, benchmark_condition_ID: 22, weight_basis_points: 10000 }
+    ].map(row => ({ ...row, is_recent: 1, is_influence_recent: 1 }));
+    const requestedContexts = [];
     const connection = {
-        async execute(sql) {
+        async execute(sql, params) {
             if (sql.includes('FROM personal_pie_score_rules')) return [[], []];
-            if (sql.includes('WITH RECURSIVE category_scope')) {
-                return [[
-                    { ID: 10, category_ID: 1, context_values: '{}' },
-                    { ID: 11, category_ID: 2, context_values: '{}' }
-                ], []];
+            if (sql.includes('FROM ranking_contexts rc')) {
+                assert.match(sql, /WHERE rc\.category_ID = \? AND c\.is_active = 1 AND c\.owner_user_ID IS NULL/);
+                assert.doesNotMatch(sql, /WITH RECURSIVE|parent_ID|source_category_ID/);
+                assert.equal(params.length, 1);
+                return [contexts.filter(row => row.category_ID === params[0]), []];
             }
             if (sql.includes('FROM personal_pies')) {
-                return [[
-                    { pie_ID: 1, context_ID: 10, benchmark_condition_ID: 21, weight_basis_points: 6000 },
-                    { pie_ID: 1, context_ID: 10, benchmark_condition_ID: 22, weight_basis_points: 4000 },
-                    { pie_ID: 2, context_ID: 11, benchmark_condition_ID: 21, weight_basis_points: 2000 },
-                    { pie_ID: 2, context_ID: 11, benchmark_condition_ID: 22, weight_basis_points: 8000 }
-                ], []];
+                requestedContexts.push(params);
+                return [pies.filter(row => params.includes(row.context_ID)), []];
             }
             throw new Error(`Unexpected SQL: ${sql}`);
         }
     };
     const publicPie = await loadPublicPie(
         connection,
-        { categoryID: 1, dimensions: [], contextValues: {} },
+        { categoryID: 1, dimensions: [{ key: 'tools', options: [
+            { key: 'any', isNeutral: true }, { key: 'allowed', isNeutral: false }
+        ] }], contextValues: { tools: 'any' } },
         new Map([[21, {}], [22, {}]])
     );
     assert.equal(publicPie.participantCount, 2);
+    assert.deepEqual(publicPie.contextIDs, [10, 11]);
+    assert.equal(Object.hasOwn(publicPie, 'composition'), false);
     assert.deepEqual(publicPie.entries, [
         { conditionID: 21, weightBasisPoints: 4000 },
         { conditionID: 22, weightBasisPoints: 6000 }
+    ]);
+    assert.deepEqual(publicPie.scoringEntries, [
+        { contextID: 10, conditionID: 21, weightBasisPoints: 6000 },
+        { contextID: 10, conditionID: 22, weightBasisPoints: 4000 },
+        { contextID: 11, conditionID: 21, weightBasisPoints: 2000 },
+        { contextID: 11, conditionID: 22, weightBasisPoints: 8000 }
     ]);
 
     const models = [{
@@ -415,4 +431,16 @@ test('public weights average participants across the subtree and drive model sco
     assert.equal(scored[0].upper, 62);
     assert.equal(scored[0].coverage, 100);
     assert.equal(scored[0].resultCount, 2);
+
+    const otherTopic = await loadPublicPie(connection,
+        { categoryID: 2, dimensions: [], contextValues: {} }, new Map([[21, {}], [22, {}]]));
+    assert.deepEqual(otherTopic.contextIDs, [12]);
+    assert.equal(otherTopic.participantCount, 1);
+    assert.deepEqual(otherTopic.entries, [{ conditionID: 22, weightBasisPoints: 10000 }]);
+    assert.deepEqual(requestedContexts, [[10, 11], [12]]);
+    const otherScores = scoreModels(models, otherTopic.scoringEntries, PIE_TOTAL_BASIS_POINTS);
+    assert.equal(otherScores[0].lower, 50);
+    assert.equal(otherScores[0].upper, 50);
+    assert.equal(otherScores[0].coverage, 100);
+    assert.equal(otherScores[0].resultCount, 1);
 });

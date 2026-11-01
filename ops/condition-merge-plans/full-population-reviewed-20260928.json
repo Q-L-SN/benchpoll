@@ -1,0 +1,22 @@
+{
+  "scoreEvidenceScope": "all",
+  "scoreEvidence": "59523326319ed78da2ef8dc3297c6c375e54468f6b58b2df9b4ccddc36b83d95",
+  "groups": [
+    { "benchmarkName": "Agents' Last Exam", "targetID": 15220, "sourceIDs": [7711], "reason": "Same Frontier agentic comparison metric; four independent model scores match." },
+    { "benchmarkName": "ARC-AGI-2", "targetID": 10165, "sourceIDs": [21513], "reason": "Same release comparison metric; four independent model scores match." },
+    { "benchmarkName": "AutomationBench", "targetID": 4831, "sourceIDs": [20072], "reason": "Official release and model-card tables report the same metric; six model scores match." },
+    { "benchmarkName": "AutomationBench (Public)", "targetID": 16417, "sourceIDs": [8832], "reason": "Same public benchmark comparison table; four model scores match." },
+    { "benchmarkName": "BrowseComp", "targetID": 930, "sourceIDs": [20883], "reason": "Official release and model-card tables report the same metric; five model scores match." },
+    { "benchmarkName": "DeepSearchQA", "targetID": 4827, "sourceIDs": [11194], "reason": "Both labels identify the F1 score; three model scores match." },
+    { "benchmarkName": "DeepSWE", "targetID": 14440, "sourceIDs": [18209], "reason": "Both labels identify agentic coding on DeepSWE; four model scores match." },
+    { "benchmarkName": "GPQA Diamond", "targetID": 6071, "sourceIDs": [9536], "reason": "Official release and model-card tables report the same metric; five of six model scores match without configuration conflicts." },
+    { "benchmarkName": "KernelBench Hard", "targetID": 3356, "sourceIDs": [5577], "reason": "Both labels specify Claude Code, Blackwell sm_120, nine questions and mean TFLOPs; four scores match." },
+    { "benchmarkName": "MMMU-Pro", "targetID": 5837, "sourceIDs": [7443], "reason": "Official model-card and release tables report the same MMMU-Pro metric; four of five scores match." },
+    { "benchmarkName": "NL2Repo", "targetID": 14375, "sourceIDs": [21428], "reason": "Same repository code-generation metric; four model scores match." },
+    { "benchmarkName": "OSWorld-Verified", "targetID": 11483, "sourceIDs": [20734], "reason": "Both labels specify the same official-code, 361-task, coordinate and display setup; four model scores match." },
+    { "benchmarkName": "SWE-Bench Pro", "targetID": 2405, "sourceIDs": [5916], "reason": "Cursor release and model-card presentation of the same benchmark; four model scores match." },
+    { "benchmarkName": "SWE-Bench Pro", "targetID": 9678, "sourceIDs": [17237], "reason": "Release chart and official model-card figure report the same benchmark; four model scores match." },
+    { "benchmarkName": "Terminal-Bench 2.1", "targetID": 4655, "sourceIDs": [16914], "reason": "Both labels identify the official agentic terminal comparison; four model scores match." },
+    { "benchmarkName": "Toolathlon-Verified", "targetID": 15949, "sourceIDs": [21421], "reason": "Both labels identify the same tool-use comparison metric; four model scores match." }
+  ]
+}

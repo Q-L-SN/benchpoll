@@ -1,5 +1,9 @@
 import { PageHeader } from './shared/page-header.js';
+import './shared/help-popover.js?v=help-popovers-20261008';
 import * as S from '/js/shared.js';
+import { enhanceUI, observeCustomSelects, handleCustomSelectKeydown } from './shared/ui-components.js?v=custom-select-20261013';
+import { openSignIn, installSignInLinks, listenAccountChange } from './shared/sign-in.js';
+import { installLegalAcceptance } from './shared/legal-acceptance.js';
 
 export const params = new URLSearchParams(location.search);
 
@@ -19,9 +23,6 @@ export function editURL(newURL, pushInHistory, withRequest) {
         break;
     }
 }
-
-export const SUPPORT_EMAIL_ADDRESS = 'support@yourdomain.com' // 示例邮箱
-export const APPEAL_EMAIL_SUBJECT = 'Appeal for Suspended Account';
 
 export function openCenterPopup(url, title, width, height) {  // 居中显示window
     // 1. 获取当前窗口坐标
@@ -44,10 +45,12 @@ export function openCenterPopup(url, title, width, height) {  // 居中显示win
 }
 
 export function loginWithGitHub() {
-    openCenterPopup('/github_login', 'Login with GitHub', 600, 700);
+    openSignIn();
 }
+installSignInLinks();
 
 export function listenStorageChange(key, callback) {
+    if (key === 'user-profile-update') return listenAccountChange(callback);
     window.addEventListener('storage', function(event) { // 同域“公共频道”
         if (event.key === key) {
             let newValue;
@@ -105,6 +108,10 @@ window.addEventListener('error', function(event) { // 同步错误捕获
     gotoErrorPage('client', event);
 }, true); // 捕获阶段监听，也能捕获到资源加载错误
 window.addEventListener('unhandledrejection', function(event) { // 异步错误捕获
+    if (event.reason?.payload?.error === 'legal_acceptance_required') {
+        event.preventDefault(); // The inline notice handles this gate without discarding the current draft.
+        return;
+    }
     if (event.reason === 'ImNotAnError') {
         event.preventDefault(); // 这是一个正常的流程，不需要被视为错误
         return;
@@ -116,13 +123,29 @@ window.addEventListener('unhandledrejection', function(event) { // 异步错误�
 });
 
 let canReloadOnPopstate = false;
+let historyNavigationHandler = null;
+let historyDocumentURL = window.location.pathname + window.location.search;
+export function setHistoryNavigationHandler(handler) {
+    if (typeof handler !== 'function' || historyNavigationHandler) {
+        throw new TypeError('A page must register exactly one history navigation handler.');
+    }
+    historyNavigationHandler = handler;
+}
 setTimeout(() => {
     canReloadOnPopstate = true;
+    historyDocumentURL = window.location.pathname + window.location.search;
 }, 1000);
 window.addEventListener('popstate', function(event) {
+    const currentDocumentURL = window.location.pathname + window.location.search;
+    const sameDocument = currentDocumentURL === historyDocumentURL;
+    historyDocumentURL = currentDocumentURL;
+    // In-page anchors and their Back entries must preserve form drafts and dialogs.
+    if (sameDocument && !historyNavigationHandler) return;
     if (event.state?.doNotReload) {
         delete event.state.doNotReload;
         window.history.replaceState(event.state, '');
+    } else if (historyNavigationHandler) {
+        void historyNavigationHandler(event);
     } else if (!canReloadOnPopstate) {
         return; // Safari等移动浏览器可能在初次加载时触发popstate
     } else {
@@ -131,6 +154,28 @@ window.addEventListener('popstate', function(event) {
 });
 
 
+
+const openDialogs = [];
+document.addEventListener('keydown', event => {
+    if (handleCustomSelectKeydown(event)) return;
+    const dialog = openDialogs.at(-1);
+    if (!dialog || !['Escape', 'Tab'].includes(event.key)) return;
+    if (document.body.classList.contains('dialog-page') && (event.key === 'Tab'
+        || event.composedPath().some(node => node instanceof PageHeader || node instanceof globalThis.HTMLDialogElement && node.open))) return;
+    event.stopPropagation();
+    if (event.key === 'Escape') {
+        event.preventDefault();
+        dialog.requestClose();
+        return;
+    }
+    const controls = dialog.focusableControls();
+    event.preventDefault();
+    if (!controls.length) { dialog.focusInitialAction(); return; }
+    const current = controls.indexOf(document.activeElement);
+    const next = current < 0 ? event.shiftKey ? controls.length - 1 : 0
+        : (current + (event.shiftKey ? -1 : 1) + controls.length) % controls.length;
+    controls[next].focus({ preventScroll: true });
+}, true);
 
 class globalDialog extends HTMLElement { // 定义全局对话框组件
     static get observedAttributes() {
@@ -147,7 +192,7 @@ class globalDialog extends HTMLElement { // 定义全局对话框组件
                     position: fixed;
                     inset: 0;
                     display: block;
-                    z-index: var(--dialog-z-index);
+                    z-index: calc(var(--dialog-z-index) + var(--dialog-stack-index, 0));
                     pointer-events: none;
                 }
                 :host([hidden]) {
@@ -293,8 +338,8 @@ class globalDialog extends HTMLElement { // 定义全局对话框组件
             <div class="dialog-root" part="root">
                 <div class="dialog-overlay" part="overlay"></div>
                 <div class="dialog-stage" part="stage">
-                    <div class="dialog-content" part="content" role="dialog" aria-modal="true">
-                        <div class="dialog-title" part="title">
+                    <div class="dialog-content" part="content" role="dialog" aria-modal="true" aria-labelledby="dialog-title" tabindex="-1">
+                        <div id="dialog-title" class="dialog-title" part="title">
                             <slot name="title"></slot>
                         </div>
                         <div class="dialog-body" part="body">
@@ -311,23 +356,61 @@ class globalDialog extends HTMLElement { // 定义全局对话框组件
     }
 
     connectedCallback() {
-        if (!this.hidden) {
-            this.focusInitialAction();
-        }
+        this.syncDialogState();
+    }
+
+    disconnectedCallback() {
+        this.syncDialogState();
     }
 
     attributeChangedCallback(name, oldValue, newValue) {
-        if (name === 'hidden' && oldValue !== newValue && !this.hidden) {
+        if (name === 'hidden' && oldValue !== newValue) this.syncDialogState();
+    }
+
+    syncDialogState() {
+        const index = openDialogs.indexOf(this);
+        if (!this.hidden && this.isConnected && index < 0) {
+            this.returnFocus = document.activeElement;
+            openDialogs.push(this);
             this.focusInitialAction();
+        } else if ((this.hidden || !this.isConnected) && index >= 0) {
+            const wasTopmost = openDialogs.at(-1) === this;
+            openDialogs.splice(index, 1);
+            for (const dialog of openDialogs) {
+                if (this.contains(dialog.returnFocus)) dialog.returnFocus = this.returnFocus;
+            }
+            if (wasTopmost) {
+                const next = openDialogs.at(-1), target = this.returnFocus;
+                requestAnimationFrame(() => {
+                    if (openDialogs.at(-1) !== next) return;
+                    if (target?.isConnected && target.getClientRects().length
+                        && !target.closest('[hidden], [inert]') && !target.hasAttribute('disabled')
+                        && (!next || next.contains(target))) target.focus({ preventScroll: true });
+                    else next?.focusInitialAction();
+                });
+            }
         }
+        openDialogs.forEach((dialog, order) => dialog.style.setProperty('--dialog-stack-index', order));
+    }
+
+    focusableControls() {
+        return [...this.querySelectorAll('global-dialog-action:not([disabled]), button:not([disabled]), a[href], input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex="0"]')]
+            .filter(control => control.getClientRects().length && (control.tabIndex >= 0 || control.matches('global-dialog-action'))
+                && !control.closest('[hidden], [inert]'));
+    }
+
+    requestClose() {
+        const event = new CustomEvent('dialog-cancel', { cancelable: true });
+        if (!this.dispatchEvent(event)) return;
+        this.focusableControls().find(control => control.classList.contains('dialog-close-button'))?.click();
     }
 
     focusInitialAction() {
         requestAnimationFrame(() => {
-            const actions = [...this.querySelectorAll('global-dialog-action')]
-                .filter(action => !action.hidden && !action.hasAttribute('disabled'));
-            const preferredAction = actions.find(action => action.classList.contains('main')) ?? actions[0];
-            preferredAction?.focus();
+            if (openDialogs.at(-1) !== this || this.hidden || !this.isConnected) return;
+            const controls = this.focusableControls();
+            const preferredAction = controls.find(action => action.classList.contains('main')) ?? controls[0];
+            (preferredAction ?? this.shadowRoot.querySelector('.dialog-content')).focus({ preventScroll: true });
         });
     }
 }
@@ -344,21 +427,21 @@ class globalDialogAction extends HTMLElement { // 定义全局对话框操作按
         template.innerHTML = `
             <style>
                 :host {
-                    --button-color: #263153;
+                    --button-color: var(--bp-text, #39414e);
                     --button-background: #ffffff;
-                    --button-border-color: #dfe2ec;
-                    --button-hover-background: #f7f7fc;
-                    --button-hover-color: #111a3d;
-                    --button-hover-border-color: #c9cde0;
+                    --button-border-color: var(--bp-line, #e3e6ec);
+                    --button-hover-background: var(--bp-hover, #f5f6f9);
+                    --button-hover-color: var(--bp-ink, #242c37);
+                    --button-hover-border-color: var(--bp-line-strong, #cfd4de);
                     display: inline-flex;
                 }
                 :host([accent]) {
-                    --button-color: #5949ce;
-                    --button-background: #f3f1ff;
-                    --button-border-color: #dcd7fa;
-                    --button-hover-background: #ebe7ff;
-                    --button-hover-color: #4c3dc2;
-                    --button-hover-border-color: #c9c1f5;
+                    --button-color: var(--bp-purple, #b84400);
+                    --button-background: var(--bp-purple-soft, #fff0e5);
+                    --button-border-color: var(--bp-line-strong, #cfd4de);
+                    --button-hover-background: var(--bp-selected, #fff2e8);
+                    --button-hover-color: var(--bp-purple-dark, #993800);
+                    --button-hover-border-color: var(--bp-purple, #b84400);
                 }
                 :host([danger]) {
                     --button-color: #b34e57;
@@ -372,43 +455,7 @@ class globalDialogAction extends HTMLElement { // 定义全局对话框操作按
                     opacity: 0.5;
                     pointer-events: none;
                 }
-                #button {
-                    min-height: var(--dialog-button-height);
-                    padding: 0 var(--dialog-button-padding-inline);
-                    border: 1px solid var(--button-border-color);
-                    border-radius: 8px;
-                    background-color: var(--button-background);
-                    color: var(--button-color);
-                    font-family: var(--font-sans);
-                    font-size: 13px;
-                    font-weight: 650;
-                    line-height: 1;
-                    display: inline-flex;
-                    align-items: center;
-                    justify-content: center;
-                    gap: 8px;
-                    cursor: pointer;
-                    user-select: none;
-                    box-shadow: inset 0 1px rgba(255, 255, 255, 0.92), 0 2px 5px rgba(25, 32, 64, 0.055);
-                    transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease, box-shadow 180ms ease;
-                }
-                #button:disabled {
-                    cursor: default;
-                }
-                #button:hover {
-                    background-color: var(--button-hover-background);
-                    color: var(--button-hover-color);
-                    border-color: var(--button-hover-border-color);
-                    box-shadow: inset 0 1px rgba(255, 255, 255, 0.94), 0 5px 12px rgba(35, 41, 77, 0.08);
-                }
-                #button:active:not(:disabled) {
-                    box-shadow: inset 0 1px 3px rgba(35, 41, 77, 0.1);
-                }
-                #button:focus-visible {
-                    outline: none;
-                    border-color: #7b6cee;
-                    box-shadow: 0 0 0 3px rgba(109, 92, 231, 0.16);
-                }
+                :host(:focus-visible) { outline: none; }
                 @media (max-width: 420px) {
                     :host,
                     #button {
@@ -416,7 +463,8 @@ class globalDialogAction extends HTMLElement { // 定义全局对话框操作按
                     }
                 }
             </style>
-            <button id="button" part="button" type="button"><slot></slot></button>
+            <link rel="stylesheet" href="/css/ui/components.css?v=custom-select-20261013">
+            <button id="button" class="bp-ui-action" part="button" type="button"><slot></slot></button>
         `;
         shadow.appendChild(template.content.cloneNode(true));
         this.syncDisabledState();
@@ -453,7 +501,6 @@ export function showDialog({
     tone = 'default'
 }) {
     return new Promise(resolve => {
-        const previousFocus = document.activeElement;
         const dialog = document.createElement('global-dialog');
         dialog.className = 'global-system-dialog';
         dialog.hidden = true;
@@ -475,18 +522,13 @@ export function showDialog({
                 return;
             }
             settled = true;
-            document.removeEventListener('keydown', handleKeydown);
+            dialog.removeEventListener('dialog-cancel', handleCancel);
             dialog.remove();
-            if (previousFocus instanceof HTMLElement && previousFocus.isConnected) {
-                previousFocus.focus();
-            }
             resolve(value);
         };
-        const handleKeydown = event => {
-            if (event.key === 'Escape') {
-                event.preventDefault();
-                finish(false);
-            }
+        const handleCancel = event => {
+            event.preventDefault();
+            finish(false);
         };
 
         if (cancelLabel) {
@@ -504,7 +546,7 @@ export function showDialog({
 
         dialog.append(titleElement, bodyElement, actionsElement);
         document.body.append(dialog);
-        document.addEventListener('keydown', handleKeydown);
+        dialog.addEventListener('dialog-cancel', handleCancel);
         requestAnimationFrame(() => {
             dialog.hidden = false;
         });
@@ -533,3 +575,6 @@ export function showConfirm(message, options = {}) {
 customElements.define('global-header', PageHeader);
 customElements.define('global-dialog', globalDialog);
 customElements.define('global-dialog-action', globalDialogAction);
+enhanceUI();
+observeCustomSelects();
+installLegalAcceptance();

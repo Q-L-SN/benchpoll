@@ -1,0 +1,2944 @@
+{
+  "groups": [
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 451,
+      "sourceIDs": [
+        14878
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 476,
+      "sourceIDs": [
+        2262
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 662,
+      "sourceIDs": [
+        11505
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 675,
+      "sourceIDs": [
+        9518
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 678,
+      "sourceIDs": [
+        18593
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 685,
+      "sourceIDs": [
+        18443
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 718,
+      "sourceIDs": [
+        16712
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 745,
+      "sourceIDs": [
+        16108
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 805,
+      "sourceIDs": [
+        16188
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 856,
+      "sourceIDs": [
+        951
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 1024,
+      "sourceIDs": [
+        13939
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 1122,
+      "sourceIDs": [
+        18316
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 1191,
+      "sourceIDs": [
+        1682
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 1278,
+      "sourceIDs": [
+        9595
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 1282,
+      "sourceIDs": [
+        12242
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 1384,
+      "sourceIDs": [
+        13657
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 1564,
+      "sourceIDs": [
+        2450
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 1644,
+      "sourceIDs": [
+        3447
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 1875,
+      "sourceIDs": [
+        19882
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 1928,
+      "sourceIDs": [
+        11313
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 2045,
+      "sourceIDs": [
+        7414
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 2101,
+      "sourceIDs": [
+        4333
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 2126,
+      "sourceIDs": [
+        14160
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 2160,
+      "sourceIDs": [
+        8505
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 2266,
+      "sourceIDs": [
+        11939
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 2369,
+      "sourceIDs": [
+        20418
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 2379,
+      "sourceIDs": [
+        16884
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 2429,
+      "sourceIDs": [
+        16619
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 2506,
+      "sourceIDs": [
+        10359
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 2536,
+      "sourceIDs": [
+        15880
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 2624,
+      "sourceIDs": [
+        13598
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 2815,
+      "sourceIDs": [
+        11747
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 3060,
+      "sourceIDs": [
+        1586
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 3116,
+      "sourceIDs": [
+        1479
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 3289,
+      "sourceIDs": [
+        19843
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 3388,
+      "sourceIDs": [
+        898
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 3549,
+      "sourceIDs": [
+        17336
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 3839,
+      "sourceIDs": [
+        3924
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 3986,
+      "sourceIDs": [
+        20694
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 4004,
+      "sourceIDs": [
+        9699
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 4050,
+      "sourceIDs": [
+        13350
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 4142,
+      "sourceIDs": [
+        8744
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 4299,
+      "sourceIDs": [
+        21266
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 4345,
+      "sourceIDs": [
+        17310
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 4580,
+      "sourceIDs": [
+        18686
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 4596,
+      "sourceIDs": [
+        11445
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 4689,
+      "sourceIDs": [
+        18921
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 4691,
+      "sourceIDs": [
+        20386
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 4862,
+      "sourceIDs": [
+        2099
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 4883,
+      "sourceIDs": [
+        7167
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 4954,
+      "sourceIDs": [
+        7230
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 5269,
+      "sourceIDs": [
+        9604
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 5275,
+      "sourceIDs": [
+        12420
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 5543,
+      "sourceIDs": [
+        8902
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 5593,
+      "sourceIDs": [
+        4110
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 5680,
+      "sourceIDs": [
+        12905
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 5746,
+      "sourceIDs": [
+        2859
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 5811,
+      "sourceIDs": [
+        11964
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 5823,
+      "sourceIDs": [
+        5047
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 5857,
+      "sourceIDs": [
+        12748
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 5966,
+      "sourceIDs": [
+        12489
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 6030,
+      "sourceIDs": [
+        14487
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 6182,
+      "sourceIDs": [
+        9150
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 6211,
+      "sourceIDs": [
+        1807
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 6297,
+      "sourceIDs": [
+        18441
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 6321,
+      "sourceIDs": [
+        13469
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 6330,
+      "sourceIDs": [
+        14625
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 6485,
+      "sourceIDs": [
+        1752
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 6572,
+      "sourceIDs": [
+        3845
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 6644,
+      "sourceIDs": [
+        8026
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 6657,
+      "sourceIDs": [
+        5669
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 6660,
+      "sourceIDs": [
+        7126
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 6725,
+      "sourceIDs": [
+        829
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 6741,
+      "sourceIDs": [
+        15297
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 6777,
+      "sourceIDs": [
+        7869
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 6820,
+      "sourceIDs": [
+        14823
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 6831,
+      "sourceIDs": [
+        1407
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 6864,
+      "sourceIDs": [
+        20213
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 6979,
+      "sourceIDs": [
+        8706
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 7041,
+      "sourceIDs": [
+        15354
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 7057,
+      "sourceIDs": [
+        4853
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 7071,
+      "sourceIDs": [
+        13163
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 7300,
+      "sourceIDs": [
+        4919
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 7323,
+      "sourceIDs": [
+        10787
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 7584,
+      "sourceIDs": [
+        12448
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 8128,
+      "sourceIDs": [
+        14228
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 8271,
+      "sourceIDs": [
+        3207
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 8455,
+      "sourceIDs": [
+        13320
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 8463,
+      "sourceIDs": [
+        9192
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 8568,
+      "sourceIDs": [
+        14282
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 8719,
+      "sourceIDs": [
+        20969
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 8947,
+      "sourceIDs": [
+        17101
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 9246,
+      "sourceIDs": [
+        6555
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 9249,
+      "sourceIDs": [
+        3015
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 9320,
+      "sourceIDs": [
+        16689
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 9365,
+      "sourceIDs": [
+        2835
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 9657,
+      "sourceIDs": [
+        909
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 9979,
+      "sourceIDs": [
+        8255
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 10041,
+      "sourceIDs": [
+        15611
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 10120,
+      "sourceIDs": [
+        12287
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 10123,
+      "sourceIDs": [
+        6133
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 10140,
+      "sourceIDs": [
+        17320
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 10194,
+      "sourceIDs": [
+        2298
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 10243,
+      "sourceIDs": [
+        14661
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 10524,
+      "sourceIDs": [
+        2348
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 10617,
+      "sourceIDs": [
+        7828
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 10725,
+      "sourceIDs": [
+        12365
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 10772,
+      "sourceIDs": [
+        6592
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 10967,
+      "sourceIDs": [
+        16518
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 11010,
+      "sourceIDs": [
+        8185
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 11107,
+      "sourceIDs": [
+        19777
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 11267,
+      "sourceIDs": [
+        9452
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 11295,
+      "sourceIDs": [
+        18304
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 11496,
+      "sourceIDs": [
+        780
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 11559,
+      "sourceIDs": [
+        8425
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 11658,
+      "sourceIDs": [
+        10178
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 11686,
+      "sourceIDs": [
+        19438
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 11697,
+      "sourceIDs": [
+        14581
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 11752,
+      "sourceIDs": [
+        1070
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 11842,
+      "sourceIDs": [
+        9688
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 11849,
+      "sourceIDs": [
+        4328
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 11942,
+      "sourceIDs": [
+        14792
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 11984,
+      "sourceIDs": [
+        5406
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 12088,
+      "sourceIDs": [
+        21229
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 12307,
+      "sourceIDs": [
+        6688
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 12338,
+      "sourceIDs": [
+        14921
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 12577,
+      "sourceIDs": [
+        1755
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 12676,
+      "sourceIDs": [
+        11345
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 12795,
+      "sourceIDs": [
+        19529
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 12969,
+      "sourceIDs": [
+        14916
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 13165,
+      "sourceIDs": [
+        15173
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 13188,
+      "sourceIDs": [
+        19673
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 13344,
+      "sourceIDs": [
+        5935
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 13516,
+      "sourceIDs": [
+        7558
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 13650,
+      "sourceIDs": [
+        12971
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 13666,
+      "sourceIDs": [
+        3455
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 13743,
+      "sourceIDs": [
+        14015
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 13756,
+      "sourceIDs": [
+        2569
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 13951,
+      "sourceIDs": [
+        19665
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 13965,
+      "sourceIDs": [
+        15045
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 14124,
+      "sourceIDs": [
+        6822
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 14161,
+      "sourceIDs": [
+        1891
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 14223,
+      "sourceIDs": [
+        20727
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 14229,
+      "sourceIDs": [
+        7937
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 14480,
+      "sourceIDs": [
+        8355
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 14628,
+      "sourceIDs": [
+        12891
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 14698,
+      "sourceIDs": [
+        6224
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 14702,
+      "sourceIDs": [
+        13991
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 14757,
+      "sourceIDs": [
+        11304
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 14809,
+      "sourceIDs": [
+        983
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 14847,
+      "sourceIDs": [
+        14623
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 14922,
+      "sourceIDs": [
+        8644
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 15234,
+      "sourceIDs": [
+        14961
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 15280,
+      "sourceIDs": [
+        8389
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 15281,
+      "sourceIDs": [
+        1799
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 15470,
+      "sourceIDs": [
+        16838
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 15478,
+      "sourceIDs": [
+        9725
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 15563,
+      "sourceIDs": [
+        4371
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 15595,
+      "sourceIDs": [
+        2846
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 15855,
+      "sourceIDs": [
+        2793
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 16005,
+      "sourceIDs": [
+        2263
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 16033,
+      "sourceIDs": [
+        20928
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 16245,
+      "sourceIDs": [
+        2196
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 16254,
+      "sourceIDs": [
+        19066
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 16341,
+      "sourceIDs": [
+        3866
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 16455,
+      "sourceIDs": [
+        19036
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 16529,
+      "sourceIDs": [
+        2702
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 16734,
+      "sourceIDs": [
+        5883
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 16861,
+      "sourceIDs": [
+        2297
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 16872,
+      "sourceIDs": [
+        18179
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 16888,
+      "sourceIDs": [
+        17230
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 16911,
+      "sourceIDs": [
+        11373
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 16978,
+      "sourceIDs": [
+        18576
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 17009,
+      "sourceIDs": [
+        1785
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 17097,
+      "sourceIDs": [
+        9587
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 17188,
+      "sourceIDs": [
+        19207
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 17697,
+      "sourceIDs": [
+        11901
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 17749,
+      "sourceIDs": [
+        16096
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 18089,
+      "sourceIDs": [
+        7611
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 18108,
+      "sourceIDs": [
+        20330
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 18174,
+      "sourceIDs": [
+        3016
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 18793,
+      "sourceIDs": [
+        1012
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 18868,
+      "sourceIDs": [
+        3637
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 18956,
+      "sourceIDs": [
+        1906
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 19026,
+      "sourceIDs": [
+        3401
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 19068,
+      "sourceIDs": [
+        17509
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 19332,
+      "sourceIDs": [
+        4185
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 19362,
+      "sourceIDs": [
+        18396
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 19392,
+      "sourceIDs": [
+        1614
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 19441,
+      "sourceIDs": [
+        14196
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 19447,
+      "sourceIDs": [
+        16165
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 19739,
+      "sourceIDs": [
+        14777
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 19808,
+      "sourceIDs": [
+        7858
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 19898,
+      "sourceIDs": [
+        10743
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 20085,
+      "sourceIDs": [
+        14873
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 20250,
+      "sourceIDs": [
+        9216
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 20391,
+      "sourceIDs": [
+        14573
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 20443,
+      "sourceIDs": [
+        5292
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 20589,
+      "sourceIDs": [
+        8671
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 20789,
+      "sourceIDs": [
+        10680
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 20949,
+      "sourceIDs": [
+        9235
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 21120,
+      "sourceIDs": [
+        8228
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 21230,
+      "sourceIDs": [
+        4609
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 21239,
+      "sourceIDs": [
+        4613
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 21274,
+      "sourceIDs": [
+        13709
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 21420,
+      "sourceIDs": [
+        17672
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 21494,
+      "sourceIDs": [
+        7455
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 21548,
+      "sourceIDs": [
+        21268
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 21554,
+      "sourceIDs": [
+        16285
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    },
+    {
+      "benchmarkName": "NanoBEIR",
+      "targetID": 21594,
+      "sourceIDs": [
+        2438
+      ],
+      "reason": "Same dataset and MaxSim retrieval metric; source condition adds only official-modelcard provenance prefix.",
+      "sourceFieldAdditions": [
+        {
+          "fieldID": 27,
+          "value": "MaxSim"
+        }
+      ]
+    }
+  ]
+}

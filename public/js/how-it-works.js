@@ -1,14 +1,16 @@
+import { createTaxonomyDrawer } from './shared/taxonomy-drawer.js?v=20260928';
+import { mountDisclosureMotion, setDisclosureOpen } from './shared/motion.js';
+import { enhanceUI } from './shared/ui-components.js';
+
+enhanceUI();
+
 const taxonomyToggle = document.getElementById('taxonomy-toggle');
 const taxonomyClose = document.getElementById('taxonomy-close');
 const taxonomyScrim = document.getElementById('taxonomy-scrim');
+const setTaxonomyOpen = createTaxonomyDrawer(taxonomyToggle, document.querySelector('.bp-sidebar'));
 const main = document.querySelector('.bp-how-main');
 const links = [...document.querySelectorAll('[data-how-link]')];
 const sections = links.map(link => document.querySelector(link.hash)).filter(Boolean);
-
-function setTaxonomyOpen(open) {
-    document.body.classList.toggle('taxonomy-open', open);
-    taxonomyToggle.setAttribute('aria-expanded', String(open));
-}
 
 function setActiveSection(sectionID) {
     links.forEach(link => {
@@ -25,7 +27,7 @@ function setActiveSection(sectionID) {
 let activeFrame = null;
 function updateActiveSection() {
     activeFrame = null;
-    const activationLine = window.matchMedia('(max-width: 760px)').matches ? 92 : 36;
+    const activationLine = window.matchMedia('(max-width: 760px)').matches ? 92 : 68;
     let current = sections[0];
     sections.forEach(section => {
         if (section.getBoundingClientRect().top <= activationLine) {
@@ -61,3 +63,16 @@ window.addEventListener('resize', scheduleActiveSectionUpdate, { passive: true }
 main.addEventListener('scroll', scheduleActiveSectionUpdate, { passive: true });
 
 updateActiveSection();
+
+mountDisclosureMotion(document.querySelector('.bp-how-content'), 'details');
+
+async function revealLinkedDetails() {
+    const target = document.getElementById(window.location.hash.slice(1));
+    if (!target) return;
+    const ancestors = [];
+    for (let node = target.closest('details'); node; node = node.parentElement.closest('details')) ancestors.unshift(node);
+    for (const details of ancestors) await setDisclosureOpen(details, true, { animate: false });
+    if (ancestors.length) target.scrollIntoView({ block: 'start' });
+}
+window.addEventListener('hashchange', () => { void revealLinkedDetails(); });
+void revealLinkedDetails();

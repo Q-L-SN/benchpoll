@@ -8,9 +8,11 @@
     <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png?v=benchpoll-brand-20260919">
     <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
     <link rel="stylesheet" href="/css/global.css" />
-    <link rel="stylesheet" href="/css/censor.css?v=20260826-senior-tools-2" />
-    <script src="/js/censor.js?v=clean-urls-20260908" type="module"></script>
+    <link rel="stylesheet" href="/css/censor.css?v=review-account-20261008" />
+    <script src="/js/censor.js?v=moderation-replay-20261008" type="module"></script>
     <link rel="stylesheet" href="/css/ui/tokens.css?v=frontend-20260905">
+    <link rel="stylesheet" href="/css/site-palette.css?v=shared-controls-20261010">
+    <link rel="stylesheet" href="/css/typography.css?v=manrope-static-20261007">
 </head>
 <body class="censor-page-body">
     <global-header>
@@ -38,6 +40,7 @@
             </div>
         </section>
 
+        <p id="moderation-account-notice" class="moderation-account-notice" role="alert" hidden></p>
         <nav class="workspace-tabs" aria-label="Moderation workspace views" role="tablist">
             <button id="queue-tab" class="workspace-tab active" type="button" role="tab" aria-selected="true" aria-controls="queue-view" data-workspace-view="queue">
                 <i class="fa-solid fa-inbox" aria-hidden="true"></i>
@@ -50,6 +53,10 @@
             <button id="audit-tab" class="workspace-tab" type="button" role="tab" aria-selected="false" aria-controls="audit-view" data-workspace-view="audit">
                 <i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i>
                 <span>Audit Log</span>
+            </button>
+            <button id="sync-tab" class="workspace-tab" type="button" role="tab" aria-selected="false" aria-controls="sync-view" data-workspace-view="sync">
+                <i class="fa-solid fa-arrows-rotate" aria-hidden="true"></i>
+                <span>Source Conflicts</span>
             </button>
             <button id="messages-tab" class="workspace-tab" type="button" role="tab" aria-selected="false" aria-controls="messages-view" data-workspace-view="messages" hidden>
                 <i class="fa-regular fa-message" aria-hidden="true"></i>
@@ -77,10 +84,18 @@
             <section id="log-list" class="log-list" aria-live="polite"></section>
         </section>
 
+        <section id="sync-view" class="workspace-view" role="tabpanel" aria-labelledby="sync-tab" hidden>
+            <div class="workspace-toolbar">
+                <div><h2>Official source changes</h2><p id="sync-summary" aria-live="polite">Loading source conflicts...</p></div>
+                <button id="sync-refresh" class="toolbar-button" type="button"><i class="fa-solid fa-arrows-rotate" aria-hidden="true"></i><span>Refresh</span></button>
+            </div>
+            <section id="sync-list" class="log-list" aria-live="polite"></section>
+        </section>
+
         <section id="explorer-view" class="workspace-view" role="tabpanel" aria-labelledby="explorer-tab" hidden>
             <div class="workspace-toolbar explorer-toolbar">
                 <div class="toolbar-heading">
-                    <div id="explorer-access-mark" class="readonly-mark" title="Read-only data access">
+                    <div id="explorer-access-mark" class="readonly-mark" data-tooltip="Read-only data access">
                         <i class="fa-solid fa-lock" aria-hidden="true"></i>
                     </div>
                     <div>
@@ -99,11 +114,11 @@
                         <span>Search</span>
                         <input id="explorer-search" type="search" maxlength="160" placeholder="Name, ID, or related object...">
                     </label>
-                    <button class="toolbar-button" type="submit" title="Search data">
+                    <button class="toolbar-button" type="submit" data-tooltip="Search data">
                         <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
                         <span>Search</span>
                     </button>
-                    <button id="explorer-add" class="toolbar-button senior-action" type="button" title="Add a record" hidden>
+                    <button id="explorer-add" class="toolbar-button senior-action" type="button" data-tooltip="Add a record" hidden>
                         <i class="fa-solid fa-plus" aria-hidden="true"></i>
                         <span>Add</span>
                     </button>
@@ -120,11 +135,11 @@
                 </table>
             </div>
             <div class="table-pagination" aria-label="Data explorer pagination">
-                <button id="explorer-prev" class="icon-page-button" type="button" title="Previous page" aria-label="Previous page">
+                <button id="explorer-prev" class="icon-page-button" type="button" data-tooltip="Previous page" aria-label="Previous page">
                     <i class="fa-solid fa-arrow-left" aria-hidden="true"></i>
                 </button>
                 <span id="explorer-page">Page 1 of 1</span>
-                <button id="explorer-next" class="icon-page-button" type="button" title="Next page" aria-label="Next page">
+                <button id="explorer-next" class="icon-page-button" type="button" data-tooltip="Next page" aria-label="Next page">
                     <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
                 </button>
             </div>
@@ -133,7 +148,7 @@
         <section id="audit-view" class="workspace-view" role="tabpanel" aria-labelledby="audit-tab" hidden>
             <div class="workspace-toolbar audit-toolbar">
                 <div class="toolbar-heading">
-                    <div class="readonly-mark" title="Immutable audit history">
+                    <div class="readonly-mark" data-tooltip="Immutable audit history">
                         <i class="fa-solid fa-shield-halved" aria-hidden="true"></i>
                     </div>
                     <div>
@@ -164,7 +179,7 @@
                         <span>Search</span>
                         <input id="audit-search" type="search" maxlength="160" placeholder="Reviewer, type, or summary...">
                     </label>
-                    <button class="toolbar-button" type="submit" title="Filter audit log">
+                    <button class="toolbar-button" type="submit" data-tooltip="Filter audit log">
                         <i class="fa-solid fa-filter" aria-hidden="true"></i>
                         <span>Filter</span>
                     </button>
@@ -191,11 +206,11 @@
                 </table>
             </div>
             <div class="table-pagination" aria-label="Audit log pagination">
-                <button id="audit-prev" class="icon-page-button" type="button" title="Previous page" aria-label="Previous page">
+                <button id="audit-prev" class="icon-page-button" type="button" data-tooltip="Previous page" aria-label="Previous page">
                     <i class="fa-solid fa-arrow-left" aria-hidden="true"></i>
                 </button>
                 <span id="audit-page">Page 1 of 1</span>
-                <button id="audit-next" class="icon-page-button" type="button" title="Next page" aria-label="Next page">
+                <button id="audit-next" class="icon-page-button" type="button" data-tooltip="Next page" aria-label="Next page">
                     <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
                 </button>
             </div>
@@ -204,7 +219,7 @@
         <section id="messages-view" class="workspace-view" role="tabpanel" aria-labelledby="messages-tab" hidden>
             <div class="workspace-toolbar">
                 <div class="toolbar-heading">
-                    <div class="readonly-mark" title="Senior reviewer inbox">
+                    <div class="readonly-mark" data-tooltip="Senior reviewer inbox">
                         <i class="fa-regular fa-message" aria-hidden="true"></i>
                     </div>
                     <div>
@@ -238,6 +253,8 @@
                     <select id="editor-type" name="type" disabled aria-describedby="editor-type-lock-note">
                         <option value="new_benchmark">New Benchmark</option>
                         <option value="new_model">New Model</option>
+                        <option value="score_field">Score Field</option>
+                        <option value="score_field_option">Score Field Value</option>
                         <option value="new_category">New Category</option>
                         <option value="benchmark_result">Benchmark Result</option>
                         <option value="report_issue">Report Issue</option>

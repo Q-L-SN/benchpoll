@@ -1,0 +1,44 @@
+/* Inputs use a surface change, never an additional black focus frame. */
+body :is(input, textarea, select, [contenteditable="true"]):focus {
+    outline: none !important;
+    box-shadow: none !important;
+}
+body :is(input, textarea, select):focus:not([aria-invalid="true"]):not(.has-error *) {
+    border-color: var(--bp-line) !important;
+}
+body :is(input, textarea, select)[aria-invalid="true"] {
+    border-color: #b24d54 !important;
+}
+body :is(input, textarea, select, [contenteditable="true"]):focus-visible {
+    outline: none !important;
+    box-shadow: none !important;
+    caret-color: var(--bp-accent);
+}
+body :is(input:not([type="checkbox"]):not([type="radio"]), textarea, select, [contenteditable="true"]):focus-visible { background-color: var(--bp-surface-soft) !important; }
+body :is(.bp-ui-field:has(input, textarea), .bp-benchmark-search, .bp-navigation-search, .tag-editor, .picker-search,
+    .bp-filter-search-wrap, .bp-model-scores-search):focus-within {
+    outline: none !important;
+    box-shadow: none !important;
+    background-color: var(--bp-surface-soft) !important;
+}
+body :is(.bp-ui-field:has(input, textarea), .bp-benchmark-search, .bp-navigation-search, .tag-editor, .picker-search,
+    .bp-filter-search-wrap, .bp-model-scores-search):focus-within:not(.has-error):not(.has-error *) {
+    border-color: var(--bp-line) !important;
+}
+body :is(.bp-ui-field:has(input, textarea), .bp-benchmark-search, .bp-navigation-search, .tag-editor, .picker-search,
+    .bp-filter-search-wrap, .bp-model-scores-search):focus-within :is(input, textarea):focus {
+    background-color: transparent !important;
+}
+/* The framed benchmark search uses its existing border as the sole focus cue. */
+body .bp-benchmark-search input:focus-visible { box-shadow: none !important; }
+body .bp-benchmark-search:has(input:focus-visible):not(.has-error):not(.has-error *) { border-color: var(--bp-accent) !important; }
+body :is(button, a[href]):has(i, svg),
+body :is(button, a[href]):has(i, svg) :is(span, strong, small, i, svg) {
+    text-decoration: none !important;
+}
+@media (forced-colors: active) {
+    body :is(input, textarea, select, [contenteditable="true"]):focus-visible {
+        outline: 2px solid Highlight !important;
+        outline-offset: -3px;
+    }
+}

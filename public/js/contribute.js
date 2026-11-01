@@ -1,30 +1,53 @@
-import { normalizeModelParameters, modelParameterLabel, parameterRowsToObject } from './shared/model-parameters.js';
-import { validateContributionCatalog } from './contribution/contracts.js?v=score-values-20260907';
+import { mountScoreFields, contributionScoreFields } from './contribution/score-fields.js?v=fixed-score-fields-20261015';
+import './shared/help-popover.js?v=help-popovers-20261008';
+import { validateContributionCatalog } from './contribution/contracts.js?v=contribution-catalog-20261028';
 import {
     escapeHTML, option, finiteOrNull,
     integerOrNull, entityKey, sameEntityID,
     entityLocator, pendingBadge, evaluationScoreBounds,
     evaluationDisplayScoreBounds, evaluationStoredTargetValue, normalizedConditionName,
-    isLiteralDefaultCondition, normalizedIdentifierKey, normalizedSearch,
+    isLiteralDefaultCondition, normalizedSearch,
     rankedMatches
 } from './contribution/fields.js';
 import * as G from '/js/global.js';
-import { buildContributionURL, readContributionEntry } from './shared/contribution-navigation.js?v=object-notes-20260910';
+import { buildContributionURL, activateContributionURL, readContributionEntry, returnFromContribution } from './shared/contribution-navigation.js?v=taxonomy-20260929';
+import { mergeRequestTemplate, bulkImportTemplate, feedbackGuidance, feedbackMessageLimit, feedbackSubmission } from './shared/feedback-templates.js';
+import { createTaxonomyDrawer } from './shared/taxonomy-drawer.js?v=20260928';
+import { mountDisclosureMotion } from './shared/motion.js';
+import { searchItems } from './shared/search.js';
+import { createOrganizationMark } from './shared/organization-logos.js?v=organization-logos-20261006';
+import { postJSON, postWriteJSON } from './shared/http.js?v=write-replay-20261008';
+import { pageAccountWriteScope, isAccountWriteError } from './shared/account-identity.js';
+import { enhanceUI } from './shared/ui-components.js';
+import { createFloatingSearchLayer } from './shared/floating-search-layer.js';
+import { createEvidenceCount } from './shared/evidence-count.js';
+
+const benchmarkSearchFields = object => [object.name, ...object.conditions.map(condition => condition.name)];
+const vendorSearchFields = vendor => vendor.name;
+const modelSearchFields = model => [model.name, model.vendorName];
 
 const contributionEntry = readContributionEntry();
+// A new handoff to this same form only changes the hash unless it is reloaded.
+window.addEventListener('hashchange', () => {
+    if (new URLSearchParams(location.hash.slice(1)).has('entry')) location.reload();
+});
 const params = contributionEntry.params;
+const feedbackInstructions = feedbackGuidance(params.get('details'));
 const formSurface = document.getElementById('form-surface');
 const entryMissing = document.getElementById('entry-missing');
 const authMissing = document.getElementById('auth-missing');
 const form = document.getElementById('contribution-form');
 const stepSurface = document.getElementById('contribution-step');
+mountDisclosureMotion(stepSurface, '.condition-suggestion-fold');
 const submitButton = document.getElementById('submit-contribution');
-const contributionTree = document.getElementById('contribution-tree');
-const treeModeNote = document.getElementById('tree-mode-note');
-const templatePicker = document.getElementById('contribution-template-picker');
 const title = document.getElementById('contribute-title');
 const subtitle = document.getElementById('contribute-subtitle');
-const breadcrumbLabel = document.getElementById('contribute-breadcrumb-label');
+document.getElementById('contribution-back').addEventListener('click', () => returnFromContribution(params));
+document.getElementById('contribution-bulk-import').addEventListener('click', () => {
+    location.assign(activateContributionURL(buildContributionURL('feedback', {
+        targetKind: 'bulk_import', details: bulkImportTemplate(), pageURL: `${location.origin}${location.pathname}`
+    })));
+});
 const successDialog = document.getElementById('submit-success-dialog');
 const errorDialog = document.getElementById('submit-error-dialog');
 const errorCopy = document.getElementById('submit-error-copy');
@@ -48,7 +71,6 @@ const taxonomyToggle = document.getElementById('contribution-taxonomy-toggle');
 const taxonomyClose = document.getElementById('contribution-taxonomy-close');
 const taxonomyScrim = document.getElementById('contribution-taxonomy-scrim');
 const authLogin = document.getElementById('auth-login-button');
-const knownTagOptions = document.getElementById('known-tag-options');
 const evaluationNameOptions = document.getElementById('evaluation-name-options');
 
 const MODE_DETAILS = {
@@ -66,25 +88,25 @@ const MODE_DETAILS = {
     new_model: {
         label: 'New model',
         title: 'Record a new model',
-        subtitle: 'Add a model once, then keep each reproducible model test condition separate.',
+        subtitle: 'Add the model itself. Record settings such as reasoning effort when submitting its scores.',
         categoryEditable: false
     },
     benchmark_result: {
         label: 'New scores',
         title: 'Contribute model scores',
-        subtitle: 'Link each score to an existing model condition, benchmark condition, and source.',
+        subtitle: 'Add a reported score and its source. Record test settings if the source provides them.',
         categoryEditable: false
     },
     edit_benchmark: {
         label: 'Change benchmark',
         title: 'Change benchmark',
-        subtitle: 'Correct details, add a test condition, or merge a duplicate benchmark. Changes take effect after approval.',
+        subtitle: 'Correct details, add a version, or merge a duplicate benchmark. Changes take effect after approval.',
         categoryEditable: false
     },
     edit_model: {
         label: 'Change model',
         title: 'Change model',
-        subtitle: 'Correct details, add a model configuration, or merge a duplicate. Changes take effect after approval.',
+        subtitle: 'Correct the model details or report a duplicate. Changes take effect after approval.',
         categoryEditable: false
     },
     edit_result: {
@@ -93,23 +115,11 @@ const MODE_DETAILS = {
         subtitle: 'Correct approved score evidence or request its removal.',
         categoryEditable: false
     },
-    new_category: {
-        label: 'New category',
-        title: 'Add a category or context',
-        subtitle: 'Choose a parent only when you are ready, then define the new taxonomy entry.',
-        categoryEditable: false
-    },
     correct_or_add_info: {
         label: 'Benchmark correction',
         title: 'Correct benchmark information',
         subtitle: 'Point reviewers to the exact information and the source that supports it.',
         categoryEditable: false
-    },
-    delete_or_migrate_category: {
-        label: 'Category adjustment',
-        title: 'Adjust a category',
-        subtitle: 'Select the affected category and explain whether it should be corrected, moved, or removed.',
-        categoryEditable: true
     },
     feedback: {
         label: 'Feedback',
@@ -120,19 +130,22 @@ const MODE_DETAILS = {
 };
 
 let mode = param('mode');
-let catalog = { benchmarks: [], models: [], vendors: [], categories: [], knownTags: [], rankingDimensions: [] };
-let categoryByID = new Map();
-let selectedCategoryID = null;
-let categorySelectionActive = false;
-let categorySelectionPurpose = null;
-let categorySelectionSnapshot = null;
+if (mode === 'feedback') {
+    if (!param('details')) {
+        document.querySelector('.contribution-sidebar-actions a[href="/contribute/feedback"]')?.remove();
+    } else if (param('targetKind') === 'bulk_import') {
+        document.getElementById('contribution-bulk-import').remove();
+    }
+}
+let catalog = { benchmarks: [], models: [], vendors: [], categories: [], rankingDimensions: [], scoreFields: [] };
 let catalogRequestSequence = 0;
 const pickerRefreshTokens = new WeakMap();
+const contributionSearches = new Map();
+let contributionSearchID = 0;
+let expandedConditionKey = null;
+let focusNewCondition = false;
 
-function setTaxonomyOpen(isOpen) {
-    document.body.classList.toggle('taxonomy-open', isOpen);
-    taxonomyToggle.setAttribute('aria-expanded', String(isOpen));
-}
+const setTaxonomyOpen = createTaxonomyDrawer(taxonomyToggle, document.querySelector('.bp-sidebar'));
 let authenticated = false;
 let hasVerifiedEmail = false;
 
@@ -148,7 +161,9 @@ function makeProfile(index = 0) {
     return {
         clientRef: `benchmark-condition-${Date.now()}-${index}`,
         name: index === 0 ? 'default' : `Profile ${index + 1}`,
+        differenceExplanation: '',
         isDefault: index === 0,
+        isPrimary: index === 0,
         isExisting: false
     };
 }
@@ -157,7 +172,10 @@ function makeEvaluation(index = 0) {
     return {
         name: '',
         introductionURL: '',
-        tags: [],
+        description: '',
+        requestOfficialSync: false,
+        officialSyncURL: '',
+        officialSyncInstructions: '',
         reviewerNotes: '',
         scoreDirection: 'higher',
         targetValue: '',
@@ -171,15 +189,7 @@ function makeEvaluation(index = 0) {
     };
 }
 
-function makeConfiguration(index = 0) {
-    return {
-        clientRef: `model-condition-${Date.now()}-${index}`,
-        parameterRows: index === 0 ? [] : [{ key: '', value: '' }],
-        name: index === 0 ? 'default' : '',
-        isDefault: index === 0,
-        isExisting: false
-    };
-}
+
 
 function makeSubject() {
     return {
@@ -196,7 +206,6 @@ function makeSubject() {
             name: '',
             logoKey: ''
         },
-        conditions: [makeConfiguration(0)],
         clientRef: `model-${Date.now()}`
     };
 }
@@ -207,8 +216,7 @@ function makeResult(index = 0) {
         modelQuery: '',
         modelID: null,
         modelRef: null,
-        modelConditionID: null,
-        modelConditionRef: null,
+        scoreFields: [],
         benchmarkQuery: '',
         benchmarkID: null,
         benchmarkRef: null,
@@ -221,28 +229,11 @@ function makeResult(index = 0) {
     };
 }
 
-function makeContextOption(index = 0) {
-    return {
-        clientRef: `context-option-${Date.now()}-${index}`,
-        name: '',
-        isDefault: index === 0,
-        isNeutral: index === 0
-    };
-}
-
 const draft = {
     benchmarks: [makeEvaluation(0)],
     subject: makeSubject(),
     results: [makeResult(0)],
     resultNotes: '',
-    category: {
-        requestKind: 'category',
-        clientRef: `category-${Date.now()}`,
-        name: '',
-        details: '',
-        contextOrder: [],
-        options: [makeContextOption(0), makeContextOption(1)]
-    },
     report: {
         postID: param('postID'),
         reason: 'spam',
@@ -250,17 +241,7 @@ const draft = {
         details: ''
     },
     feedback: {
-        details: param('details') || ''
-    },
-    context: {
-        confirmed: false,
-        categoryID: null,
-        categoryRef: null,
-        categoryPath: '',
-        dimensions: [],
-        contextValues: {},
-        contextDisplayValues: {},
-        dimensionRefs: []
+        details: ''
     },
     change: {
         targetKind: '',
@@ -298,203 +279,11 @@ function getVendor(vendorID) {
     return catalog.vendors.find(vendor => sameEntityID(vendor.ID, vendorID)) ?? null;
 }
 
-const vendorLogoFiles = new Set([
-    'amazon', 'anthropic', 'cohere', 'deepseek', 'google', 'google-alt',
-    'meta', 'microsoft', 'mistral', 'openai', 'qwen', 'xai', 'zhipu'
-]);
-
-function vendorLogoURL(vendor) {
-    const key = String(vendor?.logoKey || vendor?.slug || '').trim().toLowerCase();
-    return vendorLogoFiles.has(key) ? `/assets/vendors/${key}.png` : '';
-}
-
 function vendorMark(vendor) {
-    const logoURL = vendorLogoURL(vendor);
-    if (logoURL) {
-        return `<span class="vendor-mark"><img src="${escapeHTML(logoURL)}" alt=""></span>`;
-    }
-    return `<span class="vendor-mark fallback" aria-hidden="true">${escapeHTML(String(vendor?.name ?? '?').slice(0, 1).toUpperCase())}</span>`;
+    return createOrganizationMark(vendor, 'vendor-mark').outerHTML;
 }
 
-function getModelCondition(modelID, configurationID) {
-    return getModel(modelID)?.conditions.find(configuration => (
-        sameEntityID(configuration.ID, configurationID)
-    )) ?? null;
-}
 
-function categoryPath(categoryID) {
-    const names = [];
-    const visited = new Set();
-    let cursor = categoryID === null ? null : categoryByID.get(entityKey(categoryID));
-    while (cursor && !visited.has(entityKey(cursor.ID))) {
-        visited.add(entityKey(cursor.ID));
-        names.unshift(cursor.name);
-        cursor = cursor.parentID === null ? null : categoryByID.get(entityKey(cursor.parentID));
-    }
-    return names.join('/');
-}
-
-function findCategoryByPath(path) {
-    const normalized = String(path ?? '').split('/').filter(Boolean).join('/').toLowerCase();
-    if (!normalized) {
-        return null;
-    }
-    return catalog.categories.find(category => categoryPath(category.ID).toLowerCase() === normalized) ?? null;
-}
-
-function renderCategoryTree() {
-    const details = MODE_DETAILS[mode];
-    const editable = Boolean(details?.categoryEditable || categorySelectionActive);
-    treeModeNote.textContent = categorySelectionActive
-        ? 'Select parent'
-        : details?.categoryEditable
-            ? 'Select a category'
-            : 'Locked';
-    contributionTree.setAttribute('aria-disabled', String(!editable));
-    contributionTree.classList.toggle('selection-active', categorySelectionActive);
-    // Category editing can be locked while account/help navigation stays available.
-    const childrenByParent = new Map();
-    catalog.categories.forEach(category => {
-        const key = category.parentID === null ? 'root' : String(category.parentID);
-        if (!childrenByParent.has(key)) {
-            childrenByParent.set(key, []);
-        }
-        childrenByParent.get(key).push(category);
-    });
-
-    const renderList = parentID => {
-        const key = parentID === null ? 'root' : String(parentID);
-        const children = childrenByParent.get(key) ?? [];
-        if (children.length === 0) {
-            return '';
-        }
-        return `<ul class="${parentID === null ? 'contribution-tree-list' : 'contribution-tree-children'}">${children.map(category => {
-            const hasChildren = (childrenByParent.get(String(category.ID)) ?? []).length > 0;
-            const selected = sameEntityID(selectedCategoryID, category.ID);
-            return `<li class="contribution-tree-item${hasChildren ? '' : ' leaf'}" data-category-node="${escapeHTML(category.ID)}">
-                <button class="contribution-tree-row${selected ? ' selected' : ''}" type="button" data-category-id="${escapeHTML(category.ID)}"${editable ? '' : ' disabled'} title="${escapeHTML(categoryPath(category.ID))}">
-                    ${hasChildren ? '<span class="tree-chevron" data-tree-toggle><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></span>' : '<span class="tree-spacer"></span>'}
-                    <span class="tree-label">${escapeHTML(category.name)}${pendingBadge(category)}</span>
-                </button>
-                ${renderList(category.ID)}
-            </li>`;
-        }).join('')}</ul>`;
-    };
-    contributionTree.innerHTML = renderList(null) || '<p class="contribution-tree-empty">No categories yet.</p>';
-}
-
-function copyContextState() {
-    return {
-        selectedCategoryID,
-        confirmed: draft.context.confirmed,
-        categoryID: draft.context.categoryID,
-        categoryRef: draft.context.categoryRef,
-        categoryPath: draft.context.categoryPath,
-        dimensions: structuredClone(draft.context.dimensions),
-        contextValues: { ...draft.context.contextValues },
-        contextDisplayValues: { ...draft.context.contextDisplayValues },
-        dimensionRefs: structuredClone(draft.context.dimensionRefs)
-    };
-}
-
-function restoreContextState(snapshot) {
-    if (!snapshot) {
-        return;
-    }
-    selectedCategoryID = snapshot.selectedCategoryID;
-    Object.assign(draft.context, {
-        confirmed: snapshot.confirmed,
-        categoryID: snapshot.categoryID,
-        categoryRef: snapshot.categoryRef,
-        categoryPath: snapshot.categoryPath,
-        dimensions: snapshot.dimensions,
-        contextValues: snapshot.contextValues,
-        contextDisplayValues: snapshot.contextDisplayValues,
-        dimensionRefs: snapshot.dimensionRefs
-    });
-}
-
-function renderTemplatePicker() {
-    templatePicker.hidden = true;
-    templatePicker.innerHTML = '';
-}
-
-function cancelCategorySelection() {
-    restoreContextState(categorySelectionSnapshot);
-    categorySelectionSnapshot = null;
-    categorySelectionActive = false;
-    categorySelectionPurpose = null;
-    document.body.classList.remove('context-selection-active');
-    renderCategoryTree();
-    renderTemplatePicker();
-    renderCurrentStep();
-    setTaxonomyOpen(false);
-}
-
-function categoryDirectDimensions(categoryID) {
-    return catalog.rankingDimensions
-        .filter(dimension => sameEntityID(dimension.scopeCategoryID, categoryID))
-        .sort((left, right) => Number(left.position) - Number(right.position));
-}
-
-function resetContextOrderForParent() {
-    if (draft.category.requestKind !== 'context' || selectedCategoryID === null) {
-        draft.category.contextOrder = [];
-        return;
-    }
-    draft.category.contextOrder = [
-        ...categoryDirectDimensions(selectedCategoryID).map(dimension => ({
-            clientRef: `existing-${entityKey(dimension.ID)}`,
-            dimensionID: dimension.ID,
-            dimensionRef: dimension.reference ?? null,
-            name: dimension.name,
-            isNew: false
-        })),
-        {
-            clientRef: draft.category.clientRef,
-            dimensionID: null,
-            dimensionRef: null,
-            name: draft.category.name,
-            isNew: true
-        }
-    ];
-}
-
-function completeParentSelection(categoryID) {
-    const category = categoryByID.get(entityKey(categoryID));
-    if (!category) return;
-    selectedCategoryID = category.ID;
-    draft.context.confirmed = true;
-    draft.context.categoryID = category.reference ? null : Number(category.ID);
-    draft.context.categoryRef = category.reference ?? null;
-    draft.context.categoryPath = categoryPath(category.ID);
-    categorySelectionActive = false;
-    categorySelectionPurpose = null;
-    categorySelectionSnapshot = null;
-    document.body.classList.remove('context-selection-active');
-    resetContextOrderForParent();
-    renderCategoryTree();
-    renderTemplatePicker();
-    renderCurrentStep();
-    setTaxonomyOpen(false);
-}
-
-async function beginParentSelection() {
-    if (mode !== 'new_category') return;
-    try {
-        await refreshContributionCatalog();
-    } catch (error) {
-        showError(error.message || 'The category list could not be refreshed.');
-        return;
-    }
-    categorySelectionSnapshot = copyContextState();
-    categorySelectionActive = true;
-    categorySelectionPurpose = 'parent';
-    document.body.classList.add('context-selection-active');
-    renderCategoryTree();
-    renderTemplatePicker();
-    if (window.matchMedia('(max-width: 760px)').matches) setTaxonomyOpen(true);
-}
 
 function selectedContextLabel() {
     if (mode === 'new_benchmark' || mode === 'edit_benchmark') {
@@ -512,109 +301,7 @@ function selectedContextLabel() {
     if (mode === 'correct_or_add_info') {
         return param('targetName') || 'Benchmark information';
     }
-    if (mode === 'new_category') {
-        return draft.context.confirmed ? draft.context.categoryPath.replaceAll('/', ' > ') : 'Parent not selected';
-    }
-    return selectedCategoryID === null ? 'Top level' : categoryPath(selectedCategoryID);
-}
-
-function renderTagEditor(evaluation, evaluationIndex) {
-    return `<div class="tag-editor-shell" data-tag-editor-shell="${evaluationIndex}">
-        <div class="tag-editor" data-tag-editor="${evaluationIndex}">
-            ${evaluation.tags.map((tag, tagIndex) => `<span class="tag-chip">${escapeHTML(tag)}<button type="button" data-remove-tag="${tagIndex}" data-evaluation-index="${evaluationIndex}" aria-label="Remove ${escapeHTML(tag)}"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button></span>`).join('')}
-            <input type="text" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="tag-suggestions-${evaluationIndex}" data-tag-input="${evaluationIndex}" placeholder="Search or add a tag">
-        </div>
-    </div>`;
-}
-
-function normalizedTagName(value) {
-    return String(value ?? '').trim().replace(/\s+/g, ' ').toLocaleLowerCase('en-US');
-}
-
-function validTagName(value) {
-    const normalized = String(value ?? '').trim().replace(/\s+/g, ' ');
-    return normalized.length >= 2 && normalized.length <= 48 && !/[<>\r\n]/.test(normalized);
-}
-
-function tagSuggestions(evaluation, query) {
-    const normalizedQuery = normalizedTagName(query);
-    if (!normalizedQuery) {
-        return [];
-    }
-    const selectedTags = new Set(evaluation.tags.map(normalizedTagName));
-    return catalog.knownTags
-        .map(tag => String(tag.name ?? tag).trim())
-        .filter(Boolean)
-        .filter(tag => !selectedTags.has(normalizedTagName(tag)))
-        .map(tag => {
-            const normalized = normalizedTagName(tag);
-            return {
-                tag,
-                matchIndex: normalized.indexOf(normalizedQuery),
-                startsWith: normalized.startsWith(normalizedQuery)
-            };
-        })
-        .filter(candidate => candidate.matchIndex >= 0)
-        .sort((left, right) => (
-            Number(right.startsWith) - Number(left.startsWith)
-            || left.matchIndex - right.matchIndex
-            || left.tag.length - right.tag.length
-            || left.tag.localeCompare(right.tag)
-        ))
-        .slice(0, 6)
-        .map(candidate => candidate.tag);
-}
-
-function renderTagSuggestions(evaluation, evaluationIndex, query) {
-    const value = String(query ?? '').trim().replace(/\s+/g, ' ');
-    if (!value) {
-        return '';
-    }
-    const normalized = normalizedTagName(value);
-    if (evaluation.tags.some(tag => normalizedTagName(tag) === normalized)) {
-        return `<div class="tag-suggestions" id="tag-suggestions-${evaluationIndex}" role="listbox"><p>Already added</p></div>`;
-    }
-    const suggestions = tagSuggestions(evaluation, value);
-    if (suggestions.length > 0) {
-        return `<div class="tag-suggestions" id="tag-suggestions-${evaluationIndex}" role="listbox" aria-label="Known tag suggestions">
-            ${suggestions.map((tag, index) => `<button type="button" role="option" data-select-tag="${escapeHTML(tag)}" data-evaluation-index="${evaluationIndex}">
-                <span>${escapeHTML(tag)}</span>${index === 0 ? '<small>Tab</small>' : ''}
-            </button>`).join('')}
-        </div>`;
-    }
-    if (!validTagName(value)) {
-        return `<div class="tag-suggestions" id="tag-suggestions-${evaluationIndex}" role="listbox"><p>Use 2–48 characters for a tag.</p></div>`;
-    }
-    return `<div class="tag-suggestions" id="tag-suggestions-${evaluationIndex}" role="listbox" aria-label="Create a new tag">
-        <button class="create-tag-option" type="button" data-select-tag="${escapeHTML(value)}" data-evaluation-index="${evaluationIndex}">
-            <i class="fa-solid fa-plus" aria-hidden="true"></i><span>Create new tag</span><strong>${escapeHTML(value)}</strong>
-        </button>
-    </div>`;
-}
-
-function updateTagSuggestionMenu(input) {
-    const evaluationIndex = Number(input.dataset.tagInput);
-    const evaluation = draft.benchmarks[evaluationIndex];
-    const shell = input.closest('[data-tag-editor-shell]');
-    shell?.querySelector('.tag-suggestions')?.remove();
-    const markup = renderTagSuggestions(evaluation, evaluationIndex, input.value);
-    if (markup) {
-        shell?.insertAdjacentHTML('beforeend', markup);
-    }
-    input.setAttribute('aria-expanded', String(Boolean(markup)));
-}
-
-function commitTag(evaluationIndex, value) {
-    const evaluation = draft.benchmarks[evaluationIndex];
-    const tag = String(value ?? '').trim().replace(/\s+/g, ' ');
-    if (!validTagName(tag) || evaluation.tags.some(existing => normalizedTagName(existing) === normalizedTagName(tag))) {
-        return;
-    }
-    evaluation.tags.push(tag);
-    renderCurrentStep();
-    requestAnimationFrame(() => {
-        stepSurface.querySelector(`[data-tag-input="${evaluationIndex}"]`)?.focus();
-    });
+    return param('categoryPath') || 'BenchPoll';
 }
 
 function selectedEvaluation() {
@@ -634,7 +321,6 @@ function clearEvaluationSelection(name = '') {
     evaluation.name = name;
     if (wasExisting) {
         evaluation.introductionURL = '';
-        evaluation.tags = [];
         evaluation.scoreDirection = 'higher';
         evaluation.targetValue = '';
         evaluation.usesPercentageScale = true;
@@ -645,62 +331,234 @@ function clearEvaluationSelection(name = '') {
 }
 
 function evaluationSuggestions(query) {
-    const normalized = String(query ?? '').trim().toLocaleLowerCase('en-US');
-    if (!normalized) {
-        return catalog.benchmarks.slice(0, 6);
+    return searchItems(catalog.benchmarks, query, benchmarkSearchFields, { limit: 12 });
+}
+
+function conditionScoreCount(condition) {
+    const known = Number.isSafeInteger(condition.scoreCount) && condition.scoreCount >= 0;
+    const count = createEvidenceCount(known ? condition.scoreCount : 0);
+    if (!known) {
+        count.querySelector('.bp-evidence-count-value').textContent = '?';
+        count.dataset.tooltip = 'Approved score count unavailable.';
+        count.setAttribute('aria-label', count.dataset.tooltip);
     }
-    return catalog.benchmarks
-        .filter(object => object.name.toLocaleLowerCase('en-US').includes(normalized))
-        .slice(0, 6);
+    count.classList.add('condition-score-count');
+    // Picker options already own keyboard focus; retain the count's accessible description.
+    count.removeAttribute('tabindex');
+    return count.outerHTML;
+}
+
+function benchmarkSuggestionChoices(query) {
+    return evaluationSuggestions(query).flatMap(object => searchItems(object.conditions, query,
+        condition => [object.name, condition.name])
+        .map(condition => ({ object, condition })));
+}
+
+function conditionSuggestionGroups(choices, render) {
+    const primary = choices.filter(choice => choice.condition.isPrimary);
+    const other = choices.filter(choice => !choice.condition.isPrimary && !choice.condition.lowCoverage);
+    const lower = choices.filter(choice => !choice.condition.isPrimary && choice.condition.lowCoverage);
+    const fold = (rows, label) => rows.length ? `<details class="condition-suggestion-fold"><summary>${rows.length} ${label} ${rows.length === 1 ? 'version' : 'versions'}</summary><div>${rows.map(render).join('')}</div></details>` : '';
+    const nestedLower = fold(lower, 'lower-coverage');
+    const otherFold = other.length || lower.length ? `<details class="condition-suggestion-fold"><summary>${other.length + lower.length} other versions</summary><div>${other.map(render).join('')}${nestedLower}</div></details>` : '';
+    return primary.map(render).join('') + otherFold;
+}
+
+function benchmarkChoiceLabel(object, condition) {
+    return `<span class="benchmark-suggestion-copy"><span>${escapeHTML(object.name)}${pendingBadge(object)}</span>${normalizedConditionName(condition.name) === 'default' ? '' : `<small>${escapeHTML(condition.name)}</small>`}</span>`;
 }
 
 function renderEvaluationSuggestions(query) {
-    const suggestions = evaluationSuggestions(query);
+    const suggestions = benchmarkSuggestionChoices(query);
     if (!String(query ?? '').trim() || suggestions.length === 0) {
         return '';
     }
     return `<div class="evaluation-suggestions" role="listbox" aria-label="Existing benchmarks">
-        <p class="duplicate-check-heading"><strong>Is your benchmark already listed?</strong><span>Do not submit it twice. Select a match to add a test condition instead.</span></p>
-        ${suggestions.map((object, index) => `<button type="button" role="option" data-select-evaluation="${escapeHTML(object.ID)}">
-            <span>${escapeHTML(object.name)}${pendingBadge(object)}</span>
-            <small>${object.pending ? 'Already submitted · pending review' : 'Add a test condition'}${index === 0 ? ' · Tab to focus' : ''}</small>
-        </button>`).join('')}
+        <p class="duplicate-check-heading"><strong>Is your benchmark already listed?</strong><span>Do not submit it twice. Select a match to add a version instead.</span></p>
+        ${conditionSuggestionGroups(suggestions, ({ object, condition }) => `<button type="button" role="option" data-select-evaluation="${escapeHTML(object.ID)}">
+            ${benchmarkChoiceLabel(object, condition)}${conditionScoreCount(condition)}
+        </button>`)}
     </div>`;
 }
 
 function updateEvaluationSuggestionMenu(input) {
-    const combobox = input.closest('.evaluation-combobox');
-    combobox?.querySelector('.evaluation-suggestions')?.remove();
-    const markup = renderEvaluationSuggestions(input.value);
-    if (markup) {
-        combobox?.insertAdjacentHTML('beforeend', markup);
+    updateContributionSuggestions(input, renderEvaluationSuggestions(input.value));
+}
+
+function bindContributionSearch(key, anchor, panel, { scope = anchor, maxHeight = 280, onClose = () => {} } = {}) {
+    panel.id ||= `contribution-search-${++contributionSearchID}`;
+    panel.hidden = true;
+    anchor.setAttribute('aria-controls', panel.id);
+    anchor.setAttribute('aria-expanded', 'false');
+    const state = { panel, wanted: false };
+    state.layer = createFloatingSearchLayer({ anchor, panel, scope, align: 'start', margin: 8, gap: 6, maxHeight,
+        width: () => Math.max(anchor.getBoundingClientRect().width, 260),
+        onClose(reason) {
+            if (reason !== 'empty') state.wanted = false;
+            anchor.setAttribute('aria-expanded', 'false');
+            onClose(reason);
+        }
+    });
+    // A portal no longer bubbles through the form; invoke the same validated handlers once.
+    const handlers = new Map([['input', handleStepInput], ['keydown', handleStepKeydown], ['click', handleStepClick]]);
+    const listeners = new Map();
+    for (const [type, handler] of handlers) {
+        const listener = event => { event.stopPropagation(); handler(event); };
+        listeners.set(type, listener); panel.addEventListener(type, listener);
     }
-    input.setAttribute('aria-expanded', String(Boolean(markup)));
+    state.destroy = () => {
+        state.layer.destroy();
+        for (const [type, listener] of listeners) panel.removeEventListener(type, listener);
+        contributionSearches.delete(key);
+    };
+    contributionSearches.set(key, state);
+    return state;
+}
+
+function updateContributionSuggestions(input, markup) {
+    const combobox = input.closest('.evaluation-combobox');
+    if (!combobox) return;
+    let state = contributionSearches.get(input);
+    if (!state) {
+        const panel = document.createElement('div');
+        panel.className = 'evaluation-suggestions';
+        combobox.append(panel);
+        state = bindContributionSearch(input, input, panel, { scope: combobox });
+    }
+    state.wanted = true;
+    if (!markup) { state.layer.close({ reason: 'empty' }); state.panel.replaceChildren(); return; }
+    const template = document.createElement('template');
+    template.innerHTML = markup;
+    const content = template.content.firstElementChild;
+    state.panel.className = content.className;
+    state.panel.setAttribute('role', content.getAttribute('role'));
+    state.panel.setAttribute('aria-label', content.getAttribute('aria-label'));
+    state.panel.replaceChildren(...content.childNodes);
+    if (state.layer.contains(document.activeElement)) {
+        state.wanted = state.layer.open();
+        input.setAttribute('aria-expanded', String(state.wanted));
+    }
+}
+
+function mountVendorPicker(picker) {
+    const anchor = picker.querySelector('summary'), panel = picker.querySelector('.picker-panel');
+    const input = panel.querySelector('[data-vendor-search]');
+    panel.classList.add('bp-vendor-search-panel');
+    panel.setAttribute('role', 'group'); panel.setAttribute('aria-label', 'Vendor search');
+    input.setAttribute('aria-label', 'Search vendors');
+    const state = bindContributionSearch(picker, anchor, panel, { maxHeight: 340,
+        onClose() {
+            picker.open = false;
+            pickerRefreshTokens.delete(picker); picker.removeAttribute('aria-busy');
+        }
+    });
+    state.input = input;
+    const toggle = event => {
+        event.preventDefault();
+        if (state.layer.isOpen) state.layer.close();
+        else openVendorPicker(picker);
+    };
+    anchor.addEventListener('click', toggle);
+    const destroy = state.destroy;
+    state.destroy = () => { anchor.removeEventListener('click', toggle); destroy(); };
+}
+
+function openVendorPicker(picker) {
+    const state = contributionSearches.get(picker);
+    if (!state || state.layer.isOpen) return;
+    picker.open = true;
+    if (!state.layer.open()) { picker.open = false; return; }
+    picker.querySelector('summary').setAttribute('aria-expanded', 'true');
+    state.input.focus({ preventScroll: true });
 }
 
 function existingConditionRows(existing) {
     if (!existing) {
         return '';
     }
-    return existing.conditions.map(profile => `<div class="condition-row locked" data-existing-condition="${profile.ID}">
-        <span class="condition-number"><i class="fa-solid fa-lock" aria-hidden="true"></i></span>
-        <button class="condition-name condition-name-locked${normalizedConditionName(profile.name) === 'default' ? ' is-default' : ''}" type="button" data-action="explain-existing-condition">
-            <span>${escapeHTML(profile.name)}</span>
-            ${profile.isDefault ? '<small>Current default</small>' : '<small>Existing condition</small>'}
-        </button>
-        <button class="condition-delete locked" type="button" data-action="explain-existing-condition" aria-label="Existing conditions cannot be removed here"><i class="fa-regular fa-trash-can" aria-hidden="true"></i></button>
-    </div>`).join('');
+    return existing.conditions.map(profile => `<details name="benchmark-versions" class="condition-row condition-version locked" data-existing-condition="${escapeHTML(profile.ID)}" data-condition-key="locked-${escapeHTML(profile.ID)}"${expandedConditionKey === `locked-${profile.ID}` ? ' open' : ''}>
+        <summary data-condition-toggle><span>${escapeHTML(profile.name)}</span><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></summary>
+        <div class="condition-version-fields">
+            <label class="field condition-name"><span>Name</span><input readonly value="${escapeHTML(profile.name)}"></label>
+            <label class="field condition-difference"><span id="locked-condition-description-${escapeHTML(profile.ID)}">Description</span><textarea readonly rows="2" aria-labelledby="locked-condition-description-${escapeHTML(profile.ID)}">${escapeHTML(profile.differenceExplanation)}</textarea></label>
+            <div class="condition-version-actions">
+                <span>${profile.isPrimary ? 'Primary version' : 'Existing version'}</span>
+                <button class="condition-delete locked" type="button" data-action="explain-existing-condition" aria-label="Existing versions cannot be removed here" data-tooltip="Existing versions cannot be removed here"><i class="fa-regular fa-trash-can" aria-hidden="true"></i></button>
+            </div>
+        </div>
+    </details>`).join('');
 }
 
 function conditionRows(evaluation) {
-    return evaluation.conditions.map((profile, profileIndex) => `<div class="condition-row${normalizedConditionName(profile.name) === 'default' ? ' is-default' : ''}">
-        <span class="condition-number">${profileIndex + 1}</span>
-        <label class="condition-name">
-            <span class="sr-only">Test condition ${profileIndex + 1}</span>
-            <input required data-bind="profile" data-condition-input data-evaluation-index="0" data-profile-index="${profileIndex}" data-field="name" value="${escapeHTML(profile.name)}" placeholder="e.g. pass@1 with tools">
+    return evaluation.conditions.map((profile, profileIndex) => `<details name="benchmark-versions" class="condition-row condition-version${normalizedConditionName(profile.name) === 'default' ? ' is-default' : ''}" data-condition-key="${escapeHTML(conditionKey(profile))}"${expandedConditionKey === conditionKey(profile) ? ' open' : ''}>
+        <summary data-condition-toggle><span data-condition-heading>${escapeHTML(profile.name || 'New version')}</span><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></summary>
+        <div class="condition-version-fields">
+        <label class="field condition-name">
+            <span>Name</span>
+            <input required maxlength="${Math.max(60, originalConditionName(profile)?.length ?? 0)}" data-bind="profile" data-condition-input data-evaluation-index="0" data-profile-index="${profileIndex}" data-field="name" value="${escapeHTML(profile.name)}" placeholder="e.g. v2 overall">
         </label>
-        <button class="condition-delete" type="button" data-action="remove-profile" data-evaluation-index="0" data-profile-index="${profileIndex}" aria-label="Remove condition"><i class="fa-regular fa-trash-can" aria-hidden="true"></i></button>
-    </div>`).join('');
+        <label class="field condition-difference"><span>Description <small>Optional</small></span>
+            <textarea data-bind="profile" data-evaluation-index="0" data-profile-index="${profileIndex}" data-field="differenceExplanation" maxlength="10000" rows="2" placeholder="What this version measures and how it differs from the other versions">${escapeHTML(profile.differenceExplanation)}</textarea>
+        </label>
+        <div class="condition-version-actions">
+            <label class="condition-primary-choice"><input type="radio" name="primary-condition" data-action="set-primary-condition" data-profile-index="${profileIndex}"${profile.isPrimary ? ' checked' : ''} aria-label="Primary version: ${escapeHTML(profile.name || `version ${profileIndex + 1}`)}"><span>Primary version</span></label>
+            <button class="condition-delete" type="button" data-action="remove-profile" data-evaluation-index="0" data-profile-index="${profileIndex}" aria-label="Remove version" data-tooltip="Remove version"><i class="fa-regular fa-trash-can" aria-hidden="true"></i></button>
+        </div>
+        </div>
+    </details>`).join('');
+}
+
+function conditionKey(profile) {
+    return profile.ID === undefined ? profile.clientRef : `existing-${profile.ID}`;
+}
+
+function setExpandedCondition(key, { focus = false } = {}) {
+    expandedConditionKey = key;
+    for (const panel of stepSurface.querySelectorAll('[data-condition-key]')) {
+        panel.open = panel.dataset.conditionKey === key;
+        if (panel.open && focus) panel.querySelector('[data-condition-input]')?.focus();
+    }
+}
+
+function updateConditionHeading(input) {
+    const panel = input.closest('[data-condition-key]');
+    const heading = panel?.querySelector('[data-condition-heading]');
+    if (heading) heading.textContent = input.value || 'New version';
+    panel?.querySelector('[data-action="set-primary-condition"]')?.setAttribute('aria-label',
+        `Primary version: ${input.value || `version ${Number(input.dataset.profileIndex) + 1}`}`);
+}
+
+function reportInvalidField(input = form.querySelector(':invalid')) {
+    if (!input) return;
+    const panel = input.closest('[data-condition-key]');
+    if (panel) setExpandedCondition(panel.dataset.conditionKey);
+    input.focus();
+    input.reportValidity();
+}
+
+stepSurface.addEventListener('toggle', event => {
+    const panel = event.target;
+    if (!panel.matches('[data-condition-key]')) return;
+    if (panel.open && expandedConditionKey !== panel.dataset.conditionKey) setExpandedCondition(panel.dataset.conditionKey);
+    else if (!panel.open && expandedConditionKey === panel.dataset.conditionKey) setExpandedCondition(null);
+}, true);
+
+function originalConditionName(profile) {
+    return mode === 'edit_benchmark' && profile.ID !== undefined
+        ? draft.change.before?.conditions.find(condition => condition.ID === profile.ID)?.name : undefined;
+}
+
+function validateConditionNameLength(input, profile) {
+    const name = profile.name.trim();
+    const message = name.length > 60 && name !== originalConditionName(profile)
+        ? 'New or renamed version names must be 60 characters or fewer.' : '';
+    if (message) showFieldError(input, message);
+    else {
+        input.removeAttribute('aria-invalid');
+        input.parentElement.querySelector('.field-validation-error')?.remove();
+    }
+    input.setCustomValidity(message);
+    return !message;
 }
 
 function changeOperationSelector() {
@@ -715,22 +573,14 @@ function changeOperationSelector() {
 function requestMerge() {
     const kind = draft.change.targetKind;
     const name = draft.change.before?.name || `Score #${draft.change.targetID}`;
-    const details = [
-        'Merge request',
-        `Object to merge: ${name} (${kind} #${draft.change.targetID})`,
-        `Object page: ${location.origin}${location.pathname}`,
-        '',
-        'Object to keep (name, ID or URL): ',
-        '',
-        'Reason for merging and any details to preserve: '
-    ].join('\n');
-    location.assign(buildContributionURL('feedback', { details }));
+    const details = mergeRequestTemplate({ name, kind, ID: draft.change.targetID });
+    location.assign(activateContributionURL(buildContributionURL('feedback', { details, pageURL: `${location.origin}${location.pathname}` })));
 }
 
 function changeReviewNotesField({ required = false } = {}) {
     return `<section class="change-review-notes"><label class="field wide" data-final-notes>
         <span>${required ? 'Reason and notes' : 'Notes'} ${required ? '' : '<small>Optional</small>'}</span>
-        <textarea data-bind="change" data-field="reviewNotes" maxlength="2000"${required ? ' required minlength="3"' : ''} placeholder="${required ? 'Explain why this object should be deleted.' : 'Add context that helps reviewers verify this change.'}">${escapeHTML(draft.change.reviewNotes)}</textarea>
+        <textarea data-bind="change" data-field="reviewNotes" maxlength="2000"${required ? ' required minlength="3"' : ''} placeholder="${required ? 'Why should this item be removed?' : 'What is wrong? Include a source if useful.'}">${escapeHTML(draft.change.reviewNotes)}</textarea>
     </label></section>`;
 }
 
@@ -739,14 +589,14 @@ function reviewerNotesField({ binding, value, index = null, placeholder }) {
     const field = 'reviewerNotes';
     const activeValue = value;
     const indexAttribute = index === null ? '' : ` data-index="${index}"`;
-    return `<label class="field wide" data-final-notes${isChangeMode() && binding === 'resultBatch' ? ' data-change-path="resultNotes"' : ''}><span>Notes <small>Optional</small></span>
+    return `<label class="field wide" data-final-notes${isChangeMode() && binding === 'resultBatch' ? ' data-change-path="resultNotes"' : ''}><span>Public notes <small>Optional</small></span>
         <textarea data-bind="${activeBinding}"${indexAttribute} data-field="${field}" maxlength="${binding === 'subject' ? 10000 : 2000}" placeholder="${escapeHTML(placeholder)}">${escapeHTML(activeValue)}</textarea>
     </label>`;
 }
 
 function changeDeleteStep() {
     return `${changeOperationSelector()}
-        <div class="step-heading form-section-heading"><div><h2>Request deletion</h2><p>The object remains published until a reviewer approves this request.</p></div></div>
+        <div class="step-heading form-section-heading"><div><h2>Request deletion</h2><p>This item stays published until a reviewer approves its removal.</p></div></div>
         ${changeReviewNotesField({ required: true })}`;
 }
 
@@ -755,7 +605,7 @@ function evaluationDetailsStep() {
     const existing = selectedExistingObject();
     const editing = mode === 'edit_benchmark';
     return `${editing ? changeOperationSelector() : ''}<div class="step-heading form-section-heading">
-        <div><h2>Benchmark and test conditions</h2><p>Keep the benchmark and each reproducible test condition together in one request.</p></div>
+        <div><h2>Benchmark and versions</h2><p>Name the versions and explain what makes each one different.</p></div>
     </div>
     <section class="evaluation-identity-section">
         <label class="field evaluation-name-field">
@@ -769,41 +619,58 @@ function evaluationDetailsStep() {
     </section>
     <section class="condition-section">
         <div class="condition-section-heading">
-            <div><h3>Test conditions</h3><p>Each test condition is one short, single-line name.</p></div>
-            <button class="add-row-button" type="button" data-action="add-profile" data-evaluation-index="0"><i class="fa-solid fa-plus" aria-hidden="true"></i><span>Add condition</span></button>
+            <div data-change-path="evaluation.primaryCondition"><h3>Versions</h3></div>
+            <button class="add-row-button" type="button" data-action="add-profile" data-evaluation-index="0"><i class="fa-solid fa-plus" aria-hidden="true"></i><span>Add version</span></button>
         </div>
-        <div class="condition-table" role="group" aria-label="Test conditions">
-            <div class="condition-table-head"><span>#</span><span>Condition name</span><span>Actions</span></div>
+        <div class="condition-table" role="group" aria-label="Versions">
             ${existing && !editing ? existingConditionRows(existing) : ''}${conditionRows(evaluation)}
         </div>
     </section>
     ${existing && !editing ? '' : `<section class="evaluation-request-fields"><div class="field-grid">
-        <label class="field wide" data-change-path="evaluation.tags"><span>Tags <small>Known or new</small></span>${renderTagEditor(evaluation, 0)}</label>
-        <label class="field"><span>Score ranking rule</span><select required data-bind="evaluation" data-index="0" data-field="scoreDirection">
+        <label class="field"><span>Which scores are better?</span><select required data-bind="evaluation" data-index="0" data-field="scoreDirection">
             ${option('higher', 'Higher is better', evaluation.scoreDirection)}${option('lower', 'Lower is better', evaluation.scoreDirection)}${option('closer_to_target', 'Closer to a target value', evaluation.scoreDirection)}
         </select></label>
         ${evaluation.scoreDirection === 'closer_to_target' ? `<label class="field"><span>Target value</span><input required type="number" step="any" data-bind="evaluation" data-index="0" data-field="targetValue" value="${escapeHTML(evaluation.targetValue)}" placeholder="0"></label>` : ''}
         <label class="percentage-scale-toggle wide" data-change-path="evaluation.usesPercentageScale"><input type="checkbox" data-score-percentage${evaluation.usesPercentageScale ? ' checked' : ''}><span><strong>Scores use a percentage scale</strong></span></label>
         ${evaluation.usesPercentageScale ? '' : `<div class="score-range-combination wide" aria-label="Score range">
-            <label class="field"><span>Lowest value</span><input required type="text" inputmode="text" autocapitalize="off" autocomplete="off" spellcheck="false" data-score-range-input data-bind="evaluation" data-index="0" data-field="scoreMin" value="${escapeHTML(evaluation.scoreMin)}" placeholder="Enter the normalization minimum"></label>
-            <label class="field"><span>Highest value</span><input required type="text" inputmode="text" autocapitalize="off" autocomplete="off" spellcheck="false" data-score-range-input data-bind="evaluation" data-index="0" data-field="scoreMax" value="${escapeHTML(evaluation.scoreMax)}" placeholder="Enter the normalization maximum"></label>
+            <label class="field"><span>Lowest value</span><input required type="text" inputmode="text" autocapitalize="off" autocomplete="off" spellcheck="false" data-score-range-input data-bind="evaluation" data-index="0" data-field="scoreMin" value="${escapeHTML(evaluation.scoreMin)}" placeholder="Lowest value on the published scale"></label>
+            <label class="field"><span>Highest value</span><input required type="text" inputmode="text" autocapitalize="off" autocomplete="off" spellcheck="false" data-score-range-input data-bind="evaluation" data-index="0" data-field="scoreMax" value="${escapeHTML(evaluation.scoreMax)}" placeholder="Highest value on the published scale"></label>
         </div>`}
         <label class="field wide"><span>Introduction URL <small>Optional</small></span><input type="url" data-bind="evaluation" data-index="0" data-field="introductionURL" value="${escapeHTML(evaluation.introductionURL)}" placeholder="https://paper-or-project.example"></label>
+        <label class="field wide"><span>Introduction <small>Optional</small></span><textarea data-bind="evaluation" data-index="0" data-field="description" maxlength="10000" placeholder="What this benchmark measures and how its versions differ">${escapeHTML(evaluation.description)}</textarea></label>
+        <label class="percentage-scale-toggle wide"><input type="checkbox" data-bind="evaluation" data-index="0" data-field="requestOfficialSync"${evaluation.requestOfficialSync ? ' checked' : ''}><span><strong>Request automatic updates from the official source</strong></span></label>
+        ${evaluation.requestOfficialSync ? `<label class="field wide"><span>Official source URL <small>Optional</small></span><input type="url" data-bind="evaluation" data-index="0" data-field="officialSyncURL" value="${escapeHTML(evaluation.officialSyncURL)}" placeholder="https://official-leaderboard-or-dataset.example"></label>
+        <label class="field wide"><span>Sync instructions <small>Optional</small></span><textarea data-bind="evaluation" data-index="0" data-field="officialSyncInstructions" maxlength="10000" placeholder="How to find the current scores in the official source">${escapeHTML(evaluation.officialSyncInstructions)}</textarea></label>` : ''}
     </div></section>`}
     <section class="evaluation-request-fields final-notes-section"><div class="field-grid">
-        ${reviewerNotesField({ binding: 'evaluation', index: 0, value: evaluation.reviewerNotes, placeholder: 'Notes stored with this object after approval.' })}
+        ${reviewerNotesField({ binding: 'evaluation', index: 0, value: evaluation.reviewerNotes, placeholder: 'Shown with this benchmark after approval.' })}
     </div></section>`;
 }
 
 function vendorSuggestions(query) {
-    return rankedMatches(catalog.vendors, query, vendor => vendor.name);
+    if (mode !== 'new_model' || normalizedSearch(query)) {
+        return rankedMatches(catalog.vendors, query, vendorSearchFields);
+    }
+    const modelCounts = new Map();
+    for (const model of catalog.models) {
+        const vendorID = entityKey(model.vendorID);
+        if (vendorID) modelCounts.set(vendorID, (modelCounts.get(vendorID) ?? 0) + 1);
+    }
+    return catalog.vendors.map((vendor, index) => ({ vendor, index }))
+        .sort((left, right) => (
+            (modelCounts.get(entityKey(right.vendor.ID)) ?? 0) - (modelCounts.get(entityKey(left.vendor.ID)) ?? 0)
+            || String(left.vendor.name ?? '').localeCompare(String(right.vendor.name ?? ''), 'en-US', { sensitivity: 'base', numeric: true })
+            || left.index - right.index
+        ))
+        .slice(0, 8)
+        .map(({ vendor }) => vendor);
 }
 
 function modelSuggestions(query, vendorID = null) {
     const models = vendorID === null
         ? catalog.models
         : catalog.models.filter(model => sameEntityID(model.vendorID, vendorID));
-    return rankedMatches(models, query, model => `${model.name} ${model.vendorName}`);
+    return rankedMatches(models, query, modelSearchFields);
 }
 
 function subjectModelSuggestions(query) {
@@ -818,10 +685,10 @@ function renderVendorOptions(query, { allowCreate = mode !== 'edit_model' } = {}
     const value = String(query ?? '').trim().replace(/\s+/g, ' ');
     const suggestions = vendorSuggestions(value);
     const exact = catalog.vendors.some(vendor => normalizedSearch(vendor.name) === normalizedSearch(value));
-    return `${suggestions.map((vendor, index) => `<button type="button" class="picker-option" data-select-vendor="${escapeHTML(vendor.ID)}">
+    return `${suggestions.map((vendor, index) => `<button type="button" role="option" class="picker-option" data-select-vendor="${escapeHTML(vendor.ID)}">
         ${vendorMark(vendor)}<span>${escapeHTML(vendor.name)}${pendingBadge(vendor)}</span>${index === 0 ? '<small>Tab</small>' : ''}
     </button>`).join('')}
-    ${allowCreate && value && !exact ? `<button type="button" class="picker-option create-option" data-create-vendor="${escapeHTML(value)}">
+    ${allowCreate && value && !exact ? `<button type="button" role="option" class="picker-option create-option" data-create-vendor="${escapeHTML(value)}">
         <i class="fa-solid fa-plus" aria-hidden="true"></i><span>Record as a new vendor</span><strong>${escapeHTML(value)}</strong>
     </button>` : ''}`;
 }
@@ -859,20 +726,14 @@ function renderSubjectModelSuggestions(query) {
     }
     return `<div class="evaluation-suggestions model-suggestions" role="listbox" aria-label="Existing models">
         ${suggestions.map((model, index) => `<button type="button" role="option" data-select-subject-model="${escapeHTML(model.ID)}">
-            <span class="model-suggestion-main">${vendorMark(getVendor(model.vendorID) ?? model)}<span>${escapeHTML(model.name)}${pendingBadge(model)}</span></span>
+            <span class="model-suggestion-main">${vendorMark(getVendor(model.vendorID) ?? model)}<span><span translate="no" class="notranslate">${escapeHTML(model.name)}</span>${pendingBadge(model)}</span></span>
             ${index === 0 ? '<small>Tab</small>' : ''}
         </button>`).join('')}
     </div>`;
 }
 
 function updateSubjectModelSuggestions(input) {
-    const combobox = input.closest('.evaluation-combobox');
-    combobox?.querySelector('.evaluation-suggestions')?.remove();
-    const markup = renderSubjectModelSuggestions(input.value);
-    if (markup) {
-        combobox?.insertAdjacentHTML('beforeend', markup);
-    }
-    input.setAttribute('aria-expanded', String(Boolean(markup)));
+    updateContributionSuggestions(input, renderSubjectModelSuggestions(input.value));
 }
 
 function setSubjectVendor(vendorID) {
@@ -899,23 +760,9 @@ function setNewSubjectVendor(name) {
 
 function setSubjectModel(modelID) {
     const model = getModel(modelID);
-    if (!model) {
-        return;
-    }
-    const subject = draft.subject;
-    subject.existingModelID = model.ID;
-    subject.existingModelRef = model.reference ?? null;
-    subject.modelQuery = model.name;
-    subject.name = model.name;
-    subject.introductionURL = model.introductionURL ?? '';
-    subject.vendorID = model.vendorID;
-    subject.vendorRef = getVendor(model.vendorID)?.reference ?? null;
-    subject.vendorQuery = model.vendorName;
-    subject.vendor = { name: model.vendorName, logoKey: model.vendorLogoKey ?? '' };
-    const configuration = makeConfiguration(1);
-    configuration.name = '';
-    configuration.isDefault = false;
-    subject.conditions = [configuration];
+    if (!model) return;
+    if (model.pending) { showNotice('Model already submitted', 'This model is pending review. You can reference it in a score submission.'); return; }
+    location.href = buildContributionURL('edit_model', { targetModelID: model.ID });
 }
 
 function clearSubjectModel(name = '') {
@@ -928,70 +775,35 @@ function clearSubjectModel(name = '') {
     if (wasExisting) {
         subject.introductionURL = '';
         subject.reviewerNotes = '';
-        subject.conditions = [makeConfiguration(0)];
     }
 }
 
-function existingConfigurationRows(model) {
-    if (!model) {
-        return '';
-    }
-    return model.conditions.map(configuration => `<div class="condition-row locked" data-existing-configuration="${configuration.ID}">
-        <span class="condition-number"><i class="fa-solid fa-lock" aria-hidden="true"></i></span>
-        <button class="condition-name condition-name-locked${normalizedConditionName(configuration.name) === 'default' ? ' is-default' : ''}" type="button" data-action="explain-existing-configuration">
-            <span>${escapeHTML(configuration.name)}</span><small>${configuration.isDefault ? 'Current default' : 'Existing model condition'}</small>
-        </button>
-        <button class="condition-delete locked" type="button" data-action="explain-existing-configuration" aria-label="Existing model conditions cannot be removed here"><i class="fa-regular fa-trash-can" aria-hidden="true"></i></button>
-    </div>`).join('');
-}
 
-function configurationValues(configuration) {
-    const parameters = configuration.parameterRows === null ? null : parameterRowsToObject(configuration.parameterRows);
-    return { parameters, name: modelParameterLabel(parameters, configuration.ID).slice(0, 192),
-        isDefault: parameters !== null && Object.keys(parameters).length === 0 };
-}
 
-function configurationRows(subject) {
-    return subject.conditions.map((configuration, index) => {
-        const rows = configuration.parameterRows;
-        const path = configuration.ID ? ` data-change-path="subject.conditions[${configuration.ID}].parameterRows"` : '';
-        return `<div class="model-parameter-editor"${path}>
-            <div class="condition-section-heading"><strong>Configuration ${index + 1}</strong><button type="button" class="condition-delete" data-action="remove-configuration" data-index="${index}" aria-label="Remove configuration"><i class="fa-regular fa-trash-can" aria-hidden="true"></i></button></div>
-            ${rows === null ? '<p class="parameter-unknown">Unconfigured. Previous condition text is preserved in the model notes.</p>' : rows.length === 0 ? '<span class="parameter-unknown">default</span>' : rows.map((row, rowIndex) => `<div class="model-parameter-pair">
-                <label class="field"><input required aria-label="Parameter key" data-bind="modelParameter" data-field="key" data-index="${index}" data-row-index="${rowIndex}" value="${escapeHTML(row.key)}" placeholder="e.g. harness" maxlength="40"></label>
-                <label class="field"><input required aria-label="Parameter value" data-bind="modelParameter" data-field="value" data-index="${index}" data-row-index="${rowIndex}" value="${escapeHTML(row.value)}" placeholder="e.g. agent-v2" maxlength="160"></label>
-                <button type="button" class="condition-delete" data-action="remove-parameter" data-index="${index}" data-row-index="${rowIndex}" aria-label="Remove parameter"><i class="fa-solid fa-minus" aria-hidden="true"></i></button>
-            </div>`).join('')}
-            <button type="button" class="add-row-button" data-action="add-parameter" data-index="${index}"><i class="fa-solid fa-plus" aria-hidden="true"></i><span>Add parameter</span></button>
-            ${rows === null ? `<button type="button" class="add-row-button" data-action="configure-default" data-index="${index}">Declare default configuration</button>` : ''}
-        </div>`;
-    }).join('');
-}
+
+
+
 
 function subjectDetailsStep() {
     const subject = draft.subject;
     const existing = getModel(subject.existingModelID);
     const editing = mode === 'edit_model';
     const vendorSelected = existing || subject.vendorID !== null || Boolean(subject.vendor.name.trim());
-    return `${editing ? changeOperationSelector() : ''}<div class="step-heading form-section-heading"><div><h2>Model and test conditions</h2><p>Keep the model and each reproducible model test condition together in one request.</p></div></div>
+    return `${editing ? changeOperationSelector() : ''}<div class="step-heading form-section-heading"><div><h2>Model</h2><p>Record the model identity. Add run-specific fields when submitting scores.</p></div></div>
     <section class="evaluation-identity-section">
         ${existing && !editing ? '' : subjectVendorPicker()}
         ${vendorSelected ? `<label class="field evaluation-name-field"><span>Model name</span>
             <div class="evaluation-combobox${existing ? ' has-selection has-model-selection' : editing ? ' has-selection' : ''}">${existing ? vendorMark(getVendor(existing.vendorID) ?? existing) : '<i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>'}
-                <input required autocomplete="off"${editing ? ' data-bind="subject" data-field="name"' : ' role="combobox" aria-autocomplete="list" aria-expanded="false" data-subject-model-name'} value="${escapeHTML(editing ? subject.name : subject.modelQuery)}" placeholder="Search existing or enter a new model">
+                <input required autocomplete="off" translate="no" class="notranslate"${editing ? ' data-bind="subject" data-field="name"' : ' role="combobox" aria-autocomplete="list" aria-expanded="false" data-subject-model-name'} value="${escapeHTML(editing ? subject.name : subject.modelQuery)}" placeholder="Search existing or enter a new model">
                 ${existing || editing ? '' : renderSubjectModelSuggestions(subject.modelQuery)}
             </div>
-        </label>` : '<p class="dependent-field-hint"><i class="fa-solid fa-arrow-up" aria-hidden="true"></i><span>Choose or add a vendor to continue.</span></p>'}
-    </section>
-    <section class="condition-section">
-        <div class="condition-section-heading"><div><h3>Model configurations</h3></div><button class="add-row-button" type="button" data-action="add-configuration"><i class="fa-solid fa-plus" aria-hidden="true"></i><span>Add condition</span></button></div>
-        <div class="model-configurations" role="group" aria-label="Model configurations">${existing && !editing ? existingConfigurationRows(existing) : ''}${configurationRows(subject)}</div>
+        </label>` : ''}
     </section>
     ${existing && !editing ? '' : `<section class="evaluation-request-fields"><div class="field-grid">
         <label class="field wide"><span>Introduction URL <small>Optional</small></span><input type="url" data-bind="subject" data-field="introductionURL" value="${escapeHTML(subject.introductionURL)}" placeholder="https://model-card.example"></label>
     </div></section>`}
     <section class="evaluation-request-fields final-notes-section"><div class="field-grid">
-        ${reviewerNotesField({ binding: 'subject', value: subject.reviewerNotes, placeholder: 'Notes stored with this object after approval.' })}
+        ${reviewerNotesField({ binding: 'subject', value: subject.reviewerNotes, placeholder: 'Shown with this item after approval.' })}
     </div></section>`;
 }
 
@@ -1004,29 +816,34 @@ function renderResultModelSuggestions(result, index) {
     const modelName = parts.length > 1 ? parts.at(-1) : result.modelQuery.trim();
     const vendorName = parts.length > 1 ? parts.slice(0, -1).join(' / ') : '';
     const query = buildContributionURL('new_model', { modelName, vendorName });
-    return `<div class="evaluation-suggestions model-suggestions" role="listbox" aria-label="Existing models">${suggestions.map((model, suggestionIndex) => `<button type="button" role="option" data-select-result-model="${escapeHTML(model.ID)}" data-index="${index}"><span class="model-suggestion-main">${vendorMark(getVendor(model.vendorID) ?? model)}<span>${escapeHTML(model.name)}${pendingBadge(model)}</span></span>${suggestionIndex === 0 ? '<small>Tab</small>' : ''}</button>`).join('')}<a class="picker-create-link suggestion-create-link" href="${escapeHTML(query)}" target="_blank" rel="noopener"><i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i><span>Can’t find the model? Record a new model</span></a></div>`;
+    return `<div class="evaluation-suggestions model-suggestions" role="listbox" aria-label="Existing models">${suggestions.map((model, suggestionIndex) => `<button type="button" role="option" data-select-result-model="${escapeHTML(model.ID)}" data-index="${index}"><span class="model-suggestion-main">${vendorMark(getVendor(model.vendorID) ?? model)}<span><span translate="no" class="notranslate">${escapeHTML(model.name)}</span>${pendingBadge(model)}</span></span>${suggestionIndex === 0 ? '<small>Tab</small>' : ''}</button>`).join('')}<a class="picker-create-link suggestion-create-link" href="${escapeHTML(query)}" target="_blank" rel="noopener"><i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i><span>Can’t find the model? Record a new model</span></a></div>`;
 }
 
 function renderResultObjectSuggestions(result, index) {
-    const suggestions = evaluationSuggestions(result.benchmarkQuery);
+    const suggestions = benchmarkSuggestionChoices(result.benchmarkQuery);
     if (!result.benchmarkQuery.trim() || suggestions.length === 0) {
         return '';
     }
-    return `<div class="evaluation-suggestions" role="listbox" aria-label="Existing benchmarks">${suggestions.map((object, suggestionIndex) => `<button type="button" role="option" data-select-result-object="${escapeHTML(object.ID)}" data-index="${index}"><span>${escapeHTML(object.name)}${pendingBadge(object)}</span><small>${suggestionIndex === 0 ? 'Tab · ' : ''}Existing benchmark</small></button>`).join('')}</div>`;
+    return `<div class="evaluation-suggestions" role="listbox" aria-label="Existing benchmarks">${conditionSuggestionGroups(suggestions,
+        ({ object, condition }) => `<button type="button" role="option"${manualResultConditionAllowed(condition) ? '' : ' disabled aria-disabled="true"'} data-select-result-object="${escapeHTML(object.ID)}" data-condition-id="${escapeHTML(condition.ID)}" data-index="${index}"><span>${benchmarkChoiceLabel(object, condition)}${syncedConditionNotice(condition)}</span>${conditionScoreCount(condition)}</button>`)}</div>`;
+}
+
+function manualResultConditionAllowed(condition) {
+    return mode === 'edit_result' || condition.scoreSource === null;
+}
+
+function syncedConditionNotice(condition) {
+    return manualResultConditionAllowed(condition) ? ''
+        : '<small class="condition-source-notice">Scores sync automatically. Existing scores can be corrected from their details.</small>';
 }
 
 function updateResultSuggestionMenu(input, kind) {
     const index = Number(input.dataset.index);
     const result = draft.results[index];
-    const combobox = input.closest('.evaluation-combobox');
-    combobox?.querySelector('.evaluation-suggestions')?.remove();
     const markup = kind === 'model'
         ? renderResultModelSuggestions(result, index)
         : renderResultObjectSuggestions(result, index);
-    if (markup) {
-        combobox?.insertAdjacentHTML('beforeend', markup);
-    }
-    input.setAttribute('aria-expanded', String(Boolean(markup)));
+    updateContributionSuggestions(input, markup);
 }
 
 function clearExistingChoiceValidity(input) {
@@ -1095,32 +912,11 @@ function validateRenderedExistingChoices() {
 
 let conditionCheckQueue = Promise.resolve();
 const confirmedConditionNames = new Map();
-const confirmedParameterRows = new Map();
 
-async function confirmModelParameterChanges() {
-    if (mode !== 'edit_model' || draft.change.operation !== 'update') return true;
-    for (const configuration of draft.subject.conditions) {
-        if (!configuration.ID) continue;
-        const previousRows = confirmedParameterRows.has(configuration.ID)
-            ? confirmedParameterRows.get(configuration.ID)
-            : draft.change.baseline.subject.conditions.find(item => item.ID === configuration.ID).parameterRows;
-        if (sameClientValue(previousRows, configuration.parameterRows)) continue;
-        const before = configurationValues({ ...configuration, parameterRows: previousRows }).name;
-        const after = configurationValues(configuration).name;
-        if (!await confirmConditionMutation(configuration, 'parameters', before, after)) {
-            configuration.parameterRows = structuredClone(previousRows);
-            renderCurrentStep();
-            return false;
-        }
-        confirmedParameterRows.set(configuration.ID, structuredClone(configuration.parameterRows));
-    }
-    return true;
-}
+
 
 function editedCondition(input) {
-    return input.matches('[data-condition-input]')
-        ? selectedEvaluation().conditions[Number(input.dataset.profileIndex)]
-        : draft.subject.conditions[Number(input.dataset.index)];
+    return selectedEvaluation().conditions[Number(input.dataset.profileIndex)];
 }
 
 async function confirmConditionMutation(condition, action, previousName, nextName = '') {
@@ -1135,17 +931,18 @@ async function confirmConditionMutation(condition, action, previousName, nextNam
     }
     const summary = `“${previousName}” is linked to ${impact.resultCount} score${impact.resultCount === 1 ? '' : 's'} and ${impact.pieCount} personal weight mix${impact.pieCount === 1 ? '' : 'es'}.`;
     if (action === 'delete' && (impact.resultCount || impact.pieCount)) {
-        await G.showAlert(`${summary} It cannot be deleted while these references exist. Keep this condition or merge the duplicate object instead.`, { title: 'This condition is in use' });
+        await G.showAlert(`${summary} It cannot be deleted while these references exist. Keep this version or merge the duplicate object instead.`, { title: 'This version is in use' });
         return false;
     }
     return G.showConfirm(`${summary} ${action === 'delete'
-        ? 'Request deletion of this condition?'
+        ? 'Request deletion of this version?'
         : `${action === 'parameters' ? 'Update its parameters to' : 'Rename it to'} “${nextName}”? Its ID and linked records will be preserved; they will use the new name after approval.`}`,
-    { title: action === 'delete' ? 'Delete test condition?' : action === 'parameters' ? 'Change model parameters?' : 'Rename test condition?', confirmLabel: action === 'delete' ? 'Request deletion' : action === 'parameters' ? 'Confirm change' : 'Confirm rename' });
+    { title: action === 'delete' ? 'Delete version?' : action === 'parameters' ? 'Change model parameters?' : 'Rename version?', confirmLabel: action === 'delete' ? 'Request deletion' : action === 'parameters' ? 'Confirm change' : 'Confirm rename' });
 }
 
 function queueConditionRename(input) {
     const condition = editedCondition(input);
+    if (!validateConditionNameLength(input, condition)) return;
     if (!isChangeMode() || !Number.isSafeInteger(condition?.ID)) return;
     const nextName = input.value;
     conditionCheckQueue = conditionCheckQueue.then(async () => {
@@ -1161,8 +958,12 @@ function queueConditionRename(input) {
         else {
             condition.name = previousName;
             condition.isDefault = isLiteralDefaultCondition(previousName);
+            input = [...stepSurface.querySelectorAll('[data-condition-key]')]
+                .find(panel => panel.dataset.conditionKey === conditionKey(condition))?.querySelector('[data-condition-input]') ?? input;
             input.value = previousName;
             input.closest('.condition-row')?.classList.toggle('is-default', condition.isDefault);
+            validateConditionNameLength(input, condition);
+            updateConditionHeading(input);
         }
         input.readOnly = false;
         decorateChangedFields();
@@ -1176,20 +977,26 @@ function queueConditionDeletion(conditions, index, button) {
         try {
             if (await confirmConditionMutation(condition, 'delete', condition.name)) {
                 const currentIndex = conditions.indexOf(condition);
-                if (currentIndex >= 0 && conditions.length > 1) conditions.splice(currentIndex, 1);
+                if (currentIndex >= 0 && conditions.length > 1) {
+                    conditions.splice(currentIndex, 1);
+                    if (condition.isPrimary) conditions[0].isPrimary = true;
+                    if (expandedConditionKey === conditionKey(condition)) {
+                        expandedConditionKey = conditionKey(conditions[Math.min(currentIndex, conditions.length - 1)]);
+                        focusNewCondition = true;
+                    }
+                }
                 renderCurrentStep();
             }
-        } catch (error) { showNotice('Could not check this condition', error.message); }
+        } catch (error) { showNotice('Could not check this version', error.message); }
         finally { button.disabled = false; }
     });
 }
 
 function refreshSuggestionControl(input) {
     refreshCatalogForControl(input, () => {
+        if (!contributionSearches.get(input)?.wanted || document.activeElement !== input) return;
         if (input.matches('[data-evaluation-name]')) {
             updateEvaluationSuggestionMenu(input);
-        } else if (input.matches('[data-tag-input]')) {
-            updateTagSuggestionMenu(input);
         } else if (input.matches('[data-subject-model-name]')) {
             updateSubjectModelSuggestions(input);
         } else if (input.matches('[data-result-model-query]')) {
@@ -1209,21 +1016,22 @@ function setResultModel(index, modelID) {
     result.modelID = model.ID;
     result.modelRef = model.reference ?? null;
     result.modelQuery = modelInputValue(model);
-    const defaultConfiguration = model.conditions.find(configuration => configuration.isDefault) ?? model.conditions[0];
-    result.modelConditionID = defaultConfiguration?.ID ?? null;
-    result.modelConditionRef = defaultConfiguration?.reference ?? null;
 }
 
-function setResultObject(index, benchmarkID) {
+function setResultObject(index, benchmarkID, conditionID = null) {
     const object = getBenchmark(benchmarkID);
     const result = draft.results[index];
     if (!object || !result) {
         return;
     }
+    const requested = object.conditions.find(profile => sameEntityID(profile.ID, conditionID));
+    if (requested && !manualResultConditionAllowed(requested)) return;
     result.benchmarkID = object.ID;
     result.benchmarkRef = object.reference ?? null;
     result.benchmarkQuery = object.name;
-    const defaultProfile = object.conditions.find(profile => profile.isDefault) ?? object.conditions[0];
+    const defaultProfile = requested
+        ?? object.conditions.find(profile => profile.isPrimary && manualResultConditionAllowed(profile))
+        ?? object.conditions.find(manualResultConditionAllowed);
     result.benchmarkConditionID = defaultProfile?.ID ?? null;
     result.benchmarkConditionRef = defaultProfile?.reference ?? null;
 }
@@ -1240,18 +1048,7 @@ function resultStoredScore(result) {
     return displayScore;
 }
 
-function addConfigurationLink(model) {
-    if (!model) {
-        return '';
-    }
-    const values = {
-        vendorName: model.vendorName,
-        modelName: model.name
-    };
-    if (!model.reference) values.modelID = String(model.ID);
-    if (!getVendor(model.vendorID)?.reference) values.vendorID = String(model.vendorID);
-    return buildContributionURL('new_model', values);
-}
+
 
 function addProfileLink(object) {
     if (!object) {
@@ -1264,34 +1061,29 @@ function addProfileLink(object) {
     return buildContributionURL('new_benchmark', values);
 }
 
-function renderResultConfigurationOptions(model, index) {
-    return model.conditions.map(configuration => `<button type="button" class="picker-option" data-select-result-configuration="${escapeHTML(configuration.ID)}" data-index="${index}"><span>${escapeHTML(configuration.name)}${pendingBadge(configuration)}</span>${configuration.isDefault ? '<small>Default</small>' : ''}</button>`).join('');
-}
+
 
 function renderResultProfileOptions(object, index) {
-    return object.conditions.map(profile => `<button type="button" class="picker-option" data-select-result-profile="${escapeHTML(profile.ID)}" data-index="${index}"><span>${escapeHTML(profile.name)}${pendingBadge(profile)}</span>${profile.isDefault ? '<small>Default</small>' : ''}</button>`).join('');
+    return conditionSuggestionGroups(object.conditions.map(condition => ({ condition })), ({ condition }) =>
+        `<button type="button" class="picker-option"${manualResultConditionAllowed(condition) ? '' : ' disabled aria-disabled="true"'} data-select-result-profile="${escapeHTML(condition.ID)}" data-index="${index}"><span>${escapeHTML(condition.name)}${pendingBadge(condition)}${syncedConditionNotice(condition)}</span>${conditionScoreCount(condition)}</button>`);
 }
 
-function resultConfigurationPicker(result, index, model) {
-    if (!model) {
-        return '';
-    }
-    const selected = getModelCondition(model.ID, result.modelConditionID);
-    return `<label class="field" data-change-path="result.modelConditionID"><span>Model test condition</span><details class="picker-menu" data-catalog-picker="model-condition" data-index="${index}"><summary class="picker-summary${selected ? ' has-value' : ''}"><span>${escapeHTML(selected?.name || 'Choose a model condition')}</span><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></summary><div class="picker-panel"><div class="picker-option-list" role="listbox">${renderResultConfigurationOptions(model, index)}</div><a class="picker-create-link" href="${escapeHTML(addConfigurationLink(model))}" target="_blank" rel="noopener"><i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i><span>Can’t find the condition? Add one</span></a></div></details></label>`;
-}
+
 
 function resultProfilePicker(result, index, object) {
     if (!object) {
         return '';
     }
     const selected = getBenchmarkCondition(result.benchmarkConditionID)?.profile;
-    return `<label class="field" data-change-path="result.benchmarkConditionID"><span>Benchmark test condition</span><details class="picker-menu" data-catalog-picker="benchmark-condition" data-index="${index}"><summary class="picker-summary${selected ? ' has-value' : ''}"><span>${escapeHTML(selected?.name || 'Choose a benchmark condition')}</span><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></summary><div class="picker-panel"><div class="picker-option-list" role="listbox">${renderResultProfileOptions(object, index)}</div><a class="picker-create-link" href="${escapeHTML(addProfileLink(object))}" target="_blank" rel="noopener"><i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i><span>Can’t find the condition? Add one</span></a></div></details></label>`;
+    return `<div class="field" data-change-path="result.benchmarkConditionID"><span>Version</span><details class="picker-menu" data-catalog-picker="benchmark-condition" data-index="${index}"><summary aria-label="Choose version" class="picker-summary${selected ? ' has-value' : ''}"><span>${escapeHTML(selected?.name || 'Choose a version')}</span><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></summary><div class="picker-panel"><div class="picker-option-list" role="listbox">${renderResultProfileOptions(object, index)}</div><a class="picker-create-link" href="${escapeHTML(addProfileLink(object))}" target="_blank" rel="noopener"><i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i><span>Can’t find the version? Add one</span></a></div></details></div>`;
 }
 
 function refreshOpenCatalogPicker(picker) {
     const kind = picker.dataset.catalogPicker;
     if (kind === 'vendor') {
-        const input = picker.querySelector('[data-vendor-search]');
+        const state = contributionSearches.get(picker);
+        const input = state?.input;
+        if (!state?.layer.isOpen || state.panel.contains(document.activeElement) && document.activeElement !== input) return;
         if (input) updateVendorOptions(input);
         return;
     }
@@ -1301,13 +1093,6 @@ function refreshOpenCatalogPicker(picker) {
     const createLink = picker.querySelector('.picker-create-link');
     if (!result || !list) {
         throw new Error('The opened selector no longer matches this form row.');
-    }
-    if (kind === 'model-condition') {
-        const model = getModel(result.modelID);
-        if (!model) throw new Error('The selected model is no longer available.');
-        list.innerHTML = renderResultConfigurationOptions(model, index);
-        if (createLink) createLink.href = addConfigurationLink(model);
-        return;
     }
     if (kind === 'benchmark-condition') {
         const object = getBenchmark(result.benchmarkID);
@@ -1345,7 +1130,7 @@ function copyResult(index) {
     if (!source) return null;
     const identity = makeResult(draft.results.length);
     draft.results.push({
-        ...source,
+        ...structuredClone(source),
         clientRef: identity.clientRef
     });
     return draft.results.length - 1;
@@ -1357,14 +1142,13 @@ function resultCard(result, index) {
     const profile = getBenchmarkCondition(result.benchmarkConditionID)?.profile;
     const isPercentage = profileUsesPercentage(profile);
     return `<article class="entry-card score-entry-card" data-result-card="${index}">
-        <header class="entry-card-header"><strong>Score ${index + 1}</strong><span class="entry-card-actions">${mode === 'benchmark_result' ? `<button class="soft-icon-button copy-result-button" type="button" data-action="copy-result" data-index="${index}" aria-label="Copy as a new score" title="Copy as a new score"><i class="fa-regular fa-copy" aria-hidden="true"></i></button>` : ''}${draft.results.length > 1 ? `<button class="soft-icon-button" type="button" data-action="remove-result" data-index="${index}" aria-label="Remove result"><i class="fa-solid fa-trash-can" aria-hidden="true"></i></button>` : ''}</span></header>
+        <header class="entry-card-header"><strong>Score ${index + 1}</strong><span class="entry-card-actions">${mode === 'benchmark_result' ? `<button class="soft-icon-button copy-result-button" type="button" data-action="copy-result" data-index="${index}" aria-label="Copy as a new score" data-tooltip="Copy as a new score"><i class="fa-regular fa-copy" aria-hidden="true"></i></button>` : ''}${draft.results.length > 1 ? `<button class="soft-icon-button" type="button" data-action="remove-result" data-index="${index}" aria-label="Remove result"><i class="fa-solid fa-trash-can" aria-hidden="true"></i></button>` : ''}</span></header>
         <div class="entry-card-body"><div class="field-grid">
-            <label class="field" data-change-path="result.modelID"><span>Model</span><div class="evaluation-combobox${model ? ' has-selection has-model-selection' : ''}">${model ? vendorMark(getVendor(model.vendorID) ?? model) : '<i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>'}<input required autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" data-existing-choice="model" data-result-model-query data-index="${index}" value="${escapeHTML(result.modelQuery)}" placeholder="Search models">${model ? '' : renderResultModelSuggestions(result, index)}</div></label>
-            ${resultConfigurationPicker(result, index, model)}
+            <label class="field" data-change-path="result.modelID"><span>Model</span><div class="evaluation-combobox${model ? ' has-selection has-model-selection' : ''}">${model ? vendorMark(getVendor(model.vendorID) ?? model) : '<i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>'}<input required autocomplete="off" translate="no" class="notranslate" role="combobox" aria-autocomplete="list" aria-expanded="false" data-existing-choice="model" data-result-model-query data-index="${index}" value="${escapeHTML(result.modelQuery)}" placeholder="Search models">${model ? '' : renderResultModelSuggestions(result, index)}</div></label>
             <label class="field" data-change-path="result.benchmarkID"><span>Benchmark</span><div class="evaluation-combobox${object ? ' has-selection' : ''}"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i><input required autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" data-existing-choice="benchmark" data-result-object-query data-index="${index}" value="${escapeHTML(result.benchmarkQuery)}" placeholder="Search existing benchmarks">${object ? '' : renderResultObjectSuggestions(result, index)}</div></label>
             ${resultProfilePicker(result, index, object)}
-            <label class="field wide"><span>Score</span><div class="score-input-shell${isPercentage ? ' percentage' : ''}"><input required type="text" inputmode="text" autocapitalize="off" autocomplete="off" spellcheck="false" data-score-value-input data-bind="result" data-index="${index}" data-field="rawScore" value="${escapeHTML(result.rawScore)}"${profile ? '' : ' disabled'} placeholder="${profile ? '0' : 'Choose a condition first'}">${isPercentage ? '<span>%</span>' : ''}</div></label>
-        </div></div>
+            <label class="field wide"><span>Score</span><div class="score-input-shell${isPercentage ? ' percentage' : ''}"><input required type="text" inputmode="text" autocapitalize="off" autocomplete="off" spellcheck="false" data-score-value-input data-bind="result" data-index="${index}" data-field="rawScore" value="${escapeHTML(result.rawScore)}"${profile ? '' : ' disabled'} placeholder="${profile ? '0' : 'Choose a version first'}">${isPercentage ? '<span>%</span>' : ''}</div></label>
+        </div><section class="score-field-editor" data-score-fields-editor="${index}" data-change-path="result.scoreFields"></section></div>
     </article>`;
 }
 
@@ -1372,61 +1156,13 @@ function resultsStep() {
     const editing = mode === 'edit_result';
     const sourceLabel = draft.results.length > 1 ? 'All source URLs' : 'Source URL';
     const sharedSourceURL = draft.results[0]?.sourceURL ?? '';
-    return `${editing ? changeOperationSelector() : ''}<div class="step-heading"><div><h2>Model scores</h2><p>Each row links one model condition to one benchmark condition and its original source. Your pending entries are available too.</p></div></div>
+    return `${editing ? changeOperationSelector() : ''}<div class="step-heading"><div><h2>Model scores</h2></div></div>
     <div class="repeater-list">${draft.results.map(resultCard).join('')}</div>
     ${editing ? '' : '<div class="score-repeater-actions"><button class="add-row-button" type="button" data-action="add-result"><i class="fa-solid fa-plus" aria-hidden="true"></i><span>Add score</span></button></div>'}
     <section class="result-submission-notes"><div class="field-grid">
         <label class="field wide" data-change-path="${editing ? 'result.sourceURL' : ''}"><span>${sourceLabel}</span><input required type="url" data-bind="result" data-index="0" data-field="sourceURL" value="${escapeHTML(sharedSourceURL)}" placeholder="https://official-source.example/results"></label>
-        ${reviewerNotesField({ binding: 'resultBatch', value: draft.resultNotes, placeholder: 'Notes stored with each score after approval.' })}
+        ${reviewerNotesField({ binding: 'resultBatch', value: draft.resultNotes, placeholder: 'Shown with each score after approval.' })}
     </div></section>`;
-}
-
-function categoryDetailsStep() {
-    const isContext = draft.category.requestKind === 'context';
-    return `<div class="step-heading"><div><h2>${isContext ? 'New context' : 'New category'}</h2><p>Select a parent only when you are ready; the taxonomy locks again after selection.</p></div></div>
-    <div class="category-request-switch" role="group" aria-label="Taxonomy request type">
-        <button type="button" data-category-kind="category" class="${isContext ? '' : 'active'}">Add a new category</button>
-        <button type="button" data-category-kind="context" class="${isContext ? 'active' : ''}">Add a context to a category</button>
-    </div>
-    <section class="evaluation-context-block${draft.context.confirmed ? ' complete' : ''}">
-        <div><span class="section-eyebrow">Parent category</span><strong>${escapeHTML(selectedContextLabel())}</strong><p>Contexts can be attached only to a category, not to another context.</p></div>
-        <button class="quiet-button" type="button" data-action="start-parent-selection"><i class="fa-solid fa-sitemap" aria-hidden="true"></i><span>${draft.context.confirmed ? 'Change parent' : 'Choose parent'}</span></button>
-    </section>
-    <div class="source-panel category-request-fields"><div class="field-grid">
-        <label class="field wide"><span>${isContext ? 'Context name' : 'Category name'}</span><input required data-bind="category" data-field="name" value="${escapeHTML(draft.category.name)}" placeholder="${isContext ? 'Web access' : 'Benchmark Reliability'}"></label>
-    </div></div>
-    ${isContext ? `${contextOptionsEditor()}${contextOrderEditor()}` : ''}
-    <section class="evaluation-request-fields final-notes-section"><div class="field-grid">
-        <label class="field wide" data-final-notes><span>Notes <small>Optional</small></span><textarea data-bind="category" data-field="details" maxlength="2000" placeholder="Anything else reviewers should know.">${escapeHTML(draft.category.details)}</textarea></label>
-    </div></section>`;
-}
-
-function contextOptionsEditor() {
-    return `<section class="condition-section context-option-section">
-        <div class="condition-section-heading"><div><h3>Context options</h3><p>Add at least two distinct options. Choose exactly one default and one neutral option; they may be the same.</p></div><button class="add-row-button" type="button" data-action="add-context-option"><i class="fa-solid fa-plus" aria-hidden="true"></i><span>Add option</span></button></div>
-        <div class="condition-table context-option-table" role="group" aria-label="Context options">
-            <div class="condition-table-head context-option-grid"><span>#</span><span>Option name</span><span>Default</span><span>Neutral</span><span>Actions</span></div>
-            ${draft.category.options.map((optionEntry, index) => `<div class="condition-row context-option-grid">
-                <span class="condition-number">${index + 1}</span>
-                <label class="condition-name"><span class="sr-only">Context option ${index + 1}</span><input required data-bind="contextOption" data-index="${index}" data-field="name" value="${escapeHTML(optionEntry.name)}" placeholder="e.g. Any"></label>
-                <label class="context-option-radio"><input type="radio" name="context-default-option" data-context-option-role="default" data-index="${index}"${optionEntry.isDefault ? ' checked' : ''}><span>Default</span></label>
-                <label class="context-option-radio"><input type="radio" name="context-neutral-option" data-context-option-role="neutral" data-index="${index}"${optionEntry.isNeutral ? ' checked' : ''}><span>Neutral</span></label>
-                <button class="condition-delete" type="button" data-action="remove-context-option" data-index="${index}" aria-label="Remove option"><i class="fa-regular fa-trash-can" aria-hidden="true"></i></button>
-            </div>`).join('')}
-        </div>
-    </section>`;
-}
-
-function contextOrderEditor() {
-    return `<section class="context-order-section">
-        <div class="condition-section-heading"><div><h3>Context order</h3><p>The new context starts last. Only its row can move; existing context order stays fixed.</p></div></div>
-        <div class="context-order-list" data-context-order-list>${draft.category.contextOrder.map((entry, index) => `
-            <div class="context-order-row${entry.isNew ? ' new' : ' locked'}" data-context-order-index="${index}"${entry.isNew ? ' draggable="true"' : ''}>
-                <span class="context-order-grip"><i class="fa-solid ${entry.isNew ? 'fa-grip-lines' : 'fa-lock'}" aria-hidden="true"></i></span>
-                <span>${escapeHTML(entry.isNew ? (draft.category.name || 'New context') : entry.name)}${entry.dimensionRef ? pendingBadge({ pending: true }) : ''}</span>
-                ${entry.isNew ? `<span class="context-order-controls"><button type="button" data-action="move-context-up" aria-label="Move new context earlier"${index === 0 ? ' disabled' : ''}><i class="fa-solid fa-arrow-up" aria-hidden="true"></i></button><button type="button" data-action="move-context-down" aria-label="Move new context later"${index === draft.category.contextOrder.length - 1 ? ' disabled' : ''}><i class="fa-solid fa-arrow-down" aria-hidden="true"></i></button></span>` : '<small>Existing</small>'}
-            </div>`).join('')}</div>
-    </section>`;
 }
 
 function reportDetailsStep() {
@@ -1440,11 +1176,11 @@ function reportDetailsStep() {
 }
 
 function feedbackDetailsStep() {
-    return `<div class="step-heading form-section-heading"><div><h2>Your feedback</h2><p>Share a problem, suggestion, or concern that does not fit another contribution form.</p></div></div>
-    <section class="feedback-editor">
+    return `<section class="feedback-editor">
+        <p id="feedback-guidance" class="feedback-guidance" translate="yes">${escapeHTML(feedbackInstructions)}</p>
         <label class="field wide" data-final-notes>
-            <span>Notes</span>
-            <textarea required minlength="10" maxlength="4000" data-bind="feedback" data-field="details" placeholder="What should BenchPoll improve, and why?">${escapeHTML(draft.feedback.details)}</textarea>
+            <span>Your message</span>
+            <textarea required minlength="10" maxlength="${feedbackMessageLimit(feedbackInstructions)}" data-bind="feedback" data-field="details" aria-describedby="feedback-guidance" placeholder="Write your message">${escapeHTML(draft.feedback.details)}</textarea>
         </label>
     </section>`;
 }
@@ -1493,12 +1229,14 @@ function evaluationProfileChangeProposal(profile, evaluation) {
     return {
         ID: integerOrNull(profile.ID),
         name: normalizedText(profile.name),
+        differenceExplanation: normalizedText(profile.differenceExplanation),
         scoreMin,
         scoreMax,
         scoreDirection,
         targetValue,
         usesPercentageScale,
-        isDefault: isLiteralDefaultCondition(profile.name)
+        isDefault: isLiteralDefaultCondition(profile.name),
+        isPrimary: profile.isPrimary
     };
 }
 
@@ -1507,21 +1245,18 @@ function evaluationChangeProposal() {
     return {
         name: normalizedText(evaluation.name),
         introductionURL: normalizedText(evaluation.introductionURL),
+        description: normalizedText(evaluation.description),
+        requestOfficialSync: evaluation.requestOfficialSync,
+        officialSyncURL: normalizedText(evaluation.officialSyncURL),
+        officialSyncInstructions: normalizedText(evaluation.officialSyncInstructions),
         notes: normalizedText(evaluation.reviewerNotes),
-        tags: [...new Set(evaluation.tags.map(normalizedText).filter(Boolean))]
-            .sort((left, right) => left.localeCompare(right)),
         conditions: evaluation.conditions.map(profile => (
             evaluationProfileChangeProposal(profile, evaluation)
         ))
     };
 }
 
-function modelConfigurationChangeProposal(configuration) {
-    return {
-        ID: integerOrNull(configuration.ID),
-        ...configurationValues(configuration)
-    };
-}
+
 
 function modelChangeProposal() {
     const subject = draft.subject;
@@ -1529,10 +1264,7 @@ function modelChangeProposal() {
         vendorID: Number(subject.vendorID),
         name: normalizedText(subject.name),
         introductionURL: normalizedText(subject.introductionURL),
-        notes: normalizedText(subject.reviewerNotes),
-        conditions: subject.conditions.map(configuration => (
-            modelConfigurationChangeProposal(configuration)
-        ))
+        notes: normalizedText(subject.reviewerNotes)
     };
 }
 
@@ -1543,7 +1275,7 @@ function resultChangeProposal() {
             const result = payload.results[0];
             return {
                 modelID: result.modelID,
-                modelConditionID: result.modelConditionID,
+                scoreFields: structuredClone(draft.results[0].scoreFields).sort((left, right) => left.fieldID - right.fieldID),
                 benchmarkID: result.benchmarkID,
                 benchmarkConditionID: result.benchmarkConditionID,
                 rawScore: result.rawScore,
@@ -1571,8 +1303,8 @@ function entityChangeSubmissionProposal() {
             results: [{
                 clientRef: 'edited-result',
                 ...proposed.result,
+                scoreFields: contributionScoreFields(proposed.result.scoreFields, catalog.scoreFields),
                 modelRef: null,
-                modelConditionRef: null,
                 benchmarkRef: null,
                 benchmarkConditionRef: null
             }]
@@ -1635,20 +1367,25 @@ function changeFieldLabel(path) {
         name: mode === 'edit_model' ? 'Model name' : 'Benchmark name',
         vendorID: 'Vendor',
         introductionURL: 'Introduction URL',
-        tags: 'Tags',
+        description: 'Introduction',
+        requestOfficialSync: 'Official-source score sync request',
+        officialSyncURL: 'Official source URL',
+        officialSyncInstructions: 'Sync instructions',
         rawScore: 'Score',
-        source: 'Source'
+        source: 'Source',
+        differenceExplanation: 'Version differences'
     };
-    const leaf = String(path).split('.').at(-1).replace(/([A-Z])/g, ' $1').trim();
-    const base = labels[leaf] ?? leaf.replace(/^./, character => character.toUpperCase());
+    const key = String(path).split('.').at(-1);
+    const leaf = key.replace(/([A-Z])/g, ' $1').trim();
+    const base = labels[key] ?? leaf.replace(/^./, character => character.toUpperCase());
     const conditionMatch = String(path).match(/^(?:(?:evaluation|subject)\.)?conditions\[(\d+)\]\.(.+)$/);
     if (conditionMatch) {
-        const conditions = mode === 'edit_model' ? draft.subject.conditions : selectedEvaluation().conditions;
+        const conditions = selectedEvaluation().conditions;
         const condition = conditions.find(item => Number(item.ID) === Number(conditionMatch[1]));
         const fieldLabel = conditionMatch[2] === 'name'
-            ? 'Condition name'
+            ? 'Version name'
             : changeFieldLabel(conditionMatch[2]);
-        return `${condition?.name || (mode === 'edit_model' ? 'Model condition' : 'Benchmark condition')} · ${fieldLabel}`;
+        return `${condition?.name || (mode === 'edit_model' ? 'Model condition' : 'Version')}, ${fieldLabel}`;
     }
     if (String(path).startsWith('result.')) {
         return changeFieldLabel(String(path).slice(7));
@@ -1661,6 +1398,7 @@ function renderCurrentStep() {
     if (!details) {
         return;
     }
+    for (const state of contributionSearches.values()) state.destroy();
     if (isChangeMode() && draft.change.operation === 'delete') {
         stepSurface.innerHTML = changeDeleteStep();
     } else if (mode === 'new_benchmark' || mode === 'edit_benchmark') {
@@ -1669,8 +1407,6 @@ function renderCurrentStep() {
         stepSurface.innerHTML = subjectDetailsStep();
     } else if (mode === 'benchmark_result' || mode === 'edit_result') {
         stepSurface.innerHTML = resultsStep();
-    } else if (mode === 'new_category') {
-        stepSurface.innerHTML = categoryDetailsStep();
     } else if (mode === 'report') {
         stepSurface.innerHTML = discussionReportStep();
     } else if (mode === 'feedback') {
@@ -1684,7 +1420,19 @@ function renderCurrentStep() {
             { opacity: 1, transform: 'translateY(0)' }
         ], { duration: 210, easing: 'cubic-bezier(.22, 1, .36, 1)' });
     }
+    stepSurface.querySelectorAll('[data-score-fields-editor]').forEach(host => {
+        const result = draft.results[Number(host.dataset.scoreFieldsEditor)];
+        mountScoreFields(host, { assignments: result.scoreFields, getFields: () => catalog.scoreFields,
+            refresh: refreshContributionCatalog, onChange: decorateChangedFields });
+    });
     decorateChangedFields();
+    stepSurface.querySelectorAll('.evaluation-suggestions').forEach(panel => panel.remove());
+    stepSurface.querySelectorAll('[data-catalog-picker="vendor"]').forEach(mountVendorPicker);
+    enhanceUI(stepSurface);
+    if (focusNewCondition) {
+        focusNewCondition = false;
+        requestAnimationFrame(() => setExpandedCondition(expandedConditionKey, { focus: true }));
+    }
 }
 
 function setNested(target, path, value) {
@@ -1713,6 +1461,10 @@ function parsedConditionChangePath(path) {
 }
 
 function changePathValue(target, path) {
+    if (path === 'evaluation.primaryCondition') {
+        const primary = target.evaluation.conditions.find(condition => condition.isPrimary);
+        return primary?.ID ?? primary?.clientRef;
+    }
     const conditionPath = parsedConditionChangePath(path);
     if (!conditionPath) {
         return getNested(target, path);
@@ -1766,11 +1518,6 @@ function changePathForControl(control) {
         return conditionID === null ? '' : `evaluation.conditions[${conditionID}].${field}`;
     }
     if (binding === 'subject') return `subject.${field}`;
-    if (binding === 'configuration') {
-        const condition = draft.subject.conditions[Number(control.dataset.index)];
-        const conditionID = integerOrNull(condition?.ID);
-        return conditionID === null ? '' : `subject.conditions[${conditionID}].${field}`;
-    }
     if (binding === 'result') return `result.${field}`;
     return '';
 }
@@ -1781,12 +1528,21 @@ function restoreChangePath(path) {
         return;
     }
     const current = currentChangeDraftView();
-    if (path === 'subject.vendorID') {
+    if (path === 'evaluation.primaryCondition') {
+        const original = baseline.evaluation.conditions.find(condition => condition.isPrimary);
+        if (!original) return;
+        let restored = current.evaluation.conditions.find(condition => condition.ID === original.ID);
+        if (!restored) {
+            restored = structuredClone(original);
+            current.evaluation.conditions.push(restored);
+        }
+        current.evaluation.conditions.forEach(condition => { condition.isPrimary = condition === restored; });
+    } else if (path === 'subject.vendorID') {
         for (const field of ['vendorID', 'vendorRef', 'vendorQuery', 'vendor']) {
             current.subject[field] = structuredClone(baseline.subject[field]);
         }
     } else if (path === 'result.modelID') {
-        for (const field of ['modelID', 'modelRef', 'modelQuery', 'modelConditionID', 'modelConditionRef']) {
+        for (const field of ['modelID', 'modelRef', 'modelQuery']) {
             current.result[field] = structuredClone(baseline.result[field]);
         }
     } else if (path === 'result.benchmarkID') {
@@ -1800,11 +1556,8 @@ function restoreChangePath(path) {
             return;
         }
     }
-    const restoredParameters = path.match(/\.conditions\[(\d+)\]\.parameterRows$/);
-    if (restoredParameters) confirmedParameterRows.delete(Number(restoredParameters[1]));
     const restoredCondition = path.match(/\.conditions\[(\d+)\]\.name$/);
     if (restoredCondition) confirmedConditionNames.delete(Number(restoredCondition[1]));
-    renderCategoryTree();
     renderCurrentStep();
 }
 
@@ -1846,7 +1599,7 @@ function decorateChangedFields() {
         restore.type = 'button';
         restore.className = 'field-restore-button';
         restore.dataset.restorePath = path;
-        restore.title = 'Restore original value';
+        restore.dataset.tooltip = 'Restore original value';
         restore.setAttribute('aria-label', `Restore ${changeFieldLabel(path)}`);
         restore.innerHTML = '<i class="fa-solid fa-rotate-left" aria-hidden="true"></i>';
         container.append(restore);
@@ -1865,7 +1618,7 @@ function updateBoundField(target) {
     if (!binding || !field) {
         return;
     }
-    let value = target.value;
+    let value = target.type === 'checkbox' ? target.checked : target.value;
     if (binding === 'evaluation') {
         setNested(draft.benchmarks[Number(target.dataset.index)], field, value);
     } else if (binding === 'profile') {
@@ -1876,21 +1629,11 @@ function updateBoundField(target) {
         );
     } else if (binding === 'subject') {
         setNested(draft.subject, field, value);
-    } else if (binding === 'modelParameter') {
-        const editor = target.closest('.model-parameter-editor');
-        editor.removeAttribute('aria-invalid');
-        editor.querySelector('.model-parameter-error')?.remove();
-        draft.subject.conditions[Number(target.dataset.index)].parameterRows[Number(target.dataset.rowIndex)][field] = value;
-    } else if (binding === 'configuration') {
-        setNested(draft.subject.conditions[Number(target.dataset.index)], field, value);
     } else if (binding === 'result') {
         setNested(draft.results[Number(target.dataset.index)], field, value);
     } else if (binding === 'resultBatch') {
         draft.resultNotes = value;
-    } else if (binding === 'category') {
-        setNested(draft.category, field, value);
-    } else if (binding === 'contextOption') {
-        setNested(draft.category.options[Number(target.dataset.index)], field, value);
+
     } else if (binding === 'report') {
         setNested(draft.report, field, value);
     } else if (binding === 'feedback') {
@@ -1907,18 +1650,43 @@ function validateEvaluationConditionNames() {
         return false;
     }
     if (evaluation.conditions.length < 1) {
-        showError('Add at least one new test condition.');
+        showError('Add at least one new version.');
+        return false;
+    }
+    if ((!selectedExistingObject() || mode === 'edit_benchmark')
+        && evaluation.conditions.filter(condition => condition.isPrimary).length !== 1) {
+        showError('Choose one primary version.');
         return false;
     }
 
     const conditionNames = evaluation.conditions.map(profile => normalizedConditionName(profile.name));
+    let lengthsValid = true;
+    evaluation.conditions.forEach((profile, index) => {
+        const input = stepSurface.querySelector(`[data-condition-input][data-profile-index="${index}"]`);
+        if (input && !validateConditionNameLength(input, profile)) lengthsValid = false;
+    });
+    if (!lengthsValid) {
+        reportInvalidField();
+        return false;
+    }
     if (conditionNames.some(name => name === '')) {
-        showError('Every new test condition needs a name.');
+        const input = stepSurface.querySelector(`[data-condition-input][data-profile-index="${conditionNames.indexOf('')}"]`);
+        showFieldError(input, 'Every new version needs a name.');
+        reportInvalidField(input);
         return false;
     }
     if (new Set(conditionNames).size !== conditionNames.length) {
-        showError('Test condition names must be unique, including default.');
-        return false;
+        const beforeByID = mode === 'edit_benchmark'
+            ? new Map(draft.change.before.conditions.map(condition => [condition.ID, condition])) : new Map();
+        const repeated = evaluation.conditions.filter((profile, index) => conditionNames.some((name, otherIndex) =>
+            index !== otherIndex && name === conditionNames[index]));
+        if (repeated.some(profile => !profile.ID || beforeByID.get(profile.ID)?.name !== profile.name)) {
+            const profile = repeated.find(profile => !profile.ID || beforeByID.get(profile.ID)?.name !== profile.name);
+            const input = stepSurface.querySelector(`[data-condition-input][data-profile-index="${evaluation.conditions.indexOf(profile)}"]`);
+            showFieldError(input, 'New or renamed versions must have unique names, including default.');
+            reportInvalidField(input);
+            return false;
+        }
     }
 
     const existing = selectedExistingObject();
@@ -1926,7 +1694,7 @@ function validateEvaluationConditionNames() {
         const existingNames = new Set(existing.conditions.map(profile => normalizedConditionName(profile.name)));
         const duplicate = conditionNames.find(name => existingNames.has(name));
         if (duplicate) {
-            showError(`The condition “${duplicate}” already exists. Use the Change benchmark information form to edit it.`);
+            showError(`The version “${duplicate}” already exists. Use the Change benchmark information form to edit it.`);
             return false;
         }
     } else if (mode !== 'edit_benchmark') {
@@ -1935,7 +1703,7 @@ function validateEvaluationConditionNames() {
         ));
         if (duplicateObject) {
             const input = stepSurface.querySelector('[data-evaluation-name]');
-            showFieldError(input, 'Already listed. Select the matching row above to add a test condition on its change form.');
+            showFieldError(input, 'Already listed. Select the matching row above to add a version on its change form.');
             input.focus();
             return false;
         }
@@ -1964,37 +1732,10 @@ function validateEvaluationConditionNames() {
 
 function validateSubjectConfigurationNames() {
     const subject = draft.subject;
-    if (!subject.name.trim()) {
-        showError('Enter a model name before submitting.');
-        return false;
-    }
-    if (subject.existingModelID === null && !subject.vendor.name.trim()) {
-        showError('Choose an existing vendor or record a new vendor before submitting.');
-        return false;
-    }
-    if (subject.conditions.length < 1) {
-                showError('Add at least one new model test condition.');
-        return false;
-    }
-    try {
-        const keys = subject.conditions.map(configuration => {
-            const values = configurationValues(configuration);
-            if (values.parameters === null && !(mode === 'edit_model' && configuration.ID)) throw Error('Configure every new model condition.');
-            return values.parameters === null ? `unconfigured-${configuration.ID}` : JSON.stringify(values.parameters);
-        });
-        if (new Set(keys).size !== keys.length) throw Error('Each configuration must have a distinct set of parameter values.');
-        const existing = getModel(subject.existingModelID);
-        if (existing && mode !== 'edit_model') {
-            const existingKeys = new Set(existing.conditions.filter(item => item.parameters !== null).map(item => JSON.stringify(normalizeModelParameters(item.parameters))));
-            if (keys.some(key => existingKeys.has(key))) throw Error('This configuration already exists. Change the existing configuration instead.');
-        } else if (mode !== 'edit_model' && catalog.models.some(model =>
-            normalizedSearch(model.name) === normalizedSearch(subject.name)
-            && normalizedSearch(model.vendorName) === normalizedSearch(subject.vendor.name))) {
-            throw Error('This model already exists. Select it from the suggestions.');
-        }
-    } catch (error) {
-        showError(error.message);
-        return false;
+    if (!subject.name.trim() || !subject.vendor.name.trim()) { showError('Enter a model name and choose a vendor.'); return false; }
+    if (mode !== 'edit_model' && catalog.models.some(model =>
+        normalizedSearch(model.name) === normalizedSearch(subject.name) && normalizedSearch(model.vendorName) === normalizedSearch(subject.vendor.name))) {
+        showError('This model already exists. Open its change form instead.'); return false;
     }
     return true;
 }
@@ -2023,7 +1764,7 @@ function validateChangeHasChanges() {
 
 function syncRenderedFormFields() {
     stepSurface.querySelectorAll('[data-bind][data-field]').forEach(control => {
-        if (control.disabled || control.matches('input[type="checkbox"], input[type="radio"]')) {
+        if (control.disabled || control.matches('input[type="radio"]')) {
             return;
         }
         updateBoundField(control);
@@ -2039,7 +1780,7 @@ function validateContribution() {
     const existingChoicesValid = validateRenderedExistingChoices();
     const fieldsValid = form.checkValidity();
     if (!existingChoicesValid || !fieldsValid) {
-        form.reportValidity();
+        reportInvalidField();
         return false;
     }
     if (isChangeMode() && draft.change.operation !== 'update') {
@@ -2055,9 +1796,9 @@ function validateContribution() {
             return false;
         }
     }
-    if (mode === 'feedback' && draft.feedback.details.trim().length < 10) {
-        showError('Please add a little more detail before submitting.');
-        return false;
+    if (mode === 'feedback') {
+        try { feedbackSubmission(feedbackInstructions, draft.feedback.details); }
+        catch (error) { showError(error.message); return false; }
     }
     if (mode === 'benchmark_result' || mode === 'edit_result') {
         if (!draft.results[0]?.sourceURL.trim()) {
@@ -2068,10 +1809,13 @@ function validateContribution() {
         for (const result of draft.results) {
             const profileMatch = getBenchmarkCondition(result.benchmarkConditionID);
             const model = getModel(result.modelID);
-            const configuration = getModelCondition(result.modelID, result.modelConditionID);
             const score = resultStoredScore(result);
-            if (!model || !configuration || !profileMatch || score === null) {
-                showError('Every score needs a model, model condition, benchmark condition, and numeric score.');
+            if (!model || !profileMatch || score === null) {
+                showError('Every score needs a model, version, and numeric score.');
+                return false;
+            }
+            if (!manualResultConditionAllowed(profileMatch.profile)) {
+                showError('This version syncs automatically. To correct an existing score, open its score details.');
                 return false;
             }
             const percentage = profileUsesPercentage(profileMatch.profile);
@@ -2079,9 +1823,9 @@ function validateContribution() {
                 showError(`${profileMatch.object.name} / ${profileMatch.profile.name} accepts percentage scores from 0% to 100%.`);
                 return false;
             }
-            const pair = `${entityKey(configuration.ID)}:${entityKey(profileMatch.profile.ID)}`;
+            const pair = JSON.stringify([entityKey(model.ID), entityKey(profileMatch.profile.ID), result.scoreFields, score]);
             if (seenPairs.has(pair)) {
-                showError('This submission contains the same model condition and benchmark condition more than once.');
+                showError('This submission contains the same model, fields, version and score more than once.');
                 return false;
             }
             seenPairs.add(pair);
@@ -2089,35 +1833,6 @@ function validateContribution() {
     }
     if (isChangeMode() && !validateChangeHasChanges()) {
         return false;
-    }
-    if (mode === 'new_category') {
-        if (!draft.context.confirmed
-            || (draft.context.categoryID === null && draft.context.categoryRef === null)) {
-            showError('Choose a parent category before submitting.');
-            return false;
-        }
-        if (draft.category.requestKind === 'context'
-            && draft.category.contextOrder.filter(entry => entry.isNew).length !== 1) {
-            showError('The new context must appear exactly once in the context order.');
-            return false;
-        }
-        if (draft.category.requestKind === 'context') {
-            const names = draft.category.options.map(optionEntry => optionEntry.name.trim());
-            const normalizedNames = names.map(normalizedIdentifierKey);
-            if (names.length < 2 || names.some(name => name === '')) {
-                showError('Add at least two named context options.');
-                return false;
-            }
-            if (new Set(normalizedNames).size !== normalizedNames.length) {
-                showError('Context option names must remain distinct after punctuation and spacing are normalized.');
-                return false;
-            }
-            if (draft.category.options.filter(optionEntry => optionEntry.isDefault).length !== 1
-                || draft.category.options.filter(optionEntry => optionEntry.isNeutral).length !== 1) {
-                showError('Choose exactly one default option and one neutral option.');
-                return false;
-            }
-        }
     }
     return true;
 }
@@ -2131,28 +1846,28 @@ function evaluationPayload() {
             clientRef: candidate.clientRef,
             name: candidate.name,
             introductionURL: candidate.introductionURL,
-            tags: candidate.tags,
+            description: candidate.description,
+            requestOfficialSync: candidate.requestOfficialSync,
+            officialSyncURL: candidate.officialSyncURL,
+            officialSyncInstructions: candidate.officialSyncInstructions,
             reviewerNotes: candidate.reviewerNotes,
             conditions: candidate.conditions.map(profile => ({
                 clientRef: profile.clientRef,
                 name: profile.name,
+                differenceExplanation: profile.differenceExplanation,
                 scoreMin: evaluationScoreBounds(candidate).min,
                 scoreMax: evaluationScoreBounds(candidate).max,
                 scoreDirection: candidate.scoreDirection,
                 targetValue: evaluationStoredTargetValue(candidate),
                 usesPercentageScale: Boolean(candidate.usesPercentageScale),
-                isDefault: isLiteralDefaultCondition(profile.name)
+                isDefault: isLiteralDefaultCondition(profile.name),
+                isPrimary: profile.isPrimary
             }))
         }))
     };
 }
 
-function configurationPayload(configuration) {
-    return {
-        clientRef: configuration.clientRef,
-        ...configurationValues(configuration)
-    };
-}
+
 
 function subjectPayload() {
     const subject = draft.subject;
@@ -2170,8 +1885,7 @@ function subjectPayload() {
                 existingVendorRef: subject.vendorRef,
                 name: subject.vendor.name,
                 logoKey: subject.vendor.logoKey
-            } : null,
-            conditions: subject.conditions.map(configuration => configurationPayload(configuration))
+            } : null
         }]
     };
 }
@@ -2183,13 +1897,12 @@ function resultsPayload() {
         reviewerNotes: draft.resultNotes,
         results: draft.results.map(result => {
             const model = getModel(result.modelID);
-            const configuration = getModelCondition(result.modelID, result.modelConditionID);
             const object = getBenchmark(result.benchmarkID);
             const profile = getBenchmarkCondition(result.benchmarkConditionID)?.profile;
             return {
                 clientRef: result.clientRef,
                 ...entityLocator(model, 'modelID', 'modelRef'),
-                ...entityLocator(configuration, 'modelConditionID', 'modelConditionRef'),
+                scoreFields: contributionScoreFields(result.scoreFields, catalog.scoreFields),
                 ...entityLocator(object, 'benchmarkID', 'benchmarkRef'),
                 ...entityLocator(profile, 'benchmarkConditionID', 'benchmarkConditionRef'),
                 rawScore: resultStoredScore(result),
@@ -2225,34 +1938,6 @@ function submissionPayload() {
     if (mode === 'benchmark_result') {
         return resultsPayload();
     }
-    if (mode === 'new_category') {
-        const parent = selectedCategoryID === null ? null : categoryByID.get(entityKey(selectedCategoryID));
-        return {
-            type: 'new_category',
-            requestKind: draft.category.requestKind,
-            clientRef: draft.category.clientRef,
-            name: draft.category.name,
-            parentPath: selectedCategoryID === null ? '' : categoryPath(selectedCategoryID),
-            ...entityLocator(parent, 'parentCategoryID', 'parentCategoryRef'),
-            pageURL: param('pageURL') || document.referrer,
-            details: draft.category.details,
-            contextOrder: draft.category.requestKind === 'context'
-                ? draft.category.contextOrder.map(entry => ({
-                    clientRef: entry.clientRef,
-                    dimensionID: entry.dimensionRef ? null : entry.dimensionID,
-                    dimensionRef: entry.dimensionRef,
-                    isNew: entry.isNew
-                }))
-                : [],
-            options: draft.category.requestKind === 'context'
-                ? draft.category.options.map(optionEntry => ({
-                    name: optionEntry.name,
-                    isDefault: optionEntry.isDefault,
-                    isNeutral: optionEntry.isNeutral
-                }))
-                : []
-        };
-    }
     if (mode === 'report') {
         return { type: 'discussion_report', postID: Number(draft.report.postID), reason: draft.report.reason,
             details: draft.report.details };
@@ -2260,7 +1945,7 @@ function submissionPayload() {
     if (mode === 'feedback') {
         return {
             type: 'feedback',
-            details: draft.feedback.details,
+            details: feedbackSubmission(feedbackInstructions, draft.feedback.details),
             pageURL: param('pageURL') || document.referrer
         };
     }
@@ -2270,7 +1955,7 @@ function submissionPayload() {
         targetName: param('targetName') || selectedContextLabel(),
         targetKind: param('targetKind') || (mode === 'delete_or_migrate_category' ? 'category' : 'benchmark'),
         targetBenchmarkID: integerOrNull(param('targetBenchmarkID') || param('benchmarkID')),
-        categoryPath: selectedCategoryID === null ? param('categoryPath') : categoryPath(selectedCategoryID),
+        categoryPath: param('categoryPath'),
         pageURL: param('pageURL') || document.referrer,
         sourceURL: draft.report.sourceURL,
         details: draft.report.details
@@ -2290,52 +1975,44 @@ function showNotice(dialogTitle, message) {
 
 function contributionSubmissionError(error, status) {
     const messages = {
+        verified_email_required: 'Log out and sign in with GitHub again to authorize a verified email address for review notifications.',
+        authentication_required: 'Your session ended. Refresh this page and sign in again before submitting.',
+        dynamic_scores_are_synced: 'This version syncs automatically. To correct an existing score, open its score details.',
+        dynamic_score_condition_immutable: 'A synced score must keep its original version. Report a source-mapping problem through feedback.',
         discussion_already_reported: 'You already have a pending report for this message.',
         discussion_report_daily_limit: 'You have reached the daily report limit. Please try again tomorrow.',
         discussion_post_unavailable: 'That discussion post could not be found. Check its post number.',
         report_details_required: 'Explain the report in at least 10 characters.',
-        benchmark_condition_in_use: 'This benchmark test condition already has scores or personal weights, so it cannot be removed. Keep the condition or request deletion of the whole benchmark.',
-        model_condition_in_use: 'This model test condition already has scores, so it cannot be removed. Keep the condition or request deletion of the whole model.',
+        benchmark_condition_in_use: 'This version already has scores or personal weights, so it cannot be removed. Keep the version or request deletion of the whole benchmark.',
         change_request_has_no_changes: 'The submitted fields still match the published object. Reload the latest version and make the intended change again.',
-        change_target_modified_since_submission: 'This object changed after you opened the form. Reload the page and review the latest values before submitting again.'
+        change_target_modified_since_submission: 'This object changed after you opened the form. Reload the page and review the latest values before submitting again.',
+        write_identity_required: 'This form needs a refresh before submitting safely. Keep your draft and reopen the form.',
+        write_identity_reused: 'This retry no longer matches the original submission. Keep your draft and reopen the form.'
     };
     return messages[error?.error] || error?.error || `Request failed (${status})`;
 }
 
+let submissionPending = false;
 async function submitDraft() {
-    await conditionCheckQueue;
-    try { if (!await confirmModelParameterChanges()) return; } catch (error) { showError(error.message); return; }
-    if (!validateContribution()) {
-        return;
-    }
-    if (!hasVerifiedEmail) {
-        showError('Log out and sign in with GitHub again to authorize a verified email address for review notifications.');
-        return;
-    }
+    if (submissionPending) return;
+    submissionPending = true;
     submitButton.disabled = true;
     try {
-        const response = await fetch('/api/submit_contribution', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(submissionPayload())
-        });
-        if (!response.ok) {
-            let error = {};
-            try {
-                error = await response.json();
-            } catch {
-                error = {};
-            }
-            if (error.error === 'verified_email_required') {
-                hasVerifiedEmail = false;
-                throw new Error('Log out and sign in with GitHub again to authorize a verified email address for review notifications.');
-            }
-            throw new Error(contributionSubmissionError(error, response.status));
+        await conditionCheckQueue;
+        if (!validateContribution()) return;
+        if (!hasVerifiedEmail) {
+            showError('Log out and sign in with GitHub again to authorize a verified email address for review notifications.');
+            return;
         }
+        await pageAccountWriteScope.write(postWriteJSON, '/api/submit_contribution', submissionPayload());
         successDialog.hidden = false;
     } catch (error) {
-        showError(error.message || 'The contribution could not be submitted.');
+        if (error.payload?.error === 'verified_email_required') hasVerifiedEmail = false;
+        showError(isAccountWriteError(error) ? error.message : error.payload
+            ? contributionSubmissionError(error.payload, error.status)
+            : error.message || 'The contribution could not be submitted.');
     } finally {
+        submissionPending = false;
         submitButton.disabled = false;
     }
 }
@@ -2346,22 +2023,23 @@ function configureMode() {
         entryMissing.hidden = false;
         formSurface.hidden = true;
         authMissing.hidden = true;
-        title.textContent = 'Choose an entry point';
-        subtitle.textContent = 'Open contribution controls from the BenchPoll workspace.';
+        title.textContent = 'Choose what to add or change';
+        subtitle.textContent = 'Start from a benchmark or model in the rankings.';
         return false;
     }
-    breadcrumbLabel.textContent = details.label;
     title.textContent = details.title;
     subtitle.textContent = details.subtitle;
-    renderCategoryTree();
+    subtitle.hidden = mode === 'feedback';
     renderCurrentStep();
     return true;
 }
 
 function applyContributionCatalog(nextCatalog) {
+    if (nextCatalog.benchmarks.some(benchmark => !Array.isArray(benchmark.conditions)
+        || benchmark.conditions.some(condition => typeof condition.lowCoverage !== 'boolean'))) {
+        throw new Error('Benchmark coverage information could not be loaded.');
+    }
     catalog = nextCatalog;
-    categoryByID = new Map(catalog.categories.map(category => [entityKey(category.ID), category]));
-    knownTagOptions.innerHTML = catalog.knownTags.map(tag => `<option value="${escapeHTML(tag.name)}"></option>`).join('');
     evaluationNameOptions.innerHTML = catalog.benchmarks.map(object => `<option value="${escapeHTML(object.name)}"></option>`).join('');
 }
 
@@ -2393,13 +2071,6 @@ async function loadCatalog() {
         throw new Error('The initial contribution catalog request was superseded.');
     }
 
-    const categoryRequestPath = mode === 'new_category'
-        ? param('parentPath') || param('categoryPath')
-        : mode === 'delete_or_migrate_category'
-            ? param('categoryPath')
-            : '';
-    const requestedCategory = findCategoryByPath(categoryRequestPath);
-    selectedCategoryID = requestedCategory?.ID ?? null;
     const requestedModel = getModel(param('modelID'));
     const requestedVendor = getVendor(param('vendorID'));
     const requestedObject = getBenchmark(param('benchmarkID') || param('targetBenchmarkID'));
@@ -2448,14 +2119,20 @@ function optionalNumberText(value) {
 }
 
 function hydrateEvaluationChange(form) {
-    const defaultProfile = form.conditions.find(profile => profile.isDefault) ?? form.conditions[0];
+    const defaultProfile = form.conditions.find(profile => profile.isPrimary);
+    if (!defaultProfile || form.conditions.filter(profile => profile.isPrimary).length !== 1) {
+        throw new Error('The benchmark must have exactly one primary version.');
+    }
     const usesPercentageScale = profileUsesPercentage(defaultProfile);
     draft.benchmarks = [{
         ...makeEvaluation(0),
         existingBenchmarkID: draft.change.targetID,
         name: form.name,
         introductionURL: form.introductionURL ?? '',
-        tags: [...form.tags],
+        description: form.description,
+        requestOfficialSync: form.requestOfficialSync,
+        officialSyncURL: form.officialSyncURL,
+        officialSyncInstructions: form.officialSyncInstructions,
         scoreDirection: defaultProfile.scoreDirection,
         targetValue: defaultProfile.targetValue === null || defaultProfile.targetValue === undefined
             ? ''
@@ -2469,12 +2146,14 @@ function hydrateEvaluationChange(form) {
                 ...makeProfile(0),
                 ID: Number(profile.ID),
                 name: profile.name,
+                differenceExplanation: profile.differenceExplanation,
                 usesPercentageScale: profileUsesPercentage(profile),
                 scoreMin: optionalNumberText(profile.scoreMin),
                 scoreMax: optionalNumberText(profile.scoreMax),
                 scoreDirection: profile.scoreDirection,
                 targetValue: optionalNumberText(profile.targetValue),
                 isDefault: Boolean(profile.isDefault),
+                isPrimary: profile.isPrimary,
                 isExisting: true
             };
         })
@@ -2495,15 +2174,7 @@ function hydrateModelChange(form) {
         vendor: {
             name: vendor?.name ?? '',
             logoKey: vendor?.logoKey ?? ''
-        },
-        conditions: form.conditions.map(configuration => ({
-            ...makeConfiguration(0),
-            ID: Number(configuration.ID),
-            parameterRows: configuration.parameters === null ? null : Object.entries(normalizeModelParameters(configuration.parameters)).map(([key, value]) => ({ key, value })),
-            name: configuration.name,
-            isDefault: Boolean(configuration.isDefault),
-            isExisting: true
-        }))
+        }
     };
 }
 
@@ -2513,7 +2184,7 @@ function hydrateResultChange(form) {
     const object = getBenchmark(form.result.benchmarkID);
     result.modelID = form.result.modelID;
     result.modelQuery = model ? modelInputValue(model) : '';
-    result.modelConditionID = form.result.modelConditionID;
+    result.scoreFields = structuredClone(form.result.scoreFields);
     result.benchmarkID = form.result.benchmarkID;
     result.benchmarkQuery = object?.name ?? '';
     result.benchmarkConditionID = form.result.benchmarkConditionID;
@@ -2569,14 +2240,19 @@ async function loadChangeTarget() {
     } else {
         hydrateResultChange(payload.form);
     }
-    draft.change.before = structuredClone(payload.form);
+    draft.change.before = targetKind === 'benchmark'
+        ? Object.fromEntries(Object.keys(evaluationChangeProposal()).map(key => [key, structuredClone(payload.form[key])]))
+        : structuredClone(payload.form);
     draft.change.baseline = captureChangeDraft();
     if (param('addCondition') === '1' && targetKind !== 'result') {
-        const conditions = targetKind === 'benchmark' ? selectedEvaluation().conditions : draft.subject.conditions;
-        const condition = targetKind === 'benchmark' ? makeProfile(conditions.length) : makeConfiguration(conditions.length);
+        const conditions = selectedEvaluation().conditions;
+        const condition = makeProfile(conditions.length);
         condition.name = '';
         condition.isDefault = false;
+        condition.isPrimary = false;
         conditions.push(condition);
+        expandedConditionKey = conditionKey(condition);
+        focusNewCondition = true;
     }
 }
 
@@ -2587,6 +2263,7 @@ async function loadUser() {
         body: '{}'
     });
     if (response.status === 204) {
+        pageAccountWriteScope.bind(null);
         sidebarLogin.hidden = false;
         sidebarUser.hidden = true;
         return null;
@@ -2595,7 +2272,18 @@ async function loadUser() {
         throw new Error('Unable to load your account.');
     }
     const user = await response.json();
+    pageAccountWriteScope.bind(user.userID);
     hasVerifiedEmail = user.hasVerifiedEmail === true;
+    const emailNotice = document.querySelector('.submission-email-notice > span');
+    const emailHeading = document.createElement('strong');
+    emailHeading.textContent = user.reviewEmailEnabled === true
+        ? 'You will receive the review result by email.' : 'Your contribution will be reviewed.';
+    emailNotice.replaceChildren(emailHeading, document.createTextNode(user.reviewEmailEnabled === true
+        ? ' We will use the verified address linked to your GitHub account.'
+        : ' Email notifications are currently unavailable.'));
+    successDialog.querySelector('[slot="body"]').textContent = user.reviewEmailEnabled === true
+        ? 'Your contribution is waiting for review. We will email the verified address from your GitHub account when the review is complete.'
+        : 'Your contribution is waiting for review. Email notifications are currently unavailable.';
     sidebarUserName.textContent = user.userName;
     accountDialogName.textContent = user.userName;
     [sidebarUserPicture, accountDialogPicture].forEach(picture => {
@@ -2614,37 +2302,10 @@ async function loadUser() {
     return user;
 }
 
-contributionTree.addEventListener('click', event => {
-    const row = event.target.closest('[data-category-id]');
-    if (!row || row.disabled) {
-        return;
-    }
-    if (event.target.closest('[data-tree-toggle]')) {
-        row.closest('[data-category-node]')?.classList.toggle('collapsed');
-        return;
-    }
-    selectedCategoryID = row.dataset.categoryId;
-    if (categorySelectionActive && categorySelectionPurpose === 'parent') {
-        completeParentSelection(selectedCategoryID);
-        return;
-    }
-    renderCategoryTree();
-    if (!categorySelectionActive) {
-        renderCurrentStep();
-    }
-    if (!categorySelectionActive && window.matchMedia('(max-width: 760px)').matches) {
-        setTaxonomyOpen(false);
-    }
-});
-
 taxonomyToggle.addEventListener('click', () => {
     setTaxonomyOpen(!document.body.classList.contains('taxonomy-open'));
 });
 function closeTaxonomy() {
-    if (categorySelectionActive) {
-        cancelCategorySelection();
-        return;
-    }
     setTaxonomyOpen(false);
 }
 taxonomyClose.addEventListener('click', closeTaxonomy);
@@ -2656,7 +2317,7 @@ document.addEventListener('keydown', event => {
     }
 });
 
-stepSurface.addEventListener('input', event => {
+function handleStepInput(event) {
     const evaluationName = event.target.closest('[data-evaluation-name]');
     if (evaluationName) {
         clearExistingChoiceValidity(evaluationName);
@@ -2675,15 +2336,6 @@ stepSurface.addEventListener('input', event => {
         updateEvaluationSuggestionMenu(evaluationName);
         return;
     }
-    const tagInput = event.target.closest('[data-tag-input]');
-    if (tagInput) {
-        clearExistingChoiceValidity(tagInput);
-        tagInput.setCustomValidity('');
-        tagInput.removeAttribute('aria-invalid');
-        tagInput.closest('[data-tag-editor-shell]')?.classList.remove('has-error');
-        updateTagSuggestionMenu(tagInput);
-        return;
-    }
     const vendorSearch = event.target.closest('[data-vendor-search]');
     if (vendorSearch) {
         draft.subject.vendorQuery = vendorSearch.value;
@@ -2700,7 +2352,9 @@ stepSurface.addEventListener('input', event => {
             clearSubjectModel('');
             renderCurrentStep();
             requestAnimationFrame(() => {
-                const replacement = stepSurface.querySelector('[data-vendor-search]');
+                const picker = stepSurface.querySelector('[data-catalog-picker="vendor"]');
+                openVendorPicker(picker);
+                const replacement = contributionSearches.get(picker)?.input;
                 replacement?.focus();
                 replacement?.setSelectionRange(replacement.value.length, replacement.value.length);
             });
@@ -2737,8 +2391,6 @@ stepSurface.addEventListener('input', event => {
         if (model && resultModelQuery.value !== modelInputValue(model)) {
             result.modelID = null;
             result.modelRef = null;
-            result.modelConditionID = null;
-            result.modelConditionRef = null;
             result.modelQuery = resultModelQuery.value;
             renderCurrentStep();
             requestAnimationFrame(() => {
@@ -2777,43 +2429,39 @@ stepSurface.addEventListener('input', event => {
         return;
     }
     updateBoundField(event.target);
-    const categoryName = event.target.closest('[data-bind="category"][data-field="name"]');
-    if (categoryName && draft.category.requestKind === 'context') {
-        const newName = stepSurface.querySelector('.context-order-row.new > span:nth-child(2)');
-        if (newName) newName.textContent = categoryName.value || 'New context';
-        const newEntry = draft.category.contextOrder.find(entry => entry.isNew);
-        if (newEntry) newEntry.name = categoryName.value;
-    }
-    const conditionInput = event.target.closest('[data-condition-input], [data-configuration-input]');
+    const conditionInput = event.target.closest('[data-condition-input]');
     if (conditionInput) {
+        updateConditionHeading(conditionInput);
         clearExistingChoiceValidity(conditionInput);
         const row = conditionInput.closest('.condition-row');
         const isDefault = isLiteralDefaultCondition(conditionInput.value);
         if (conditionInput.matches('[data-condition-input]')) {
             const profile = draft.benchmarks[Number(conditionInput.dataset.evaluationIndex)]
                 ?.conditions[Number(conditionInput.dataset.profileIndex)];
-            if (profile) profile.isDefault = isDefault;
-        } else {
-            const configuration = draft.subject.conditions[Number(conditionInput.dataset.index)];
-            if (configuration) configuration.isDefault = isDefault;
+            if (profile) {
+                profile.isDefault = isDefault;
+                validateConditionNameLength(conditionInput, profile);
+            }
         }
         row?.classList.toggle('is-default', isDefault);
+        // Correcting either side of a duplicate must clear the other row's stale error.
+        for (const sibling of stepSurface.querySelectorAll('[data-condition-input]')) {
+            if (sibling === conditionInput) continue;
+            clearExistingChoiceValidity(sibling);
+            validateConditionNameLength(sibling, editedCondition(sibling));
+        }
     }
     decorateChangedFields();
-});
+}
+stepSurface.addEventListener('input', handleStepInput);
 
 stepSurface.addEventListener('change', event => {
-    const optionRole = event.target.closest('[data-context-option-role]');
-    if (optionRole) {
-        const selectedIndex = Number(optionRole.dataset.index);
-        const field = optionRole.dataset.contextOptionRole === 'neutral' ? 'isNeutral' : 'isDefault';
-        draft.category.options.forEach((optionEntry, index) => {
-            optionEntry[field] = index === selectedIndex;
-        });
+    updateBoundField(event.target);
+    if (event.target.matches('[data-field="requestOfficialSync"]')) {
+        renderCurrentStep();
         return;
     }
-    updateBoundField(event.target);
-    if (event.target.matches('[data-condition-input], [data-configuration-input]')) {
+    if (event.target.matches('[data-condition-input]')) {
         queueConditionRename(event.target);
     }
     const percentageScale = event.target.closest('[data-score-percentage]');
@@ -2840,9 +2488,10 @@ stepSurface.addEventListener('change', event => {
     decorateChangedFields();
 });
 
-stepSurface.addEventListener('keydown', event => {
+function handleStepKeydown(event) {
+    if (event.isComposing || event.key === 'Tab' && event.shiftKey) return;
     const vendorSearch = event.target.closest('[data-vendor-search]');
-    if (vendorSearch && event.key === 'Tab' && vendorSearch.value.trim()) {
+    if (vendorSearch && ['Tab', 'Enter'].includes(event.key) && vendorSearch.value.trim()) {
         const closest = vendorSuggestions(vendorSearch.value)[0];
         if (closest) {
             event.preventDefault();
@@ -2850,6 +2499,7 @@ stepSurface.addEventListener('keydown', event => {
             renderCurrentStep();
             requestAnimationFrame(() => stepSurface.querySelector('[data-subject-model-name]')?.focus());
         }
+        if (event.key === 'Enter') event.preventDefault();
         return;
     }
     const subjectModelName = event.target.closest('[data-subject-model-name]');
@@ -2875,10 +2525,12 @@ stepSurface.addEventListener('keydown', event => {
     }
     const resultObjectQuery = event.target.closest('[data-result-object-query]');
     if (resultObjectQuery && event.key === 'Tab' && resultObjectQuery.value.trim()) {
-        const closest = evaluationSuggestions(resultObjectQuery.value)[0];
+        const source = contributionSearches.get(resultObjectQuery)?.panel;
+        const closest = [...source?.querySelectorAll('[data-select-result-object]') ?? []]
+            .find(button => !button.disabled && !button.closest('details:not([open])') && button.getClientRects().length > 0);
         if (closest) {
             event.preventDefault();
-            setResultObject(Number(resultObjectQuery.dataset.index), closest.ID);
+            setResultObject(Number(resultObjectQuery.dataset.index), closest.dataset.selectResultObject, closest.dataset.conditionId);
             renderCurrentStep();
         }
         return;
@@ -2888,34 +2540,19 @@ stepSurface.addEventListener('keydown', event => {
         const closest = evaluationSuggestions(evaluationName.value)[0];
         if (closest) {
             event.preventDefault();
-            stepSurface.querySelector('[data-select-evaluation]')?.focus();
+            [...contributionSearches.get(evaluationName)?.panel.querySelectorAll('[data-select-evaluation]') ?? []]
+                .find(button => button.getClientRects().length > 0)?.focus();
         }
         return;
     }
-    const tagInput = event.target.closest('[data-tag-input]');
-    if (!tagInput || !['Tab', 'Enter', ','].includes(event.key) || !tagInput.value.trim()) {
-        return;
-    }
-    const evaluationIndex = Number(tagInput.dataset.tagInput);
-    const closest = tagSuggestions(draft.benchmarks[evaluationIndex], tagInput.value)[0];
-    if (closest) {
-        event.preventDefault();
-        commitTag(evaluationIndex, closest);
-    } else if (event.key === 'Enter' || event.key === ',') {
-        event.preventDefault();
-    }
-});
+}
+stepSurface.addEventListener('keydown', handleStepKeydown);
 
 stepSurface.addEventListener('focusin', event => {
     const evaluationName = event.target.closest('[data-evaluation-name]');
     if (evaluationName) {
         updateEvaluationSuggestionMenu(evaluationName);
         refreshSuggestionControl(evaluationName);
-    }
-    const tagInput = event.target.closest('[data-tag-input]');
-    if (tagInput) {
-        updateTagSuggestionMenu(tagInput);
-        refreshSuggestionControl(tagInput);
     }
     const subjectModelName = event.target.closest('[data-subject-model-name]');
     if (subjectModelName) {
@@ -2935,72 +2572,42 @@ stepSurface.addEventListener('focusin', event => {
 });
 
 stepSurface.addEventListener('toggle', event => {
-    const picker = event.target.closest('[data-catalog-picker]');
+    const picker = event.target.matches('[data-catalog-picker]') ? event.target : null;
+    if (picker?.dataset.catalogPicker === 'vendor') {
+        if (picker.open) openVendorPicker(picker);
+        else contributionSearches.get(picker)?.layer.close();
+    }
     if (picker?.open) {
         refreshCatalogForControl(picker, () => refreshOpenCatalogPicker(picker));
     }
 }, true);
 
-stepSurface.addEventListener('pointerdown', event => {
-    const tagOption = event.target.closest('[data-select-tag]');
-    tagOption?.closest('[data-tag-editor-shell]')?.setAttribute('data-tag-commit-pending', 'true');
-});
-
 stepSurface.addEventListener('focusout', event => {
-    const editor = event.target.closest('.model-parameter-editor');
-    if (editor && !editor.contains(event.relatedTarget)) {
-        conditionCheckQueue = conditionCheckQueue.then(async () => {
-            if (!editor.isConnected) return;
-            try { await confirmModelParameterChanges(); }
-            catch (error) {
-                editor.setAttribute('aria-invalid', 'true');
-                let message = editor.querySelector('.model-parameter-error');
-                if (!message) {
-                    message = document.createElement('p');
-                    message.className = 'model-parameter-error field-validation-error';
-                    message.setAttribute('role', 'alert');
-                    editor.append(message);
-                }
-                message.textContent = error.message;
-            }
-        });
-    }
     const evaluationCombobox = event.target.closest('.evaluation-combobox');
     if (evaluationCombobox) {
         setTimeout(() => {
-            if (evaluationCombobox.isConnected && !evaluationCombobox.contains(document.activeElement)) {
+            const input = evaluationCombobox.querySelector('input');
+            const state = contributionSearches.get(input);
+            if (evaluationCombobox.isConnected && !(state?.layer.contains(document.activeElement) ?? evaluationCombobox.contains(document.activeElement))) {
                 const existingChoice = evaluationCombobox.querySelector('[data-existing-choice]');
                 if (existingChoice) {
                     validateExistingChoiceInput(existingChoice);
                 }
-                evaluationCombobox.querySelector('.evaluation-suggestions')?.remove();
+                state?.layer.close();
                 evaluationCombobox.querySelector('[role="combobox"]')?.setAttribute('aria-expanded', 'false');
             }
         }, 120);
     }
-    const shell = event.target.closest('[data-tag-editor-shell]');
-    if (!shell) {
-        return;
-    }
-    const input = shell.querySelector('[data-tag-input]');
-    const nextFocus = event.relatedTarget;
-    const isCommittingTag = shell.dataset.tagCommitPending === 'true';
-    if (!isCommittingTag && (!nextFocus || !shell.contains(nextFocus)) && input?.value.trim()) {
-        const message = 'Add the unfinished text as a tag or clear it before leaving this field.';
-        input.setCustomValidity(message);
-        input.setAttribute('aria-invalid', 'true');
-        shell.classList.add('has-error');
-        showFieldError(input, message);
-    }
-    setTimeout(() => {
-        if (shell.isConnected && !shell.contains(document.activeElement)) {
-            shell.querySelector('.tag-suggestions')?.remove();
-            input?.setAttribute('aria-expanded', 'false');
-        }
-    }, 120);
 });
 
-stepSurface.addEventListener('click', event => {
+function handleStepClick(event) {
+    const conditionToggle = event.target.closest('[data-condition-toggle]');
+    if (conditionToggle) {
+        event.preventDefault();
+        const panel = conditionToggle.closest('[data-condition-key]');
+        setExpandedCondition(panel.open ? null : panel.dataset.conditionKey);
+        return;
+    }
     const restore = event.target.closest('[data-restore-path]');
     if (restore) {
         restoreChangePath(restore.dataset.restorePath);
@@ -3042,23 +2649,17 @@ stepSurface.addEventListener('click', event => {
     }
     const resultObjectSuggestion = event.target.closest('[data-select-result-object]');
     if (resultObjectSuggestion) {
-        setResultObject(Number(resultObjectSuggestion.dataset.index), resultObjectSuggestion.dataset.selectResultObject);
-        renderCurrentStep();
-        return;
-    }
-    const resultConfiguration = event.target.closest('[data-select-result-configuration]');
-    if (resultConfiguration) {
-        const result = draft.results[Number(resultConfiguration.dataset.index)];
-        const configuration = getModelCondition(result.modelID, resultConfiguration.dataset.selectResultConfiguration);
-        result.modelConditionID = configuration?.ID ?? null;
-        result.modelConditionRef = configuration?.reference ?? null;
+        if (resultObjectSuggestion.disabled) return;
+        setResultObject(Number(resultObjectSuggestion.dataset.index), resultObjectSuggestion.dataset.selectResultObject, resultObjectSuggestion.dataset.conditionId);
         renderCurrentStep();
         return;
     }
     const resultProfile = event.target.closest('[data-select-result-profile]');
     if (resultProfile) {
+        if (resultProfile.disabled) return;
         const result = draft.results[Number(resultProfile.dataset.index)];
         const profile = getBenchmarkCondition(resultProfile.dataset.selectResultProfile)?.profile;
+        if (profile && !manualResultConditionAllowed(profile)) return;
         result.benchmarkConditionID = profile?.ID ?? null;
         result.benchmarkConditionRef = profile?.reference ?? null;
         renderCurrentStep();
@@ -3071,97 +2672,46 @@ stepSurface.addEventListener('click', event => {
             showFieldError(stepSurface.querySelector('[data-evaluation-name]'), 'This benchmark has already been submitted and is awaiting review.');
         } else if (benchmark) {
             const url = new URL(buildContributionURL('edit_benchmark', { targetBenchmarkID: benchmark.ID, addCondition: '1' }), location.origin);
-            location.assign(url.href);
+            location.assign(activateContributionURL(url.href));
         }
-        return;
-    }
-    const tagSuggestion = event.target.closest('[data-select-tag]');
-    if (tagSuggestion) {
-        commitTag(Number(tagSuggestion.dataset.evaluationIndex), tagSuggestion.dataset.selectTag);
         return;
     }
     const actionTarget = event.target.closest('[data-action]');
     if (actionTarget) {
         const action = actionTarget.dataset.action;
-        if (action === 'start-parent-selection') {
-            void beginParentSelection();
-            return;
-        } else if (action === 'explain-existing-condition') {
+        if (action === 'explain-existing-condition') {
             showNotice(
-                'Existing condition',
-                'Existing test conditions cannot be changed in the Record benchmark form. Open Change benchmark information to edit or remove one.'
-            );
-            return;
-        } else if (action === 'explain-existing-configuration') {
-            showNotice(
-                'Existing model condition',
-                'Existing model test conditions cannot be changed in the Record model form. Open Change model information to edit or remove one.'
+                'Existing version',
+                'Existing versions cannot be changed in the Record benchmark form. Open Change benchmark information to edit or remove one.'
             );
             return;
         } else if (action === 'add-evaluation') {
             draft.benchmarks.push(makeEvaluation(draft.benchmarks.length));
         } else if (action === 'remove-evaluation') {
             draft.benchmarks.splice(Number(actionTarget.dataset.index), 1);
+        } else if (action === 'set-primary-condition') {
+            const evaluation = selectedEvaluation();
+            evaluation.conditions.forEach((profile, index) => {
+                profile.isPrimary = index === Number(actionTarget.dataset.profileIndex);
+            });
         } else if (action === 'add-profile') {
             const evaluation = draft.benchmarks[Number(actionTarget.dataset.evaluationIndex)];
             const profile = makeProfile(evaluation.conditions.length);
             profile.name = '';
             profile.isDefault = false;
+            profile.isPrimary = false;
             evaluation.conditions.push(profile);
+            expandedConditionKey = conditionKey(profile);
+            focusNewCondition = true;
         } else if (action === 'remove-profile') {
             const evaluation = draft.benchmarks[Number(actionTarget.dataset.evaluationIndex)];
             if (evaluation.conditions.length <= 1) {
-                showNotice('Keep one condition', 'A benchmark request must contain at least one new test condition.');
+                showNotice('Keep one version', 'A benchmark request must contain at least one new version.');
                 return;
             }
             const profileIndex = Number(actionTarget.dataset.profileIndex);
             queueConditionDeletion(evaluation.conditions, profileIndex, actionTarget);
             return;
-        } else if (action === 'add-parameter') {
-            const configuration = draft.subject.conditions[Number(actionTarget.dataset.index)];
-            if (configuration.parameterRows === null) configuration.parameterRows = [];
-            if (configuration.parameterRows.length >= 16) return;
-            configuration.parameterRows.push({ key: '', value: '' });
-        } else if (action === 'remove-parameter') {
-            draft.subject.conditions[Number(actionTarget.dataset.index)].parameterRows.splice(Number(actionTarget.dataset.rowIndex), 1);
-        } else if (action === 'configure-default') {
-            draft.subject.conditions[Number(actionTarget.dataset.index)].parameterRows = [];
-        } else if (action === 'add-configuration') {
-            const configuration = makeConfiguration(draft.subject.conditions.length);
-            configuration.name = '';
-            configuration.isDefault = false;
-            draft.subject.conditions.push(configuration);
-        } else if (action === 'remove-configuration') {
-            if (draft.subject.conditions.length <= 1) {
-                showNotice('Keep one condition', 'A model request must contain at least one new model test condition.');
-                return;
-            }
-            const configurationIndex = Number(actionTarget.dataset.index);
-            queueConditionDeletion(draft.subject.conditions, configurationIndex, actionTarget);
-            return;
-        } else if (action === 'move-context-up' || action === 'move-context-down') {
-            const currentIndex = draft.category.contextOrder.findIndex(entry => entry.isNew);
-            const nextIndex = action === 'move-context-up' ? currentIndex - 1 : currentIndex + 1;
-            if (currentIndex >= 0 && nextIndex >= 0 && nextIndex < draft.category.contextOrder.length) {
-                const [entry] = draft.category.contextOrder.splice(currentIndex, 1);
-                draft.category.contextOrder.splice(nextIndex, 0, entry);
-            }
-        } else if (action === 'add-context-option') {
-            draft.category.options.push(makeContextOption(draft.category.options.length));
-        } else if (action === 'remove-context-option') {
-            if (draft.category.options.length <= 2) {
-                showNotice('Keep two options', 'A context must contain at least two distinct options.');
-                return;
-            }
-            const optionIndex = Number(actionTarget.dataset.index);
-            const removed = draft.category.options[optionIndex];
-            draft.category.options.splice(optionIndex, 1);
-            if (removed?.isDefault && draft.category.options[0]) {
-                draft.category.options[0].isDefault = true;
-            }
-            if (removed?.isNeutral && draft.category.options[0]) {
-                draft.category.options[0].isNeutral = true;
-            }
         } else if (action === 'add-result') {
             draft.results.push(makeResult(draft.results.length));
         } else if (action === 'copy-result') {
@@ -3183,62 +2733,8 @@ stepSurface.addEventListener('click', event => {
         renderCurrentStep();
         return;
     }
-    const removeTag = event.target.closest('[data-remove-tag]');
-    if (removeTag) {
-        const evaluation = draft.benchmarks[Number(removeTag.dataset.evaluationIndex)];
-        evaluation.tags.splice(Number(removeTag.dataset.removeTag), 1);
-        renderCurrentStep();
-    }
-});
-
-stepSurface.addEventListener('click', event => {
-    const categoryKind = event.target.closest('[data-category-kind]');
-    if (!categoryKind) return;
-    draft.category.requestKind = categoryKind.dataset.categoryKind;
-    if (draft.category.requestKind === 'context' && draft.category.options.length < 2) {
-        draft.category.options = [makeContextOption(0), makeContextOption(1)];
-    }
-    draft.category.clientRef = `${draft.category.requestKind}-${Date.now()}`;
-    resetContextOrderForParent();
-    renderCurrentStep();
-});
-
-stepSurface.addEventListener('dragstart', event => {
-    const row = event.target.closest('.context-order-row.new[draggable="true"]');
-    if (!row) {
-        event.preventDefault();
-        return;
-    }
-    event.dataTransfer.effectAllowed = 'move';
-    event.dataTransfer.setData('text/plain', 'new-context');
-    row.classList.add('dragging');
-});
-
-stepSurface.addEventListener('dragend', event => {
-    event.target.closest('.context-order-row')?.classList.remove('dragging');
-});
-
-stepSurface.addEventListener('dragover', event => {
-    if (!event.target.closest('[data-context-order-list]')) return;
-    event.preventDefault();
-    event.dataTransfer.dropEffect = 'move';
-});
-
-stepSurface.addEventListener('drop', event => {
-    const targetRow = event.target.closest('[data-context-order-index]');
-    if (!targetRow || event.dataTransfer.getData('text/plain') !== 'new-context') return;
-    event.preventDefault();
-    const currentIndex = draft.category.contextOrder.findIndex(entry => entry.isNew);
-    if (currentIndex < 0) return;
-    const targetIndex = Number(targetRow.dataset.contextOrderIndex);
-    const rect = targetRow.getBoundingClientRect();
-    const insertAfter = event.clientY > rect.top + rect.height / 2;
-    const [newEntry] = draft.category.contextOrder.splice(currentIndex, 1);
-    let insertionIndex = targetIndex + (insertAfter ? 1 : 0);
-    if (currentIndex < insertionIndex) insertionIndex -= 1;
-    draft.category.contextOrder.splice(Math.max(0, insertionIndex), 0, newEntry);
-    renderCurrentStep();
-});
+}
+stepSurface.addEventListener('click', handleStepClick);
 
 form.addEventListener('submit', event => {
     event.preventDefault();
@@ -3273,13 +2769,7 @@ accountDeleteButton.addEventListener('click', () => {
 async function runAccountAction(url, button) {
     button.setAttribute('disabled', '');
     try {
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
-        });
-        if (!response.ok) {
-            throw new Error(`Request failed (${response.status})`);
-        }
+        await pageAccountWriteScope.write(postJSON, url);
         window.location.reload();
     } catch (error) {
         button.removeAttribute('disabled');
@@ -3289,19 +2779,30 @@ async function runAccountAction(url, button) {
 
 logoutConfirmButton.addEventListener('click', () => runAccountAction('/api/logout', logoutConfirmButton));
 deleteConfirmButton.addEventListener('click', () => runAccountAction('/api/delete_account', deleteConfirmButton));
-function showContributionGuide() {
-    showNotice(
-        'How contribution works',
-        'Every contribution is attributed to your account and reviewed before publishing. Benchmark test conditions describe the protocol; model test conditions describe how a model was run; score evidence links exactly one of each.'
-    );
+const contributionGuide = document.getElementById('contribution-guide-dialog');
+let guideTrigger = null;
+function showContributionGuide(event) {
+    guideTrigger = event.currentTarget;
+    contributionGuide.hidden = false;
+    contributionGuide.returnFocus = guideTrigger;
+    contributionGuide.shadowRoot.querySelector('.dialog-body').scrollTop = 0;
 }
+function closeContributionGuide() {
+    contributionGuide.hidden = true;
+    guideTrigger?.focus({ preventScroll: true });
+}
+contributionGuide.querySelector('.dialog-close-button').addEventListener('click', closeContributionGuide);
 
-document.getElementById('contribution-help').addEventListener('click', showContributionGuide);
-document.getElementById('contribution-page-help').addEventListener('click', showContributionGuide);
+const contributionHelpButton = document.getElementById('contribution-help');
+contributionHelpButton.addEventListener('click', showContributionGuide);
+contributionHelpButton.disabled = false;
 
 async function initialize() {
     try {
         if (contributionEntry.error) throw new Error(contributionEntry.error);
+        if (mode === 'feedback' && feedbackMessageLimit(feedbackInstructions) < 10) {
+            throw new Error('The prefilled instructions are too long. Please open a fresh feedback form.');
+        }
         await loadCatalog();
         const user = await loadUser();
         authenticated = Boolean(user);
@@ -3320,11 +2821,6 @@ async function initialize() {
         formSurface.hidden = false;
         authMissing.hidden = true;
         entryMissing.hidden = true;
-        if (param('addCondition') === '1') requestAnimationFrame(() => {
-            if (document.activeElement?.matches('input, textarea, select')) return;
-            const inputs = stepSurface.querySelectorAll('[data-condition-input], [data-configuration-input]');
-            inputs[inputs.length - 1]?.focus();
-        });
     } catch (error) {
         showError(error.message || 'The contribution page could not be loaded.');
     }

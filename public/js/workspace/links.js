@@ -13,8 +13,7 @@ function buildBenchmarkEditURL(object) {
 
 function buildModelEditURL(model) {
     return contributionEditURL('edit_model', {
-        targetModelID: model.modelID,
-        targetConditionID: model.ID
+        targetModelID: model.modelID
     });
 }
 

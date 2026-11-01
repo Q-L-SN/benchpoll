@@ -20,11 +20,14 @@ test('admin explorer exposes only canonical strict-schema entities', () => {
     const keys = ADMIN_EXPLORER_ENTITIES.map(entity => entity.key);
     assert.deepEqual(keys, [
         'benchmarks',
+        'score_sync_jobs',
+        'score_sync_runs',
+        'score_sync_registry_events',
         'benchmark_conditions',
         'models',
-        'model_conditions',
+        'score_fields',
+        'score_field_options',
         'benchmark_results',
-        'benchmark_tags',
         'vendors',
         'categories',
         'ranking_dimensions',
@@ -32,7 +35,10 @@ test('admin explorer exposes only canonical strict-schema entities', () => {
         'personal_pies',
         'personal_pie_weights'
     ]);
-    assert.doesNotMatch(source, /evaluation_profiles|evaluation_results|model_configurations|\bobjects\b|template_values|template_hash/);
+    assert.doesNotMatch(source, /benchmark_tags|benchmark_tag_links|evaluation_profiles|evaluation_results|model_configurations|\bobjects\b|template_values|template_hash/);
+    for (const key of ['score_sync_jobs', 'score_sync_runs', 'score_sync_registry_events']) {
+        assert.match(source, new RegExp(key + ': \\{\\s*label: [^\\n]+actionKeys: \\[\\]'));
+    }
 });
 
 test('moderation request summaries use canonical contribution names', () => {
@@ -102,7 +108,7 @@ test('successful moderation audit entries require recorded SQL and persist revie
     assert.equal(auditID, 44);
     assert.equal(writes.length, 1);
     assert.match(writes[0].sql, /INSERT INTO moderation_audit_logs/);
-    assert.equal(writes[0].params[1], 167495513);
+    assert.equal(writes[0].params[1], '167495513');
     assert.match(writes[0].params[9], /INSERT INTO benchmarks/);
 });
 
@@ -132,6 +138,8 @@ test('data explorer applies allowlisted SQL and returns only declared list colum
                 conditionCount: 2,
                 resultCount: 3,
                 isActive: 1,
+                requestOfficialSync: 1,
+                scoresUpdatedAt: '2026-10-03',
                 updatedAt: '2026-08-29',
                 introductionURL: 'https://example.com',
                 secretColumn: 'must not leak'
@@ -151,6 +159,8 @@ test('data explorer applies allowlisted SQL and returns only declared list colum
         conditionCount: 2,
         resultCount: 3,
         isActive: 1,
+        requestOfficialSync: 1,
+        scoresUpdatedAt: '2026-10-03',
         updatedAt: '2026-08-29'
     });
     assert.deepEqual(calls[0].params, ['%Strict%']);
@@ -221,7 +231,7 @@ test('audit snapshots retain moderation request content and reviewer-visible sta
     }, { type: 'new_benchmark' }), {
         moderationLogID: 8,
         status: 'pending',
-        submittedBy: 99,
+        submittedBy: '99',
         reportCount: 2,
         createdAt: 'created',
         updatedAt: 'updated',

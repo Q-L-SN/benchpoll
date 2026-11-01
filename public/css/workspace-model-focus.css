@@ -1,0 +1,98 @@
+.bp-model-row:focus-visible,
+.bp-model-column:focus-visible {
+    border-radius: 4px;
+    outline-offset: -2px;
+}
+
+/* A one-shot jump is not keyboard input; the controller releases this on a real key press. */
+.bp-model-row.is-model-jump-auto-focus {
+    transition: none;
+}
+
+.bp-model-row.is-model-jump-auto-focus:not(.is-model-jump-focus):focus-visible,
+.bp-model-column.is-model-jump-auto-focus:not(.is-model-jump-focus):focus-visible {
+    outline: none;
+}
+
+.bp-model-row.is-model-jump-auto-focus:not(.is-model-jump-focus):focus-visible {
+    background: transparent;
+}
+
+.bp-model-row.is-model-jump-auto-focus:not(.is-model-jump-focus):focus-visible:hover {
+    background: var(--bp-hover, #f5f6f7);
+}
+
+.bp-model-column.is-model-jump-auto-focus:focus-visible .bp-model-column-plot::before {
+    background-color: transparent;
+}
+
+@media (hover: hover) {
+    .bp-model-column.is-model-jump-auto-focus:focus-visible:hover .bp-model-column-plot::before {
+        background-color: var(--bp-hover, var(--bp-surface-soft));
+    }
+}
+
+.bp-model-row.is-model-jump-focus,
+.bp-model-column.is-model-jump-focus,
+.th-model.is-model-jump-focus {
+    background: var(--accent-soft, #e7f0e9);
+    outline: 2px solid var(--accent-color, #246650);
+    outline-offset: -2px;
+    border-radius: 4px;
+    animation: bp-model-jump-focus 1.9s ease-out both;
+}
+
+.bp-model-focus-pagination {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    min-height: 44px;
+    padding: 4px 8px;
+    background: var(--bp-surface, #fff);
+    border-bottom: 1px solid var(--bp-line, #dfe5df);
+}
+
+.bp-model-focus-pagination > span {
+    min-width: 0;
+    margin-inline: auto;
+    color: var(--bp-muted, #69766f);
+    font-size: 12px;
+    overflow-wrap: anywhere;
+}
+
+.bp-model-focus-pagination .bp-ui-action {
+    flex: 0 0 44px;
+    width: 44px;
+    min-height: 44px;
+}
+
+.bp-model-focus-pagination [aria-disabled="true"] {
+    opacity: .5;
+}
+
+.bp-model-focus-pagination .bp-model-focus-error,
+.bp-model-focus-status {
+    flex-basis: 100%;
+    padding: 8px;
+    color: var(--bp-muted, #69766f);
+    font-size: 12px;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+}
+
+@keyframes bp-model-jump-focus {
+    0%, 35% { background-color: var(--accent-soft, #e7f0e9); outline-color: var(--accent-color, #246650); }
+    100% { background-color: transparent; outline-color: transparent; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .bp-model-row.is-model-jump-focus,
+    .bp-model-column.is-model-jump-focus,
+    .th-model.is-model-jump-focus {
+        animation: none;
+    }
+}

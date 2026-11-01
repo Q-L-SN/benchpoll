@@ -1,0 +1,12 @@
+.bp-fallback-step-number, .bp-fallback-connector { display: none; }
+.bp-benchmark-family-chain { --bp-chain-axis: 10px; display: grid; gap: 0; margin: 0; padding: 4px 0; list-style: none; overflow: visible; }
+.bp-benchmark-family-chain > li { display: grid; gap: 0; min-width: 0; }
+.bp-fallback-unit { position: relative; display: flex; align-items: center; gap: 6px; min-width: 0; padding: 5px 0 5px 24px; }
+.bp-fallback-unit::before { content: ''; position: absolute; top: 0; bottom: 0; left: var(--bp-chain-axis); width: 1px; background: #c7cbd1; pointer-events: none; }
+.bp-fallback-unit::after { content: ''; position: absolute; top: 50%; left: calc(var(--bp-chain-axis) - 3.5px); width: 8px; height: 8px; box-sizing: border-box; border: 1px solid #929aa3; border-radius: 50%; background: var(--bp-chain-surface, var(--bp-surface, white)); transform: translateY(-50%); pointer-events: none; }
+.bp-benchmark-family-chain > li:first-child > .bp-fallback-unit:first-child::before { top: 50%; }
+.bp-benchmark-family-chain > li:last-child > .bp-fallback-unit:last-child::before { bottom: 50%; }
+.bp-fallback-attachment { flex: 0 0 auto; color: var(--bp-muted); }
+.bp-fallback-step { min-width: 0; max-width: 100%; padding: 2px 0; background: transparent; }
+.bp-fallback-step-label { display: grid; gap: 0; min-width: 0; }
+.bp-fallback-step-name, .bp-fallback-step .bp-benchmark-condition { white-space: normal; overflow-wrap: anywhere; }

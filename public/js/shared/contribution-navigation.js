@@ -1,7 +1,7 @@
 const routes = Object.freeze({
     new_benchmark: 'benchmarks/new', new_model: 'models/new', benchmark_result: 'scores/new',
-    new_category: 'categories/new', feedback: 'feedback', report: 'reports/new',
-    correct_or_add_info: 'benchmark-correction', delete_or_migrate_category: 'categories/edit'
+    feedback: 'feedback', report: 'reports/new',
+    correct_or_add_info: 'benchmark-correction'
 });
 const targets = Object.freeze({
     edit_benchmark: ['benchmarks', 'targetBenchmarkID'],
@@ -10,9 +10,26 @@ const targets = Object.freeze({
 const entryPrefix = 'benchpoll:contribution-entry:';
 const lifetime = 30 * 60 * 1000;
 const links = new Map();
+const entries = new Map();
+let activationListening = false;
 const fields = new Set(['pageURL', 'parentPath', 'parentName', 'categoryPath', 'targetName', 'targetKind',
     'targetCategoryID', 'targetBenchmarkID', 'targetModelID', 'targetResultID', 'targetConditionID',
     'benchmarkID', 'benchmarkName', 'modelID', 'modelName', 'vendorID', 'vendorName', 'postID', 'operation', 'addCondition', 'details']);
+
+export function returnFromContribution(params = new URLSearchParams()) {
+    if (window.history.length > 1) { window.history.back(); return; }
+    const candidates = [document.referrer, params.get('pageURL'), params.get('parentPath')];
+    for (const candidate of candidates) {
+        if (!candidate) continue;
+        try {
+            const previous = new URL(candidate, window.location.origin);
+            if (previous.origin === window.location.origin && previous.href !== window.location.href) {
+                window.location.assign(previous.href); return;
+            }
+        } catch { /* Ignore a malformed optional return URL. */ }
+    }
+    window.location.assign('/');
+}
 
 export function contributionPath(mode, values = {}) {
     if (targets[mode]) {
@@ -51,19 +68,51 @@ export function buildContributionURL(mode, values = {}) {
     if (!Object.keys(extra).length) return path;
     const signature = JSON.stringify([path, extra]);
     const cached = links.get(signature);
-    if (cached && cached.expiresAt > Date.now()) return cached.url;
-    for (const key of Object.keys(localStorage)) {
-        if (!key.startsWith(entryPrefix)) continue;
-        const record = JSON.parse(localStorage.getItem(key));
-        if (record.expiresAt <= Date.now()) localStorage.removeItem(key);
-    }
-    for (const [key, value] of links) if (value.expiresAt <= Date.now()) links.delete(key);
+    if (cached) return cached;
     const token = window.crypto.randomUUID();
-    const expiresAt = Date.now() + lifetime;
-    localStorage.setItem(entryPrefix + token, JSON.stringify({ path, values: extra, expiresAt }));
     const url = `${path}#entry=${token}`;
-    links.set(signature, { url, expiresAt });
+    entries.set(token, { path, values: extra });
+    links.set(signature, url);
+    listenForContributionActivation();
     return url;
+}
+
+export function activateContributionURL(url) {
+    const target = new URL(url, window.location.href);
+    if (target.origin !== window.location.origin) return url;
+    const token = new URLSearchParams(target.hash.slice(1)).get('entry');
+    const entry = entries.get(token);
+    if (!entry || entry.path !== target.pathname) return url;
+    try {
+        const storage = window.localStorage;
+        const now = Date.now();
+        for (let index = storage.length - 1; index >= 0; index--) {
+            const key = storage.key(index);
+            if (!key?.startsWith(entryPrefix)) continue;
+            let record;
+            try { record = JSON.parse(storage.getItem(key)); } catch { /* Remove malformed handoffs only. */ }
+            if (!Number.isFinite(record?.expiresAt) || record.expiresAt <= now) storage.removeItem(key);
+        }
+        storage.setItem(entryPrefix + token, JSON.stringify({ ...entry, expiresAt: now + lifetime }));
+    } catch { /* The destination reports unavailable prefill without breaking ordinary navigation. */ }
+    return url;
+}
+
+function listenForContributionActivation() {
+    if (activationListening || typeof document === 'undefined') return;
+    activationListening = true;
+    const activate = event => {
+        if (!event.isTrusted || event.defaultPrevented || (event.type === 'click' && event.button !== 0)
+            || (event.type === 'auxclick' && event.button !== 1)) return;
+        const link = event.composedPath().find(node => node.matches?.('a[href]'));
+        if (!link || link.hasAttribute('download')) return;
+        activateContributionURL(link.href);
+    };
+    // Bubble after handlers which update href; leave native navigation/modifiers untouched.
+    document.addEventListener('click', activate);
+    document.addEventListener('auxclick', activate);
+    // Native browser menu selections are not observable. Prepare only the requested link.
+    document.addEventListener('contextmenu', activate);
 }
 
 export function readContributionEntry() {

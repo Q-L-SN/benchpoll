@@ -1,0 +1,52 @@
+/* Existing loading markers share the same centered, font-independent ring. */
+.bp-spinner,
+i.fa-spinner,
+i.fa-circle-notch {
+    display: inline-block;
+    box-sizing: border-box;
+    width: 1em;
+    height: 1em;
+    min-width: 1em;
+    flex-shrink: 0;
+    padding: 0;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    vertical-align: -.125em;
+    transform-origin: 50% 50%;
+    animation: bp-spinner-turn .8s linear infinite;
+}
+i.fa-spinner::before,
+i.fa-circle-notch::before { content: none; }
+@keyframes bp-spinner-turn { to { transform: rotate(360deg); } }
+
+.bp-update-indicator {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 18px;
+    width: 18px;
+    height: 18px;
+    font-size: 14px;
+    color: var(--bp-accent, #be4b00);
+    opacity: 1;
+    transition: opacity .7s ease;
+}
+#workspace-update-indicator,
+#workspace-update-indicator > i { color: var(--bp-accent, #be4b00); }
+.bp-update-indicator[data-phase="idle"],
+.bp-update-indicator[data-phase="fading"] { opacity: 0; }
+.bp-update-indicator[data-phase="pending"] { transition: none; }
+.bp-update-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+@media (prefers-reduced-motion: reduce) {
+    .bp-spinner, i.fa-spinner, i.fa-circle-notch { animation: none; }
+    .bp-update-indicator { transition: none; }
+}

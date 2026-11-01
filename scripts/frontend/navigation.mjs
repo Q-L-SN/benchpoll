@@ -1,17 +1,24 @@
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
+import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 import { startPreview } from './server.mjs';
-import { workspace, createFixtureState, weightedEntries } from './fixtures.mjs';
+import { workspace, createFixtureState, weightedEntries, familyEntries } from './fixtures.mjs';
 import { entryFromContext, contextKey } from '../../public/js/navigation/model.js';
 
-const output = new URL('../../artifacts/navigation/', import.meta.url);
+const reviewOutput = process.env.NAVIGATION_REVIEW_OUTPUT;
+if (reviewOutput) assert.match(reviewOutput, /^artifacts\/review-20261008\/[a-z0-9-]+$/);
+const output = new URL('../../' + (reviewOutput ?? 'artifacts/navigation') + '/', import.meta.url);
+const baseline = process.env.NAVIGATION_REVIEW_BASELINE === '1'
+    ? 'D:/BenchPoll-artifacts/review-20261008/profile-read-production-before' : null;
+const baselineFiles = ['public/js/shared/http.js', 'public/js/workspace/comparison-profiles.js',
+    'public/js/home-workspace.js', 'public/js/navigation/sidebar.js', 'public/js/workspace/comparison-profile-menu.js'];
 await mkdir(output, { recursive: true });
 const browser = await chromium.launch({ headless: true });
 const results = [];
 const categories = [
-    { ID: 1, parentID: null, name: 'AI Evaluation' },
+    { ID: 1, parentID: null, name: 'Intelligence' },
     { ID: 2, parentID: 1, name: 'Language models' },
     { ID: 3, parentID: 2, name: 'Coding' },
     { ID: 4, parentID: 3, name: 'Code generation' },
@@ -55,7 +62,7 @@ const pie = (categoryID, values = {}, entries = [{ conditionID: 1, weightBasisPo
 function createState() {
     const initial = [pie(3), pie(4), pie(4, { budget: 'extended' }), pie(6), pie(8)];
     return { owner: '1', pies: new Map(initial.map(item => [contextKey(item.context.categoryID, item.context.contextValues), item])),
-        requests: [], indexDelay: 0, indexFailure: null, saveDelay: 0, saveFailure: null, workspaceDelay: 0, unavailable: new Set() };
+        requests: [], receipts: new Map(), indexDelay: 0, indexFailure: null, saveDelay: 0, saveFailure: null, workspaceDelay: 0, unavailable: new Set() };
 }
 async function fixture(page, state) {
     await page.route('**/api/**', async route => {
@@ -67,8 +74,11 @@ async function fixture(page, state) {
             if (!state.owner) return route.fulfill({ status: 204, body: '' });
             return send({ userID: state.owner, userName: `User ${state.owner}`, hasVerifiedEmail: true, role: 'reviewer' });
         }
+        if (path === '/api/get_comparison_profiles') {
+            return send({ authenticated: Boolean(state.owner), userID: state.owner, last: null, profiles: [] });
+        }
         if (path.startsWith('/api/get_page')) {
-            const categoryPathPart = decodeURIComponent(path.slice('/api/get_page'.length)).replace(/^\/rankings\//, '').replace(/^\/$/, '');
+            const categoryPathPart = decodeURIComponent(path.slice('/api/get_page'.length)).replace(/^\//, '');
             const category = categoryPathPart ? categories.find(item => categoryPath(item.ID) === categoryPathPart) : categories[0];
             if (!category) return send({ error: 'category_not_found' }, 404);
             return send({ categoryTree: treeFor(category.ID), currentCategoryID: category.ID });
@@ -85,19 +95,36 @@ async function fixture(page, state) {
             if (state.indexFailure) return send({ error: 'index_failure' }, state.indexFailure);
             return send(captured);
         }
+        if (path === '/api/get_topics') {
+            return send({ userID: state.owner, topics: categories.map(category => ({ ID: category.ID,
+                name: category.name, isMine: false, configured: false })) });
+        }
+        if (path === '/api/get_category_navigation') {
+            return send({ items: categories.map(category => entryFromContext({ categoryID: category.ID, lineage: lineage(category.ID), contextValues: {} })) });
+        }
         if (path === '/api/get_weighted_workspace' || path === '/api/save_personal_pie') {
             const ID = body.categoryID ?? 1;
             const context = contextFor(ID, body.contextValues);
             const key = contextKey(ID, context.contextValues);
             if (path === '/api/save_personal_pie') {
+                const requestKey = route.request().headers()['idempotency-key'];
+                assert.ok(requestKey);
+                if (!state.owner) return send({ error: 'authentication_required' }, 401);
+                if (body.expectedUserID !== state.owner) return send({ error: 'account_changed' }, 409);
+                const identity = `${state.owner}:${requestKey}`, intent = JSON.stringify(body);
+                const replay = state.receipts.get(identity);
+                if (replay) return send(replay.intent === intent ? replay.receipt : { error: 'write_identity_reused' }, replay.intent === intent ? 200 : 409);
                 await delay(state.saveDelay);
                 if (state.saveFailure) return send({ error: state.saveFailure === 409 ? 'pie_revision_conflict' : 'save_failed' }, state.saveFailure);
                 const previous = state.pies.get(key);
-                if (!state.owner) return send({ error: 'authentication_required' }, 401);
                 if ((previous?.revision ?? 0) !== body.expectedRevision) return send({ error: 'pie_revision_conflict' }, 409);
                 if (body.entries.length) state.pies.set(key, { context, revision: (previous?.revision ?? 0) + 1,
-                    entries: weightedEntries(body.entries), fallbackRules: body.fallbackRules.map(rule => ({ ...rule, entries: weightedEntries(rule.entries) })) });
+                    entries: weightedEntries(body.entries), fallbackRules: body.fallbackRules.map(rule => ({ ...rule, entries: familyEntries(rule.entries) })) });
                 else state.pies.delete(key);
+                const receipt = { saved: true, requestKey, userID: state.owner, categoryID: ID, contextValues: context.contextValues,
+                    personalPie: { revision: state.pies.get(key)?.revision ?? 0, entries: body.entries, fallbackRules: body.fallbackRules } };
+                state.receipts.set(identity, { intent, receipt });
+                return send(receipt);
             } else await delay(state.workspaceDelay);
             const stored = state.owner ? state.pies.get(key) : null;
             const payload = workspace(createFixtureState({ authenticated: Boolean(state.owner), userID: state.owner,
@@ -136,6 +163,8 @@ async function check(name, action, browserOptions = {}) {
     page.on('pageerror', error => errors.push(error.message));
     await page.addInitScript(() => localStorage.setItem('benchpoll-welcome-seen-v1', '1'));
     try {
+        if (baseline) for (const path of baselineFiles) await page.route(url => url.pathname === path.replace(/^public/, ''),
+            route => route.fulfill({ contentType: 'text/javascript', path: baseline + '/' + path }));
         await fixture(page, state);
         await page.goto(app.url);
         await ready(page, 1);
@@ -147,10 +176,33 @@ async function check(name, action, browserOptions = {}) {
     } catch (error) {
         results.push({ name, passed: false, error: error.message, pageErrors: errors });
         console.error(`FAIL ${name}: ${error.message}`);
-        await page.screenshot({ path: new URL(name.replaceAll(/[^a-z0-9]+/gi, '-') + '-failure.png', output).pathname, fullPage: true }).catch(() => {});
+        await page.screenshot({ path: fileURLToPath(new URL(name.replaceAll(/[^a-z0-9]+/gi, '-') + '-failure.png', output)), fullPage: true }).catch(() => {});
     } finally { await context.close(); await app.close(); }
 }
 try {
+    await check('search is opt-in in both modes and reaches unloaded categories', async ({ page, state }) => {
+        assert.equal(await page.locator('#configured-search-wrap').isVisible(), false);
+        assert.equal(state.requests.some(item => item.path === '/api/get_category_navigation'), false);
+        await page.locator('#navigation-search-toggle').click();
+        await page.locator('#configured-search').fill('Mathematics');
+        await page.locator('[data-search-category-id="6"]').click();
+        await ready(page, 6);
+        assert.equal(await page.locator('#configured-search-wrap').isVisible(), false);
+        await goConfigured(page);
+        assert.equal(await page.locator('#configured-search-wrap').isVisible(), false);
+        await page.locator('#navigation-search-toggle').click();
+        await page.locator('#configured-search').fill('extended');
+        assert.equal(await savedRows(page).count(), 1);
+        await page.locator('#configured-search').press('Escape');
+        assert.equal(await page.locator('#configured-search-wrap').isVisible(), false);
+        assert.equal(await savedRows(page).count(), 5);
+        await page.locator('[data-navigation-view="all"]').click();
+        await page.locator('#navigation-search-toggle').click();
+        await page.locator('#configured-search').fill('No such category');
+        await page.getByText('No matching categories.', { exact: true }).waitFor();
+        await page.locator('#navigation-search-close').click();
+        assert.equal(await page.locator('#tree-content').isVisible(), true);
+    });
     await check('both navigation views preserve pie mode and exact saved context', async ({ page, state }) => {
         const before = state.requests.filter(item => item.path === '/api/get_weighted_workspace').length;
         await goConfigured(page);
@@ -182,6 +234,16 @@ try {
         assert.equal(await page.locator('#tree-content [data-category-id="2"] .bp-config-mark').count(), 0);
         await expand(2);
         assert.equal(await page.locator('#tree-content [data-category-id="3"] .bp-config-mark').count(), 1);
+        const marker = page.locator('#tree-content [data-category-id="3"] .bp-config-mark');
+        assert.equal(await marker.locator('svg').count(), 0);
+        assert.equal(await marker.getAttribute('aria-label'), 'Personal weights configured in this category');
+        const dot = await marker.evaluate(element => {
+            const style = getComputedStyle(element, '::before');
+            return { width: style.width, radius: style.borderRadius, background: style.backgroundColor };
+        });
+        assert.equal(dot.width, '6px');
+        assert.equal(dot.radius, '50%');
+        assert.notEqual(dot.background, 'rgba(0, 0, 0, 0)');
         await expand(3);
         assert.equal(await page.locator('#tree-content [data-category-id="4"] .bp-config-mark').count(), 1);
         await expand(5);
@@ -196,7 +258,7 @@ try {
         await page.reload(); await ready(page, 4);
         assert.equal(await page.locator('#tree-content [data-category-id="3"] .icon-folder').getAttribute('aria-expanded'), 'false');
     });
-    await check('expanded tree order has gaps only between saved roots and temporary ancestors never merge groups', async ({ page }) => {
+    await check('expanded tree order has gaps only between saved roots and unconfigured current ancestors stay hidden', async ({ page }) => {
         await goConfigured(page);
         assert.deepEqual(await savedRows(page).evaluateAll(rows => rows.map(row => Number(row.dataset.locationCategoryId))), [3, 4, 4, 6, 8]);
         assert.deepEqual(await page.locator('.bp-configured-row.is-group-start').evaluateAll(rows => rows.map(row => Number(row.dataset.locationCategoryId))), [6, 8]);
@@ -204,13 +266,12 @@ try {
         await page.locator('[data-navigation-view="all"]').click();
         await page.locator('#tree-content [data-category-id="2"]').click(); await ready(page, 2);
         await goConfigured(page);
-        assert.equal(await currentRow(page).getAttribute('data-configured'), 'false');
-        assert.equal(await currentRow(page).getAttribute('data-location-category-id'), '2');
+        assert.equal(await currentRow(page).count(), 0);
         assert.deepEqual(await page.locator('.bp-configured-row.is-group-start').evaluateAll(rows => rows.map(row => Number(row.dataset.locationCategoryId))), [6, 8]);
-        assert.equal(await page.locator('.bp-configured-row[data-configured="false"]').count(), 1);
+        assert.equal(await page.locator('.bp-configured-row[data-configured="false"]').count(), 0);
         assert.ok(!/Not configured|Saving|Currently browsing/.test(await page.locator('#configured-content').innerText()));
-        assert.equal(await currentRow(page).locator('.bp-config-mark.is-configured').count(), 0);
-        await page.screenshot({ path: new URL('sidebar-desktop.png', output).pathname, fullPage: true });
+        assert.equal(await page.locator('.bp-configured-row[data-location-category-id="2"]').count(), 0);
+        await page.screenshot({ path: fileURLToPath(new URL('sidebar-desktop.png', output)), fullPage: true });
     });
     await check('successful first save and clear update the same row without changing views or inheriting fallback', async ({ page, state }) => {
         await goConfigured(page); await config(page, 3).click(); await ready(page, 3);
@@ -219,13 +280,13 @@ try {
         await page.locator('#tree-content [data-category-id="2"]').click(); await ready(page, 2);
         await goConfigured(page); await mode(page, 'personal');
         state.saveDelay = 250;
-        await page.getByRole('button', { name: 'Add General knowledge to Personal Weights and focus it', exact: true }).click();
-        assert.equal(await currentRow(page).getAttribute('data-configured'), 'false');
+        await page.getByRole('button', { name: 'Add General knowledge to Personal Weights', exact: true }).click();
+        assert.equal(await currentRow(page).count(), 0);
         await until(async () => await currentRow(page).getAttribute('data-configured') === 'true', 'First save did not mark location');
         assert.equal(await currentRow(page).count(), 1);
         assert.deepEqual(await page.locator('.bp-configured-row.is-group-start').evaluateAll(rows => rows.map(row => Number(row.dataset.locationCategoryId))), [8]);
         await page.getByRole('button', { name: 'Remove General knowledge from Personal Weights', exact: true }).click();
-        await until(async () => await currentRow(page).getAttribute('data-configured') === 'false', 'Clear did not unmark location');
+        await until(async () => await currentRow(page).count() === 0, 'Clear did not remove the unconfigured location');
         assert.deepEqual(await page.locator('.bp-configured-row.is-group-start').evaluateAll(rows => rows.map(row => Number(row.dataset.locationCategoryId))), [6, 8]);
         await mode(page, 'personal');
         assert.equal(await page.locator('[data-navigation-view="configured"]').getAttribute('aria-pressed'), 'true');
@@ -245,12 +306,13 @@ try {
         await page.locator('#tree-content [data-category-id="2"]').click(); await ready(page, 2);
         await goConfigured(page);
         state.saveFailure = 500;
-        await page.getByRole('button', { name: 'Add General knowledge to Personal Weights and focus it', exact: true }).click();
-        await page.getByText('Your change was not saved', { exact: true }).waitFor();
-        assert.equal(await currentRow(page).getAttribute('data-configured'), 'false');
+        await page.getByRole('button', { name: 'Add General knowledge to Personal Weights', exact: true }).click();
+        await page.locator('#model-rows').getByText('Could not confirm saving. Your changes are kept; retry to confirm.', { exact: true }).waitFor();
+        assert.equal(await currentRow(page).count(), 0);
     });
     await check('search keeps context identity, unavailable entries cannot navigate, and index failures are not empty states', async ({ page, state }) => {
         await goConfigured(page);
+        await page.locator('#navigation-search-toggle').click();
         await page.locator('#configured-search').fill('Coding extended');
         assert.equal(await page.locator('.bp-configured-row').count(), 1);
         assert.equal(await page.locator('.bp-configured-context').textContent(), 'Budget: Extended');
@@ -281,9 +343,9 @@ try {
         await delay(600);
         assert.equal(await savedRows(page).count(), 0);
         assert.equal(await page.locator('#tree-content .bp-config-mark').count(), 0);
-        assert.equal(await page.locator('.bp-configured-row[data-configured="false"]').count(), 1);
+        assert.equal(await page.locator('.bp-configured-row[data-configured="false"]').count(), 0);
     });
-    await check('account switching replaces the index and rejects delayed data from the previous account', async ({ page, state }) => {
+    await check('account switching clears the old index and an explicit refresh binds the new account', async ({ page, state }) => {
         await goConfigured(page);
         const previousDocument = await page.evaluate(() => performance.timeOrigin);
         state.indexDelay = 450;
@@ -294,11 +356,19 @@ try {
         state.pies = new Map([[contextKey(9, only.context.contextValues), only]]);
         state.indexDelay = 0;
         await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-        await until(async () => await savedRows(page).count() === 1 && await config(page, 9).count() === 1, 'New account index did not replace old data');
+        await until(async () => await savedRows(page).count() === 0, 'Foreign-account response did not clear the old index');
         await delay(500);
+        assert.equal(await savedRows(page).count(), 0, 'Late old-account index must not return after invalidation');
+        assert.equal(await page.evaluate(() => performance.timeOrigin), previousDocument,
+            'The account boundary is not silently rebound within the old document');
+        assert.equal(state.requests.some(item => item.path === '/api/save_personal_pie'), false);
+        await page.reload();
+        await ready(page, 1);
+        await until(async () => await savedRows(page).count() === 1 && await config(page, 9).count() === 1,
+            'Explicit refresh did not load the new account index');
         assert.deepEqual(await savedRows(page).evaluateAll(rows => rows.map(row => Number(row.dataset.locationCategoryId))), [9]);
         assert.equal(await page.locator('#tree-content [data-configured="true"]').count(), 1);
-        assert.notEqual(await page.evaluate(() => performance.timeOrigin), previousDocument, 'The old account workspace must not remain editable');
+        assert.notEqual(await page.evaluate(() => performance.timeOrigin), previousDocument);
     });
     await check('configured scroll and keyboard focus survive view switches reload and index refresh', async ({ page, state }) => {
         const added = Array.from({ length: 45 }, (_, index) => ({ ID: 100 + index, parentID: 1, name: `Extra ${index}` }));
@@ -319,7 +389,8 @@ try {
             assert.ok(Math.abs(await viewport.evaluate(element => element.scrollTop) - 600) < 2);
             await page.reload(); await ready(page, 1);
             await until(async () => await savedRows(page).count() === 50, 'Reloaded index did not load');
-            assert.ok(Math.abs(await viewport.evaluate(element => element.scrollTop) - 600) < 2, 'Reload lost configured scroll position');
+            await until(async () => Math.abs(await viewport.evaluate(element => element.scrollTop) - 600) < 2,
+                `Reload lost configured scroll position: ${await viewport.evaluate(element => element.scrollTop)}`);
             const target = config(page, 110);
             await target.focus();
             await page.evaluate(() => window.dispatchEvent(new Event('focus')));
@@ -331,12 +402,39 @@ try {
         await goConfigured(page); await config(page, 4, 'Extended').click(); await ready(page, 4);
         await page.locator('#pie-mode-personal').click();
         await config(page, 6, 'Standard').click(); await ready(page, 6);
+        const documentID = await page.evaluate(() => performance.timeOrigin);
         await page.goBack(); await ready(page, 4);
         assert.equal(await page.locator('.bp-template-value').textContent(), 'Extended');
         await mode(page, 'personal');
         await page.goForward(); await ready(page, 6); await mode(page, 'personal');
+        assert.equal(await page.evaluate(() => performance.timeOrigin), documentID, 'History must be handled by the workspace, not a document reload');
         assert.equal(await page.locator('[data-navigation-view="configured"]').getAttribute('aria-pressed'), 'true');
     });
+    for (const failure of [null, 503]) {
+        await check(`history waits for a pending save and ${failure ? 'keeps the current context on failure' : 'opens the destination after success'}`, async ({ page, state }) => {
+            await goConfigured(page); await config(page, 4, 'Extended').click(); await ready(page, 4);
+            await page.locator('#pie-mode-personal').click();
+            await config(page, 6, 'Standard').click(); await ready(page, 6);
+            const currentURL = page.url(), documentID = await page.evaluate(() => performance.timeOrigin);
+            state.saveDelay = 450; state.saveFailure = failure; state.requests.length = 0;
+            await page.getByRole('button', { name: 'Remove General knowledge from Personal Weights', exact: true }).click();
+            await until(() => state.requests.some(item => item.path === '/api/save_personal_pie'), 'Save did not start');
+            await page.evaluate(() => history.back());
+            if (failure) {
+                await page.locator('#model-rows').getByText('Could not confirm saving. Your changes are kept; retry to confirm.', { exact: true }).waitFor();
+                await ready(page, 6);
+                assert.equal(page.url(), currentURL);
+                assert.equal(state.requests.some(item => item.path === '/api/get_weighted_workspace' && item.body.categoryID === 4), false);
+            } else {
+                await ready(page, 4);
+                assert.equal(state.pies.has(contextKey(6, { budget: 'standard' })), false);
+                const save = state.requests.findIndex(item => item.path === '/api/save_personal_pie');
+                const destination = state.requests.findIndex(item => item.path === '/api/get_weighted_workspace' && item.body.categoryID === 4);
+                assert.ok(save >= 0 && destination > save);
+            }
+            assert.equal(await page.evaluate(() => performance.timeOrigin), documentID);
+        });
+    }
     for (const width of [390, 320]) {
         await check(`mobile navigation ${width} keeps every saved context visible without overflow`, async ({ page }) => {
             await page.locator('#taxonomy-toggle').click(); await goConfigured(page);
@@ -344,7 +442,7 @@ try {
             assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
             const sidebar = page.locator('.bp-sidebar');
             assert.equal(await sidebar.evaluate(element => element.scrollWidth <= element.clientWidth), true);
-            await page.screenshot({ path: new URL(`sidebar-mobile-${width}.png`, output).pathname, fullPage: true });
+            await page.screenshot({ path: fileURLToPath(new URL(`sidebar-mobile-${width}.png`, output)), fullPage: true });
             await config(page, 4, 'Extended').click(); await ready(page, 4);
             assert.equal(await page.locator('#taxonomy-toggle').getAttribute('aria-expanded'), 'false');
             assert.equal(await page.locator('.bp-template-value').textContent(), 'Extended');

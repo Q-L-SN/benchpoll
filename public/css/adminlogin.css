@@ -1,19 +1,19 @@
 body.admin-login-page {
-    --bg-body: #f5f6f2;
+    --bg-body: var(--bp-surface-soft);
     --bg-panel: #ffffff;
     --bg-hover: #f6faf8;
-    --border-color: #dfe5df;
-    --border-strong: #c7d2c9;
-    --text-primary: #172d28;
-    --text-secondary: #59816d;
-    --text-muted: #85a595;
-    --accent-color: #246650;
-    --accent-strong: #164b39;
-    --accent-soft: #e7f0e9;
+    --border-color: var(--bp-line);
+    --border-strong: var(--bp-line-strong);
+    --text-primary: var(--bp-ink);
+    --text-secondary: var(--bp-muted);
+    --text-muted: var(--bp-muted);
+    --accent-color: var(--bp-purple);
+    --accent-strong: var(--bp-purple-dark);
+    --accent-soft: var(--bp-purple-soft);
     --nav-height: 62px;
     min-height: 100vh;
     overflow-x: hidden;
-    background: #f5f6f2;
+    background: var(--bp-surface-soft);
 }
 
 .header-link {
@@ -21,10 +21,10 @@ body.admin-login-page {
     min-height: 34px;
     align-items: center;
     gap: 8px;
-    border: 1px solid #e2ede8;
+    border: 1px solid var(--bp-line);
     border-radius: 7px;
     background: #ffffff;
-    color: #3a5a4a;
+    color: var(--bp-text);
     box-shadow: 0 1px 2px rgba(34, 54, 44, 0.04), 0 5px 13px rgba(44, 70, 57, 0.035);
     padding: 0 12px;
     font-size: 12px;
@@ -34,9 +34,9 @@ body.admin-login-page {
 }
 
 .header-link:hover {
-    border-color: #d4e3dc;
-    background: #f5f7f0;
-    color: #296a4a;
+    border-color: var(--bp-line);
+    background: var(--bp-hover);
+    color: var(--bp-purple);
     box-shadow: 0 2px 7px rgba(44, 68, 56, 0.065);
 }
 
@@ -57,14 +57,14 @@ body.admin-login-page {
 
 .eyebrow {
     margin-bottom: 12px;
-    color: #296a4a;
+    color: var(--bp-purple);
     font-size: 12px;
     font-weight: 680;
 }
 
 h1 {
     max-width: 460px;
-    color: #172d28;
+    color: var(--bp-ink);
     font-family: var(--font-display);
     font-size: clamp(32px, 4vw, 43px);
     font-weight: 720;
@@ -74,7 +74,7 @@ h1 {
 .intro-copy {
     max-width: 440px;
     margin-top: 17px;
-    color: #567766;
+    color: var(--bp-text);
     font-size: 15px;
     line-height: 1.65;
 }
@@ -84,13 +84,13 @@ h1 {
     align-items: center;
     gap: 7px;
     margin-top: 24px;
-    color: #5e7469;
+    color: var(--bp-muted);
     font-size: 12px;
     font-weight: 560;
 }
 
 .restricted-note i {
-    color: #61746b;
+    color: var(--bp-muted);
     font-size: 11px;
 }
 
@@ -99,7 +99,7 @@ h1 {
     min-width: 0;
     flex-direction: column;
     gap: 18px;
-    border: 1px solid #e4eee9;
+    border: 1px solid var(--bp-line);
     border-radius: 8px;
     background: #ffffff;
     box-shadow: 0 1px 2px rgba(34, 54, 44, 0.04), 0 13px 34px rgba(51, 80, 66, 0.07);
@@ -114,7 +114,7 @@ h1 {
 }
 
 .form-heading h2 {
-    color: #23382e;
+    color: var(--bp-ink);
     font-size: 16px;
     font-weight: 680;
     line-height: 1.25;
@@ -122,7 +122,7 @@ h1 {
 
 .form-heading p {
     margin-top: 3px;
-    color: #5e7669;
+    color: var(--bp-muted);
     font-size: 11.5px;
 }
 
@@ -133,10 +133,10 @@ h1 {
     flex: 0 0 40px;
     align-items: center;
     justify-content: center;
-    border: 1px solid #e8f0ec;
+    border: 1px solid var(--bp-line);
     border-radius: 8px;
-    background: #f5f9f7;
-    color: #296a4a;
+    background: var(--bp-selected);
+    color: var(--bp-purple);
     box-shadow: inset 0 1px rgba(255, 255, 255, 0.9), 0 3px 8px rgba(96, 151, 124, 0.08);
     font-size: 15px;
 }
@@ -149,7 +149,7 @@ h1 {
 }
 
 .admin-field > span {
-    color: #3a5a4a;
+    color: var(--bp-text);
     font-size: 12px;
     font-weight: 630;
 }
@@ -157,10 +157,10 @@ h1 {
 .admin-field input {
     width: 100%;
     height: 42px;
-    border: 1px solid #e1ece7;
+    border: 1px solid var(--bp-line);
     border-radius: 7px;
-    background: #f5f6f2;
-    color: #23382e;
+    background: var(--bp-surface-soft);
+    color: var(--bp-ink);
     outline: none;
     box-shadow: inset 0 1px 2px rgba(35, 56, 46, 0.025);
     padding: 0 12px;
@@ -168,7 +168,7 @@ h1 {
 }
 
 .admin-field input::placeholder {
-    color: #63736b;
+    color: var(--bp-muted);
 }
 
 .admin-field input:hover {
@@ -177,7 +177,7 @@ h1 {
 }
 
 .admin-field input:focus {
-    border-color: #a8c7b8;
+    border-color: var(--bp-line-strong);
     background: #ffffff;
     box-shadow: 0 0 0 3px rgba(41, 106, 74, 0.13);
 }
@@ -189,9 +189,9 @@ h1 {
     justify-content: center;
     gap: 9px;
     margin-top: 3px;
-    border: 1px solid #296a4a;
+    border: 1px solid var(--bp-purple);
     border-radius: 7px;
-    background: #296a4a;
+    background: var(--bp-purple);
     color: #ffffff;
     cursor: pointer;
     box-shadow: inset 0 1px rgba(255, 255, 255, 0.2), 0 4px 11px rgba(41, 106, 74, 0.17);
@@ -201,8 +201,8 @@ h1 {
 }
 
 #loginButton:hover {
-    border-color: #296a4a;
-    background: #296a4a;
+    border-color: var(--bp-purple);
+    background: var(--bp-purple);
     box-shadow: inset 0 1px rgba(255, 255, 255, 0.2), 0 6px 15px rgba(41, 106, 74, 0.21);
 }
 

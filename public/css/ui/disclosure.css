@@ -1,0 +1,28 @@
+/* Only mounted disclosure glyphs rotate; other arrows and expanded tooltips do not. */
+body [data-ui-disclosure] > .bp-ui-disclosure-chevron {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 12px;
+    width: 12px;
+    height: 12px;
+    font-size: 10px;
+    line-height: 1;
+    vertical-align: middle;
+    transform: rotate(0deg);
+    transform-origin: center;
+    transition: transform 190ms cubic-bezier(.22, 1, .36, 1);
+    pointer-events: none;
+}
+body [data-ui-disclosure][aria-expanded="true"]:not(summary) > .bp-ui-disclosure-chevron,
+body details[open]:not([data-ui-disclosure-open="false"]) > summary[data-ui-disclosure] > .bp-ui-disclosure-chevron {
+    transform: rotate(90deg);
+}
+summary[data-ui-disclosure] { list-style: none; }
+summary[data-ui-disclosure]::marker { content: ''; }
+summary[data-ui-disclosure]::-webkit-details-marker { display: none; }
+:where(summary[data-ui-disclosure]) > .bp-ui-disclosure-chevron { margin-inline-start: .5em; }
+:where(summary[data-ui-disclosure]) > .bp-ui-disclosure-chevron:only-child { margin-inline-start: 0; }
+@media (prefers-reduced-motion: reduce) {
+    body [data-ui-disclosure] > .bp-ui-disclosure-chevron { transition: none; }
+}

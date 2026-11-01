@@ -6,12 +6,23 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "lint": "eslint server.js ranking-service.js navigation-service.js condition-impact.js model-comparison.js score-aggregation.js discussion-service.js moderation-admin.js db.js public/js scripts test",
+    "build:home": "node scripts/build-home-assets.mjs",
+    "migrate:ranking-cache": "node scripts/migrate-ranking-cache.mjs --apply",
+    "fetch:arena": "node scripts/fetch-arena-latest.mjs",
+    "import:arena:plan": "node scripts/import-arena-latest.mjs",
+    "sync:scores": "node scripts/run-score-sync.mjs",
+    "sync:register": "node scripts/register-score-sync.mjs",
+    "lint": "eslint server.js ranking-service.js ranking-pagination.js navigation-service.js condition-impact.js model-comparison.js comparison-profiles.js score-aggregation.js score-field-service.js discussion-service.js moderation-admin.js db.js public/js scripts test",
+    "migrate:score-fields": "node scripts/migrate-score-fields.mjs --apply",
+    "migrate:comparison-profiles": "node scripts/migrate-comparison-profiles.mjs --apply",
+    "test:score-fields-ui": "node scripts/frontend/score-fields.mjs",
+    "test:comparison-profiles-ui": "node scripts/frontend/comparison-profiles.mjs",
+    "test:comparison-profiles-live": "node scripts/frontend/comparison-profiles-live.mjs",
     "migrate:model-parameters": "node scripts/migrate-model-parameters.mjs --apply",
     "migrate:object-notes": "node scripts/migrate-object-notes.mjs --apply",
     "migrate:discussions": "node scripts/migrate-discussions.mjs --apply",
     "migrate:remove-score-providers": "node scripts/migrate-remove-score-providers.mjs --apply",
-    "test": "node --test",
+    "test": "node --test \"test/**/*.test.mjs\"",
     "check:ranking-integrity": "node scripts/check-ranking-integrity.mjs",
     "migrate:session-integrity": "node scripts/migrate-session-integrity.mjs --apply",
     "migrate:moderation-admin": "node scripts/migrate-moderation-admin.mjs --apply && node scripts/migrate-admin-messages.mjs --apply",
@@ -27,6 +38,7 @@
     "migrate:context-free-results": "node scripts/migrate-context-free-results.mjs --apply",
     "migrate:personal-fallback-rules": "node scripts/migrate-personal-fallback-rules.mjs --apply",
     "test:frontend": "node scripts/frontend/verify.mjs",
+    "test:review-fixes-ui": "node scripts/frontend/review-regressions.mjs",
     "test:navigation": "node scripts/frontend/navigation.mjs",
     "preview:frontend": "node scripts/frontend/preview.mjs"
   },
@@ -40,11 +52,14 @@
     "express": "^5.2.1",
     "express-mysql-session": "^3.0.3",
     "express-session": "^1.19.0",
+    "fuse.js": "7.5.0",
+    "hyparquet": "^1.31.1",
     "mysql2": "^3.23.4",
     "nodemailer": "^9.0.5",
     "undici": "^8.10.0"
   },
   "devDependencies": {
+    "esbuild": "0.28.2",
     "eslint": "^10.9.0",
     "playwright": "1.62.1"
   }

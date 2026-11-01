@@ -1,3 +1,5 @@
+import { normalizeScoreFieldRequests, normalizeFieldContribution } from '../score-field-service.js';
+import { assertPrimaryCondition } from '../benchmark-primary-condition.js';
 import { normalizeModelParameters, modelParameterLabel, parameterRowsToObject } from '../public/js/shared/model-parameters.js';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
@@ -21,9 +23,12 @@ function sourceBetween(startMarker, endMarker) {
 }
 
 function loadContract() {
-    const sandbox = vm.createContext({ normalizeModelParameters, modelParameterLabel, parameterRowsToObject, URL, crypto, structuredClone, normalizeDiscussionReport });
+    const sandbox = vm.createContext({ assertPrimaryCondition, normalizeScoreFieldRequests, normalizeFieldContribution, normalizeModelParameters, modelParameterLabel, parameterRowsToObject, URL, crypto, structuredClone, normalizeDiscussionReport });
     const source = sourceBetween('function normalizeString(', 'function parseModerationContent(');
     vm.runInContext(`${source}\nthis.contract = { buildContributionContent, normalizeStoredModerationContent };`, sandbox);
+    const endpoint = sourceBetween("API.post('/submit_contribution'", 'function pendingCatalogReference(');
+    const prefix = endpoint.slice(endpoint.indexOf('=> {') + 4, endpoint.indexOf('const connection = await db.getConnection();'));
+    vm.runInContext(`this.contract.buildRequest = body => { const req = { body }; ${prefix}\nreturn content; };`, sandbox);
     return sandbox.contract;
 }
 
@@ -47,6 +52,7 @@ function benchmarkCondition(overrides = {}) {
         scoreMin: 0,
         scoreMax: 100,
         isDefault: true,
+        isPrimary: true,
         ...overrides
     };
 }
@@ -60,7 +66,6 @@ function newBenchmark(overrides = {}) {
             existingBenchmarkRef: null,
             name: 'StrictBench',
             introductionURL: '',
-            tags: ['Benchmark', 'Reasoning', 'benchmark'],
             reviewerNotes: '',
             conditions: [benchmarkCondition()],
             ...overrides
@@ -76,8 +81,7 @@ function benchmarkResult(overrides = {}) {
             clientRef: 'result-one',
             modelID: 4,
             modelRef: null,
-            modelConditionID: 5,
-            modelConditionRef: null,
+            scoreFields: [],
             benchmarkID: 6,
             benchmarkRef: null,
             benchmarkConditionID: 7,
@@ -93,11 +97,51 @@ function benchmarkResult(overrides = {}) {
     };
 }
 
-test('new benchmark keeps multiple tags and explicit custom normalization anchors', () => {
+function contextTemplate(overrides = {}) {
+    return {
+        type: 'new_category',
+        requestKind: 'context',
+        clientRef: 'context-budget',
+        name: 'Budget',
+        parentPath: 'topics/54/intelligence',
+        parentCategoryID: 54,
+        parentCategoryRef: null,
+        pageURL: 'https://benchpoll.com/topics/54/intelligence',
+        details: 'Keep this topic-specific budget setting and reviewer notes.',
+        contextOrder: [{ clientRef: 'new-budget', dimensionID: null, dimensionRef: null, isNew: true }],
+        options: [
+            { key: 'any', name: 'Any', isDefault: true, isNeutral: true },
+            { key: 'limited', name: 'Limited', isDefault: false, isNeutral: false }
+        ],
+        ...overrides
+    };
+}
+
+for (let repetition = 1; repetition <= 2; repetition++) {
+    test(`account metadata is removed before the real strict contribution parser (run ${repetition})`, () => {
+        const contract = loadContract();
+        for (const payload of [
+            { type: 'feedback', details: 'A useful contribution to review.', pageURL: '' },
+            { type: 'report_issue', issueType: 'correct_or_add_info', targetName: 'Bench', details: 'Correct the published explanation.', pageURL: '', sourceURL: '' },
+            newBenchmark(), benchmarkResult(),
+            { type: 'discussion_report', postID: 5, reason: 'spam', details: 'Repeated promotional messages.' }
+        ]) {
+            const body = { ...payload, expectedUserID: '7' };
+            const before = structuredClone(body);
+            assert.equal(contract.buildRequest(body).type, contract.buildContributionContent(payload).type);
+            assert.deepEqual(body, before, 'Separating metadata must not mutate the incoming body');
+            assert.equal(JSON.stringify(contract.buildRequest(body)).includes('expectedUserID'), false);
+        }
+        assert.throws(() => contract.buildRequest({ type: 'feedback', details: 'Unknown business fields still fail.', expectedUserID: '7', unexpected: true }),
+            error => error.body.error === 'unknown_submission_field' && error.body.field === 'unexpected');
+    });
+}
+
+test('new benchmark keeps explicit custom normalization anchors without tags', () => {
     const content = loadContract().buildContributionContent(newBenchmark());
-    assert.equal(content.schemaVersion, 5);
+    assert.equal(content.schemaVersion, 6);
     assert.equal(content.type, 'new_benchmark');
-    assert.deepEqual(Array.from(content.benchmarks[0].tags), ['Benchmark', 'Reasoning']);
+    assert.equal(Object.hasOwn(content.benchmarks[0], 'tags'), false);
     assert.equal(content.benchmarks[0].conditions[0].scoreMin, 0);
     assert.equal(content.benchmarks[0].conditions[0].scoreMax, 100);
     assert.equal(content.benchmarks[0].conditions[0].usesPercentageScale, false);
@@ -166,7 +210,7 @@ test('custom normalization requires both bounds and never invents a missing valu
 test('changing normalization anchors does not reject accepted custom scores outside them', () => {
     const guard = sourceBetween(
         'async function assertBenchmarkConditionSetCanChange(',
-        'async function assertModelConditionSetCanChange('
+        'async function validateEntityChangeProposal('
     );
     assert.doesNotMatch(guard, /raw_score\s*[<>]|rangeClauses|range_conflicts_with_results/);
     assert.match(guard, /benchmark_condition_in_use/);
@@ -210,98 +254,94 @@ test('old evaluation and profile payload fields are rejected instead of translat
     })), error => error?.body?.error === 'unknown_benchmark_field' && error?.body?.field === 'objectType');
 });
 
-test('new models use only model conditions and canonical introduction URL', () => {
+test('models store identity only and reject the removed model condition payload', () => {
     const contract = loadContract();
-    const content = contract.buildContributionContent({
-        type: 'new_model',
-        models: [{
-            clientRef: 'model-one',
-            existingModelID: null,
-            existingModelRef: null,
-            name: 'Model One',
-            introductionURL: 'https://example.com/model',
-            reviewerNotes: '',
-            vendor: {
-                existingVendorID: null,
-                existingVendorRef: null,
-                name: 'Example Lab',
-                logoKey: ''
-            },
-            conditions: [{ clientRef: 'model-condition-default', name: 'default', isDefault: true, parameters: {} }]
-        }]
-    });
+    const request = { type: 'new_model', models: [{
+        clientRef: 'model-one', existingModelID: null, existingModelRef: null,
+        name: 'Model One', introductionURL: 'https://example.com/model', reviewerNotes: '',
+        vendor: { existingVendorID: null, existingVendorRef: null, name: 'Lab', logoKey: '' }
+    }] };
+    const content = contract.buildContributionContent(request);
+    assert.equal(content.schemaVersion, 6);
     assert.equal(content.models[0].introductionURL, 'https://example.com/model');
-    assert.deepEqual(JSON.parse(JSON.stringify(content.models[0].conditions)), [{
-        clientRef: 'model-condition-default',
-        parameters: {},
-        name: 'default',
-        isDefault: true
-    }]);
-    assert.throws(() => contract.buildContributionContent({
-        type: 'new_model',
-        models: [{
-            clientRef: 'model-one',
-            name: 'Model One',
-            vendor: { name: 'Example Lab' },
-            configurations: []
-        }]
-    }), error => error?.body?.error === 'unknown_model_field' && error?.body?.field === 'configurations');
-
-    const modelWithoutDefault = contract.buildContributionContent({
-        type: 'new_model',
-        models: [{
-            clientRef: 'model-two',
-            existingModelID: null,
-            existingModelRef: null,
-            name: 'Model Two',
-            introductionURL: '',
-            reviewerNotes: '',
-            vendor: {
-                existingVendorID: null,
-                existingVendorRef: null,
-                name: 'Example Lab Two',
-                logoKey: ''
-            },
-            conditions: [{ clientRef: 'model-condition-high', name: 'effort=high', parameters: { effort: 'high' }, isDefault: false }]
-        }]
-    });
-    assert.equal(modelWithoutDefault.models[0].conditions[0].isDefault, false);
-    assert.throws(() => contract.buildContributionContent({
-        type: 'new_model',
-        models: [{
-            clientRef: 'model-three',
-            existingModelID: null,
-            existingModelRef: null,
-            name: 'Model Three',
-            introductionURL: '',
-            reviewerNotes: '',
-            vendor: {
-                existingVendorID: null,
-                existingVendorRef: null,
-                name: 'Example Lab Three',
-                logoKey: ''
-            },
-            conditions: [{ clientRef: 'model-condition-wrong', name: 'effort=high', parameters: { effort: 'high' }, isDefault: true }]
-        }]
-    }), error => error?.body?.error === 'model_parameter_label_mismatch');
+    assert.equal(Object.hasOwn(content.models[0], 'conditions'), false);
+    for (const property of ['conditions', 'configurations']) {
+        const invalid = structuredClone(request);
+        invalid.models[0][property] = [];
+        assert.throws(() => contract.buildContributionContent(invalid),
+            error => error.body.error === 'unknown_model_field' && error.body.field === property);
+    }
 });
 
-test('new category submissions preserve their final reviewer notes', () => {
-    const content = loadContract().buildContributionContent({
-        type: 'new_category',
-        requestKind: 'category',
-        clientRef: 'category-reliability',
-        name: 'Reliability',
-        parentPath: 'AI Evaluation',
-        parentCategoryID: 1,
-        parentCategoryRef: null,
-        pageURL: 'https://benchpoll.com/',
-        details: 'Place this next to the existing safety category.',
-        contextOrder: [],
-        options: []
-    });
+test('legacy category creation is retired in favor of independent topics', () => {
+    assert.throws(() => loadContract().buildContributionContent(contextTemplate({
+        requestKind: 'category', contextOrder: [], options: []
+    })), error => error?.status === 410
+        && error?.body?.error === 'topic_hierarchy_removed'
+        && error?.body?.url === '/#new-topic');
+});
 
-    assert.equal(content.details, 'Place this next to the existing safety category.');
+test('context-template submissions retain final notes and their topic through stored revalidation', () => {
+    const contract = loadContract();
+    const request = contextTemplate();
+    const before = structuredClone(request);
+    const content = contract.buildContributionContent(request);
+    assert.deepEqual(request, before);
+    assert.equal(content.requestKind, 'context');
+    assert.equal(content.schemaVersion, 5);
+    assert.equal(content.parentCategoryID, 54);
+    assert.equal(content.details, request.details);
+    assert.deepEqual(structuredClone(content.contextOrder), request.contextOrder);
+    assert.deepEqual(structuredClone(content.options), request.options);
+    const stored = contract.normalizeStoredModerationContent(structuredClone(content));
+    assert.deepEqual(structuredClone(stored), structuredClone(content));
+    assert.throws(() => contract.normalizeStoredModerationContent({ ...content, schemaVersion: 4 }),
+        error => error?.status === 409 && error?.body?.error === 'stored_submission_schema_mismatch');
+});
+
+test('new context-template submissions return 410 without mutating their notes or account metadata', () => {
+    const contract = loadContract();
+    const request = { ...contextTemplate(), expectedUserID: '7' };
+    const before = structuredClone(request);
+    assert.throws(() => contract.buildRequest(request),
+        error => error?.status === 410 && error?.body?.error === 'category_contribution_retired');
+    assert.deepEqual(request, before);
+});
+
+test('historical context-template approval cannot recreate the retired combination structure', async () => {
+    const sandbox = vm.createContext({});
+    vm.runInContext(sourceBetween('async function applyModerationContent(', 'async function buildExecutedModerationSQLPreview(')
+        + '\nthis.apply = applyModerationContent;', sandbox);
+    const connection = new Proxy({}, { get() { throw new Error('Retired approval must not access the database'); } });
+    await assert.rejects(sandbox.apply(connection, { type: 'new_category', requestKind: 'context' }),
+        error => error?.status === 410 && error.body.error === 'category_contribution_retired');
+    assert.doesNotMatch(serverSource, /function createCategoryFromSubmission|function migrateExistingContextsForDimension/);
+});
+
+test('context templates still require a topic, one new dimension and valid distinct options', () => {
+    const contract = loadContract();
+    assert.throws(() => contract.buildContributionContent(contextTemplate({ parentCategoryID: null })),
+        error => error?.body?.error === 'category_parent_required');
+    for (const contextOrder of [[], [
+        ...contextTemplate().contextOrder,
+        { clientRef: 'second-new', dimensionID: null, dimensionRef: null, isNew: true }
+    ]]) {
+        assert.throws(() => contract.buildContributionContent(contextTemplate({ contextOrder })),
+            error => error?.body?.error === 'invalid_context_order');
+    }
+    const options = contextTemplate().options;
+    for (const invalid of [
+        options.slice(0, 1),
+        [options[0], { ...options[1], key: options[0].key }],
+        [options[0], { ...options[1], name: 'ANY' }],
+        options.map(option => ({ ...option, isDefault: false })),
+        options.map(option => ({ ...option, isDefault: true })),
+        options.map(option => ({ ...option, isNeutral: false })),
+        options.map(option => ({ ...option, isNeutral: true }))
+    ]) {
+        assert.throws(() => contract.buildContributionContent(contextTemplate({ options: invalid })),
+            error => error?.body?.error === 'invalid_context_options');
+    }
 });
 
 test('every benchmark result carries its own required source URL', () => {
@@ -326,7 +366,7 @@ test('every benchmark result carries its own required source URL', () => {
 test('benchmark results are global evidence and reject ranking context fields', () => {
     const contract = loadContract();
     const content = contract.buildContributionContent(benchmarkResult());
-    assert.equal(content.schemaVersion, 8);
+    assert.equal(content.schemaVersion, 9);
     assert.equal(Object.hasOwn(content, 'context'), false);
 
     const oldContext = benchmarkResult({
@@ -356,14 +396,18 @@ test('runtime SQL uses strict benchmark tables and stores a source on each resul
     const resultInsert = sourceBetween('async function applyBenchmarkResult(', 'async function applyModerationContent(');
     assert.doesNotMatch(resultInsert, /ranking_context_ID|materializeContributionContext/);
     assert.match(serverSource, /INSERT INTO benchmark_conditions/);
-    assert.match(serverSource, /INSERT INTO benchmark_tag_links/);
-    assert.match(serverSource, /INSERT INTO model_conditions/);
+    assert.doesNotMatch(serverSource, /(?:FROM|JOIN|INTO|UPDATE) benchmark_(?:tags|tag_links)\b/);
+    assert.doesNotMatch(serverSource, /model_conditions|model_condition_ID/);
+    assert.match(serverSource, /score_fields/);
     assert.doesNotMatch(serverSource, /\bFROM objects\b|\bINTO objects\b|evaluation_profiles|evaluation_results|model_configurations|category_templates|\bvotes\b/);
 });
 
 test('submission endpoint requires a verified email and senior review uses the same contribution path', () => {
     const endpoint = sourceBetween("API.post('/submit_contribution'", 'function pendingCatalogReference(');
-    assert.match(endpoint, /SELECT email FROM users WHERE ID = \? LIMIT 1/);
+    assert.match(endpoint, /SELECT email FROM users WHERE ID = \? AND email_verified_at IS NOT NULL/);
+    assert.match(endpoint, /AND deleted_at IS NULL/);
+    assert.match(endpoint, /AND \(banned_at IS NULL OR \(banned_until IS NOT NULL AND banned_until <= NOW\(\)\)\)/);
+    assert.match(endpoint, /LIMIT 1 FOR SHARE/);
     assert.match(endpoint, /verified_email_required/);
     assert.match(endpoint, /if \(req\.user\.isSenior\)/);
     assert.match(endpoint, /await applyModerationContent\(workingConnection, content/);

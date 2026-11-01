@@ -1,6 +1,11 @@
 /* Shared styles split by responsibility; no build step required. */
-@import url('./ui/tokens.css');
-@import url('./ui/shell.css?v=brand-20260919');
-@import url('./ui/workspace.css?v=compact-discussion-20260908');
-@import url('./ui/fallback.css?v=public-fallback-20260906');
-@import url('./ui/evidence.css');
+@import url('./ui/tokens.css?v=fallback-discovery-20261005');
+@import url('./ui/shell.css?v=privacy-mobile-20261002');
+@import url('./ui/workspace.css?v=fallback-controls-20261009');
+@import url('./ui/ranking-motion.css?v=workspace-ui-20261008');
+@import url('./ui/fallback.css?v=fallback-controls-20261009');
+@import url('./ui/benchmark-families.css?v=fallback-picker-20261008');
+@import url('./ui/benchmark-add-layouts.css?v=ranking-experience-20261007');
+@import url('./ui/fallback-picker.css?v=fallback-controls-20261009');
+@import url('./ui/contribution-layouts.css?v=style-previews-20261006');
+@import url('./ui/evidence.css?v=fallback-controls-20261009');

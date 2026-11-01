@@ -1,0 +1,6 @@
+[
+  { "scoreID": 175844, "modelID": 514, "canonicalModelID": 110, "fieldID": 20, "existingValue": 3, "inferredValue": 5, "sourceURL": "https://cognition.com/frontiercode", "nativeID": "frontiercode:v1_1:DeepSeek V4 Flash 0731:high:extended:new_score" },
+  { "scoreID": 175845, "modelID": 514, "canonicalModelID": 110, "fieldID": 20, "existingValue": 3, "inferredValue": 5, "sourceURL": "https://cognition.com/frontiercode", "nativeID": "frontiercode:v1_1:DeepSeek V4 Flash 0731:high:extended:correct" },
+  { "scoreID": 175846, "modelID": 514, "canonicalModelID": 110, "fieldID": 20, "existingValue": 3, "inferredValue": 5, "sourceURL": "https://cognition.com/frontiercode", "nativeID": "frontiercode:v1_1:DeepSeek V4 Flash 0731:high:main:new_score" },
+  { "scoreID": 175847, "modelID": 514, "canonicalModelID": 110, "fieldID": 20, "existingValue": 3, "inferredValue": 5, "sourceURL": "https://cognition.com/frontiercode", "nativeID": "frontiercode:v1_1:DeepSeek V4 Flash 0731:high:main:correct" }
+]

@@ -4,15 +4,20 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BenchPoll</title>
+    <meta name="robots" content="noindex, nofollow, nosnippet">
     <link rel="icon" href="/favicon.ico?v=benchpoll-brand-20260919" sizes="any">
     <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png?v=benchpoll-brand-20260919">
-    <link rel="stylesheet" href="css/global.css" />
-    <link rel="stylesheet" href="css/dialogPage.css" />
-    <script src="js/dialogPage.js" type="module"></script>
+    <link rel="stylesheet" href="/css/global.css" />
+    <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
+    <link rel="stylesheet" href="/css/dialogPage.css" />
+    <script src="/js/dialogPage.js" type="module"></script>
     <link rel="stylesheet" href="/css/ui/tokens.css?v=frontend-20260905">
+    <link rel="stylesheet" href="/css/site-palette.css?v=shared-controls-20261010">
+    <link rel="stylesheet" href="/css/typography.css?v=manrope-static-20261007">
 </head>
 <body class="dialog-page">
     <global-header></global-header>
+    <noscript><main><h1>This page could not be loaded</h1><a href="/">BenchPoll home</a></main></noscript>
     <global-dialog id="code-1-dialog" hidden>
         <div slot="title">This page does not exist</div>
         <div slot="body">The address may be incorrect, or the page may have moved.</div>
@@ -23,14 +28,14 @@
         </div>
     </global-dialog>
     <global-dialog id="code-2-dialog" hidden>
-        <div slot="title">Please log in to continue</div>
+        <div slot="title">Sign in to continue</div>
         <div slot="body">Sign in with GitHub to return to the action you requested.</div>
         <div slot="actions">
             <global-dialog-action class="dialog-close-button">
                 Cancel
             </global-dialog-action>
             <global-dialog-action class="dialog-login-button main">
-                Login
+                Sign in
             </global-dialog-action>
         </div>
     </global-dialog>
@@ -44,7 +49,7 @@
         </div>
     </global-dialog>
     <global-dialog id="code-4-dialog" hidden>
-        <div slot="title">Couldn't log in: Your account is too new</div>
+        <div slot="title">Your GitHub account is too new to sign in</div>
         <div slot="body"></div>
         <div slot="actions">
             <global-dialog-action class="dialog-close-button main">
@@ -53,7 +58,7 @@
         </div>
     </global-dialog>
     <global-dialog id="code-5-dialog" hidden>
-        <div slot="title">Rate limit exceeded</div>
+        <div slot="title">Too many requests</div>
         <div slot="body">You have made too many requests in a short period. Please wait a few minutes before trying again.</div>
         <div slot="actions">
             <global-dialog-action class="dialog-close-button main" hidden>OK</global-dialog-action>
@@ -69,7 +74,7 @@
         </div>
     </global-dialog>
     <global-dialog id="code-7-dialog" hidden>
-        <div slot="title">Couldn't log in: Account suspended</div>
+        <div slot="title">Your account is suspended</div>
         <div slot="body"></div>
         <div slot="actions">
             <global-dialog-action class="dialog-close-button main">

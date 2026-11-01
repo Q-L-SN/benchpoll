@@ -1,0 +1,5 @@
+body .bp-model-row .bp-score-known { background: var(--score-vendor-color, var(--bp-accent)); }
+.bp-score-known, .bp-column-known { transition: background-color 180ms ease; }
+@media (prefers-reduced-motion: reduce) {
+    .bp-score-known, .bp-column-known { transition: none; }
+}

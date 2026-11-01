@@ -1,15 +1,19 @@
 import '/js/shared.js';
 import * as G from '/js/global.js';
+import { noticeNavigationTarget } from './shared/notice-navigation.js';
 
-const requestedDialogCode = Number(G.params.get('dialogCode') || 1);
+const serverNotice = document.querySelector('meta[name="benchpoll-page-error"]');
+const params = serverNotice ? new URLSearchParams(serverNotice.content) : G.params;
+const requestedDialogCode = Number(params.get('dialogCode') || 1);
 const dialogCode = Number.isInteger(requestedDialogCode) && requestedDialogCode >= 1 && requestedDialogCode <= 7
     ? requestedDialogCode
     : 1; // 默认为Not Found错误
-const side = G.params.get('side');
-const displayURL = new URLSearchParams(location.search).get('displayURL');
-const oldURL = G.params.get('oldURL'); // dialogCode === 2 || dialogCode === 3
+const side = params.get('side');
+const displayURL = noticeNavigationTarget(params.get('displayURL'), location.origin);
+const oldURL = noticeNavigationTarget(params.get('oldURL'), location.origin);
+const referrerURL = noticeNavigationTarget(document.referrer, location.origin);
 
-G.editURL(displayURL ?? document.referrer, false, false);
+if (!serverNotice && (displayURL || referrerURL)) G.editURL(displayURL ?? referrerURL, false, false);
 
 function handleUserProfileUpdate(newValue) {
     if (newValue !== null) {
@@ -20,18 +24,19 @@ function handleUserProfileUpdate(newValue) {
 G.listenStorageChange('user-profile-update', handleUserProfileUpdate);
 G.listenStorageChange('user-profile', handleUserProfileUpdate);
 
-const errorCode = G.params.get('errorCode'); // side !== 'client'
-const errorName = G.params.get('error');
-const upstreamStatus = G.params.get('upstreamStatus');
-const minAge = G.params.get('minAge'); // dialogCode === 4
-const actualAge = G.params.get('actualAge') // dialogCode === 4
-const bannedUntilValue = G.params.get('bannedUntil');
-const bannedUntil = bannedUntilValue
+const errorCode = params.get('errorCode'); // side !== 'client'
+const errorName = params.get('error');
+const upstreamStatus = params.get('upstreamStatus');
+const minAge = params.get('minAge'); // dialogCode === 4
+const actualAge = params.get('actualAge') // dialogCode === 4
+const bannedUntilValue = params.get('bannedUntil');
+const bannedUntilDate = bannedUntilValue ? new Date(bannedUntilValue) : null;
+const bannedUntil = dialogCode === 7 && bannedUntilDate && Number.isFinite(bannedUntilDate.getTime())
     ? new Intl.DateTimeFormat(navigator.language, {
         year: 'numeric',
         month: 'short',
         day: 'numeric',
-    }).format(new Date(bannedUntilValue))
+    }).format(bannedUntilDate)
     : 'the date shown in your suspension notice';
 
 const displayDialog = document.getElementById('code-' + dialogCode + '-dialog')
@@ -44,12 +49,9 @@ case 4:
     const p1 = document.createElement('p');
     const p2 = document.createElement('p');
     p1.textContent = 
-        'To maintain a secure platform environment, ' +
-        'we currently only allow login and registration with GitHub accounts that are at least ' + minAge +
-        ' days old.';
+        'Your GitHub account must be at least ' + minAge + ' days old to sign in.';
     p2.textContent =
-        'We detected that your GitHub account is currently ' + actualAge +
-        ' days old. Please try again once your account meets this requirement.';
+        'Your account is ' + actualAge + ' days old. Please try again when it is old enough.';
     dialogBody.appendChild(p1);
     dialogBody.appendChild(p2);
     break;
@@ -61,26 +63,27 @@ case 5:
 case 6:
     switch (side) {
     case 'server':
-        dialogTitle.textContent = 'A server-side error occurred: ' + errorCode;
+        dialogTitle.textContent = 'This page could not be loaded';
+        dialogBody.textContent = 'Please try again. If it keeps happening, send us feedback and include error code ' + errorCode + '.';
         break;
     case 'callback': {
         const callbackMessages = {
             invalid_oauth_state: 'The sign-in session expired or could not be verified. Please start sign-in again.',
             github_token_exchange_timeout: 'GitHub did not respond while BenchPoll was completing sign-in.',
             github_token_exchange_unavailable: 'BenchPoll could not reach GitHub\'s sign-in service.',
-            github_token_exchange_failed: 'GitHub rejected the authorization-code exchange.',
-            github_token_response_invalid: 'GitHub returned an invalid authorization response.',
+            github_token_exchange_failed: 'GitHub could not complete sign-in. Please try signing in again.',
+            github_token_response_invalid: 'We could not confirm your GitHub sign-in. Please try again.',
             github_authorization_failed: 'GitHub could not authorize this sign-in.',
             github_profile_timeout: 'GitHub did not respond while BenchPoll was loading your profile.',
             github_profile_unavailable: 'BenchPoll could not reach GitHub\'s profile service.',
             github_profile_failed: 'GitHub rejected the profile request.',
-            github_profile_response_invalid: 'GitHub returned an invalid profile response.',
-            github_profile_invalid: 'The GitHub profile response was incomplete.',
+            github_profile_response_invalid: 'We could not read your GitHub profile. Please try signing in again.',
+            github_profile_invalid: 'Your GitHub profile is missing required information. Please try signing in again.',
             github_email_timeout: 'GitHub did not respond while BenchPoll was checking your verified email.',
             github_email_unavailable: 'BenchPoll could not reach GitHub\'s email service.',
             github_email_permission_required: 'BenchPoll could not read a verified email from GitHub. Check the app email permission and try again.',
             github_email_failed: 'GitHub rejected the verified-email request.',
-            github_email_response_invalid: 'GitHub returned an invalid email response.',
+            github_email_response_invalid: 'We could not read your GitHub email address. Please try signing in again.',
             github_verified_email_required: 'A verified email address is required on your GitHub account.'
         };
         dialogTitle.textContent = 'Couldn\'t complete GitHub sign-in';
@@ -97,9 +100,8 @@ case 6:
         break;
     }
     case 'client':
-        dialogTitle.textContent = 'A client-side error occurred';
-        dialogBody.textContent = 'You may still be able to view the error after returning to this page, ' +
-            'but enabling “Preserve log” in Developer Tools provides a more reliable record.';
+        dialogTitle.textContent = 'The page stopped working';
+        dialogBody.textContent = 'Reload the page to try again. If the problem continues, send us feedback.';
         break;
     }
     break;
@@ -108,12 +110,11 @@ case 7:
     const p4 = document.createElement('p');
     const a = document.createElement('a');
     p3.textContent =
-        'Due to a violation of our Terms of Service, ' +
-        'your account is currently restricted from logging in. This suspension will be lifted on ' + bannedUntil + '.';
+        'Your account is suspended until ' + bannedUntil + '. You cannot sign in during this time.';
     p4.textContent =
-        'If you believe this was done in error, you may submit an appeal by contacting us at ';
-    a.href = 'mailto:' + G.SUPPORT_EMAIL_ADDRESS + '?subject=' + encodeURIComponent(G.APPEAL_EMAIL_SUBJECT);
-    a.textContent = G.SUPPORT_EMAIL_ADDRESS;
+        'Think this is a mistake? ';
+    a.href = '/privacy#operator';
+    a.textContent = 'Contact us to appeal';
     dialogBody.appendChild(p3);
     p4.appendChild(a);
     dialogBody.appendChild(p4);
@@ -125,10 +126,7 @@ case 7:
         switch (dialogCode) {
         case 2:
         case 3:
-            if (oldURL) {
-                return;
-            }
-            break;
+            return;
         case 6:
             if (window.history.length > 1) {
                 return;
@@ -148,7 +146,7 @@ closeButton.addEventListener('click', function(event) {
         break;
     case 2:
     case 3:
-        G.editURL(oldURL, false, true);
+        G.editURL(oldURL ?? '/', false, true);
         break;
     case 6:
         window.history.back();

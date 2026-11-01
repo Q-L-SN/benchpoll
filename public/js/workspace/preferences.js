@@ -1,13 +1,31 @@
 const STORAGE_KEY = 'benchpoll-workspace-preferences-v1';
+const DISPLAY_STORAGE_KEY = 'benchpoll-workspace-display-v1';
+
+export function readWorkspaceDisplay(storage) {
+    try {
+        const target = storage === undefined ? globalThis.localStorage : storage;
+        return target.getItem(DISPLAY_STORAGE_KEY) === 'standard' ? 'standard' : 'charts';
+    } catch {
+        return 'charts';
+    }
+}
+
+export function writeWorkspaceDisplay(display, storage) {
+    try {
+        const target = storage === undefined ? globalThis.localStorage : storage;
+        target.setItem(DISPLAY_STORAGE_KEY, display === 'charts' ? 'charts' : 'standard');
+        return true;
+    } catch {
+        return false;
+    }
+}
 
 function normalizeWorkspacePreferences(value) {
     const preferences = value && typeof value === 'object' ? value : {};
-    const publicFallbackVisible = typeof preferences.publicFallbackVisible === 'boolean'
-        ? preferences.publicFallbackVisible
-        : preferences.fallbackVisible?.public;
     return {
         mode: preferences.mode === 'personal' ? 'personal' : 'public',
-        publicFallbackVisible: typeof publicFallbackVisible === 'boolean' ? publicFallbackVisible : false
+        personalFallbackExpanded: preferences.personalFallbackExpanded === true,
+        scoreMode: preferences.scoreMode === 'range' ? 'range' : 'available'
     };
 }
 

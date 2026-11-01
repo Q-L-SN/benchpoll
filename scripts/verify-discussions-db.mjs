@@ -15,7 +15,7 @@ try {
     await connection.beginTransaction();
     const [[user]] = await connection.execute('SELECT ID FROM users WHERE deleted_at IS NULL AND banned_at IS NULL ORDER BY ID LIMIT 1');
     const [[category]] = await connection.execute('SELECT ID FROM categories WHERE parent_ID IS NULL AND is_active = 1');
-    const [[benchmark]] = await connection.execute('SELECT c.ID, c.benchmark_ID FROM benchmark_conditions c JOIN benchmarks b ON b.ID = c.benchmark_ID WHERE c.is_active = 1 AND b.is_active = 1 LIMIT 1');
+    const [[benchmark]] = await connection.execute('SELECT c.ID, c.benchmark_ID FROM benchmark_conditions c JOIN benchmarks b ON b.ID = c.benchmark_ID WHERE c.deleted_at IS NULL AND b.is_active = 1 LIMIT 1');
     assert.ok(user && category && benchmark, 'Existing active fixtures required');
     const categoryID = Number(category.ID), userID = Number(user.ID);
     const before = await listDiscussion(db, null, { categoryID });

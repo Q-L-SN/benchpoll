@@ -1,0 +1,12 @@
+[Unit]
+Description=Check BenchPoll registered score-source schedules
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=1h
+RandomizedDelaySec=5min
+Persistent=true
+Unit=benchpoll-score-sync.service
+
+[Install]
+WantedBy=timers.target

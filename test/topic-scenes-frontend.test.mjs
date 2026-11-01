@@ -1,0 +1,163 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { readRankingContext, rankingContextURL } from '../public/js/shared/ranking-url.js';
+import { orderedScenes, matchingScenes, sceneNavigationEntries, searchTopicGroups } from '../public/js/navigation/scenes.js';
+import { entryFromContext, locationURL, validateNavigationPayload } from '../public/js/navigation/model.js';
+import { referenceGroups, validateReferenceTargets, referenceIssueMessage } from '../public/js/workspace/topic-references.js';
+import { createWeightTreemapLayout } from '../public/js/workspace/weight-treemap-layout.js';
+import { createWorkspaceState } from '../public/js/workspace/state.js';
+import { createPersonalPieRecovery } from '../public/js/workspace/pie-recovery.js';
+import { validateWorkspacePayload } from '../public/js/workspace/contracts.js';
+import { createFixtureState, workspace } from '../scripts/frontend/fixtures.mjs';
+import { parseProposal, validateProposalDraft, validatePublishedProposal, validateEditedProposal } from '../public/js/topic-proposals.js';
+import { fixtureProposal } from './fixtures/topic-proposals-server.mjs';
+
+const scenes = [{ ID: 20, name: 'Vector', description: 'Editable image output', isDefault: false },
+    { ID: 10, name: 'General', description: 'General image generation', isDefault: true }];
+const topic = { ID: 54, name: 'Images', categoryID: 54, categoryName: 'Images', url: '/images', scenes, contextValues: {} };
+const targets = [{ contextID: 10, categoryID: 54, sceneID: 10, name: 'Images / General', topicName: 'Images', sceneName: 'General',
+    url: '/images?scene=10', description: 'General images', isPrivate: false, hasWeights: true },
+{ contextID: 20, categoryID: 54, sceneID: 20, name: 'Images / Vector', topicName: 'Images', sceneName: 'Vector',
+    url: '/images?scene=20', description: 'Editable output', isPrivate: false, hasWeights: true },
+{ contextID: 30, categoryID: 55, sceneID: null, name: 'Coding', topicName: 'Coding', sceneName: null,
+    url: '/coding', description: 'Software development', isPrivate: false, hasWeights: true }];
+
+test('scene URLs round-trip without dimensions and replace a previous context without losing model focus', () => {
+    assert.deepEqual(readRankingContext('?scene=20&focusModel=91', []), { scene: '20' });
+    const url = rankingContextURL('https://benchpoll.com/images?context_output=vector&scene=10&focusModel=91', [], { scene: '20' });
+    assert.equal(url.search, '?scene=20&focusModel=91');
+    assert.equal(rankingContextURL(url.href, [], {}).search, '?focusModel=91');
+    for (const search of ['?scene=0', '?scene=-10', '?scene=abc', '?scene=9007199254740992', '?scene=10&scene=20', '?scene=10&context_scene=10', '?scene=10&context_output=vector']) {
+        assert.throws(() => readRankingContext(search, []), search);
+    }
+    assert.deepEqual(readRankingContext('?context_output=vector', []), { output: 'vector' });
+});
+
+test('default scene leads stable tabs; scene search uses names and descriptions', () => {
+    assert.deepEqual(orderedScenes(scenes).map(scene => scene.ID), [10, 20]);
+    assert.deepEqual(scenes.map(scene => scene.ID), [20, 10]);
+    assert.deepEqual(matchingScenes(topic, 'editable').map(scene => scene.ID), [20]);
+    const entries = sceneNavigationEntries([entryFromContext(topic)]);
+    assert.equal(entries.length, 3);
+    assert.equal(locationURL(entries[2]), '/images?scene=20');
+    assert.equal(entries[2].contextLabel, 'Vector');
+    assert.equal(locationURL(entries[0]), '/images');
+});
+
+test('parent-only searches keep all scenes available without treating inherited names or summaries as matches', () => {
+    const parent = { ...topic, name: 'Image Generation', description: 'Create still pictures.', scenes: [
+        { ...scenes[0], description: 'Image Generation: Vector.' },
+        { ...scenes[1], description: 'Create still pictures.' }
+    ] };
+    for (const query of ['', 'Image Generation', 'IMAGE generation', 'Create still pictures', 'Image Generaton']) {
+        const [group] = searchTopicGroups([parent], query);
+        assert.equal(group.topic, parent, query);
+        assert.equal(group.topicMatch, true, query);
+        assert.deepEqual(group.scenes, [], query);
+        assert.equal(group.topic.scenes.length, 2, 'expansion retains the complete scene catalogue');
+    }
+    assert.equal(searchTopicGroups([parent], 'unrelated').length, 0);
+    const onlyParent = { categoryName: 'Coding', description: 'Software development' };
+    assert.deepEqual(searchTopicGroups([onlyParent], 'coding'), [{ topic: onlyParent, topicMatch: true, scenes: [] }]);
+});
+
+test('scene names, intrinsic descriptions and combined parent/scene queries remain directly searchable', () => {
+    for (const query of ['Vector', 'editable', 'Images Vector', 'Images editable', 'Véctor', 'Vetor']) {
+        const [group] = searchTopicGroups([topic], query);
+        assert.equal(group.topicMatch, false, query);
+        assert.deepEqual(group.scenes.map(scene => scene.ID), [20], query);
+    }
+    const mixed = { ...topic, name: 'Vector Images' };
+    const [group] = searchTopicGroups([mixed], 'Vector');
+    assert.equal(group.topicMatch, true);
+    assert.deepEqual(group.scenes.map(scene => scene.ID), [20], 'a parent match does not hide directly matched scenes or reveal other siblings');
+    const shared = { ...topic, scenes: scenes.map(scene => ({ ...scene, description: 'Shared goal' })) };
+    assert.deepEqual(searchTopicGroups([shared], 'Shared goal')[0].scenes.map(scene => scene.ID), [10, 20]);
+});
+
+test('a language name expands neither all 184 sibling languages nor other topic scenes', () => {
+    const parent = { ID: 219, name: 'Language', description: 'Understand and communicate across languages.', scenes: [
+        { ID: 1, name: 'General', isDefault: true, description: 'Language: General.' },
+        { ID: 2, name: 'English', description: 'Language: English.' },
+        ...Array.from({ length: 183 }, (_, i) => ({ ID: i + 3, name: `Option ${i}`, description: `Language: Option ${i}.` }))
+    ] };
+    assert.equal(searchTopicGroups([parent], 'Language')[0].scenes.length, 0);
+    assert.deepEqual(searchTopicGroups([parent], 'English')[0].scenes.map(scene => scene.ID), [2]);
+});
+
+test('private scene navigation remains scoped and has readable scene labels', () => {
+    const entry = entryFromContext({ ...topic, isPrivate: true, ID: 20, url: '/personal/54', sceneID: 20, contextValues: { scene: '20' } });
+    assert.equal(entry.contextID, 20);
+    assert.equal(entry.contextLabel, 'Vector');
+    assert.equal(locationURL(entry), '/personal/54?scene=20');
+    assert.equal(validateNavigationPayload({ userID: '1', items: [entry] }).items.length, 1);
+});
+
+test('reference chooser groups scenes but never exposes an ambiguous root selection', () => {
+    const root = { ...targets[0], contextID: 9, sceneID: null, sceneName: null };
+    assert.deepEqual(referenceGroups([root, ...targets]).map(group => [group.name, group.hasScenes, group.targets.map(target => target.contextID)]),
+        [['Images', true, [10, 20]], ['Coding', false, [30]]]);
+    assert.deepEqual(referenceGroups(targets, 'editable').flatMap(group => group.targets.map(target => target.contextID)), [20]);
+    assert.deepEqual(referenceGroups(targets, 'Images').flatMap(group => group.targets.map(target => target.contextID)), [10, 20]);
+    assert.equal(referenceGroups(targets, 'Images')[0].collapsed, true);
+    assert.equal(referenceGroups(targets, '')[0].collapsed, true);
+    assert.equal(referenceGroups(targets, 'editable')[0].collapsed, false);
+    assert.deepEqual(referenceGroups(targets, 'Images Vector')[0].targets.map(target => target.contextID), [20]);
+    assert.deepEqual(referenceGroups([targets[1], { ...targets[0], isDefault: true }], 'Images')[0].targets.map(target => target.contextID), [10, 20]);
+});
+
+test('reference payload validation rejects duplicate identities, foreign URLs and mismatched scene IDs', () => {
+    assert.equal(validateReferenceTargets({ targets }).length, 3);
+    for (const invalid of [[...targets, targets[0]], [{ ...targets[0], sceneID: 21 }], [{ ...targets[0], url: 'https://example.com' }]]) {
+        assert.throws(() => validateReferenceTargets({ targets: invalid }));
+    }
+    assert.match(referenceIssueMessage({ name: 'Vector', reason: 'empty' }), /Vector: No weights/);
+});
+
+test('mixed treemap keeps positive benchmark and negative reference identity and area', () => {
+    const tiles = createWeightTreemapLayout()([{ conditionID: 1, weightBasisPoints: 2500 }, { conditionID: -20, weightBasisPoints: 7500 }], 400, 400);
+    assert.equal(tiles.length, 2);
+    assert.equal(tiles[0].conditionID, -20);
+    assert.equal(tiles[0].width * tiles[0].height / (tiles[1].width * tiles[1].height), 3);
+});
+
+test('owned recovery retains topic references and exact scene scope', () => {
+    const values = new Map(), store = { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value), removeItem: key => values.delete(key) };
+    const state = Object.assign(createWorkspaceState(), { userID: '1', authenticated: true, categoryID: 54,
+        selectedContextValues: { scene: '10' }, personalRevision: 1, personalEditVersion: 1 });
+    const draft = { entries: [{ conditionID: 1, weightBasisPoints: 2500 }, { conditionID: -20, weightBasisPoints: 7500 }], fallbackRules: [] };
+    const recovery = createPersonalPieRecovery({ state, getStorage: () => store, guestDrafts: {}, snapshot: () => draft });
+    recovery.checkpoint();
+    assert.deepEqual(recovery.lookup('1', 54, { scene: '10' }).value.draft, draft);
+    assert.equal(recovery.lookup('1', 54, { scene: '20' }), null);
+    assert.equal(recovery.lookup('2', 54, { scene: '10' }), null);
+});
+
+test('workspace mixed entries validate independently of benchmark fallback identities', () => {
+    const value = workspace(createFixtureState(), { categoryID: 1, scoreMode: 'range' });
+    value.context = { ...value.context, ID: 10, sceneID: 10, scenes, contextValues: { scene: '10' }, dimensions: [] };
+    const entry = { type: 'topic', referenceContextID: 20, conditionID: -20, name: 'Images / Vector', weightBasisPoints: 500 };
+    value.personalPie.entries.push(entry); value.publicPie.entries.push(entry);
+    value.personalPie.referenceIssues = [{ targetContextID: 20, name: 'Vector', reason: 'empty' }];
+    value.personalPie.effectiveEntries = [{ ...entry, unavailable: true }];
+    assert.equal(validateWorkspacePayload(value), value);
+    value.personalPie.fallbackRules.push({ primaryConditionID: -20, mode: 'ordered', entries: [] });
+    assert.throws(() => validateWorkspacePayload(value), /invalid primary/);
+});
+
+test('scene proposals bind parent identity and validate their approved scene URL', () => {
+    const proposal = fixtureProposal({ kind: 'scene', parentTopicID: 190, parentTopicName: 'Coding', sceneID: null,
+        name: 'Embedded firmware', supportCount: 0, isMine: true, canEdit: true, canWithdraw: true, canSupport: false });
+    const body = { name: proposal.name, description: proposal.description, parentTopicID: 190 };
+    assert.equal(validatePublishedProposal(proposal, body).parentTopicID, 190);
+    assert.throws(() => validatePublishedProposal(proposal, { ...body, parentTopicID: 191 }));
+    assert.equal(Object.keys(validateProposalDraft({ ...body, name: 'Settings' }).errors).length, 0, 'Scene names do not reserve root routes');
+    assert.ok(validateProposalDraft({ ...body, name: 'Settings', parentTopicID: null }).errors.name);
+    const approved = { ...proposal, status: 'approved', supportCount: 30, submissionID: 100, sceneID: 19001,
+        canEdit: false, canWithdraw: false, url: '/coding?scene=19001' };
+    assert.equal(parseProposal(approved).url, '/coding?scene=19001');
+    for (const url of ['/coding?scene=19002', '/research?scene=19001', '//example.com/coding?scene=19001', '/coding?scene=19001&scene=19002']) {
+        assert.throws(() => parseProposal({ ...approved, url }));
+    }
+    assert.throws(() => validateEditedProposal({ ...proposal, parentTopicID: 191 }, proposal, body));
+});

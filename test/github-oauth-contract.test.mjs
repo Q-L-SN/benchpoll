@@ -41,7 +41,7 @@ test('GitHub API requests pin a version and retain safe upstream status diagnost
 test('OAuth callback errors are diagnosable without logging callback secrets', () => {
     const errorHandler = server.slice(server.lastIndexOf('app.use((err, req, res, next)'), server.length);
 
-    assert.match(dialog, /G\.params\.get\('error'\)/);
+    assert.match(dialog, /params\.get\('error'\)/);
     assert.match(dialog, /Diagnostic code:/);
     assert.match(errorHandler, /req\.path/);
     assert.doesNotMatch(errorHandler, /console\.error\([^;]*req\.originalUrl/);

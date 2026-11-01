@@ -1,0 +1,54 @@
+#legal-acceptance-notice {
+    --dialog-width: 480px;
+    --dialog-min-width: 280px;
+}
+
+.bp-legal-acceptance-body {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-width: 0;
+    font: inherit;
+}
+
+.bp-legal-acceptance-body p { margin: 0; }
+
+.bp-legal-acceptance-documents {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.bp-legal-acceptance-documents a {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    min-height: 44px;
+    color: var(--bp-purple, #b84400);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    overflow-wrap: anywhere;
+}
+
+.bp-legal-acceptance-version {
+    color: var(--bp-muted, #687487);
+    font-size: 12px;
+    text-align: right;
+}
+
+.bp-legal-acceptance-note {
+    color: var(--bp-muted, #687487);
+    font-size: 13px;
+}
+
+.bp-legal-acceptance-status[data-error="true"] { color: #aa293c; }
+
+#legal-acceptance-notice .bp-ui-action { min-height: 44px; }
+
+#legal-acceptance-notice [hidden] { display: none !important; }
+
+@media (max-width: 420px) {
+    .bp-legal-acceptance-body { gap: 12px; }
+    .bp-legal-acceptance-documents a { flex-wrap: wrap; }
+}

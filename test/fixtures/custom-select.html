@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Select Field Regression Fixture</title>
+    <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
+    <link rel="stylesheet" href="/css/global.css">
+    <link rel="stylesheet" href="/css/site-palette.css">
+    <style>
+        body { margin: 0; padding: 24px 16px 80px; font-family: sans-serif; }
+        main { max-width: 520px; margin: 0 auto; }
+        form, fieldset { display: grid; gap: 12px; margin: 0; padding: 0; border: 0; }
+        label { display: grid; gap: 6px; min-width: 0; font-size: 13px; }
+        h1 { font-size: 18px; margin: 0 0 20px; }
+        button:not(.bp-ui-select-trigger) { min-height: 38px; }
+        #bottom-field { position: fixed; bottom: 12px; right: 12px; width: min(230px, calc(100vw - 24px)); }
+        #dynamic { display: grid; gap: 12px; }
+        #legacy-overlay { position: fixed; inset: 20px; padding: 20px; background: white; z-index: 100; }
+        #legacy-overlay[hidden] { display: none; }
+        dialog { width: min(300px, calc(100vw - 48px)); }
+    </style>
+    <script type="module">
+        import '/js/global.js';
+        import { initializeOverlays } from '/js/shared/overlays.js';
+        import { mountCustomSelect, observeCustomSelects } from '/js/shared/custom-select.js?v=custom-select-20261013';
+        window.selectFixture = { events: [], focusEvents: [], submissions: [], mountCustomSelect, observeCustomSelects };
+        for (const type of ['focus', 'blur']) document.querySelector('#preset').addEventListener(type, () => window.selectFixture.focusEvents.push(type));
+        document.addEventListener('input', event => { if (event.target.matches('select')) window.selectFixture.events.push([event.type, event.target.id, event.target.value]); });
+        document.addEventListener('change', event => { if (event.target.matches('select')) window.selectFixture.events.push([event.type, event.target.id, event.target.value]); });
+        document.querySelector('#selection-form').addEventListener('submit', event => {
+            event.preventDefault();
+            window.selectFixture.submissions.push([...new FormData(event.target)]);
+        });
+        document.querySelector('#open-dialog').onclick = () => { document.querySelector('#custom-dialog').hidden = false; };
+        document.querySelector('#dialog-close').onclick = () => { document.querySelector('#custom-dialog').hidden = true; };
+        document.querySelector('#native-close').onclick = () => document.querySelector('#native-dialog').close();
+        document.querySelector('#legacy-close').onclick = () => { document.querySelector('#legacy-overlay').hidden = true; };
+        initializeOverlays([document.querySelector('#legacy-overlay')]);
+        document.addEventListener('change', event => {
+            if (event.target.id !== 'rerendering') return;
+            const value = event.target.value;
+            event.target.parentElement.innerHTML = `<span>Rerendered field</span><select id="rerendering"><option value="one" ${value === 'one' ? 'selected' : ''}>One</option><option value="two" ${value === 'two' ? 'selected' : ''}>Two</option></select>`;
+        });
+        window.selectFixture.ready = true;
+    </script>
+</head>
+<body>
+    <main>
+        <h1>Select Fields</h1>
+        <form id="selection-form">
+            <label><span>Run preset</span>
+                <select id="preset" name="preset" required aria-describedby="preset-help">
+                    <option value="" disabled selected>Choose a preset</option>
+                    <optgroup label="Current">
+                        <option value="aster">Aster</option>
+                        <option value="birch">Birch</option>
+                        <option value="basil">Basil</option>
+                        <option value="blocked" disabled>Blocked</option>
+                    </optgroup>
+                    <optgroup label="Archived" disabled><option value="archived">Archived run</option></optgroup>
+                    <optgroup label="Hidden" hidden><option value="hidden">Hidden run</option></optgroup>
+                    <option value="cherry">Cherry</option>
+                </select>
+            </label>
+            <small id="preset-help">Preset metadata</small>
+            <label for="programmatic">Programmatic value</label>
+            <select id="programmatic" name="programmatic">
+                <option value="one">One</option><option value="two">Two</option><option value="three">Three</option>
+            </select>
+            <fieldset id="disabled-fieldset" disabled>
+                <label><span>Disabled field</span><select id="disabled" name="disabled"><option>Locked</option><option>Unlocked</option></select></label>
+            </fieldset>
+            <label><span>Multiple values</span><select id="multiple" name="multiple" multiple><option value="a" selected>Alpha</option><option value="b">Beta</option><option value="g">Gamma</option></select></label>
+            <label><span>Rerendered field</span><select id="rerendering"><option value="one">One</option><option value="two">Two</option></select></label>
+            <button id="after" type="button">Next action</button>
+            <button type="submit" id="submit">Submit fixture</button>
+            <button type="reset" id="reset">Reset fixture</button>
+        </form>
+        <div id="dynamic"></div>
+        <button id="open-dialog" type="button">Open dialog</button>
+        <label id="bottom-field"><span>Long value</span><select id="long"><option selected>LongestPresetNameWithoutAnyBreaksForWrappingAndOverflowVerification0123456789</option><option>Short preset</option></select></label>
+    </main>
+    <global-dialog id="custom-dialog" hidden>
+        <span slot="title">Preset Settings</span>
+        <div slot="body">
+            <label><span>Dialog preset</span><select id="dialog-preset"><option>Aster</option><option>Birch</option><option>Cherry</option></select></label>
+            <button id="dialog-after" type="button">Dialog action</button>
+        </div>
+        <div slot="actions"><button id="dialog-close" type="button" class="dialog-close-button">Close dialog</button></div>
+    </global-dialog>
+    <dialog id="native-dialog">
+        <label><span>Native dialog preset</span><select><option>Aster</option><option>Birch</option></select></label>
+        <button type="button" id="native-close">Close native dialog</button>
+    </dialog>
+    <section id="legacy-overlay" role="dialog" aria-label="Legacy editor" hidden>
+        <label><span>Overlay preset</span><select><option>Aster</option><option>Birch</option></select></label>
+        <button type="button" id="legacy-close">Close overlay</button>
+    </section>
+</body>
+</html>

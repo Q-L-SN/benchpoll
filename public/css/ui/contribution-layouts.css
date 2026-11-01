@@ -1,0 +1,47 @@
+.bp-contribution-icon { display: inline-block; }
+.bp-model-controls { display: contents; }
+.bp-home .bp-benchmark-toolbar h2 { margin-right: auto; }
+.bp-home #contribute-button,
+.bp-home #contribute-data-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 34px;
+    margin: 0;
+    padding: 5px 8px;
+    border: 1px solid var(--bp-line);
+    border-radius: 4px;
+    color: var(--bp-accent);
+    font-size: 11px;
+    font-weight: 600;
+}
+.bp-home #contribute-button:hover,
+.bp-home #contribute-data-button:hover { background: var(--bp-hover); color: var(--bp-ink); }
+.bp-home #contribute-button[hidden], .bp-home #contribute-data-button[hidden] { display: none; }
+@media (max-width: 760px) {
+    .bp-home #contribute-button,
+    .bp-home #contribute-data-button { min-height: 44px; }
+    .bp-home .bp-model-controls {
+        display: grid;
+        grid-template-columns: max-content max-content minmax(28px, 1fr) 44px;
+        align-items: center;
+        gap: 0;
+        padding: 8px 8px 12px;
+        border-bottom: 1px solid var(--bp-line);
+    }
+    .bp-home .bp-model-controls :is(.bp-model-toolbar, .bp-scoring-toolbar) { display: contents; }
+    .bp-home .bp-model-controls .bp-scoring-switch { grid-area: 1 / 1; }
+    .bp-home .bp-model-controls .bp-quick-comparison { grid-area: 1 / 2; }
+    .bp-home .bp-model-controls .bp-model-search { grid-area: 1 / 3; justify-self: start; }
+    .bp-home #contribute-data-button {
+        grid-area: 1 / 4;
+        justify-self: end;
+        justify-content: center;
+        box-sizing: border-box;
+        width: 44px;
+        height: 44px;
+        padding: 0;
+        font-size: 13px;
+    }
+    .bp-home #contribute-data-button > span { display: none; }
+}

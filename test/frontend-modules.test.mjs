@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { distributeToTarget, clonePersonalPieSnapshot, benchmarkConditionLabel } from '../public/js/workspace/weights.js';
-import { validateWorkspacePayload, validateApprovedModelResultsPayload } from '../public/js/workspace/contracts.js';
+import { validateWorkspacePayload, validateRankingPagePayload, validateApprovedModelResultsPayload } from '../public/js/workspace/contracts.js';
 import { createWorkspaceState } from '../public/js/workspace/state.js';
+import { modelRankingEmptyMessage } from '../public/js/workspace/model-list.js';
 import { createWorkspaceChannel } from '../public/js/shared/workspace-channel.js';
 import { escapeHTML, finiteOrNull, entityLocator, evaluationDisplayScoreBounds, evaluationStoredTargetValue, rankedMatches } from '../public/js/contribution/fields.js';
 import { createFixtureState, workspace, approvedResults } from '../scripts/frontend/fixtures.mjs';
@@ -35,33 +36,81 @@ test('undo snapshots and separate workspace instances do not share mutable data'
     assert.equal(second.pieOrderByObjectID.size, 0);
 });
 
+test('model ranking empty messages distinguish missing weights from filtered results', () => {
+    const state = createWorkspaceState();
+    state.comparison = { mode: 'best', keys: ['field:1'], filters: [] };
+    assert.equal(modelRankingEmptyMessage(state), 'No public weights for this topic or scene yet.');
+    state.publicEntries = [{ conditionID: 1, weightBasisPoints: 10000 }];
+    assert.equal(modelRankingEmptyMessage(state), 'No models match these settings. Try combining run settings or removing a filter.');
+    state.mode = 'personal';
+    assert.equal(modelRankingEmptyMessage(state), 'Add evaluation items to Personal Weights to calculate a model ranking.');
+    state.personalEntries = [{ conditionID: 1, weightBasisPoints: 10000 }];
+    assert.equal(modelRankingEmptyMessage(state), 'No models match these settings. Try combining run settings or removing a filter.');
+    state.comparison = { mode: 'best', keys: [], filters: [] };
+    assert.equal(modelRankingEmptyMessage(state), 'No measured results match these weights yet. Add another evaluation item or contribute scores.');
+});
+
 test('workspace contract rejects missing arrays, mixed identities, and invalid fallback allocations', () => {
     const valid = workspace(createFixtureState(), {});
     assert.equal(validateWorkspacePayload(valid), valid);
     for (const mutate of [
+        payload => { delete payload.authenticated; },
+        payload => { delete payload.userID; },
+        payload => { payload.userID = 9007199254740992; },
+        payload => { payload.userID = '01'; },
+        payload => { payload.authenticated = false; },
         payload => { delete payload.personalPie.entries; },
         payload => { payload.benchmarks[0].conditionName = 'changed'; },
+        payload => { delete payload.benchmarks[0].scoreCount; },
+        payload => { payload.benchmarks[0].lowCoverage = 'false'; },
         payload => { payload.context.dimensions[0].options = null; },
         payload => { payload.personalPie.fallbackRules = [{ primaryConditionID: 1, mode: 'fallback_if_missing', entries: [{ ...payload.benchmarks[1], weightBasisPoints: 9999 }] }]; },
-        payload => { payload.personalPie.fallbackRules = [{ primaryConditionID: 1, mode: 'fallback_if_missing', entries: [{ ...payload.benchmarks[0], weightBasisPoints: 10000 }] }]; }
+        payload => { payload.personalPie.fallbackRules = [{ primaryConditionID: 1, mode: 'fallback_if_missing', entries: [{ ...payload.benchmarks[0], weightBasisPoints: 10000 }] }]; },
+        payload => { payload.modelLeaderboards.public[0].rank = undefined; },
+        payload => { payload.scoreMode = 'unknown'; },
+        payload => { payload.rankingPagination.benchmarks.primary.nextOffset += 1; },
+        payload => { delete payload.rankingPagination.benchmarks.lowCoverage; },
+        payload => { delete payload.benchmarks[0].isPrimaryCondition; }
     ]) {
         const payload = structuredClone(valid); mutate(payload);
         assert.throws(() => validateWorkspacePayload(payload), error => error.code === 'invalid_workspace_response' && error.status === 422);
     }
 });
 
-test('approved score contract requires real sample counts, numeric scores and sources', () => {
-    const valid = approvedResults({ modelConditionID: 201 });
+test('ranking page contract rejects pages that cannot be safely appended', () => {
+    const first = workspace(createFixtureState(), {});
+    const valid = { items: [], total: 8, nextOffset: 8, hasMore: false, group: 'primary', grouping: 'versions',
+        groupTotals: { primary: 8, other: 2, lowCoverage: 1 } };
+    assert.equal(validateRankingPagePayload(valid, { list: 'benchmarks', group: 'primary', offset: 8, grouping: 'versions' }), valid);
+    assert.throws(() => validateRankingPagePayload({ ...valid, hasMore: true },
+        { list: 'benchmarks', group: 'primary', offset: 8, grouping: 'versions' }), error => error.code === 'invalid_workspace_response');
+    assert.throws(() => validateRankingPagePayload({ items: first.modelLeaderboards.public.slice(0, 1),
+        total: 8, nextOffset: 2, hasMore: true }, { list: 'public', offset: 0 }),
+    error => error.code === 'invalid_workspace_response');
+});
+
+test('approved score contract requires real sample counts, numeric scores and safe optional sources', () => {
+    const valid = approvedResults({ modelID: 301, scoreFields: [] });
     assert.equal(validateApprovedModelResultsPayload(valid), valid);
     for (const mutate of [
         payload => { payload.scoreGroups[0].sampleCount = 7; },
         payload => { payload.scoreGroups[0].samples[0].rawScore = '88'; },
-        payload => { payload.scoreGroups[0].samples[0].sourceURL = ''; },
+        payload => { payload.scoreGroups[0].samples[0].sourceURL = 'javascript:alert(1)'; },
+        payload => { payload.scoreGroups[0].samples[0].sourceURL = 'not a URL'; },
+        payload => { payload.scoreGroups[0].samples[0].sourceURL = {}; },
         payload => { delete payload.scoreGroups[0].distinctScoreCount; },
         payload => { payload.scoreGroups[0].distinctScoreCount = 3; }
     ]) {
         const payload = structuredClone(valid); mutate(payload);
         assert.throws(() => validateApprovedModelResultsPayload(payload), error => error.code === 'invalid_model_scores_response');
+    }
+});
+
+test('approved score evidence remains readable when a stored score has no source link', () => {
+    for (const sourceURL of ['', null]) {
+        const payload = approvedResults({ modelID: 301, scoreFields: [] });
+        payload.scoreGroups[0].samples[0].sourceURL = sourceURL;
+        assert.equal(validateApprovedModelResultsPayload(payload), payload);
     }
 });
 

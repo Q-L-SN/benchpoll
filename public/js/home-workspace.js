@@ -1,50 +1,111 @@
 import { navigationChannel } from './shared/navigation-channel.js';
-import { createComparisonControls } from './workspace/comparison-controls.js?v=comparison-recovery-20260912';
+import { createBasicComparisonControls as createComparisonControls } from './workspace/basic-comparison-controls.js';
+import { setHelpText } from './shared/help-popover.js?v=help-popovers-20261008';
 import { workspaceChannel } from './shared/workspace-channel.js';
 import { readRankingContext, rankingContextURL } from './shared/ranking-url.js?v=short-20260908';
-import { categoryDiscussionURL, createDiscussionEntry } from './workspace/discussion-entry.js?v=compact-count-20260908';
+import { categoryDiscussionURL, createDiscussionEntry } from './workspace/discussion-entry.js?v=arena-workspace-20261003';
 const updateDiscussionEntry = createDiscussionEntry(document.getElementById('discussion-entry'));
 import { initializeMobilePanels } from './shared/mobile-panels.js';
 import {
-    PIE_GRADIENTS, SAVE_DEBOUNCE_MS, WEIGHT_STEP_BASIS_POINTS,
+    SAVE_DEBOUNCE_MS, WEIGHT_STEP_BASIS_POINTS,
     MIN_WEIGHT_BASIS_POINTS, WHEEL_WEIGHT_COMMIT_IDLE_MS, TOUCH_DRAG_THRESHOLD_PX,
-    TOUCH_WEIGHT_BASIS_POINTS_PER_PIXEL, WORKSPACE_LOAD_RETRY_DELAYS_MS, FALLBACK_RULE_MODE,
-    MAX_FALLBACK_COMPONENTS
+    TOUCH_WEIGHT_BASIS_POINTS_PER_PIXEL, WORKSPACE_LOAD_RETRY_DELAYS_MS, FALLBACK_RULE_MODE
 } from './workspace/constants.js';
-import { createWorkspaceState } from './workspace/state.js?v=public-fallback-preferences-20260921';
-import { readWorkspacePreferences, writeWorkspacePreferences } from './workspace/preferences.js?v=public-fallback-preferences-20260921';
-import { validateWorkspacePayload } from './workspace/contracts.js?v=model-parameters-20260912';
+import { createWorkspaceState } from './workspace/state.js?v=fallback-controls-20261009';
+import { readWorkspacePreferences, writeWorkspacePreferences } from './workspace/preferences.js?v=fallback-controls-20261009';
+import { validateWorkspacePayload, validateRankingPagePayload } from './workspace/contracts.js?v=review-evidence-20261008';
 import {
     cloneEntries, cloneFallbackRules, clonePersonalPieSnapshot,
-    clamp, humanizePathPart, benchmarkConditionLabel,
+    clamp, benchmarkConditionLabel,
     benchmarkAccessibleName, distributeToTarget
 } from './workspace/weights.js';
-import { postJSON } from './shared/http.js';
-import { buildBenchmarkEditURL } from './workspace/links.js?v=clean-urls-20260908';
-import { createModelScoresView } from './workspace/model-scores.js?v=model-parameters-20260912';
-import { createModelListView } from './workspace/model-list.js?v=comparison-recovery-20260912';
-import { createPieRenderer } from './workspace/pie-renderer.js?v=personal-only-icon-20260907';
+import { postJSON, postWriteJSON } from './shared/http.js';
+import { validatePersonalPieSave } from './workspace/pie-save.js';
+import { accountWriteError, isAccountWriteError, canonicalAccountID, pageAccountWriteScope } from './shared/account-identity.js';
+import { createModelScoresView } from './workspace/model-scores.js?v=help-popovers-20261008';
+import { createModelListView } from './workspace/model-list.js?v=workspace-ui-20261008';
+import { createPieRenderer } from './workspace/pie-renderer.js?v=lightweight-chains-20261007';
+import { updateTopicSearchMetadata } from './shared/search-metadata.js';
+import { createGuestDraftStore } from './workspace/guest-drafts.js?v=review-drafts-20261008';
+import { createPersonalPieRecovery } from './workspace/pie-recovery.js';
+import { familyKey, portableFamilyEntry, familyEntryKey, FALLBACK_CONFIGURATION_VERSION } from './shared/benchmark-families.js';
+import { createFamilyView } from './workspace/family-view.js?v=percentile-ranking-20261007';
+import { createBenchmarkRowFocus } from './workspace/benchmark-family-row.js?v=fallback-picker-20261008';
+import { createBenchmarkFallbackCatalogue } from './workspace/benchmark-fallback-catalogue.js?v=fallback-picker-20261008';
+import { createFallbackPicker } from './workspace/fallback-picker.js?v=fallback-controls-20261009';
+import { fallbackStatusLabel } from './shared/fallback-choice.js';
+import { initializeFallbackAppearance } from './workspace/fallback-appearance.js?v=fallback-appearance-20261014';
+import { createBenchmarkInformationLink } from './workspace/benchmark-link.js';
+import { contributionEditURL } from './workspace/links.js';
+import { createAction } from './shared/ui-components.js';
+import { createEvidenceCount, updateEvidenceCount } from './shared/evidence-count.js';
+import { bulkImportTemplate } from './shared/feedback-templates.js';
+import { comparisonProfileKey } from './shared/comparison-profile-key.js';
+import { animateContent, setVisible, flipPie } from './shared/motion.js?v=workspace-ui-20261008';
+import { createSceneControls } from './workspace/scenes.js';
+import { createTopicReferencePicker, renderTopicReferences, isTopicReference, topicReferenceError } from './workspace/topic-references.js';
+import { createTopicReferenceSearch } from './workspace/topic-reference-search.js';
+import { topicLabelText, renderTopicLabel } from './shared/topic-label.js';
+import { BENCHMARK_GROUPS, benchmarkConditionGroup } from './shared/benchmark-condition-groups.js?v=fallback-discovery-20261005';
+import { captureRankingResume } from './shared/ranking-resume.js';
+import { createToast } from './shared/toast.js';
+import { createTopicCreator } from './shared/topic-identity.js';
+import { AVAILABLE_INFERENCE_VERSION } from './shared/available-score.js';
+import { readHomeModelFocusIntent, consumeHomeModelFocusURL, withHomeFocusComparison,
+    createHomeModelFocus, createModelFocusNotice } from './workspace/model-focus.js';
+import { createModelSearch } from './shared/model-search.js';
+import { normalizeModelFocusTarget } from './workspace/model-focus-target.js';
+import { AA_EXCLUSION_MESSAGE, excludedFromRanking } from './shared/aa-ranking-policy.js';
+import { mountSiteActions } from './shared/site-header.js';
+import { createUpdateIndicator } from './shared/update-indicator.js';
+import { mountDisclosureChevron } from './shared/disclosure-chevron.js';
+
+mountSiteActions(document.getElementById('config-site-links'), { accountID: 'config-site-account', moreID: 'config-site-more',
+    minimal: true, extraActions: [document.getElementById('taxonomy-toggle')] });
 
 const pieSvg = document.getElementById('weight-pie');
+const pieHoverTooltip = document.getElementById('pie-hover-tooltip');
 const breadcrumb = document.getElementById('bp-breadcrumb');
 const templateStrip = document.getElementById('bp-template-strip');
 const benchmarkRows = document.getElementById('benchmark-rows');
 const benchmarkSearch = document.getElementById('benchmark-search');
 const benchmarkPersonalPin = document.getElementById('benchmark-personal-pin');
 const modelRows = document.getElementById('model-rows');
+const scoreModeButtons = [...document.querySelectorAll('[data-score-mode]')];
+const scoringSwitch = document.querySelector('.bp-scoring-switch');
 const modeSwitch = document.querySelector('.bp-mode-switch');
+const workspaceHeadline = document.getElementById('workspace-headline');
+const headlineVariants = [...workspaceHeadline.querySelectorAll('[data-headline-mode]')];
 const personalModeButton = document.getElementById('pie-mode-personal');
 const publicModeButton = document.getElementById('pie-mode-public');
 const personalPieCreate = document.getElementById('personal-pie-create');
 const personalEmptyMode = document.getElementById('personal-empty-mode');
 const personalEmptyPublicReturn = document.getElementById('personal-empty-public-return');
+const personalPieEmpty = document.getElementById('personal-pie-empty');
+const compactPieMessage = document.getElementById('pie-empty-compact-message');
+const compactPieAction = document.getElementById('pie-empty-compact-action');
+const personalPieFindBenchmarks = document.getElementById('personal-pie-find-benchmarks');
+const guestDraftNotice = document.getElementById('guest-draft-notice');
+const guestDraftMessage = document.getElementById('guest-draft-message');
+const guestDraftSave = document.getElementById('guest-draft-save');
+const guestDraftDiscard = document.getElementById('guest-draft-discard');
 const pieInstruction = document.getElementById('pie-instruction');
 const pieContextNote = document.getElementById('pie-context-note');
+const pieModelCount = createEvidenceCount(0, { kind: 'models' });
+const pieAdjustmentStatus = document.getElementById('pie-adjustment-status');
+const pieAdjustmentDismiss = document.getElementById('pie-adjustment-dismiss');
+const pieAdjustmentName = document.getElementById('pie-adjustment-name');
+const pieAdjustmentValue = document.getElementById('pie-adjustment-value');
+const pieAdjustmentLabel = document.getElementById('pie-adjustment-label');
+const pieAdjustmentInstruction = document.getElementById('pie-adjustment-instruction');
+const personalPieGuidance = document.getElementById('personal-pie-guidance');
+const publicPieSummary = document.getElementById('public-pie-summary');
+const publicPieCount = document.getElementById('public-pie-count');
 const undoButton = document.getElementById('workspace-undo');
+const redoButton = document.getElementById('workspace-redo');
+const addFallbackBenchmarkButton = document.getElementById('inline-fallback-add-benchmark');
 const refreshButton = document.getElementById('workspace-refresh');
 const lastUpdated = document.getElementById('last-updated');
-const termsButton = document.getElementById('terms-button');
-const termsDialog = document.getElementById('terms-dialog');
 const loginButton = document.getElementById('login-button');
 const contributeDataButton = document.getElementById('contribute-data-button');
 const contributeEvaluationButton = document.getElementById('contribute-button');
@@ -54,6 +115,8 @@ const modelScoresSummary = document.getElementById('model-scores-summary');
 const modelScoresList = document.getElementById('model-scores-list');
 const benchmarkCard = document.getElementById('benchmark-card');
 const modelCard = document.getElementById('model-card');
+const modelIndexHeading = document.getElementById('model-leaderboard-heading');
+const modelIndexTab = document.getElementById('model-index-tab');
 const leftWorkspace = document.querySelector('.bp-left-workspace');
 const pieHomeSlot = document.getElementById('pie-home-slot');
 const pieCard = document.getElementById('pie-card');
@@ -64,70 +127,357 @@ const benchmarkLeaderboardOpen = document.getElementById('benchmark-leaderboard-
 const benchmarkLeaderboardClose = document.getElementById('benchmark-leaderboard-close');
 const inlineFallback = document.getElementById('inline-fallback');
 const inlineFallbackPersonalControl = document.getElementById('inline-fallback-personal-control');
-const inlineFallbackEnabled = document.getElementById('inline-fallback-enabled');
+const inlineFallbackToggle = document.getElementById('inline-fallback-toggle');
+const inlineFallbackSettings = document.getElementById('inline-fallback-settings');
+const inlineFallbackEditor = document.getElementById('inline-fallback-editor');
+const inlineFallbackPreviewSequence = document.getElementById('inline-fallback-preview-sequence');
+const inlineFallbackPreview = document.getElementById('inline-fallback-preview');
+const inlineFallbackEdit = document.getElementById('inline-fallback-edit');
+const inlineFallbackConfigurations = document.getElementById('inline-fallback-configurations');
+const inlineFallbackDone = document.getElementById('inline-fallback-done');
+const inlineFallbackConfigurationLabel = document.getElementById('inline-fallback-configuration-label');
+const inlineFallbackEntrance = document.getElementById('inline-fallback-entrance');
+const inlineFallbackSaveError = document.getElementById('inline-fallback-save-error');
+const inlineFallbackSaveRetry = document.getElementById('inline-fallback-save-retry');
 const publicFallbackToggle = document.getElementById('public-fallback-toggle');
-const inlineFallbackRemove = document.getElementById('inline-fallback-remove');
 const inlineFallbackGuide = document.getElementById('inline-fallback-guide');
 const inlineFallbackChart = document.getElementById('inline-fallback-chart');
 
 const state = createWorkspaceState();
+const updateIndicator = createUpdateIndicator();
+updateIndicator.element.id = 'workspace-update-indicator';
+window.addEventListener('pagehide', () => updateIndicator.destroy(), { once: true });
+const sceneControls = createSceneControls({ host: templateStrip, getState: () => state,
+    beforeWrite: prepareContextChange,
+    write: (path, body) => pageAccountWriteScope.write(postJSON, path, body),
+    onSelect: selectScene,
+    async onChanged(id) {
+        state.selectedContextValues = { scene: String(id) };
+        await loadWeightedWorkspace({ preserveUndo: false });
+    }
+});
+const referenceOptions = {
+    request: (body, options) => postJSON('/api/get_topic_reference_targets', body, { ...options, timeoutMs: 20000, requireJSON: true }),
+    getScope: () => `${workspaceContextFingerprint()}|${state.mode}|${state.userID ?? 'guest'}`,
+    getCurrentContextID: () => state.contextID,
+    getEntries: () => state.personalEntries,
+    isPrivate: () => state.contextIsPrivate,
+    async onAdd(target) {
+        const scope = workspaceContextFingerprint();
+        if (state.mode !== 'personal' || state.loading || !await finishPendingWeightAdjustments()
+            || scope !== workspaceContextFingerprint()) return false;
+        const added = addObjectToPersonalPie(target);
+        if (added) { state.workspaceView = 'focus'; renderAll(); }
+        return added;
+    }
+};
+const referencePicker = createTopicReferencePicker(referenceOptions);
+const referenceSearch = createTopicReferenceSearch({ ...referenceOptions,
+    canAdd: () => state.mode === 'personal' && !state.loading,
+    onChange: () => renderBenchmarks() });
+const additionToast = createToast({ avoid: pieAdjustmentStatus });
+const guestDrafts = createGuestDraftStore();
+const pieRecovery = createPersonalPieRecovery({ state, guestDrafts, snapshot: portablePersonalPie });
+const hiddenPersonalBenchmarkIDs = new Set();
+const getBenchmarkMemberURL = member => categoryDiscussionURL(state.categoryID, state.selectedContextValues,
+    member.benchmarkID, member.conditionID ?? member.ID);
+const benchmarkRowFocus = createBenchmarkRowFocus();
+const benchmarkFallbackCatalogue = createBenchmarkFallbackCatalogue({
+    request: body => postJSON('/api/get_ranking_page', body),
+    onChange: () => { renderBenchmarks(); fallbackPicker.refresh(); },
+    onExpired: page => { void recoverRankingPages(page); }
+});
+const fallbackPicker = createFallbackPicker({ catalogue: benchmarkFallbackCatalogue,
+    getScope: () => `${workspaceContextFingerprint()}|${state.mode}|${state.userID ?? 'guest'}`,
+    getPrimary: ID => state.benchmarks.find(object => Number(object.ID) === Number(ID))
+        ?? state.benchmarkDetailsByID.get(Number(ID)),
+    getComposition: publicFallbackRuleFor, getCurrent: fallbackRuleFor,
+    canApply: (ID, action) => state.mode === 'personal' && !state.loading && !state.gestureOpen
+        && (action === 'replace'
+            ? state.personalEntries.some(entry => Number(entry.conditionID) === Number(ID))
+            : !state.personalEntries.some(entry => Number(entry.conditionID) === Number(ID))),
+    onApply: applyFallbackConfiguration, onCustomize: beginInlineFallbackEditing,
+    getMemberURL: getBenchmarkMemberURL, onInspectVersion: onBenchmarkInspection
+});
+initializeFallbackAppearance();
+let benchmarkSearchTimer = null;
+let lowCoverageExpanded = false;
+let otherConditionsExpanded = false;
+
+function benchmarkPageKey(group) {
+    return group === 'primary' ? 'benchmarks' : group === 'other' ? 'benchmarkOther' : 'benchmarkLow';
+}
+
+function currentBenchmarkGroup(condition) {
+    if (state.rankingPagination?.benchmarkGrouping === 'flat') return 'primary';
+    if (condition.isFamily) return 'primary';
+    const personal = state.personalEntries.find(entry => Number(entry.conditionID) === Number(condition.conditionID));
+    const publicEntry = state.publicEntries.find(entry => Number(entry.conditionID) === Number(condition.conditionID));
+    return benchmarkConditionGroup({ ...condition,
+        personalWeightBasisPoints: personal?.weightBasisPoints ?? 0,
+        publicWeightBasisPoints: publicEntry?.weightBasisPoints ?? condition.publicWeightBasisPoints ?? Number(condition.publicWeight ?? 0) * 100,
+        personalWeight: (personal?.weightBasisPoints ?? 0) / 100,
+        publicWeight: publicEntry ? publicEntry.weightBasisPoints / 100 : condition.publicWeight ?? 0 });
+}
+
+function currentBenchmarkPages() {
+    const pages = structuredClone(state.rankingPagination?.benchmarks);
+    if (state.rankingPagination?.benchmarkGrouping === 'flat') return pages;
+    // Reclassify optimistic edits while the server snapshot remains unchanged.
+    for (const object of state.benchmarks) {
+        const previous = benchmarkConditionGroup(object);
+        const current = currentBenchmarkGroup(object);
+        if (previous !== current && pages) {
+            pages[previous].total--;
+            pages[current].total++;
+        }
+    }
+    return pages;
+}
+
+function nextVisibleBenchmarkGroup() {
+    const hasOtherVersions = (currentBenchmarkPages()?.other.total ?? 0) > 0;
+    const groups = hasOtherVersions && otherConditionsExpanded
+        ? ['other', lowCoverageExpanded && 'lowCoverage'].filter(Boolean)
+        : !hasOtherVersions && lowCoverageExpanded ? ['lowCoverage'] : ['primary'];
+    return groups.find(group => state.rankingPagination?.benchmarks[group]?.hasMore
+        && !state.rankingPageLoading[benchmarkPageKey(group)] && !state.rankingPageError[benchmarkPageKey(group)]);
+}
+
+function loadVisibleBenchmarkPage() {
+    const group = nextVisibleBenchmarkGroup();
+    if (group && shouldLoadMore(benchmarkRows)) void loadNextRankingPage('benchmarks', group);
+}
 Object.assign(state, readWorkspacePreferences());
+state.availableInferenceVersion = AVAILABLE_INFERENCE_VERSION;
+state.workspaceDisplay = 'standard';
+const homeModelFocusIntent = readHomeModelFocusIntent(window.location.href);
+if (homeModelFocusIntent?.valid) {
+    state.mode = homeModelFocusIntent.mode;
+    state.scoreMode = homeModelFocusIntent.scoreMode;
+}
+if (homeModelFocusIntent) consumeHomeModelFocusURL();
+function renderScoringControls() {
+    scoreModeButtons.forEach(button => button.setAttribute('aria-pressed', String(button.dataset.scoreMode === state.scoreMode)));
+    scoringSwitch.dataset.mode = state.scoreMode;
+}
+renderScoringControls();
+let scoreModeChangeID = 0;
+scoreModeButtons.forEach(button => button.addEventListener('click', async () => {
+    const requestedMode = button.dataset.scoreMode;
+    const changeID = ++scoreModeChangeID;
+    const adjustmentsSaved = await finishPendingWeightAdjustments();
+    const pieSaved = adjustmentsSaved && await flushPendingPersonalPieSave();
+    if (changeID !== scoreModeChangeID) return;
+    if (!pieSaved) {
+        setStatus('Your weight change was not saved. Try switching modes again.');
+        return;
+    }
+    if (state.scoreMode === requestedMode) return;
+    state.scoreMode = requestedMode;
+    writeWorkspacePreferences(state);
+    renderScoringControls();
+    void loadWeightedWorkspace({ preserveUndo: true });
+}));
 state.comparisonRequest = null;
 state.comparisonNeedsSelection = false;
 state.comparisonPending = false;
 state.comparisonError = '';
-const renderComparisonControls = createComparisonControls({ onChange(options) {
+function onComparisonChange(options) {
+    if (typeof modelFocus !== 'undefined') modelFocus.cancel({ clearPage: true });
     state.comparisonNeedsSelection = false;
     state.comparisonError = '';
     state.comparisonPending = true;
     state.comparisonRequest = options;
+    comparisonProfileLoadError = '';
     renderModels();
     void loadWeightedWorkspace({ preserveUndo: true, comparisonChange: true });
-}, onInvalid(message) {
-    state.comparisonNeedsSelection = true;
-    state.comparisonError = message;
-    state.comparisonPending = false;
-    state.comparisonRequest = null;
-    renderModels();
-} });
+}
+const comparisonControls = withHomeFocusComparison({
+    controls: createComparisonControls({ onChange: onComparisonChange }), intent: homeModelFocusIntent,
+    onChange: onComparisonChange, onApply: options => { state.comparisonRequest = options; }
+});
+let comparisonProfileLoadError = '';
+let comparisonProfileFailure = null;
+let comparisonProfileLoading = false;
+let comparisonProfilesReady;
+function loadComparisonProfiles() {
+    if (comparisonProfileLoading) return comparisonProfilesReady;
+    comparisonProfileLoading = true;
+    comparisonProfileFailure = null;
+    comparisonProfilesReady = postJSON('/api/get_user_profile', {}, { timeoutMs: 10000, requireJSON: true }).then(profile => {
+        const accountID = profile == null ? null : canonicalAccountID(profile.userID);
+        if (profile != null && !accountID) throw new TypeError('Invalid account identity');
+        state.comparisonRequest = comparisonControls.configureAccount(accountID);
+        comparisonProfileLoadError = '';
+        return true;
+    }).catch(error => {
+        comparisonProfileFailure = Object.assign(new Error('Your account could not be checked. Please retry.'),
+            { code: 'comparison_settings_unavailable' });
+        console.error('[BenchPoll] Comparison account unavailable', error);
+        return false;
+    }).finally(() => { comparisonProfileLoading = false; });
+    return comparisonProfilesReady;
+}
+loadComparisonProfiles();
+const defaultComparison = () => ({ mode: 'best', keys: ['model'], filters: [] });
+const invalidSavedComparison = error => error.status === 400 && [
+    'comparison_keys_unavailable', 'invalid_comparison_filter_key', 'comparison_model_unavailable',
+        'invalid_comparison_keys', 'invalid_comparison_filters', 'score_field_option_unavailable'
+].includes(error.payload?.error);
+async function recoverComparison(error) {
+    comparisonProfileLoadError = 'A saved comparison uses fields or values that are no longer available. It was reset to Model only.';
+    console.warn('[BenchPoll] Saved comparison reset', error.payload?.error);
+    state.comparisonRequest = defaultComparison();
+    state.comparisonNeedsSelection = false;
+    state.comparisonError = '';
+    comparisonControls.resetToDefault();
+}
 initializeMobilePanels(document.querySelector('.bp-workspace'));
 
 let touchPieGesture = null;
 let pendingWheelBasisPoints = 0;
 let wheelWeightCommitTimer = null;
 let wheelPreviewFrame = null;
+let weightCursorTarget = null;
+let lastPointerPosition = null;
+let gestureSettledResolvers = [];
 
-let selectedFallbackPrimaryID = null;
-let selectedFallbackComponentID = null;
-let fallbackDraftPrimaryID = null;
+function notifyGestureSettled() {
+    const resolvers = gestureSettledResolvers;
+    gestureSettledResolvers = [];
+    resolvers.forEach(resolve => resolve());
+}
+
+async function waitForGestureToSettle() {
+    while (state.gestureOpen) {
+        await new Promise(resolve => gestureSettledResolvers.push(resolve));
+    }
+}
+
 let fallbackTargetPrimaryID = null;
-let selectedPublicFallbackComponentID = null;
-let pendingFallbackWheelBasisPoints = 0;
-let fallbackWheelCommitTimer = null;
-let fallbackWheelPreviewFrame = null;
-let touchFallbackGesture = null;
+let fallbackEditorScope = null;
+let pendingFallbackSave = false;
+let fallbackSaveFailed = false;
 
-const { openApprovedModelResults } = createModelScoresView({ state, modelScoresDialog, modelScoresTitle, modelScoresSummary, modelScoresList });
-const { renderModels } = createModelListView({ state, modelRows, openApprovedModelResults });
-const { renderPie } = createPieRenderer({
-    state, pieSvg, orderedPieEntries, currentPieEntries, selectedObjectIndex,
+const { openApprovedModelResults } = createModelScoresView({ state, modelScoresDialog, modelScoresTitle, modelScoresSummary, modelScoresList,
+    getMemberURL: getBenchmarkMemberURL, onInspectVersion: onBenchmarkInspection });
+const modelListView = createModelListView({
+    state, modelRows, openApprovedModelResults,
+    onUpdateStatus: updateLastUpdated,
+    onRetrySave: () => state.personalSaveConflict ? window.location.reload() : void persistPersonalPie(),
+    onNeedMore: () => {
+        if (shouldLoadMore(modelRows)) void loadNextRankingPage(state.mode);
+    },
+    onFocusPageRequest: offset => { void modelFocus.loadPage(offset); },
+    onFocusPageClose: () => modelFocus.backToTop()
+});
+const { renderModels, clearRankingStatus } = modelListView;
+const modelFocusNotice = createModelFocusNotice(modelRows);
+const modelFocus = createHomeModelFocus({ intent: homeModelFocusIntent, state, rows: modelRows, view: modelListView,
+    request: postJSON, onMessage: modelFocusNotice,
+    showRanking() {
+        setWorkspaceView('leaderboard', { animate: false });
+        const workspace = document.querySelector('.bp-workspace');
+        workspace.dataset.mobilePanel = 'models';
+        workspace.querySelectorAll('[data-mobile-panel]').forEach(button =>
+            button.setAttribute('aria-pressed', String(button.dataset.mobilePanel === 'models')));
+    }
+});
+createModelSearch({ container: document.getElementById('ranking-model-search'),
+    async search(query, { signal }) {
+        const snapshotID = state.rankingPagination?.snapshotID, list = state.mode;
+        if (!snapshotID || state.loading || state.comparisonPending) throw new Error('Ranking not ready');
+        const result = await postJSON('/api/search_ranking_models', { snapshotID, list, query },
+            { signal, timeoutMs: 15000, requireJSON: true });
+        if (result.snapshotID !== snapshotID || result.list !== list
+            || state.rankingPagination?.snapshotID !== snapshotID || state.mode !== list || !Array.isArray(result.items)) {
+            throw new Error('Ranking changed');
+        }
+        return result.items.map(item => ({ ...item, targetModel: normalizeModelFocusTarget(item.targetModel), snapshotID, list }));
+    },
+    onSelect(item) {
+        if (state.rankingPagination?.snapshotID !== item.snapshotID || state.mode !== item.list
+            || state.loading || state.comparisonPending) {
+            modelFocusNotice('This ranking changed. Search again.'); return;
+        }
+        void modelFocus.start(item.targetModel);
+    }
+});
+const { renderPie: renderPieGraphic } = createPieRenderer({
+    state, pieSvg, pieHoverTooltip, orderedPieEntries, currentPieEntries, selectedObjectIndex,
     renderInlineFallback, fallbackRuleFor, publicFallbackRuleFor,
     async onSelect(objectID) {
         if (!await finishPendingWeightAdjustments()) return;
-        deactivateInlineFallbackTarget({ discardDraft: true });
-        selectedPublicFallbackComponentID = null;
+        deactivateInlineFallbackTarget();
         state.selectedObjectID = objectID;
+        state.selectedFamilyKey = null;
+        state.workspaceView = 'focus';
+        applyWorkspaceView({ animate: true });
+        renderModeState();
         renderPie();
         renderBenchmarks();
         renderBenchmarkSummary();
+        revealBenchmarkRow(objectID);
     }
 });
+
+function renderPie(options) {
+    renderPieGraphic(options);
+    renderSelectedWeightHeading();
+}
 
 function snapshotPersonalPie() {
     return {
         entries: cloneEntries(state.personalEntries),
         fallbackRules: cloneFallbackRules(state.personalFallbackRules)
     };
+}
+
+function portablePersonalPie() {
+    return {
+        entries: state.personalEntries.map(entry => ({
+            conditionID: Number(entry.conditionID),
+            weightBasisPoints: Number(entry.weightBasisPoints)
+        })),
+        fallbackRules: state.personalFallbackRules.map(rule => ({
+            primaryConditionID: Number(rule.primaryConditionID),
+            mode: FALLBACK_RULE_MODE,
+            ...(rule.selectionSource ? { selectionSource: rule.selectionSource } : {}),
+            entries: rule.entries.map(portableFamilyEntry)
+        }))
+    };
+}
+
+function recordGuestDraft() {
+    const key = workspaceContextFingerprint();
+    if (state.personalEntries.length === 0 && !state.hasSavedPersonalWeights) {
+        state.guestDraftStorageAvailable = guestDrafts.delete(key);
+        state.usingGuestDraft = false;
+    } else {
+        state.guestDraftStorageAvailable = guestDrafts.set(key, portablePersonalPie());
+        state.usingGuestDraft = true;
+    }
+    state.personalIsDraft = true;
+}
+
+function recordPersonalDraft() {
+    if (!state.authenticated || state.usingGuestDraft && !state.recoveredPersonalDraft) {
+        recordGuestDraft();
+        return true;
+    }
+    try {
+        pieRecovery.checkpoint();
+        return !state.personalRecoveryBlocked;
+    } catch (error) {
+        state.personalRecoveryBlocked = true;
+        state.personalSaveConflict = true;
+        state.personalSaveError = ['pie_recovery_changed', 'pie_save_scope_changed'].includes(error.code) ? error.message
+            : 'Your draft could not be retained safely. Keep this tab open and review it before saving.';
+        state.personalRankingError = state.personalSaveError;
+        setStatus(state.personalSaveError);
+        return false;
+    }
 }
 
 function restorePersonalPieSnapshot(snapshot) {
@@ -161,19 +511,97 @@ function resetPieVisualState() {
     state.visualPieEntries.clear();
     pieCard?.classList.remove('is-adjusting-weight');
     inlineFallback?.classList.remove('is-adjusting-weight');
-    selectedFallbackPrimaryID = null;
-    selectedFallbackComponentID = null;
-    fallbackDraftPrimaryID = null;
     fallbackTargetPrimaryID = null;
-    selectedPublicFallbackComponentID = null;
+    fallbackEditorScope = null;
+    pendingFallbackSave = false;
+    fallbackSaveFailed = false;
 }
 
 function setPieAdjustmentActive(active) {
     pieCard?.classList.toggle('is-adjusting-weight', Boolean(active));
+    updatePieAdjustmentStatus();
 }
 
-function setFallbackAdjustmentActive(active) {
-    inlineFallback?.classList.toggle('is-adjusting-weight', Boolean(active));
+function updatePieAdjustmentStatus() {
+    updateWeightAdjustmentCursor();
+    const entry = state.personalEntries.find(item => Number(item.conditionID) === Number(state.selectedObjectID));
+    const single = state.personalEntries.length === 1;
+    const visible = state.mode === 'personal' && Boolean(entry)
+        && (single || state.workspaceView === 'focus' || pieCard?.classList.contains('is-adjusting-weight'));
+    if (!visible) {
+        if (pieAdjustmentStatus.getAttribute('aria-hidden') !== 'true') void setVisible(pieAdjustmentStatus, false);
+        return;
+    }
+    pieAdjustmentName.textContent = benchmarkAccessibleName(entry);
+    pieAdjustmentName.dataset.tooltip = pieAdjustmentName.textContent;
+    pieAdjustmentValue.textContent = `${Math.round(entry.weightBasisPoints / 100)}%`;
+    pieAdjustmentLabel.textContent = single ? 'One benchmark' : 'Adjusting weight';
+    pieAdjustmentStatus.classList.toggle('is-single-benchmark', single);
+    pieAdjustmentDismiss.disabled = single;
+    pieAdjustmentDismiss.setAttribute('aria-label', single ? 'One benchmark stays at 100%' : 'Stop adjusting weight');
+    pieAdjustmentStatus.querySelector('i').className = single ? 'fa-solid fa-plus' : 'fa-solid fa-arrows-up-down';
+    pieAdjustmentInstruction.textContent = single
+        ? 'Add another benchmark to adjust weights. One benchmark stays at 100%.'
+        : window.matchMedia('(pointer: coarse)').matches
+        ? 'Swipe on the pie to adjust. Tap this prompt to stop adjusting.'
+        : 'Scroll on the pie or list. Right-click or click this prompt to stop adjusting.';
+    if (pieAdjustmentStatus.getAttribute('aria-hidden') !== 'false') void setVisible(pieAdjustmentStatus, true);
+}
+
+let benchmarkRevealSequence = 0;
+function revealBenchmarkRow(objectID) {
+    const sequence = ++benchmarkRevealSequence;
+    if (Number(objectID) < 0) {
+        const row = benchmarkRows.querySelector(`.bp-reference-option[data-context-id="${-Number(objectID)}"]`);
+        if (row) {
+            const viewport = benchmarkRows.getBoundingClientRect(), bounds = row.getBoundingClientRect();
+            if (bounds.top < viewport.top || bounds.bottom > viewport.bottom) row.scrollIntoView({ block: 'nearest',
+                behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
+        }
+        return;
+    }
+    const snapshotID = state.rankingPagination?.snapshotID;
+    void (async () => {
+        await new Promise(resolve => requestAnimationFrame(resolve));
+        while (sequence === benchmarkRevealSequence
+            && Number(state.selectedObjectID) === Number(objectID)
+            && snapshotID === state.rankingPagination?.snapshotID) {
+            const details = state.benchmarkDetailsByID.get(Number(objectID))
+                ?? currentPieEntries().find(entry => Number(entry.conditionID) === Number(objectID));
+            if (!details) return;
+            const group = currentBenchmarkGroup(details);
+            const nestedLowCoverage = group === 'lowCoverage' && (currentBenchmarkPages()?.other.total ?? 0) > 0;
+            if ((group === 'lowCoverage' && (!lowCoverageExpanded || (nestedLowCoverage && !otherConditionsExpanded)))
+                || (group === 'other' && !otherConditionsExpanded)) {
+                if (group === 'lowCoverage') lowCoverageExpanded = true;
+                if (group === 'other' || nestedLowCoverage) otherConditionsExpanded = true;
+                renderBenchmarks();
+            }
+            const row = [...benchmarkRows.querySelectorAll('.bp-benchmark-row')]
+                .find(item => Number(item.dataset.conditionId) === Number(objectID));
+            if (row) {
+                const viewport = benchmarkRows.getBoundingClientRect();
+                const bounds = row.getBoundingClientRect();
+                if (bounds.top < viewport.top || bounds.bottom > viewport.bottom) {
+                    row.scrollIntoView({
+                        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth',
+                        block: 'nearest'
+                    });
+                }
+                return;
+            }
+            if (benchmarkSearch.value.trim()) {
+                benchmarkSearch.value = '';
+                reloadBenchmarkPage();
+            }
+            if (!state.rankingPagination?.benchmarks[group]?.hasMore || state.rankingPageError[benchmarkPageKey(group)]) return;
+            if (state.rankingPageLoading[benchmarkPageKey(group)] || state.loading) {
+                await new Promise(resolve => window.setTimeout(resolve, 50));
+            } else {
+                await loadNextRankingPage('benchmarks', group);
+            }
+        }
+    })();
 }
 
 function registerPieEntries(entries) {
@@ -204,6 +632,8 @@ function sameContextValues(left = {}, right = {}) {
 function syncContextValuesToURL() {
     const url = rankingContextURL(window.location.href, state.dimensions, state.selectedContextValues);
     window.history.replaceState(window.history.state, '', url);
+    updateTopicSearchMetadata({ name: state.topicName, description: state.topicSummary,
+        url: '/' + state.categoryPath.replace(/^\/+/, ''), isPrivate: state.contextIsPrivate, scenes: state.scenes }, state.sceneID);
 }
 
 function setStatus(message = '') {
@@ -212,208 +642,74 @@ function setStatus(message = '') {
 }
 
 function updateLastUpdated() {
-    if (state.statusMessage) {
-        lastUpdated.textContent = state.statusMessage;
-        return;
+    lastUpdated.hidden = !state.statusMessage;
+    lastUpdated.textContent = state.statusMessage;
+    updateIndicator.update({
+        pending: state.loading || state.saving || state.comparisonPending
+            || state.mode === 'personal' && state.personalRankingDirty,
+        error: state.workspaceLoadError || state.personalSaveError || state.personalRankingError,
+        version: state.lastLoadTime
+    });
+}
+
+const categoryNavigationMedia = window.matchMedia('(max-width: 760px)');
+
+function currentCategoryNode(name) {
+    const node = document.createElement(categoryNavigationMedia.matches ? 'button' : 'span');
+    node.className = 'bp-breadcrumb-current';
+    node.textContent = name;
+    if (categoryNavigationMedia.matches) {
+        node.type = 'button';
+        node.dataset.taxonomyTrigger = '';
+        node.setAttribute('aria-label', `Open topics: ${name}`);
+        node.setAttribute('aria-controls', 'tree-content');
+        node.setAttribute('aria-expanded', String(document.body.classList.contains('taxonomy-open')
+            && !document.body.classList.contains('taxonomy-closing')));
     }
-    const elapsedMinutes = Math.max(0, Math.floor((Date.now() - state.lastLoadTime) / 60000));
-    lastUpdated.textContent = elapsedMinutes === 0
-        ? 'Last updated just now'
-        : `Last updated ${elapsedMinutes}m ago`;
+    return node;
 }
 
 function renderBreadcrumb() {
     breadcrumb.replaceChildren();
-    const pathParts = String(state.categoryPath || '')
-        .split('/')
-        .filter(Boolean);
-    const displayParts = pathParts.map(humanizePathPart);
-    const rootOffset = displayParts.length > 1 ? 1 : 0;
-    const visibleParts = displayParts.length > 0
-        ? displayParts.slice(rootOffset)
-        : ['All Categories'];
-    visibleParts.forEach((part, index) => {
-        const isCurrent = index === visibleParts.length - 1;
-        const node = document.createElement(isCurrent ? 'span' : 'a');
-        node.textContent = part;
-        if (isCurrent) node.className = 'bp-breadcrumb-current';
-        if (!isCurrent) {
-            const path = pathParts
-                .slice(0, rootOffset + index + 1)
-                .map(segment => encodeURIComponent(segment))
-                .join('/');
-            node.href = `/rankings/${path}`;
-        }
-        breadcrumb.append(node);
-        if (!isCurrent) {
-            const separator = document.createElement('i');
-            separator.className = 'fa-solid fa-chevron-right';
-            separator.setAttribute('aria-hidden', 'true');
-            breadcrumb.append(separator);
-        }
-    });
+    const name = currentCategoryNode(state.topicName || 'Topics');
+    breadcrumb.append(name, updateIndicator.element);
+    if (state.contextIsPrivate) {
+        const label = document.createElement('small'); label.className = 'bp-private-context-label'; label.textContent = 'Private';
+        breadcrumb.append(label);
+    }
+    const creator = document.getElementById('workspace-topic-creator');
+    creator.replaceChildren();
+    creator.hidden = !state.topicCreator;
+    if (state.topicCreator) creator.append(createTopicCreator(state.topicCreator));
+    const summary = document.getElementById('workspace-topic-summary');
+    summary.textContent = state.topicSummary;
+    summary.hidden = !state.topicSummary;
 }
 
-function templateValueClass(option) {
-    if (option?.isNeutral) {
-        return 'bp-template-neutral';
-    }
-    if (/disallowed/i.test(option?.name ?? '')) {
-        return 'bp-template-negative';
-    }
-    return 'bp-template-positive';
+async function prepareContextChange() {
+    if (state.loading || !await finishPendingWeightAdjustments()) return false;
+    if (state.saving && state.savePromise) await state.savePromise.catch(() => {});
+    return flushPendingPersonalPieSave();
+}
+
+async function selectScene(id) {
+    const category = state.categoryID;
+    if (!state.scenes.some(scene => Number(scene.ID) === id) || !await prepareContextChange() || category !== state.categoryID) return;
+    state.selectedContextValues = { scene: String(id) };
+    state.workspaceView = 'overview';
+    await loadWeightedWorkspace();
 }
 
 function renderTemplateControls() {
-    templateStrip.replaceChildren();
-    const hasTemplateDimensions = state.dimensions.length > 0;
-    templateStrip.hidden = !hasTemplateDimensions;
-    document.body.classList.toggle('bp-no-template-context', !hasTemplateDimensions);
-
-    if (!hasTemplateDimensions) {
-        return;
-    }
-
-    state.dimensions.forEach(dimension => {
-        const selected = dimension.options.find(option => option.key === dimension.selectedKey)
-            ?? dimension.options[0];
-        const picker = document.createElement('div');
-        picker.className = 'bp-template-picker';
-        picker.dataset.templateKey = dimension.key;
-        const control = document.createElement('button');
-        control.className = 'bp-template-control';
-        control.type = 'button';
-        control.dataset.templateKey = dimension.key;
-        control.setAttribute('aria-haspopup', 'listbox');
-        control.setAttribute('aria-expanded', 'false');
-        control.setAttribute('aria-label', `${dimension.name}: ${selected?.name ?? 'Not specified'}. Hover to view options.`);
-        const name = document.createElement('span');
-        name.textContent = dimension.name;
-        const value = document.createElement('strong');
-        value.className = `bp-template-value ${templateValueClass(selected)}`;
-        value.textContent = selected?.name ?? 'Not specified';
-        control.append(name, value);
-
-        const menu = document.createElement('div');
-        menu.className = 'bp-template-menu';
-        menu.setAttribute('role', 'listbox');
-        menu.setAttribute('aria-label', dimension.name);
-
-        let closeTimer = null;
-        const openMenu = () => {
-            if (dimension.options.length < 2) {
-                return;
-            }
-            window.clearTimeout(closeTimer);
-            closeTimer = null;
-            picker.dataset.open = 'true';
-            control.setAttribute('aria-expanded', 'true');
-        };
-        const closeMenu = () => {
-            window.clearTimeout(closeTimer);
-            closeTimer = null;
-            delete picker.dataset.open;
-            control.setAttribute('aria-expanded', 'false');
-        };
-        const scheduleMenuClose = () => {
-            window.clearTimeout(closeTimer);
-            closeTimer = window.setTimeout(closeMenu, 140);
-        };
-
-        dimension.options.forEach(option => {
-            const choice = document.createElement('button');
-            const isSelected = option.key === selected?.key;
-            choice.className = 'bp-template-choice';
-            choice.type = 'button';
-            choice.setAttribute('role', 'option');
-            choice.setAttribute('aria-selected', String(isSelected));
-            choice.dataset.selected = String(isSelected);
-            choice.textContent = option.name;
-            choice.addEventListener('click', async event => {
-                event.stopPropagation();
-                if (state.loading || isSelected) {
-                    closeMenu();
-                    return;
-                }
-                closeMenu();
-                if (!await finishPendingWeightAdjustments()) return;
-                if (state.saving && state.savePromise) {
-                    await state.savePromise.catch(() => {});
-                }
-                if (!await flushPendingPersonalPieSave()) {
-                    return;
-                }
-                state.selectedContextValues = {
-                    ...state.selectedContextValues,
-                    [dimension.key]: option.key
-                };
-                state.workspaceView = 'overview';
-                await loadWeightedWorkspace();
-            });
-            menu.append(choice);
-        });
-
-        picker.addEventListener('pointerenter', event => {
-            if (event.pointerType !== 'touch') {
-                openMenu();
-            }
-        });
-        picker.addEventListener('pointerleave', event => {
-            if (event.pointerType !== 'touch') {
-                scheduleMenuClose();
-            }
-        });
-        picker.addEventListener('focusin', openMenu);
-        picker.addEventListener('focusout', () => {
-            requestAnimationFrame(() => {
-                if (!picker.contains(document.activeElement)) {
-                    closeMenu();
-                }
-            });
-        });
-        control.addEventListener('click', event => {
-            event.stopPropagation();
-            if (window.matchMedia('(hover: none)').matches) {
-                if (picker.dataset.open === 'true') {
-                    closeMenu();
-                } else {
-                    openMenu();
-                }
-            } else {
-                openMenu();
-            }
-        });
-        control.addEventListener('keydown', event => {
-            if (event.key === 'Escape') {
-                closeMenu();
-                control.focus();
-                return;
-            }
-            if (event.key === 'ArrowDown') {
-                event.preventDefault();
-                openMenu();
-                menu.querySelector('[aria-selected="true"]')?.focus();
-            }
-        });
-        menu.addEventListener('keydown', event => {
-            if (event.key === 'Escape') {
-                closeMenu();
-                control.focus();
-            }
-        });
-
-        picker.append(control, menu);
-        templateStrip.append(picker);
-    });
+    sceneControls.render();
 }
 
 function updateUndoState() {
-    undoButton.disabled = !state.authenticated
-        || state.saving
-        || state.gestureOpen
+    undoButton.disabled = state.gestureOpen
         || wheelWeightCommitTimer !== null
-        || fallbackWheelCommitTimer !== null
-        || !state.undoSnapshot;
+        || !state.editHistory.canUndo;
+    redoButton.hidden = !state.editHistory.canRedo;
+    redoButton.disabled = state.gestureOpen || wheelWeightCommitTimer !== null || !state.editHistory.canRedo;
 }
 
 function requestLogin() {
@@ -421,11 +717,7 @@ function requestLogin() {
 }
 
 function beginMutation(isGesture = false) {
-    if (!state.authenticated) {
-        requestLogin();
-        return false;
-    }
-    if (state.saving || state.loading) {
+    if (state.loading) {
         return false;
     }
     if (isGesture) {
@@ -444,27 +736,33 @@ function beginMutation(isGesture = false) {
         if (state.gestureOpen) {
             return false;
         }
-        state.undoSnapshot = snapshotPersonalPie();
+        state.editHistory.record(snapshotPersonalPie());
         updateUndoState();
     }
+    state.personalEditVersion += 1;
+    state.personalSavePending = true;
+    state.personalSaveError = '';
+    state.personalRankingDirty = true;
+    state.personalRankingError = '';
+    renderModels();
     return true;
 }
 
 function finishWeightGesture({ persist = true } = {}) {
     if (!state.gestureOpen) {
         setPieAdjustmentActive(false);
-        setFallbackAdjustmentActive(false);
-        return state.persistPromise ?? Promise.resolve(true);
+        return Promise.resolve(true);
     }
     window.clearTimeout(state.gestureTimer);
     state.gestureTimer = null;
     state.gestureOpen = false;
+    notifyGestureSettled();
     setPieAdjustmentActive(false);
-    setFallbackAdjustmentActive(false);
     if (state.gestureSnapshot) {
-        state.undoSnapshot = clonePersonalPieSnapshot(state.gestureSnapshot);
+        state.editHistory.record(state.gestureSnapshot);
     }
     state.gestureSnapshot = null;
+    recordPersonalDraft();
     renderInlineFallback();
     renderBenchmarks();
     renderModels();
@@ -473,9 +771,6 @@ function finishWeightGesture({ persist = true } = {}) {
 }
 
 async function finishPendingWeightAdjustments() {
-    if (fallbackWheelCommitTimer !== null && !await commitPendingFallbackWheelAdjustment()) {
-        return false;
-    }
     if (wheelWeightCommitTimer !== null && !await commitPendingWheelAdjustment()) {
         return false;
     }
@@ -486,6 +781,8 @@ async function finishPendingWeightAdjustments() {
 }
 
 function scheduleSave() {
+    recordPersonalDraft();
+    renderModeState();
     window.clearTimeout(state.saveTimer);
     state.saveTimer = window.setTimeout(() => {
         state.saveTimer = null;
@@ -495,7 +792,7 @@ function scheduleSave() {
 
 async function flushPendingPersonalPieSave() {
     let saved = true;
-    if (state.saveTimer !== null) {
+    if (state.saveTimer !== null || pendingFallbackSave || state.personalSavePending) {
         window.clearTimeout(state.saveTimer);
         state.saveTimer = null;
         saved = await persistPersonalPie();
@@ -539,7 +836,10 @@ function adjustSelectedWeight(deltaBasisPoints, { animateWeights = true } = {}) 
     state.personalEntries = entries.map((entry, index) => (
         index === selectedIndex ? selected : redistributedByID.get(Number(entry.conditionID))
     ));
+    recordPersonalDraft();
     renderPie({ animateWeights });
+    publishContextWeights();
+    updatePieAdjustmentStatus();
     renderBenchmarkSummary();
 }
 
@@ -574,28 +874,157 @@ function scheduleWheelPreview() {
     });
 }
 
-function objectTypeLabel(type) {
-    const normalized = String(type ?? 'benchmark').toLowerCase();
-    if (normalized === 'arena') return 'Arena';
-    if (normalized === 'protocol') return 'Protocol';
-    if (normalized === 'other') return 'Other Benchmark';
-    return 'Benchmark';
-}
-
 const WORKSPACE_VIEWS = new Set(['overview', 'leaderboard', 'focus']);
 
 function selectedBenchmark() {
-    return state.benchmarks.find(object => Number(object.ID) === Number(state.selectedObjectID)) ?? null;
+    return state.benchmarks.find(object => !object.isFamily && Number(object.ID) === Number(state.selectedObjectID))
+        ?? state.benchmarkDetailsByID.get(Number(state.selectedObjectID))
+        ?? (() => {
+            const entry = currentPieEntries().find(item => Number(item.conditionID) === Number(state.selectedObjectID));
+            return entry ? { ...entry, ID: Number(entry.conditionID) } : null;
+        })()
+        ?? null;
 }
 
-function benchmarkSummaryTags(object) {
-    if (!object) {
-        return [];
+function shouldLoadMore(container) {
+    if (container.clientHeight <= 0) return false;
+    const bounds = container.getBoundingClientRect();
+    if (bounds.bottom < 0 || bounds.top > window.innerHeight) return false;
+    // Mobile lists grow with the page instead of owning a scroll viewport.
+    if (container.scrollHeight <= container.clientHeight + 1) {
+        return bounds.bottom <= window.innerHeight + 180;
     }
-    const tags = Array.isArray(object.tags) && object.tags.length > 0
-        ? [...object.tags]
-        : [objectTypeLabel(object.type)];
-    return tags.slice(0, 4);
+    return container.scrollTop + container.clientHeight >= container.scrollHeight - 180;
+}
+
+function invalidateRankingPages() {
+    for (const key of Object.keys(state.rankingPageSequence)) {
+        state.rankingPageSequence[key] += 1;
+        state.rankingPageLoading[key] = false;
+        state.rankingPageError[key] = '';
+    }
+}
+
+let rankingRecovery = null;
+function rankingRecoveryScope() {
+    return JSON.stringify([workspaceContextFingerprint(), state.scoreMode, state.availableInferenceVersion, state.personalEditVersion,
+        comparisonProfileKey(state.comparisonRequest ?? { mode: 'best', keys: ['model'], filters: [] }),
+        currentBenchmarkFilters()]);
+}
+
+function recoverRankingPages(failedPage) {
+    const pagination = state.rankingPagination;
+    if (!pagination || workspaceLoadFailed) return Promise.resolve();
+    if (rankingRecovery?.snapshotID === pagination.snapshotID
+        && rankingRecovery.scope === rankingRecoveryScope()) return rankingRecovery.promise;
+    const requests = [failedPage];
+    for (const list of ['personal', 'public']) {
+        if (state.rankingPageLoading[list] && pagination[list].hasMore) requests.push({ list, offset: pagination[list].nextOffset });
+    }
+    for (const group of BENCHMARK_GROUPS) {
+        if (state.rankingPageLoading[benchmarkPageKey(group)] && pagination.benchmarks[group].hasMore) {
+            requests.push({ list: 'benchmarks', group, offset: pagination.benchmarks[group].nextOffset });
+        }
+    }
+    const recovery = { snapshotID: pagination.snapshotID, scope: rankingRecoveryScope(),
+        resume: captureRankingResume(pagination, { requests, fallbacks: benchmarkFallbackCatalogue.progress() }) };
+    const task = loadWeightedWorkspace({ preserveUndo: true, pageRecovery: recovery });
+    const promise = task.finally(() => { if (rankingRecovery?.promise === promise) rankingRecovery = null; });
+    rankingRecovery = { snapshotID: pagination.snapshotID, scope: recovery.scope, mode: state.mode, promise };
+    return promise;
+}
+
+async function loadNextRankingPage(list, group = 'primary') {
+    if (list !== 'benchmarks' && typeof modelFocus !== 'undefined'
+        && (modelFocus.blocksPaging || modelListView.getFocusPage()?.list === list)) return;
+    const pagination = state.rankingPagination;
+    const key = list === 'benchmarks' ? benchmarkPageKey(group) : list;
+    const page = list === 'benchmarks' ? pagination?.benchmarks[group] : pagination?.[list];
+    if (!pagination || !page?.hasMore || state.loading || workspaceLoadFailed || state.rankingPageLoading[key]) return;
+    const snapshotID = pagination.snapshotID;
+    const workspaceSequence = state.loadSequence;
+    const sequence = ++state.rankingPageSequence[key];
+    const offset = page.nextOffset;
+    state.rankingPageLoading[key] = true;
+    state.rankingPageError[key] = '';
+    if (list === 'benchmarks') renderBenchmarks();
+    else if (state.mode === list) renderModels();
+    try {
+        const response = validateRankingPagePayload(await postJSON('/api/get_ranking_page', {
+            snapshotID, list, offset,
+            ...(list === 'benchmarks' ? { group } : {}),
+            query: list === 'benchmarks' ? benchmarkSearch.value.trim() : '',
+            pinPersonal: list === 'benchmarks' ? state.pinPersonalBenchmarks : false
+        }), { list, offset, group, scoreMode: state.scoreMode,
+            grouping: benchmarkSearch.value.trim() ? 'versions' : 'flat' });
+        if (sequence !== state.rankingPageSequence[key] || workspaceSequence !== state.loadSequence
+            || snapshotID !== state.rankingPagination?.snapshotID) return;
+        if (list === 'benchmarks') {
+            state.rankingPagination.benchmarkGrouping = response.grouping;
+            state.benchmarks.push(...response.items);
+            response.items.filter(object => !object.isFamily).forEach(object => state.benchmarkDetailsByID.set(Number(object.ID), object));
+            for (const otherGroup of BENCHMARK_GROUPS) {
+                const otherPage = state.rankingPagination.benchmarks[otherGroup];
+                otherPage.total = response.groupTotals[otherGroup];
+                otherPage.hasMore = otherPage.nextOffset < otherPage.total;
+            }
+            state.rankingPagination.benchmarks[group] = {
+                total: response.total, nextOffset: response.nextOffset, hasMore: response.hasMore
+            };
+            renderBenchmarks();
+            renderBenchmarkSummary();
+            window.queueMicrotask(loadVisibleBenchmarkPage);
+        } else {
+            state.modelLeaderboards[list].push(...response.items);
+            state.rankingPagination[list] = {
+                total: response.total, nextOffset: response.nextOffset, hasMore: response.hasMore
+            };
+            if (state.mode === list) renderModels();
+        }
+    } catch (error) {
+        if (sequence !== state.rankingPageSequence[key] || workspaceSequence !== state.loadSequence
+            || snapshotID !== state.rankingPagination?.snapshotID) return;
+        if (error.status === 410 || (error.status === 403 && error.payload?.error === 'ranking_snapshot_forbidden')) {
+            void recoverRankingPages({ list, group: list === 'benchmarks' ? group : undefined, offset });
+            return;
+        }
+        state.rankingPageError[key] = 'Could not load more results.';
+        if (list === 'benchmarks') renderBenchmarks();
+        else if (state.mode === list) renderModels();
+    } finally {
+        if (sequence === state.rankingPageSequence[key]) {
+            state.rankingPageLoading[key] = false;
+            if (list === 'benchmarks') renderBenchmarks();
+            else if (state.mode === list) renderModels();
+        }
+    }
+}
+
+function reloadBenchmarkPage() {
+    if (!state.rankingPagination || workspaceLoadFailed) return;
+    state.rankingPagination.benchmarkGrouping = benchmarkSearch.value.trim() ? 'versions' : 'flat';
+    for (const group of BENCHMARK_GROUPS) {
+        const key = benchmarkPageKey(group);
+        state.rankingPageSequence[key] += 1;
+        state.rankingPageLoading[key] = false;
+        state.rankingPageError[key] = '';
+        state.rankingPagination.benchmarks[group] = { total: null, nextOffset: 0, hasMore: true };
+    }
+    otherConditionsExpanded = false;
+    lowCoverageExpanded = false;
+    state.benchmarks = [];
+    benchmarkRows.scrollTop = 0;
+    renderBenchmarks();
+    void loadNextRankingPage('benchmarks');
+}
+
+function currentBenchmarkFilters() {
+    return { benchmarkQuery: benchmarkSearch.value.trim(), pinPersonal: state.pinPersonalBenchmarks };
+}
+
+function refreshChangedBenchmarkFilters(requested) {
+    const current = currentBenchmarkFilters();
+    if (Object.keys(current).some(key => current[key] !== requested[key])) reloadBenchmarkPage();
 }
 
 function renderBenchmarkSummary() {
@@ -604,7 +1033,7 @@ function renderBenchmarkSummary() {
     if (!object) {
         const empty = document.createElement('div');
         empty.className = 'bp-benchmark-summary-empty';
-        empty.innerHTML = '<strong>No benchmark selected</strong><span>Select a weight slice to inspect its benchmark.</span>';
+        empty.innerHTML = '<strong>No benchmark selected</strong><span>Select a weight block to inspect its benchmark.</span>';
         benchmarkSummaryContent.append(empty);
         return;
     }
@@ -626,14 +1055,7 @@ function renderBenchmarkSummary() {
         condition.textContent = conditionLabel;
         title.append(condition);
     }
-    const tags = document.createElement('span');
-    tags.className = 'bp-benchmark-summary-tags';
-    benchmarkSummaryTags(object).forEach(label => {
-        const tag = document.createElement('span');
-        tag.textContent = label;
-        tags.append(tag);
-    });
-    identity.append(eyebrow, title, tags);
+    identity.append(eyebrow, title);
 
     const metric = document.createElement('div');
     metric.className = 'bp-benchmark-summary-metric';
@@ -650,23 +1072,19 @@ function renderBenchmarkSummary() {
 }
 
 function applyWorkspaceView({ animate = false } = {}) {
-    const update = () => {
-            if (pieCard.parentElement !== pieHomeSlot) {
-            pieHomeSlot.append(pieCard);
-        }
-        pieCard.hidden = false;
-        benchmarkSummaryCard.hidden = true;
-        benchmarkCard.hidden = false;
-        modelCard.hidden = false;
-        leftWorkspace.dataset.workspaceView = state.workspaceView;
-        rightWorkspace.dataset.workspaceView = state.workspaceView;
-    };
-    if (animate
-        && typeof document.startViewTransition === 'function'
-        && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-        document.startViewTransition(update);
-    } else {
-        update();
+    if (pieCard.parentElement !== pieHomeSlot) {
+        pieHomeSlot.append(pieCard);
+    }
+    pieCard.hidden = false;
+    benchmarkSummaryCard.hidden = true;
+    benchmarkCard.hidden = false;
+    modelCard.hidden = false;
+    leftWorkspace.dataset.workspaceView = state.workspaceView;
+    rightWorkspace.dataset.workspaceView = state.workspaceView;
+    if (animate && window.matchMedia('(min-width: 761px)').matches) {
+        // A transformed workspace changes the containing block of its fixed adjustment prompt.
+        animateContent(leftWorkspace, { translate: false });
+        animateContent(rightWorkspace, { translate: false });
     }
 }
 
@@ -681,29 +1099,70 @@ function setWorkspaceView(view, { animate = true } = {}) {
     renderBenchmarkSummary();
 }
 
+function onBenchmarkInspection(event) {
+    if (event && (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey)) return;
+    fallbackPicker.close({ restore: false });
+    if (isPersonalBenchmarkFocus()) setWorkspaceView('leaderboard');
+}
+
+function appendBenchmarkDiscoveryActions(empty) {
+    const query = benchmarkSearch.value.trim();
+    const details = bulkImportTemplate({ query, categoryPath: state.categoryPath, contextValues: state.selectedContextValues });
+    const actions = document.createElement('div'); actions.className = 'bp-benchmark-discovery-actions';
+    actions.append(createAction({ label: 'Add a new benchmark', icon: 'fa-solid fa-plus',
+        href: contributionEditURL('new_benchmark', { benchmarkName: query, categoryPath: state.categoryPath }), variant: 'secondary' }),
+    createAction({ label: 'Request bulk import', icon: 'fa-solid fa-file-import',
+        href: contributionEditURL('feedback', { targetKind: 'bulk_import', details, pageURL: window.location.href }), variant: 'secondary' }));
+    empty.append(actions);
+}
+
+function onBenchmarkActivation(event, object) {
+    if ((event.button !== undefined && event.button !== 0) || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+    const hasWeight = state.mode === 'personal' ? objectInPersonalPie(object) : Number(object.publicWeight) > 0;
+    if (!hasWeight) return;
+    event.preventDefault();
+    void selectWeightedBenchmark(object, { toggle: true });
+}
+
+async function selectWeightedBenchmark(object, { toggle = false } = {}) {
+    const context = workspaceContextFingerprint();
+    if (state.loading || !await finishPendingWeightAdjustments()) return;
+    if (state.loading || context !== workspaceContextFingerprint()
+        || !(state.mode === 'personal' ? objectInPersonalPie(object) : Number(object.publicWeight) > 0)) return;
+    const selected = state.workspaceView === 'focus' && Number(state.selectedObjectID) === Number(object.ID)
+        && (object.isFamily ? state.selectedFamilyKey === object.familyKey : state.selectedFamilyKey === null);
+    deactivateInlineFallbackTarget();
+    state.selectedObjectID = object.ID;
+    state.selectedFamilyKey = object.isFamily ? object.familyKey : null;
+    state.workspaceView = toggle && selected ? 'leaderboard' : 'focus';
+    applyWorkspaceView({ animate: true });
+    renderModeState(); renderPie(); renderBenchmarks(); renderBenchmarkSummary();
+}
+
 function fallbackRuleFor(primaryConditionID) {
     return state.personalFallbackRules.find(rule => (
         Number(rule.primaryConditionID) === Number(primaryConditionID)
     )) ?? null;
 }
 
+function fallbackSignature(rules) {
+    return rules.map(rule => JSON.stringify([familyKey(rule.primaryConditionID, rule.entries), rule.selectionSource ?? 'selected'])).sort().join('\n');
+}
+
 function publicFallbackRuleFor(primaryConditionID) {
-    return state.publicFallbackRules.find(rule => (
+    const composition = state.mode === 'personal'
+        ? [...state.personalCommunityComposition, ...state.publicFamilyComposition] : state.publicFamilyComposition;
+    return composition.find(rule => (
         Number(rule.primaryConditionID) === Number(primaryConditionID)
     )) ?? null;
 }
 
-function fallbackIsEnabledFor(primaryConditionID) {
-    return Boolean(fallbackRuleFor(primaryConditionID))
-        || Number(fallbackDraftPrimaryID) === Number(primaryConditionID);
-}
-
 function selectedInlineFallbackPrimary() {
-    if (!state.authenticated || state.mode !== 'personal') {
+    if (state.mode !== 'personal') {
         return null;
     }
     const primary = selectedBenchmark();
-    if (!primary || !state.personalEntries.some(entry => (
+    if (!primary || isTopicReference(primary) || !state.personalEntries.some(entry => (
         Number(entry.conditionID) === Number(primary.ID)
     ))) {
         return null;
@@ -716,7 +1175,7 @@ function selectedPublicFallbackPrimary() {
         return null;
     }
     const primary = selectedBenchmark();
-    if (!primary || !state.publicEntries.some(entry => (
+    if (!primary || isTopicReference(primary) || !state.publicEntries.some(entry => (
         Number(entry.conditionID) === Number(primary.ID)
     ))) {
         return null;
@@ -724,36 +1183,65 @@ function selectedPublicFallbackPrimary() {
     return primary;
 }
 
+function inlineFallbackScope(primaryID) {
+    return `${workspaceContextFingerprint()}|${state.mode}|${state.userID ?? 'guest'}|${Number(primaryID)}`;
+}
+
+function isInlineFallbackEditing() {
+    const primary = selectedInlineFallbackPrimary();
+    return Boolean(primary) && state.personalFallbackExpanded
+        && fallbackEditorScope === inlineFallbackScope(primary.ID);
+}
+
+function beginInlineFallbackEditing(primary = selectedInlineFallbackPrimary()) {
+    if (!primary || isTopicReference(primary) || state.mode !== 'personal' || state.loading || state.gestureOpen
+        || !state.personalEntries.some(entry => Number(entry.conditionID) === Number(primary.ID))) return false;
+    if (Number(state.selectedObjectID) !== Number(primary.ID)) focusPersonalBenchmark(primary);
+    const current = fallbackRuleFor(primary.ID);
+    if (current?.selectionSource !== 'custom') {
+        if (!beginMutation()) return false;
+        replaceFallbackRuleEntries(primary.ID, current?.entries ?? [], 'custom');
+        scheduleSave();
+    }
+    state.personalFallbackExpanded = true;
+    fallbackEditorScope = inlineFallbackScope(primary.ID);
+    deactivateInlineFallbackTarget();
+    writeWorkspacePreferences(state);
+    renderInlineFallback(); renderBenchmarks();
+    requestAnimationFrame(() => {
+        if (isInlineFallbackEditing()) inlineFallbackDone.focus({ preventScroll: true });
+    });
+    return true;
+}
+
+function finishInlineFallbackEditing() {
+    fallbackEditorScope = null;
+    deactivateInlineFallbackTarget();
+    renderInlineFallback(); renderBenchmarks();
+    requestAnimationFrame(() => {
+        if (!inlineFallbackEdit.closest('[hidden], [inert]')) inlineFallbackEdit.focus({ preventScroll: true });
+    });
+}
+
 function isInlineFallbackTargetActive() {
     const primary = selectedInlineFallbackPrimary();
     return Boolean(primary)
-        && fallbackIsEnabledFor(primary.ID)
+        && isInlineFallbackEditing()
         && Number(fallbackTargetPrimaryID) === Number(primary.ID);
 }
 
-function deactivateInlineFallbackTarget({ discardDraft = false } = {}) {
+function deactivateInlineFallbackTarget() {
     fallbackTargetPrimaryID = null;
-    selectedFallbackPrimaryID = null;
-    selectedFallbackComponentID = null;
-    if (discardDraft) {
-        fallbackDraftPrimaryID = null;
-    }
     inlineFallback?.classList.remove('is-target-active');
     benchmarkCard?.classList.remove('is-fallback-target-active');
 }
 
-function activateInlineFallbackTarget(preferredComponentID = null) {
+function activateInlineFallbackTarget() {
     const primary = selectedInlineFallbackPrimary();
-    if (!primary || !fallbackIsEnabledFor(primary.ID) || state.loading || state.saving) {
+    if (!primary || !isInlineFallbackEditing() || state.loading) {
         return false;
     }
-    const rule = fallbackRuleFor(primary.ID);
-    const componentIDs = new Set((rule?.entries ?? []).map(entry => Number(entry.conditionID)));
     fallbackTargetPrimaryID = Number(primary.ID);
-    selectedFallbackPrimaryID = Number(primary.ID);
-    selectedFallbackComponentID = componentIDs.has(Number(preferredComponentID))
-        ? Number(preferredComponentID)
-        : rule?.entries[0]?.conditionID ?? null;
     if (state.workspaceView === 'focus') {
         state.workspaceView = 'leaderboard';
         applyWorkspaceView({ animate: true });
@@ -764,465 +1252,232 @@ function activateInlineFallbackTarget(preferredComponentID = null) {
     return true;
 }
 
-function publicFallbackPercent(weight) {
-    return weight > 0 && weight < 0.01 ? '<0.01%' : `${Number(weight.toFixed(2))}%`;
-}
-
 function renderInlineFallback() {
-    if (!inlineFallback
-        || !inlineFallbackPersonalControl
-        || !inlineFallbackEnabled
-        || !publicFallbackToggle
-        || !inlineFallbackRemove
-        || !inlineFallbackGuide
-        || !inlineFallbackChart) {
-        return;
+    fallbackPicker.refresh();
+    if (!isInlineFallbackEditing()) {
+        fallbackEditorScope = null;
+        deactivateInlineFallbackTarget();
     }
     const personal = state.mode === 'personal';
     const primary = personal ? selectedInlineFallbackPrimary() : selectedPublicFallbackPrimary();
-    const primaryConditionID = Number(primary?.ID);
-    const personalRule = primary && personal ? fallbackRuleFor(primaryConditionID) : null;
-    const publicRule = primary && !personal ? publicFallbackRuleFor(primaryConditionID) : null;
-    const enabled = Boolean(primary) && personal && fallbackIsEnabledFor(primaryConditionID);
-    const publicExpanded = Boolean(primary) && !personal && state.publicFallbackVisible;
-    const chartVisible = personal ? enabled : publicExpanded;
-    const visible = Boolean(primary);
-    inlineFallback.hidden = !visible;
-    pieCard?.classList.toggle('has-inline-fallback', visible);
+    const rule = primary && personal ? fallbackRuleFor(primary.ID) : null;
+    const enabled = Boolean(primary) && personal && Boolean(rule) && state.personalFallbackExpanded;
+    const editing = enabled && isInlineFallbackEditing();
+    void setVisible(inlineFallback, Boolean(primary), { collapse: true });
+    pieCard.classList.toggle('has-inline-fallback', Boolean(primary));
     inlineFallback.classList.toggle('is-readonly', !personal);
     inlineFallbackPersonalControl.hidden = !personal;
     publicFallbackToggle.hidden = personal;
-    publicFallbackToggle.disabled = state.loading || state.saving;
-    publicFallbackToggle.textContent = publicExpanded ? 'Hide fallback' : 'Show fallback';
-    publicFallbackToggle.setAttribute('aria-expanded', String(publicExpanded));
+    publicFallbackToggle.disabled = state.loading;
+    inlineFallbackToggle.querySelector('span').textContent = `Fallback: ${fallbackStatusLabel(rule)}`;
+    if (rule) {
+        inlineFallbackToggle.removeAttribute('aria-haspopup');
+        inlineFallbackToggle.setAttribute('aria-controls', 'inline-fallback-settings');
+        inlineFallbackToggle.setAttribute('aria-expanded', String(enabled));
+    } else {
+        inlineFallbackToggle.setAttribute('aria-haspopup', 'dialog');
+        inlineFallbackToggle.setAttribute('aria-controls', 'fallback-picker');
+        inlineFallbackToggle.removeAttribute('aria-expanded');
+    }
+    inlineFallbackToggle.disabled = state.loading;
+    inlineFallbackSaveError.hidden = !personal || !fallbackSaveFailed;
+    inlineFallbackSaveRetry.disabled = state.saving || state.loading;
+    inlineFallbackGuide.hidden = !primary;
+    addFallbackBenchmarkButton.hidden = !personal;
+    inlineFallbackEdit.hidden = !enabled || editing;
+    inlineFallbackDone.hidden = !editing;
+    inlineFallbackEdit.disabled = state.loading || state.gestureOpen;
+    inlineFallbackPreview.hidden = !enabled || editing;
+    inlineFallbackConfigurations.disabled = state.loading;
+    addFallbackBenchmarkButton.disabled = state.loading;
+    inlineFallbackChart.hidden = !primary;
     if (!primary) {
-        deactivateInlineFallbackTarget({ discardDraft: personal });
-        inlineFallbackEnabled.checked = false;
-        inlineFallbackRemove.hidden = true;
-        inlineFallbackGuide.hidden = true;
-        inlineFallbackChart.hidden = true;
-        inlineFallbackChart.tabIndex = -1;
+        deactivateInlineFallbackTarget();
         inlineFallbackChart.replaceChildren();
+        void setVisible(inlineFallbackSettings, false, { collapse: true });
         return;
     }
-
-    const rule = personal ? personalRule : publicRule;
-    const targetActive = personal && chartVisible && Number(fallbackTargetPrimaryID) === primaryConditionID;
-    const controlsBusy = state.loading || state.saving || state.gestureOpen;
-    const interactionBusy = state.loading || state.saving;
-    if (!personal || !targetActive) {
-        selectedFallbackPrimaryID = null;
-        selectedFallbackComponentID = null;
-    }
-    inlineFallback.classList.toggle('is-target-active', targetActive);
-    benchmarkCard?.classList.toggle('is-fallback-target-active', targetActive);
-    inlineFallbackEnabled.checked = enabled;
-    inlineFallbackEnabled.disabled = controlsBusy;
-    inlineFallbackRemove.hidden = !personal || !targetActive || !rule || selectedFallbackComponentID === null;
-    inlineFallbackRemove.disabled = controlsBusy;
-    if (!inlineFallbackRemove.hidden) {
-        const selectedEntry = rule.entries.find(entry => (
-            Number(entry.conditionID) === Number(selectedFallbackComponentID)
-        ));
-        const selectedName = benchmarkAccessibleName(selectedEntry);
-        inlineFallbackRemove.setAttribute('aria-label', `Remove ${selectedName} from Fallback`);
-        inlineFallbackRemove.title = `Remove ${selectedName} from Fallback`;
-    }
-    inlineFallbackGuide.hidden = !chartVisible;
-    inlineFallbackGuide.textContent = personal
-        ? 'Select the bar, add benchmarks from the leaderboard, then scroll to adjust.'
-        : `When a model has no score for ${benchmarkAccessibleName(primary)}, use this benchmark mix instead.`;
-    inlineFallbackChart.hidden = !chartVisible;
-    inlineFallbackChart.tabIndex = chartVisible && !interactionBusy ? 0 : -1;
-    inlineFallbackChart.classList.toggle('is-target-active', targetActive);
-    inlineFallbackChart.classList.toggle('is-disabled', interactionBusy);
-    inlineFallbackChart.setAttribute(
-        'aria-label',
-        personal
-            ? targetActive
-                ? `Fallback mix selected for ${benchmarkAccessibleName(primary)}. Choose benchmark rows to add.`
-                : `Fallback mix for ${benchmarkAccessibleName(primary)}. Select this bar before choosing benchmarks.`
-            : `Public fallback mix for ${benchmarkAccessibleName(primary)}`
-    );
-
-    if (!chartVisible) {
-        inlineFallbackChart.classList.remove('has-single-component', 'is-empty');
-        inlineFallbackChart.replaceChildren();
+    const active = personal && enabled && isInlineFallbackTargetActive();
+    addFallbackBenchmarkButton.setAttribute('aria-pressed', String(active));
+    addFallbackBenchmarkButton.querySelector('span').textContent = 'Add fallback benchmark';
+    inlineFallback.classList.toggle('is-target-active', active);
+    benchmarkCard.classList.toggle('is-fallback-target-active', active);
+    inlineFallbackChart.classList.toggle('is-target-active', active);
+    inlineFallbackChart.classList.toggle('bp-weight-setup-glow', editing && !rule?.entries.length);
+    inlineFallbackChart.classList.toggle('is-empty', personal && !rule?.entries.length);
+    inlineFallbackChart.tabIndex = -1;
+    inlineFallbackChart.setAttribute('aria-label', personal
+        ? `Fallback order for ${benchmarkAccessibleName(primary)}. Use Add fallback benchmark below to add backups.`
+        : `Public fallback configurations for ${benchmarkAccessibleName(primary)}`);
+    if (!enabled) {
+        void setVisible(inlineFallbackSettings, false, { collapse: true });
+        void setVisible(inlineFallbackEditor, false, { collapse: true });
         return;
     }
-
-    if (!rule) {
-        inlineFallbackChart.classList.remove('has-single-component');
-        inlineFallbackChart.classList.add('is-empty');
-        const empty = document.createElement('span');
-        empty.className = 'bp-inline-fallback-empty';
-        empty.textContent = !personal ? 'No public fallback configured for this benchmark.' : targetActive
-            ? 'Choose a benchmark from the leaderboard'
-            : 'Select this bar to add benchmarks';
-        inlineFallbackChart.replaceChildren(empty);
-        return;
-    }
-
-    const componentIDs = new Set(rule.entries.map(entry => Number(entry.conditionID)));
-    if (personal && targetActive && (selectedFallbackPrimaryID !== primaryConditionID
-        || !componentIDs.has(Number(selectedFallbackComponentID)))) {
-        selectedFallbackPrimaryID = primaryConditionID;
-        selectedFallbackComponentID = rule.entries[0]?.conditionID ?? null;
-    }
-    if (!personal && selectedPublicFallbackComponentID !== null
-        && !componentIDs.has(Number(selectedPublicFallbackComponentID))) {
-        selectedPublicFallbackComponentID = null;
-    }
-    inlineFallbackChart.querySelector('.bp-inline-fallback-empty')?.remove();
-    inlineFallbackChart.classList.remove('is-empty');
-    inlineFallbackChart.classList.toggle('has-single-component', rule.entries.length === 1
-        && (personal || rule.unconfiguredWeightBasisPoints === 0));
-    inlineFallbackChart.querySelector('.bp-public-fallback-unconfigured')?.remove();
-    const retainedSegments = new Set();
-    rule.entries.forEach((entry, index) => {
-        const conditionID = Number(entry.conditionID);
-        const weight = Number(entry.weightBasisPoints) / 100;
-        const percentage = personal ? `${Math.round(weight)}%` : publicFallbackPercent(weight);
-        const selected = personal
-            ? targetActive && conditionID === Number(selectedFallbackComponentID)
-            : conditionID === Number(selectedPublicFallbackComponentID);
-        const [startColor, endColor] = PIE_GRADIENTS[index % PIE_GRADIENTS.length];
-        let segment = inlineFallbackChart.querySelector(
-            `.bp-inline-fallback-segment[data-condition-id="${conditionID}"]`
-        );
-        if (!segment) {
-            segment = document.createElement('button');
-            segment.type = 'button';
-            segment.className = 'bp-inline-fallback-segment';
-            segment.append(
-                document.createElement('strong'),
-                document.createElement('small'),
-                document.createElement('span')
-            );
-            segment.addEventListener('click', event => {
-                event.stopPropagation();
-                if (state.mode === 'public') {
-                    selectedPublicFallbackComponentID = Number(segment.dataset.conditionId);
-                    renderInlineFallback();
-                } else {
-                    activateInlineFallbackTarget(Number(segment.dataset.conditionId));
-                }
-            });
-        }
-        retainedSegments.add(segment);
-        segment.classList.toggle('selected', selected);
-        segment.dataset.primaryConditionId = String(primaryConditionID);
-        segment.dataset.conditionId = String(conditionID);
-        segment.style.setProperty('--bp-fallback-weight', `${weight}%`);
-        segment.style.setProperty('--bp-fallback-color-start', `var(--bp-chart-${index % PIE_GRADIENTS.length}-start, ${startColor})`);
-        segment.style.setProperty('--bp-fallback-color-end', `var(--bp-chart-${index % PIE_GRADIENTS.length}-end, ${endColor})`);
-        segment.disabled = interactionBusy;
-        segment.setAttribute('aria-pressed', String(selected));
-        segment.setAttribute(
-            'aria-label',
-            `${benchmarkAccessibleName(entry)}: ${percentage} of the ${personal ? '' : 'public '}Fallback mix`
-        );
-        segment.title = `${benchmarkAccessibleName(entry)}: ${percentage}`;
-        if (!personal && selected) {
-            inlineFallbackGuide.textContent = segment.title;
-        }
-
-        const name = segment.querySelector('strong');
-        name.textContent = entry.name;
-        const conditionLabel = benchmarkConditionLabel(entry);
-        const condition = segment.querySelector('small');
-        condition.hidden = !conditionLabel;
-        condition.textContent = conditionLabel;
-        const value = segment.querySelector('span');
-        value.textContent = percentage;
-        const currentAtIndex = inlineFallbackChart.children[index];
-        if (currentAtIndex !== segment) {
-            inlineFallbackChart.insertBefore(segment, currentAtIndex ?? null);
-        }
-    });
-    inlineFallbackChart.querySelectorAll('.bp-inline-fallback-segment').forEach(segment => {
-        if (!retainedSegments.has(segment)) segment.remove();
-    });
-    if (!personal && rule.unconfiguredWeightBasisPoints > 0) {
-        const remainder = document.createElement('span');
-        const weight = rule.unconfiguredWeightBasisPoints / 100;
-        remainder.className = 'bp-public-fallback-unconfigured';
-        remainder.style.setProperty('--bp-fallback-weight', `${weight}%`);
-        const label = document.createElement('span');
-        label.textContent = 'No fallback';
-        const percentage = document.createElement('span');
-        percentage.textContent = publicFallbackPercent(weight);
-        remainder.append(label, percentage);
-        remainder.title = `No fallback ${percentage.textContent}`;
-        remainder.tabIndex = 0;
-        remainder.addEventListener('focus', () => {
-            inlineFallbackGuide.textContent = remainder.title;
-        });
-        inlineFallbackChart.append(remainder);
-    }
+    inlineFallbackSettings.classList.toggle('is-editing', editing);
+    inlineFallbackConfigurationLabel.textContent = fallbackStatusLabel(rule);
+    inlineFallbackEntrance.textContent = benchmarkAccessibleName(primary);
+    inlineFallbackGuide.textContent = 'If this version has no score, try these backups in order.';
+    if (editing) familyView.renderPersonal({ primary, entries: rule?.entries ?? [], active, disabled: state.loading });
+    else familyView.renderPreview(inlineFallbackPreviewSequence, { primary, entries: rule.entries });
+    void setVisible(inlineFallbackEditor, editing, { collapse: true });
+    void setVisible(inlineFallbackSettings, true, { collapse: true });
 }
 
-function adjustSelectedFallbackWeight(deltaBasisPoints) {
+function fallbackComponentFromBenchmark(object) {
+    return {
+        conditionID: Number(object.ID), benchmarkID: Number(object.benchmarkID), name: object.name,
+        conditionKey: object.conditionKey, conditionName: object.conditionName,
+        isDefaultCondition: object.isDefaultCondition, isPrimaryCondition: object.isPrimaryCondition,
+        lowCoverage: object.lowCoverage, type: object.type
+    };
+}
+
+function replaceFallbackRuleEntries(primaryConditionID, entries, selectionSource = 'custom') {
+    const retained = state.personalFallbackRules.filter(rule => rule.primaryConditionID !== primaryConditionID);
+    if (entries !== null) retained.push({ primaryConditionID, mode: FALLBACK_RULE_MODE, familyID: null,
+        selectionSource, entries: cloneEntries(entries) });
+    state.personalFallbackRules = retained.sort((a, b) => a.primaryConditionID - b.primaryConditionID);
+}
+
+function addObjectToFallbackChain(object) {
+    if (excludedFromRanking(object)) { setStatus(AA_EXCLUSION_MESSAGE); return false; }
     const primary = selectedInlineFallbackPrimary();
     if (!primary || !isInlineFallbackTargetActive()) return false;
-    const rules = cloneFallbackRules(state.personalFallbackRules);
-    const rule = rules.find(candidate => (
-        Number(candidate.primaryConditionID) === Number(primary.ID)
-    ));
-    if (!rule || rule.entries.length < 2) return false;
-    const selectedIndex = rule.entries.findIndex(entry => (
-        Number(entry.conditionID) === Number(selectedFallbackComponentID)
-    ));
-    if (selectedIndex < 0) return false;
-
-    const selected = { ...rule.entries[selectedIndex] };
-    const others = rule.entries.filter((_, index) => index !== selectedIndex);
-    const maximum = state.limits.totalBasisPoints - (others.length * MIN_WEIGHT_BASIS_POINTS);
-    const nextWeight = clamp(
-        Number(selected.weightBasisPoints) + deltaBasisPoints,
-        MIN_WEIGHT_BASIS_POINTS,
-        maximum
-    );
-    if (nextWeight === Number(selected.weightBasisPoints) || !beginMutation(true)) {
+    if (object.isFamily) {
+        setStatus('Choose a benchmark version, not another fallback configuration.');
         return false;
     }
-
-    selected.weightBasisPoints = nextWeight;
-    selected.weight = nextWeight / 100;
-    const redistributed = distributeToTarget(
-        others,
-        state.limits.totalBasisPoints - nextWeight,
-        MIN_WEIGHT_BASIS_POINTS
-    );
-    const redistributedByID = new Map(redistributed.map(entry => [Number(entry.conditionID), entry]));
-    rule.entries = rule.entries.map((entry, index) => (
-        index === selectedIndex ? selected : redistributedByID.get(Number(entry.conditionID))
-    ));
-    state.personalFallbackRules = rules;
-    renderInlineFallback();
-    return true;
-}
-
-function scheduleFallbackWheelPreview() {
-    if (fallbackWheelPreviewFrame !== null) return;
-    fallbackWheelPreviewFrame = requestAnimationFrame(() => {
-        fallbackWheelPreviewFrame = null;
-        const deltaBasisPoints = Math.round(pendingFallbackWheelBasisPoints);
-        pendingFallbackWheelBasisPoints = 0;
-        if (deltaBasisPoints !== 0) {
-            adjustSelectedFallbackWeight(deltaBasisPoints);
-        }
-    });
-}
-
-function commitPendingFallbackWheelAdjustment() {
-    window.clearTimeout(fallbackWheelCommitTimer);
-    fallbackWheelCommitTimer = null;
-    if (fallbackWheelPreviewFrame !== null) {
-        cancelAnimationFrame(fallbackWheelPreviewFrame);
-        fallbackWheelPreviewFrame = null;
-    }
-    const deltaBasisPoints = Math.round(pendingFallbackWheelBasisPoints);
-    pendingFallbackWheelBasisPoints = 0;
-    if (deltaBasisPoints !== 0) {
-        adjustSelectedFallbackWeight(deltaBasisPoints);
-    }
-    renderInlineFallback();
-    updateUndoState();
-    return finishWeightGesture();
-}
-
-async function removeInlineFallbackRule() {
-    const primary = selectedInlineFallbackPrimary();
-    if (!primary) {
-        renderInlineFallback();
-        return;
-    }
-    const primaryConditionID = Number(primary.ID);
-    if (!fallbackRuleFor(primaryConditionID)) {
-        if (Number(fallbackDraftPrimaryID) === primaryConditionID) {
-            fallbackDraftPrimaryID = null;
-        }
-        deactivateInlineFallbackTarget();
-        renderInlineFallback();
-        renderBenchmarks();
-        return;
-    }
-    if (!beginMutation()) {
-        renderInlineFallback();
-        return;
-    }
-    state.personalFallbackRules = state.personalFallbackRules.filter(rule => (
-        Number(rule.primaryConditionID) !== primaryConditionID
-    ));
-    fallbackDraftPrimaryID = null;
-    deactivateInlineFallbackTarget();
-    renderPie();
-    renderBenchmarks();
-    await persistPersonalPie();
-}
-
-function fallbackComponentFromBenchmark(object, weightBasisPoints) {
-    return {
-        conditionID: Number(object.ID),
-        benchmarkID: Number(object.benchmarkID),
-        name: object.name,
-        conditionKey: object.conditionKey,
-        conditionName: object.conditionName,
-        isDefaultCondition: Boolean(object.isDefaultCondition),
-        type: object.type,
-        weightBasisPoints,
-        weight: weightBasisPoints / 100
-    };
-}
-
-function fallbackRuleWouldCycle(primaryConditionID, candidateEntries) {
-    const rulesByPrimary = new Map(state.personalFallbackRules
-        .filter(rule => Number(rule.primaryConditionID) !== Number(primaryConditionID))
-        .map(rule => [Number(rule.primaryConditionID), rule.entries.map(entry => Number(entry.conditionID))]));
-    rulesByPrimary.set(Number(primaryConditionID), candidateEntries.map(entry => Number(entry.conditionID)));
-    const targetID = Number(primaryConditionID);
-    const canReachTarget = (conditionID, visited = new Set()) => {
-        const normalizedID = Number(conditionID);
-        if (normalizedID === targetID) return true;
-        if (visited.has(normalizedID)) return false;
-        visited.add(normalizedID);
-        return (rulesByPrimary.get(normalizedID) ?? []).some(nextID => canReachTarget(nextID, visited));
-    };
-    return candidateEntries.some(entry => canReachTarget(entry.conditionID));
-}
-
-function replaceFallbackRuleEntries(primaryConditionID, entries) {
-    const retained = state.personalFallbackRules.filter(rule => (
-        Number(rule.primaryConditionID) !== Number(primaryConditionID)
-    ));
-    if (entries.length > 0) {
-        retained.push({
-            primaryConditionID: Number(primaryConditionID),
-            mode: FALLBACK_RULE_MODE,
-            entries: cloneEntries(entries)
-        });
-    }
-    state.personalFallbackRules = retained.sort((left, right) => (
-        Number(left.primaryConditionID) - Number(right.primaryConditionID)
-    ));
-}
-
-function addObjectToFallbackMix(object) {
-    const primary = selectedInlineFallbackPrimary();
-    if (!primary || !isInlineFallbackTargetActive()) {
-        return false;
-    }
-    const primaryConditionID = Number(primary.ID);
     const conditionID = Number(object.ID);
-    if (conditionID === primaryConditionID) {
-        setStatus('A benchmark cannot fall back to itself.');
+    if (conditionID === primary.ID) {
+        setStatus('The entrance benchmark is already first.');
         return false;
     }
-
-    const existingRule = fallbackRuleFor(primaryConditionID);
-    const existingEntry = existingRule?.entries.find(entry => (
-        Number(entry.conditionID) === conditionID
-    ));
-    if (existingEntry) {
-        selectedFallbackPrimaryID = primaryConditionID;
-        selectedFallbackComponentID = conditionID;
-        renderInlineFallback();
-        renderBenchmarks();
+    const entries = fallbackRuleFor(primary.ID)?.entries ?? [];
+    if (entries.some(entry => entry.conditionID === conditionID)) {
         return true;
     }
-
-    const existingEntries = cloneEntries(existingRule?.entries ?? []);
-    if (existingEntries.length >= MAX_FALLBACK_COMPONENTS) {
-        setStatus('Fallback can contain up to ' + MAX_FALLBACK_COMPONENTS + ' benchmarks.');
-        return false;
-    }
-
-    const candidate = fallbackComponentFromBenchmark(object, state.limits.totalBasisPoints);
-    let nextEntries;
-    if (existingEntries.length === 0) {
-        nextEntries = [candidate];
-    } else {
-        const initialWeight = Math.min(
-            500,
-            state.limits.totalBasisPoints - (existingEntries.length * MIN_WEIGHT_BASIS_POINTS)
-        );
-        const redistributed = distributeToTarget(
-            existingEntries,
-            state.limits.totalBasisPoints - initialWeight,
-            MIN_WEIGHT_BASIS_POINTS
-        );
-        candidate.weightBasisPoints = initialWeight;
-        candidate.weight = initialWeight / 100;
-        nextEntries = [...redistributed, candidate];
-    }
-
-    if (fallbackRuleWouldCycle(primaryConditionID, nextEntries)) {
-        setStatus('That benchmark would create a fallback loop.');
-        return false;
-    }
-    if (!beginMutation()) {
-        return false;
-    }
-
-    replaceFallbackRuleEntries(primaryConditionID, nextEntries);
-    fallbackDraftPrimaryID = null;
-    fallbackTargetPrimaryID = primaryConditionID;
-    selectedFallbackPrimaryID = primaryConditionID;
-    selectedFallbackComponentID = conditionID;
+    if (!beginMutation()) return false;
+    replaceFallbackRuleEntries(primary.ID, [...entries, fallbackComponentFromBenchmark(object)]);
+    fallbackTargetPrimaryID = primary.ID;
     setStatus('');
     renderPie();
     renderBenchmarks();
     scheduleSave();
+    additionToast.show('Added to your fallback list.');
     return true;
 }
 
-function removeSelectedFallbackComponent() {
+function moveFallbackMember(conditionID, targetIndex) {
+    if (!isInlineFallbackEditing()) return false;
     const primary = selectedInlineFallbackPrimary();
-    const rule = primary ? fallbackRuleFor(primary.ID) : null;
-    if (!primary || !rule || !isInlineFallbackTargetActive()) {
-        return false;
-    }
-    const conditionID = Number(selectedFallbackComponentID);
-    if (!rule.entries.some(entry => Number(entry.conditionID) === conditionID)) {
-        return false;
-    }
-    if (!beginMutation()) {
-        return false;
-    }
-
-    const remaining = rule.entries.filter(entry => Number(entry.conditionID) !== conditionID);
-    const redistributed = distributeToTarget(
-        remaining,
-        state.limits.totalBasisPoints,
-        MIN_WEIGHT_BASIS_POINTS
-    );
-    const primaryConditionID = Number(primary.ID);
-    replaceFallbackRuleEntries(primaryConditionID, redistributed);
-    fallbackDraftPrimaryID = redistributed.length === 0 ? primaryConditionID : null;
-    fallbackTargetPrimaryID = primaryConditionID;
-    selectedFallbackPrimaryID = primaryConditionID;
-    selectedFallbackComponentID = redistributed[0]?.conditionID ?? null;
+    const entries = primary ? fallbackRuleFor(primary.ID)?.entries : null;
+    const index = entries?.findIndex((entry, position) => familyEntryKey(entry, position) === conditionID) ?? -1;
+    if (index < 0 || targetIndex < 0 || targetIndex >= entries.length || index === targetIndex) return false;
+    const next = cloneEntries(entries);
+    next.splice(targetIndex, 0, next.splice(index, 1)[0]);
+    if (!beginMutation()) return false;
+    replaceFallbackRuleEntries(primary.ID, next);
     renderPie();
     renderBenchmarks();
     scheduleSave();
     return true;
 }
+
+function removeFallbackMember(conditionID) {
+    if (!isInlineFallbackEditing()) return false;
+    const primary = selectedInlineFallbackPrimary();
+    const rule = primary ? fallbackRuleFor(primary.ID) : null;
+    if (!rule || !rule.entries.some((entry, index) => familyEntryKey(entry, index) === conditionID)) return false;
+    const entries = rule.entries.filter((entry, index) => familyEntryKey(entry, index) !== conditionID);
+    if (!beginMutation()) return false;
+    replaceFallbackRuleEntries(primary.ID, entries);
+    renderPie();
+    renderBenchmarks();
+    scheduleSave();
+    return true;
+}
+
+const familyView = createFamilyView({ container: inlineFallbackChart,
+    getMemberURL: getBenchmarkMemberURL, onInspectVersion: onBenchmarkInspection,
+    onMove: moveFallbackMember, onRemove: removeFallbackMember });
+
+function focusPersonalBenchmark(object) {
+    state.selectedObjectID = Number(object.ID);
+    deactivateInlineFallbackTarget();
+    state.selectedFamilyKey = null;
+    state.workspaceView = 'focus';
+    applyWorkspaceView({ animate: true });
+    renderModeState(); renderPie(); renderBenchmarks(); renderBenchmarkSummary();
+}
+
+function applyFallbackConfiguration(primary, choice, action) {
+    if (state.mode !== 'personal' || state.loading) return false;
+    if (!choice.community && (excludedFromRanking(primary) || choice.entries.some(excludedFromRanking))) {
+        setStatus(AA_EXCLUSION_MESSAGE); return false;
+    }
+    if (action === 'replace' || state.personalEntries.some(entry => Number(entry.conditionID) === Number(primary.ID))) {
+        if (!state.personalEntries.some(entry => Number(entry.conditionID) === Number(primary.ID)) || !beginMutation()) return false;
+        replaceFallbackRuleEntries(primary.ID, choice.community ? null : choice.entries,
+            choice.configureOwn ? 'custom' : choice.selectionSource ?? 'selected');
+        const rule = fallbackRuleFor(primary.ID);
+        if (rule) rule.familyID = choice.familyID;
+        state.selectedObjectID = primary.ID;
+        scheduleSave();
+    } else {
+        const object = choice.entries.length ? { ...primary, isFamily: true, familyEntries: choice.entries,
+            familyID: choice.familyID, familyKey: choice.key } : primary;
+        if (!addObjectToPersonalPie(object)) return false;
+    }
+    fallbackEditorScope = null;
+    deactivateInlineFallbackTarget();
+    state.personalFallbackExpanded = true;
+    writeWorkspacePreferences(state);
+    focusPersonalBenchmark(primary);
+    if (choice.configureOwn) beginInlineFallbackEditing(primary);
+    return true;
+}
+
+function openInlineFallbackPicker() {
+    const primary = selectedInlineFallbackPrimary();
+    if (primary && !state.loading && !isInlineFallbackEditing()) fallbackPicker.open(primary, { action: 'replace',
+        getReturnFocus: () => inlineFallbackToggle });
+}
+
+inlineFallbackConfigurations.addEventListener('click', () => {
+    if (isInlineFallbackEditing()) finishInlineFallbackEditing();
+    openInlineFallbackPicker();
+});
+
+inlineFallbackEdit.addEventListener('click', () => beginInlineFallbackEditing());
+inlineFallbackDone.addEventListener('click', finishInlineFallbackEditing);
+
+addFallbackBenchmarkButton.addEventListener('click', () => {
+    if (!activateInlineFallbackTarget()) return;
+    if (window.matchMedia('(hover: hover)').matches) benchmarkSearch.focus({ preventScroll: true });
+    benchmarkCard.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block: 'nearest' });
+});
+
 function addObjectToPersonalPie(object) {
+    if (excludedFromRanking(object) || object.familyEntries?.some(excludedFromRanking)) {
+        setStatus(AA_EXCLUSION_MESSAGE); return false;
+    }
     const existing = state.personalEntries.find(entry => Number(entry.conditionID) === Number(object.ID));
     if (existing) {
+        if (object.isFamily && familyKey(existing.conditionID, fallbackRuleFor(existing.conditionID)?.entries ?? []) !== object.familyKey) {
+            if (!beginMutation()) return false;
+            replaceFallbackRuleEntries(existing.conditionID, object.familyEntries);
+            fallbackRuleFor(existing.conditionID).familyID = object.familyID;
+            scheduleSave();
+        }
         state.selectedObjectID = existing.conditionID;
         return true;
     }
-    if (!beginMutation()) {
-        return false;
-    }
     if (state.personalEntries.length >= state.limits.maxPieItems) {
-        setStatus(`Personal Weights can contain up to ${state.limits.maxPieItems} benchmarks`);
-        state.undoSnapshot = null;
-        updateUndoState();
+        setStatus(`Personal Weights can contain up to ${state.limits.maxPieItems} entries`);
         return false;
     }
+    if (!beginMutation()) return false;
     const initialWeight = state.personalEntries.length === 0
         ? state.limits.totalBasisPoints
         : Math.min(
@@ -1240,15 +1495,36 @@ function addObjectToPersonalPie(object) {
         conditionKey: object.conditionKey,
         conditionName: object.conditionName,
         isDefaultCondition: Boolean(object.isDefaultCondition),
+        isPrimaryCondition: object.isPrimaryCondition,
+        lowCoverage: object.lowCoverage,
         type: object.type,
+        scoredModelCount: Number(object.scoredModelCount ?? 0),
         weightBasisPoints: initialWeight,
         weight: initialWeight / 100
     };
+    if (isTopicReference(object)) {
+        Object.assign(newEntry, { referenceContextID: object.referenceContextID,
+            categoryID: object.categoryID, topicName: object.topicName, sceneName: object.sceneName,
+            sceneID: object.sceneID, url: object.url, description: object.description, isPrivate: object.isPrivate });
+        delete newEntry.benchmarkID;
+        delete newEntry.scoredModelCount;
+    }
     state.personalEntries = [...existingEntries, newEntry];
+    if (object.isFamily) {
+        replaceFallbackRuleEntries(newEntry.conditionID, object.familyEntries);
+        fallbackRuleFor(newEntry.conditionID).familyID = object.familyID;
+    }
+    hiddenPersonalBenchmarkIDs.delete(newEntry.conditionID);
     registerPieEntries([newEntry]);
     state.selectedObjectID = newEntry.conditionID;
     scheduleSave();
+    if (!isTopicReference(newEntry)) additionToast.show('Added to Personal Weights.');
     return true;
+}
+
+function objectInPersonalPie(object) {
+    const exists = state.personalEntries.some(entry => entry.conditionID === Number(object.ID));
+    return exists && (!object.isFamily || familyKey(Number(object.ID), fallbackRuleFor(object.ID)?.entries ?? []) === object.familyKey);
 }
 
 function removeObjectFromPersonalPie(object) {
@@ -1264,11 +1540,12 @@ function removeObjectFromPersonalPie(object) {
         state.personalEntries.filter(entry => Number(entry.conditionID) !== objectID),
         state.limits.totalBasisPoints
     );
+    hiddenPersonalBenchmarkIDs.add(objectID);
     state.personalFallbackRules = state.personalFallbackRules.filter(rule => (
         Number(rule.primaryConditionID) !== objectID
     ));
     if (state.mode === 'personal' && Number(state.selectedObjectID) === objectID) {
-        deactivateInlineFallbackTarget({ discardDraft: true });
+        deactivateInlineFallbackTarget();
         state.selectedObjectID = state.personalEntries[0]?.conditionID ?? null;
         if (state.workspaceView === 'focus') {
             state.workspaceView = 'leaderboard';
@@ -1278,9 +1555,17 @@ function removeObjectFromPersonalPie(object) {
     return true;
 }
 
+let pendingBenchmarkFocus = null;
 function renderBenchmarks() {
+    // Keep the current list's geometry until its same-scope recovery is ready.
+    if (state.loading && rankingRecovery?.snapshotID === state.rankingPagination?.snapshotID
+        && rankingRecovery?.scope === rankingRecoveryScope() && rankingRecovery?.mode === state.mode) return;
+    const scrollTop = benchmarkRows.scrollTop;
+    const familyFocus = benchmarkRowFocus.captureFocus(benchmarkRows)
+        ?? (document.activeElement === document.body ? pendingBenchmarkFocus : null);
     benchmarkRows.replaceChildren();
     const personalControlsActive = state.mode === 'personal';
+    benchmarkCard?.classList.toggle('has-personal-controls', personalControlsActive);
     const fallbackTargetActive = isInlineFallbackTargetActive();
     const fallbackPrimary = fallbackTargetActive ? selectedInlineFallbackPrimary() : null;
     const activeFallbackRule = fallbackPrimary ? fallbackRuleFor(fallbackPrimary.ID) : null;
@@ -1289,281 +1574,479 @@ function renderBenchmarks() {
     )));
     benchmarkCard?.classList.toggle('is-fallback-target-active', fallbackTargetActive);
     const canPinPersonal = personalControlsActive
-        && state.authenticated
         && state.personalEntries.length > 0;
     if (!canPinPersonal) {
         state.pinPersonalBenchmarks = false;
     }
-    benchmarkPersonalPin.hidden = !canPinPersonal;
-    benchmarkPersonalPin.disabled = !canPinPersonal;
+    benchmarkPersonalPin.hidden = !canPinPersonal || fallbackTargetActive;
+    benchmarkPersonalPin.disabled = !canPinPersonal || fallbackTargetActive;
     benchmarkPersonalPin.setAttribute('aria-pressed', String(state.pinPersonalBenchmarks));
     benchmarkPersonalPin.setAttribute(
         'aria-label',
         state.pinPersonalBenchmarks ? 'Stop pinning my benchmarks to the top' : 'Pin my benchmarks to the top'
     );
-    benchmarkPersonalPin.title = canPinPersonal
+    benchmarkPersonalPin.dataset.tooltip = canPinPersonal
         ? state.pinPersonalBenchmarks ? 'Restore public-weight order' : 'Pin my benchmarks to the top'
         : 'Add benchmarks to Personal Weights to use this';
     if (state.loading) {
+        referenceSearch.render(document.createElement('div'), '', false);
         const loading = document.createElement('div');
         loading.className = 'bp-loading-state';
         loading.textContent = 'Loading benchmarks…';
         benchmarkRows.append(loading);
         return;
     }
-    const query = benchmarkSearch.value.trim().toLowerCase();
+    const topicResults = document.createElement('section');
+    benchmarkRows.append(topicResults);
+    referenceSearch.render(topicResults, benchmarkSearch.value.trim(), !fallbackTargetActive);
+    if (state.benchmarks.length === 0 && state.rankingPageLoading.benchmarks) {
+        const loading = document.createElement('div');
+        loading.className = 'bp-loading-state';
+        loading.textContent = 'Loading benchmarks…';
+        benchmarkRows.append(loading);
+        return;
+    }
     const personalWeightsByID = new Map(state.personalEntries.map(entry => [
         Number(entry.conditionID),
         Number(entry.weight)
     ]));
-    const personalWeightFor = object => personalWeightsByID.has(Number(object.ID))
+    const personalWeightFor = object => object.isFamily && !objectInPersonalPie(object) ? null : personalWeightsByID.has(Number(object.ID))
         ? personalWeightsByID.get(Number(object.ID))
         : object.personalWeight;
-    const objects = state.benchmarks.filter(object => (
-        !query
-        || object.name.toLowerCase().includes(query)
-        || benchmarkConditionLabel(object).toLowerCase().includes(query)
-        || object.tags?.some(tag => tag.toLowerCase().includes(query))
-    )).sort((left, right) => {
-        const leftIsPinned = state.pinPersonalBenchmarks && personalWeightsByID.has(Number(left.ID));
-        const rightIsPinned = state.pinPersonalBenchmarks && personalWeightsByID.has(Number(right.ID));
-        if (leftIsPinned !== rightIsPinned) {
-            return rightIsPinned - leftIsPinned;
+    const objects = state.mode === 'personal'
+        ? state.benchmarks.filter(object => !hiddenPersonalBenchmarkIDs.has(Number(object.ID)))
+        : state.benchmarks;
+    if (objects.length === 0 && !state.rankingPagination?.benchmarks.other.total
+        && !state.rankingPagination?.benchmarks.lowCoverage.total) {
+        if (state.benchmarks.length > 0 && state.rankingPagination?.benchmarks.primary.hasMore
+            && !state.rankingPageError.benchmarks) {
+            const loading = document.createElement('div');
+            loading.className = 'bp-loading-state';
+            loading.textContent = 'Loading benchmarks…';
+            benchmarkRows.append(loading);
+            window.queueMicrotask(loadVisibleBenchmarkPage);
+            return;
         }
-        if (leftIsPinned && rightIsPinned) {
-            const personalDifference = personalWeightFor(right) - personalWeightFor(left);
-            if (personalDifference !== 0) {
-                return personalDifference;
-            }
-        }
-        const publicDifference = Number(right.publicWeight) - Number(left.publicWeight);
-        if (publicDifference !== 0) {
-            return publicDifference;
-        }
-        return Number(left.rank) - Number(right.rank)
-            || left.name.localeCompare(right.name)
-            || benchmarkConditionLabel(left).localeCompare(benchmarkConditionLabel(right));
-    });
-    if (objects.length === 0) {
         const empty = document.createElement('div');
         empty.className = 'bp-empty-state';
-        empty.textContent = 'No benchmarks found';
+        empty.textContent = state.rankingPageError.benchmarks || (state.benchmarks.length > 0
+            ? 'No other benchmarks in this view.'
+            : 'No benchmarks found');
         benchmarkRows.append(empty);
-        return;
+        if (state.rankingPageError.benchmarks) {
+            const retry = document.createElement('button');
+            retry.type = 'button';
+            retry.textContent = 'Retry';
+            retry.addEventListener('click', () => { void loadNextRankingPage('benchmarks'); });
+            empty.append(retry);
+        } else appendBenchmarkDiscoveryActions(empty);
     }
 
+    const groupPages = currentBenchmarkPages();
+    const hasOtherVersions = (groupPages?.other.total ?? 0) > 0;
+    const lowCoverageRows = document.createElement('div');
+    lowCoverageRows.id = 'benchmark-low-rows';
+    lowCoverageRows.className = 'bp-benchmark-low-rows';
+    const otherRows = document.createElement('div');
+    otherRows.id = 'benchmark-other-rows';
+    otherRows.className = 'bp-benchmark-low-rows';
     const hasPinnedObjects = state.pinPersonalBenchmarks
-        && objects.some(object => personalWeightsByID.has(Number(object.ID)));
+        && objects.some(object => (currentBenchmarkGroup(object) === 'primary'
+            || (currentBenchmarkGroup(object) === 'other' && otherConditionsExpanded)
+            || (currentBenchmarkGroup(object) === 'lowCoverage' && (!hasOtherVersions || otherConditionsExpanded) && lowCoverageExpanded))
+            && objectInPersonalPie(object));
     let encounteredUnpinnedRow = false;
-    objects.forEach(object => {
-        const inPersonalPie = state.personalEntries.some(entry => Number(entry.conditionID) === Number(object.ID));
-        const pinned = state.pinPersonalBenchmarks && inPersonalPie;
+    const createRow = object => {
+        const inPersonalPie = objectInPersonalPie(object);
+        const pinned = !object.isFamily && state.pinPersonalBenchmarks && inPersonalPie;
         const row = document.createElement('div');
         row.className = 'bp-benchmark-row';
-        const selected = Number(state.selectedObjectID) === Number(object.ID);
+        row.dataset.conditionId = String(object.ID);
+        if (object.isFamily) row.dataset.familyKey = object.familyKey;
+        row.classList.toggle('is-family', object.isFamily === true);
+        const selected = !fallbackTargetActive && Number(state.selectedObjectID) === Number(object.ID)
+            && (!object.isFamily || (state.mode === 'personal' ? inPersonalPie : state.selectedFamilyKey === object.familyKey));
         row.classList.toggle('selected', selected);
-        row.classList.toggle('in-personal-pie', inPersonalPie);
+        row.classList.toggle('in-personal-pie', inPersonalPie && !fallbackTargetActive);
         row.classList.toggle('is-personal-pinned', pinned);
         row.classList.toggle('in-fallback-mix', activeFallbackConditionIDs.has(Number(object.ID)));
         row.classList.toggle('is-fallback-primary', Number(fallbackPrimary?.ID) === Number(object.ID));
-        if (hasPinnedObjects && !pinned && !encounteredUnpinnedRow) {
+        if (!object.isFamily && hasPinnedObjects && !pinned && !encounteredUnpinnedRow) {
             row.classList.add('after-personal-pinned');
             encounteredUnpinnedRow = true;
         }
         row.classList.toggle('is-muted', state.workspaceView === 'focus' && state.mode === 'personal' && !selected);
-        row.tabIndex = 0;
-        row.setAttribute('role', 'button');
-        const accessibleName = benchmarkAccessibleName(object);
-        const focusedName = selected
-            ? accessibleName
-            : benchmarkAccessibleName(selectedBenchmark()) || 'the selected benchmark';
-        const exitsPersonalFocus = state.workspaceView === 'focus' && state.mode === 'personal';
-        row.setAttribute('aria-label', fallbackTargetActive
-            ? activeFallbackConditionIDs.has(Number(object.ID))
-                ? `Select ${accessibleName} in Fallback`
-                : Number(fallbackPrimary?.ID) === Number(object.ID)
-                    ? `${accessibleName} cannot be its own Fallback`
-                    : `Add ${accessibleName} to Fallback`
-            : exitsPersonalFocus
-                ? `Exit weight adjustment for ${focusedName}`
-                : state.mode === 'personal' && !inPersonalPie
-                    ? `Add ${accessibleName} to Personal Weights and focus it`
-                    : `${selected && state.workspaceView === 'focus' ? 'Close focus for' : 'Focus'} ${accessibleName}`);
+        row.setAttribute('role', 'group');
+        const accessibleName = object.isFamily
+            ? [benchmarkAccessibleName(object), ...object.familyEntries.map(benchmarkAccessibleName)].join(' → ')
+            : benchmarkAccessibleName(object);
+        row.setAttribute('aria-label', object.isFamily ? `Fallback configuration for ${accessibleName}` : `Benchmark ${accessibleName}`);
+        const hasWeight = state.mode === 'personal' ? inPersonalPie : Number(object.publicWeight) > 0;
+        if (hasWeight) {
+            row.tabIndex = 0;
+            row.dataset.benchmarkControl = 'selection';
+        }
 
         const rank = document.createElement('span');
         rank.className = 'bp-benchmark-rank';
-        rank.textContent = String(object.rank);
+        rank.textContent = object.isFamily ? '' : String(object.rank);
 
-        const identity = document.createElement('span');
+        let identity = document.createElement('span');
         identity.className = 'bp-benchmark-identity';
-        const name = document.createElement('span');
-        name.className = 'bp-benchmark-name';
-        name.textContent = object.name;
+        const name = createBenchmarkInformationLink(object, { getURL: getBenchmarkMemberURL,
+            onInspect: onBenchmarkInspection, className: 'bp-benchmark-name' });
         identity.append(name);
-        const conditionLabel = benchmarkConditionLabel(object);
-        if (conditionLabel) {
-            const condition = document.createElement('span');
-            condition.className = 'bp-benchmark-condition';
-            condition.textContent = conditionLabel;
-            identity.append(condition);
-        }
-        identity.title = accessibleName;
+        const scoreCount = createEvidenceCount(object.scoreCount, { modelCount: object.scoredModelCount });
+        scoreCount.classList.add('bp-benchmark-score-count');
+        identity.append(scoreCount);
+        identity.dataset.tooltip = `${accessibleName}, ${object.scoreCount} approved scores from ${object.scoredModelCount} models`;
 
         const publicValue = document.createElement('span');
-        publicValue.className = 'bp-benchmark-weight';
+        publicValue.className = 'bp-benchmark-weight bp-benchmark-public-weight';
+        publicValue.hidden = state.contextIsPrivate;
         publicValue.textContent = `${Number(object.publicWeight).toFixed(2)}%`;
 
         const personalWeight = personalWeightFor(object);
         const personalValue = document.createElement('span');
-        personalValue.className = 'bp-benchmark-weight';
+        personalValue.className = 'bp-benchmark-weight bp-benchmark-personal-weight';
         const personalWeightText = personalWeight === null ? '—' : `${Math.round(Number(personalWeight))}%`;
         personalValue.textContent = personalWeightText;
-        if (personalControlsActive && inPersonalPie && fallbackRuleFor(object.ID)) {
-            personalValue.classList.add('has-fallback');
-            personalValue.title = `${accessibleName} has a Fallback`;
-            const value = document.createElement('span');
-            value.textContent = personalWeightText;
-            const icon = document.createElement('i');
-            icon.className = 'fa-solid fa-code-branch';
-            icon.setAttribute('aria-hidden', 'true');
-            personalValue.replaceChildren();
-            personalValue.append(value, icon);
-        }
 
         const actionCell = document.createElement('span');
         actionCell.className = 'bp-benchmark-action-cell';
-        const discussion = document.createElement('a');
-        discussion.className = 'bp-row-edit-action bp-benchmark-discuss';
-        discussion.href = categoryDiscussionURL(state.categoryID, state.selectedContextValues, object.benchmarkID);
-        discussion.title = 'Discuss benchmark';
-        discussion.setAttribute('aria-label', `Discuss ${accessibleName}`);
-        discussion.innerHTML = '<i class="fa-regular fa-comment" aria-hidden="true"></i>';
-        discussion.addEventListener('click', event => event.stopPropagation());
-        actionCell.append(discussion);
-        if (state.authenticated) {
-            const edit = document.createElement('a');
-            edit.className = 'bp-row-edit-action bp-benchmark-edit';
-            edit.href = buildBenchmarkEditURL(object);
-            edit.title = 'Change benchmark';
-            edit.setAttribute('aria-label', `Change ${accessibleName}`);
-            edit.innerHTML = '<i class="fa-solid fa-pencil" aria-hidden="true"></i>';
-            edit.addEventListener('click', event => event.stopPropagation());
-            actionCell.append(edit);
+        if (personalControlsActive) {
+            const alreadyAdded = fallbackTargetActive
+                ? !object.isFamily && (activeFallbackConditionIDs.has(Number(object.ID)) || Number(fallbackPrimary?.ID) === Number(object.ID))
+                : inPersonalPie;
+            const unavailable = fallbackTargetActive && object.isFamily;
+            if (!alreadyAdded && !unavailable) {
+                const add = document.createElement('button'); add.type = 'button';
+                add.className = 'bp-benchmark-add'; add.dataset.benchmarkControl = 'add';
+                const excluded = excludedFromRanking(object) || object.familyEntries?.some(excludedFromRanking);
+                add.setAttribute('aria-disabled', String(Boolean(excluded)));
+                const target = fallbackTargetActive ? 'Fallback' : 'Personal Weights';
+                const label = `Add ${accessibleName} to ${target}`;
+                add.dataset.tooltip = excluded ? AA_EXCLUSION_MESSAGE : label;
+                add.setAttribute('aria-label', excluded ? `${label}. ${AA_EXCLUSION_MESSAGE}` : label);
+                add.innerHTML = '<i class="fa-solid fa-plus" aria-hidden="true"></i>';
+                const addLabel = document.createElement('span');
+                addLabel.className = 'bp-benchmark-add-label';
+                addLabel.textContent = 'Add';
+                const addTarget = document.createElement('span');
+                addTarget.className = 'bp-benchmark-add-target';
+                addTarget.textContent = fallbackTargetActive ? ' to Fallback' : ' to Pie';
+                addLabel.append(addTarget);
+                add.append(addLabel);
+                add.addEventListener('click', event => {
+                    event.stopPropagation();
+                    if (excluded) { setStatus(AA_EXCLUSION_MESSAGE); return; }
+                    if (isInlineFallbackTargetActive()) {
+                        addObjectToFallbackChain(object);
+                        return;
+                    }
+                    if (!addObjectToPersonalPie(object)) return;
+                    focusPersonalBenchmark(object);
+                });
+                row.classList.add('has-add-action');
+                actionCell.append(add);
+            }
+        }
 
-            if (personalControlsActive && inPersonalPie) {
+        if (personalControlsActive && inPersonalPie && !fallbackTargetActive) {
+            if (object.isFamily) {
+                const applied = document.createElement('span');
+                applied.className = 'bp-benchmark-applied';
+                applied.setAttribute('role', 'img');
+                applied.setAttribute('aria-label', `Applied fallback configuration for ${accessibleName}`);
+                applied.dataset.tooltip = 'Applied to Personal Weights';
+                applied.innerHTML = '<i class="fa-solid fa-check" aria-hidden="true"></i>';
+                actionCell.append(applied);
+            } else {
                 actionCell.classList.add('has-personal-remove');
                 const remove = document.createElement('button');
                 remove.type = 'button';
                 remove.className = 'bp-personal-weight-remove';
-                remove.title = 'Remove from Personal Weights';
+                remove.dataset.benchmarkControl = 'remove';
+                remove.dataset.tooltip = 'Remove from Personal Weights';
                 remove.setAttribute('aria-label', `Remove ${accessibleName} from Personal Weights`);
                 remove.innerHTML = '<i class="fa-regular fa-trash-can" aria-hidden="true"></i>';
                 remove.addEventListener('click', event => {
                     event.stopPropagation();
-                    if (!removeObjectFromPersonalPie(object)) {
-                        return;
-                    }
+                    if (!removeObjectFromPersonalPie(object)) return;
                     renderAll();
                 });
                 actionCell.append(remove);
             }
         }
 
-        const activate = event => {
-            if (event.target.closest('a, button')) {
-                return;
-            }
-            if (event.type === 'keydown' && event.key !== 'Enter' && event.key !== ' ') {
-                return;
-            }
-            if (event.type === 'keydown') {
-                event.preventDefault();
-            }
-            if (fallbackTargetActive) {
-                addObjectToFallbackMix(object);
-                return;
-            }
-            deactivateInlineFallbackTarget({ discardDraft: true });
-            if (state.workspaceView === 'focus' && state.mode === 'personal') {
-                setWorkspaceView('leaderboard');
-                return;
-            }
-            if (state.workspaceView === 'focus' && selected) {
-                setWorkspaceView('leaderboard');
-                return;
-            }
-            if (state.mode === 'personal' && !addObjectToPersonalPie(object)) {
-                return;
-            }
-            state.selectedObjectID = Number(object.ID);
-            state.workspaceView = 'focus';
-            applyWorkspaceView({ animate: true });
-            renderModeState();
-            renderPie();
-            renderBenchmarks();
-            renderBenchmarkSummary();
-        };
-        row.addEventListener('click', activate);
-        row.addEventListener('keydown', activate);
-        row.append(rank, identity, personalValue, publicValue, actionCell);
-        benchmarkRows.append(row);
+        row.addEventListener('click', event => {
+            if (event.defaultPrevented || event.target.closest('a, button')
+                || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+            onBenchmarkActivation(event, object);
+        });
+        row.addEventListener('keydown', event => {
+            if (event.target !== row || (event.key !== 'Enter' && event.key !== ' ')) return;
+            event.preventDefault();
+            onBenchmarkActivation(event, object);
+        });
+        row.append(rank, identity, personalValue, publicValue);
+        if (actionCell.childElementCount) row.append(actionCell);
+        return row;
+    };
+    objects.forEach(object => {
+        const entry = document.createElement('div'); entry.className = 'bp-benchmark-entry';
+        entry.append(createRow(object));
+        const group = currentBenchmarkGroup(object);
+        if (group === 'lowCoverage') lowCoverageRows.append(entry);
+        else if (group === 'other') otherRows.append(entry);
+        else benchmarkRows.append(entry);
     });
+    const appendPageFooter = (container, group) => {
+        const page = groupPages?.[group];
+        const key = benchmarkPageKey(group);
+        if (!page?.hasMore && !state.rankingPageError[key]) return;
+        const footer = document.createElement('div');
+        footer.className = 'bp-ranking-page-footer';
+        footer.dataset.benchmarkGroup = group;
+        footer.textContent = state.rankingPageLoading[key] ? 'Loading benchmarks…' : state.rankingPageError[key] || '';
+        if (!state.rankingPageLoading[key]) {
+            const more = document.createElement('button');
+            more.type = 'button';
+            more.textContent = state.rankingPageError[key] ? 'Retry' : 'Load more';
+            more.addEventListener('click', () => { void loadNextRankingPage('benchmarks', group); });
+            footer.append(more);
+        }
+        container.append(footer);
+    };
+    appendPageFooter(benchmarkRows, 'primary');
+    for (const group of ['lowCoverage', 'other']) {
+        if (group === 'other' && !hasOtherVersions) continue;
+        const count = (groupPages?.[group].total ?? 0) + (group === 'other' ? groupPages?.lowCoverage.total ?? 0 : 0);
+        if (!count) continue;
+        const rows = group === 'other' ? otherRows : lowCoverageRows;
+        const expanded = group === 'other' ? otherConditionsExpanded : lowCoverageExpanded;
+        const toggle = document.createElement('button');
+        toggle.type = 'button';
+        toggle.className = 'bp-benchmark-low-toggle';
+        toggle.setAttribute('aria-controls', rows.id);
+        toggle.setAttribute('aria-expanded', String(expanded));
+        const title = document.createElement('span');
+        title.textContent = `${count} ${group === 'other' ? 'other' : 'lower-coverage'} benchmark ${count === 1 ? 'version' : 'versions'}`;
+        toggle.append(title);
+        mountDisclosureChevron(toggle);
+        const help = document.createElement('button');
+        help.type = 'button';
+        help.className = 'bp-coverage-help';
+        help.setAttribute('aria-label', `About ${group === 'other' ? 'other' : 'lower-coverage'} benchmark versions`);
+        setHelpText(help, group === 'other' ? 'More versions of the same tests. You can inspect or add any of them.'
+            : 'These versions have far fewer scores than another version of the same benchmark. You can still inspect and add them.');
+        help.innerHTML = '<i class="fa-regular fa-circle-question" aria-hidden="true"></i>';
+        const controls = document.createElement('div'); controls.className = 'bp-benchmark-low-controls';
+        controls.append(toggle, help);
+        toggle.addEventListener('click', () => {
+            const nextExpanded = !(group === 'other' ? otherConditionsExpanded : lowCoverageExpanded);
+            if (group === 'other') otherConditionsExpanded = nextExpanded;
+            else lowCoverageExpanded = nextExpanded;
+            toggle.setAttribute('aria-expanded', String(nextExpanded));
+            if (nextExpanded) {
+                void setVisible(rows, true, { collapse: true }).then(() => {
+                    if ((group === 'other' ? otherConditionsExpanded : lowCoverageExpanded) && rows.isConnected) {
+                        renderBenchmarks();
+                        void loadNextRankingPage('benchmarks', group);
+                    }
+                });
+            }
+            else void setVisible(rows, false, { collapse: true }).then(() => {
+                if (!(group === 'other' ? otherConditionsExpanded : lowCoverageExpanded) && rows.isConnected) renderBenchmarks();
+            });
+        });
+        const parent = group === 'other' || !hasOtherVersions ? benchmarkRows : otherRows;
+        parent.append(controls);
+        rows.hidden = !expanded;
+        if (group === 'other') {
+            const footer = document.createElement('div');
+            appendPageFooter(footer, group);
+            const nested = rows.querySelector('.bp-benchmark-low-controls');
+            if (footer.firstChild) rows.insertBefore(footer.firstChild, nested);
+        } else appendPageFooter(rows, group);
+        parent.append(rows);
+    }
+    benchmarkRows.scrollTop = scrollTop;
+    pendingBenchmarkFocus = document.body.classList.contains('discussion-open')
+        || benchmarkRowFocus.restoreFocus(benchmarkRows, familyFocus) ? null : familyFocus;
+    window.queueMicrotask(loadVisibleBenchmarkPage);
 }
 
 function renderModeState() {
+    renderReferenceState();
     const personal = state.mode === 'personal';
+    const indexTitle = personal ? 'Personal AI Index' : 'Public AI Index';
+    modelIndexHeading.textContent = indexTitle;
+    modelIndexTab.textContent = indexTitle;
+    if (workspaceHeadline.dataset.mode !== state.mode) {
+        workspaceHeadline.dataset.mode = state.mode;
+        headlineVariants.forEach(variant => { variant.hidden = variant.dataset.headlineMode !== state.mode; });
+        animateContent(workspaceHeadline, { translate: false });
+    }
+    document.body.classList.toggle('bp-private-category', state.contextIsPrivate);
+    personalEmptyPublicReturn.hidden = state.contextIsPrivate;
+    const storageWarning = !state.guestDraftStorageAvailable && state.personalSavePending;
+    guestDraftNotice.hidden = !state.usingGuestDraft && !state.legacyDraftAvailable
+        && !state.personalRecoveryBlocked && !state.personalDraftUnavailable && !storageWarning;
+    if (!guestDraftNotice.hidden) {
+        guestDraftMessage.textContent = state.personalRecoveryBlocked
+            ? state.personalSaveError || 'This stored draft cannot be safely restored. Discard it or refresh to review it.'
+            : state.personalDraftUnavailable
+                ? 'Your draft is kept, but its ranking could not be previewed. Retry or discard it.'
+            : state.legacyDraftAvailable
+                ? 'An older draft in this tab has no account information. Recover it only if it is yours.'
+            : !state.guestDraftStorageAvailable
+                ? 'Browser storage is unavailable. Keep this tab open until your changes are saved.'
+            : state.recoveredPersonalDraft
+                ? state.personalSaveRequest
+                    ? 'Your changes were recovered. Confirm the earlier save before saving newer edits.'
+                    : 'Your changes were recovered. Review this mix before replacing your saved weights.'
+            : state.authenticated
+            ? state.hasSavedPersonalWeights
+                ? 'This preview is not saved. Saving will replace your weights for this topic or scene.'
+                : 'This preview is not saved to your account yet.'
+            : state.guestDraftStorageAvailable
+                ? 'This preview is temporary. Sign in to save your weights.'
+                : 'This preview is temporary and may be lost if this tab closes.';
+        guestDraftSave.textContent = state.personalDraftUnavailable ? 'Retry preview'
+            : state.legacyDraftAvailable ? 'Recover my draft'
+            : state.recoveredPersonalDraft ? 'Confirm and save'
+            : state.authenticated ? 'Save this mix' : 'Sign in to save';
+        guestDraftSave.hidden = state.personalRecoveryBlocked || storageWarning && !state.usingGuestDraft;
+        guestDraftSave.disabled = state.loading || state.saving || !state.guestDraftStorageAvailable && !state.authenticated;
+        guestDraftDiscard.hidden = !state.authenticated && !state.legacyDraftAvailable;
+    }
+    personalPieGuidance.hidden = false;
+    publicPieSummary.hidden = personal;
+    publicPieCount.textContent = `${state.publicParticipantCount.toLocaleString('en-US')} saved weight ${state.publicParticipantCount === 1 ? 'set' : 'sets'}`;
     const hasPersonalWeights = state.personalEntries.length > 0;
+    const emptyPie = !state.loading && currentPieEntries().length === 0;
+    pieCard.classList.toggle('has-empty-pie', emptyPie);
+    pieCard.classList.toggle('has-mode-selector', hasPersonalWeights && !state.contextIsPrivate);
+    compactPieMessage.textContent = personal ? 'Add a benchmark or topic to start your index.' : 'No public weights for this topic or scene yet.';
+    compactPieAction.hidden = personal;
+    compactPieAction.textContent = hasPersonalWeights ? 'View your personal weights' : 'Create personal weights';
+    pieSvg.style.touchAction = personal && state.personalEntries.length > 1 ? 'pan-x' : 'pan-y';
     const showCreatePersonal = !state.loading && !hasPersonalWeights && !personal;
     const showEmptyPersonal = !state.loading && !hasPersonalWeights && personal;
-    modeSwitch.hidden = !hasPersonalWeights;
+    pieSvg.toggleAttribute('hidden', showEmptyPersonal);
+    personalPieEmpty.hidden = !showEmptyPersonal;
+    pieCard.classList.toggle('has-empty-personal-pie', showEmptyPersonal);
+    personalPieGuidance.hidden = emptyPie;
+    modeSwitch.hidden = !hasPersonalWeights || state.contextIsPrivate;
     personalPieCreate.hidden = !showCreatePersonal;
-    personalEmptyMode.hidden = !showEmptyPersonal;
+    personalEmptyMode.hidden = !showEmptyPersonal && !state.contextIsPrivate;
     pieCard.classList.toggle('has-personal-create-cta', showCreatePersonal);
     modeSwitch?.classList.toggle('is-public', !personal);
     personalModeButton.classList.toggle('selected', personal);
     publicModeButton.classList.toggle('selected', !personal);
     personalModeButton.setAttribute('aria-selected', String(personal));
     publicModeButton.setAttribute('aria-selected', String(!personal));
-    if (personal && !state.authenticated) {
-        pieInstruction.textContent = 'Sign in to create Personal Weights.';
-        pieContextNote.textContent = '';
-    } else if (personal) {
-        const focusedName = state.workspaceView === 'focus'
-            ? benchmarkAccessibleName(selectedBenchmark())
-            : '';
-        pieInstruction.textContent = focusedName
-            ? window.matchMedia('(pointer: coarse)').matches
-                ? `Swipe to adjust ${focusedName}.`
-                : `Scroll to adjust ${focusedName}.`
-            : state.personalEntries.length === 0
-                ? 'Choose a benchmark on the right to begin.'
-            : window.matchMedia('(pointer: coarse)').matches
-                ? 'Tap a slice, then swipe to adjust.'
-                : 'Select a slice, then scroll to adjust.';
-        pieContextNote.textContent = state.personalEntries.length === 0 ? '' : 'This context only.';
-    } else {
-        pieInstruction.textContent = 'Select a slice to inspect.';
-        if (state.publicEntries.length > 0) {
-            const people = state.publicParticipantCount === 1 ? 'person' : 'people';
-            pieContextNote.textContent = `Community average · ${state.publicParticipantCount} ${people}.`;
-        } else {
-            pieContextNote.textContent = 'No community weights yet.';
-        }
-    }
+    renderSelectedWeightHeading();
+    updatePieAdjustmentStatus();
+    publishContextWeights();
 }
 
-function setMode(mode) {
-    if (fallbackWheelCommitTimer !== null) {
-        void commitPendingFallbackWheelAdjustment();
-    } else if (wheelWeightCommitTimer !== null) {
-        void commitPendingWheelAdjustment();
+function renderSelectedWeightHeading() {
+    const entries = currentPieEntries();
+    const selected = entries.find(entry => Number(entry.conditionID) === Number(state.selectedObjectID)) ?? entries[0];
+    personalPieGuidance.hidden = !selected;
+    if (isTopicReference(selected)) renderTopicLabel(pieInstruction, topicLabelText(selected));
+    else pieInstruction.textContent = selected ? benchmarkAccessibleName(selected) : '';
+    if (selected && !isTopicReference(selected) && typeof selected.scoredModelCount === 'number') {
+        updateEvidenceCount(pieModelCount, selected.scoredModelCount, { kind: 'models' });
+        if (pieModelCount.parentElement !== pieContextNote) pieContextNote.replaceChildren(pieModelCount);
+    } else pieContextNote.replaceChildren();
+}
+
+function renderReferenceState() {
+    const personal = state.mode === 'personal';
+    const actions = document.getElementById('weight-add-actions');
+    actions.hidden = !personal;
+    for (const button of actions.querySelectorAll('button')) button.disabled = state.loading;
+    renderTopicReferences(document.getElementById('topic-reference-weights'), {
+        entries: currentPieEntries(), issues: state.referenceIssues[state.mode], effectiveEntries: state.effectiveEntries[state.mode],
+        dirty: personal && state.personalRankingDirty, personal, selectedID: state.selectedObjectID,
+        onSelect: object => selectWeightedBenchmark({ ...object, publicWeight: object.weightBasisPoints / 100 }, { toggle: true }),
+        onRemove: async object => {
+            const scope = workspaceContextFingerprint();
+            if (state.loading || !await finishPendingWeightAdjustments() || scope !== workspaceContextFingerprint()) return;
+            removeObjectFromPersonalPie(object);
+        }
+    });
+    referencePicker.refresh();
+}
+
+function publishContextWeights() {
+    window.dispatchEvent(new CustomEvent('benchpoll:context-weights', { detail: {
+        categoryID: state.categoryID, categoryPath: state.categoryPath, categoryName: state.topicName,
+        contextValues: { ...state.selectedContextValues },
+        isPrivate: state.contextIsPrivate, mode: state.mode,
+        personal: state.personalEntries.map(entry => ({ conditionID: entry.conditionID, weightBasisPoints: entry.weightBasisPoints })),
+        public: state.publicEntries.map(entry => ({ conditionID: entry.conditionID, weightBasisPoints: entry.weightBasisPoints }))
+    } }));
+}
+
+let modeSwitchSequence = 0;
+let pendingPieMode = null;
+let workspaceSettledResolvers = [];
+let workspaceLoadFailed = false;
+function notifyWorkspaceSettled() {
+    if (state.loading) return;
+    const resolvers = workspaceSettledResolvers;
+    workspaceSettledResolvers = [];
+    resolvers.forEach(resolve => resolve());
+}
+function waitForWorkspace() {
+    return state.loading ? new Promise(resolve => workspaceSettledResolvers.push(resolve)) : Promise.resolve();
+}
+function renderPendingPieMode() {
+    for (const [mode, button] of [['personal', personalModeButton], ['public', publicModeButton]]) {
+        const pending = mode === pendingPieMode;
+        button.setAttribute('aria-busy', String(pending));
+        button.querySelector('.bp-pie-mode-loading').hidden = !pending;
     }
-    if (state.gestureOpen) {
-        void finishWeightGesture();
+    document.getElementById('pie-mode-status').textContent = pendingPieMode
+        ? `Loading ${pendingPieMode === 'personal' ? 'Personal' : 'Public'} Weights` : '';
+}
+async function setMode(mode) {
+    const sequence = ++modeSwitchSequence;
+    const requestedMode = mode === 'public' && !state.contextIsPrivate ? 'public' : 'personal';
+    if (requestedMode === state.mode) { pendingPieMode = null; renderPendingPieMode(); return; }
+    const contextFingerprint = state.pieContextFingerprint;
+    pendingPieMode = requestedMode;
+    renderPendingPieMode();
+    try {
+        if (!await finishPendingWeightAdjustments() || !await flushPendingPersonalPieSave()) {
+            setStatus('Your weight change was not saved. Try switching again.');
+            return;
+        }
+        await waitForWorkspace();
+        if (sequence !== modeSwitchSequence || contextFingerprint && contextFingerprint !== state.pieContextFingerprint) return;
+        if (workspaceLoadFailed) { setStatus('Could not load these weights. Refresh to retry.'); return; }
+        if (state.rankingPagination?.[requestedMode]?.hasMore && state.modelLeaderboards[requestedMode].length === 0) {
+            await loadNextRankingPage(requestedMode);
+        }
+        await document.fonts.ready;
+        if (sequence !== modeSwitchSequence || contextFingerprint && contextFingerprint !== state.pieContextFingerprint) return;
+        applyPieMode(requestedMode);
+    } catch (error) {
+        if (sequence === modeSwitchSequence) setStatus('Could not switch weights. Please try again.');
+        console.error('[BenchPoll] Weight switch failed', error);
+    } finally {
+        if (sequence === modeSwitchSequence) { pendingPieMode = null; renderPendingPieMode(); }
     }
-    deactivateInlineFallbackTarget({ discardDraft: true });
-    selectedPublicFallbackComponentID = null;
-    state.mode = mode === 'public' ? 'public' : 'personal';
+}
+function applyPieMode(mode) {
+    const previousMode = state.mode;
+    const previousPie = pieSvg.cloneNode(true);
+    deactivateInlineFallbackTarget();
+    state.mode = mode === 'public' && !state.contextIsPrivate ? 'public' : 'personal';
     writeWorkspacePreferences(state);
     const entries = currentPieEntries();
     if (!entries.some(entry => Number(entry.conditionID) === Number(state.selectedObjectID))) {
@@ -1578,6 +2061,9 @@ function setMode(mode) {
     renderBenchmarks();
     renderBenchmarkSummary();
     renderModels();
+    if (state.mode !== previousMode) {
+        void flipPie(pieSvg, previousPie, { from: previousMode, to: state.mode });
+    }
 }
 
 function renderAll() {
@@ -1603,26 +2089,61 @@ function renderAll() {
     contributeDataButton.href = contributionURL.pathname + contributionURL.search;
     updateUndoState();
     benchmarkCard?.setAttribute('aria-busy', String(state.loading));
-    modelCard?.setAttribute('aria-busy', String(state.loading));
+    modelCard?.setAttribute('aria-busy', String(state.loading || state.comparisonPending
+        || state.mode === 'personal' && state.personalRankingDirty && !state.personalRankingError));
+    notifyWorkspaceSettled();
 }
 
-function applyServerWorkspace(payload, { preserveUndo = true, personalSave = false } = {}) {
-    const previousUndo = preserveUndo ? state.undoSnapshot : null;
+function applyServerWorkspace(payload, {
+    preserveUndo = true,
+    personalSave = false,
+    usingGuestDraft = false,
+    recoveryRecord = null,
+    legacyDraftAvailable = false,
+    restoringRankingProgress = false,
+    savedPersonalWeights = payload.personalPie.entries.length > 0 && !payload.personalPie.isDraft
+} = {}) {
+    if (state.userID !== null && payload.userID !== state.userID) throw accountWriteError();
+    if (!preserveUndo) state.editHistory.clear();
     const nextContextFingerprint = workspaceContextFingerprint(
         payload.context.categoryID,
         payload.context.contextValues
     );
     const contextChanged = state.pieContextFingerprint !== nextContextFingerprint;
     if (contextChanged) {
+        state.editHistory.clear();
+        hiddenPersonalBenchmarkIDs.clear();
         resetPieVisualState();
         state.pieContextFingerprint = nextContextFingerprint;
         state.workspaceView = 'overview';
     }
     state.authenticated = Boolean(payload.authenticated);
+    state.userID = payload.userID;
+    state.usingGuestDraft = usingGuestDraft;
+    state.hasSavedPersonalWeights = savedPersonalWeights;
+    state.guestPreviewError = false;
+    state.personalRankingDirty = false;
+    state.personalRankingError = '';
+    state.rankingVersion += 1;
+    state.personalSavePending = false;
+    state.personalSaveRequest = null;
+    state.personalSaveError = '';
+    state.personalSaveConflict = false;
+    state.personalRankingRefreshNeeded = false;
+    state.personalDraftUnavailable = false;
+    state.legacyDraftAvailable = legacyDraftAvailable;
     state.categoryID = Number(payload.context.categoryID);
     state.categoryPath = String(payload.context.categoryPath || '');
+    state.topicName = String(payload.context.categoryName ?? payload.context.lineage?.at(-1)?.name ?? state.topicName ?? '');
+    state.topicSummary = String(payload.context.description ?? '');
+    state.topicCreator = payload.context.creator ?? null;
+    state.contextIsPrivate = payload.context.isPrivate === true;
+    state.scenes = (payload.context.scenes ?? []).map(scene => ({ ...scene }));
+    state.sceneID = payload.context.sceneID ?? null;
+    state.contextID = Number(payload.context.ID ?? payload.context.contextID ?? state.sceneID) || null;
+    if (state.contextIsPrivate) state.mode = 'personal';
     state.selectedContextValues = { ...payload.context.contextValues };
-    updateDiscussionEntry(state.categoryID, state.selectedContextValues);
+    updateDiscussionEntry(state.categoryID, state.selectedContextValues, state.contextIsPrivate);
     state.dimensions = payload.context.dimensions.map(dimension => ({
         ...dimension,
         options: dimension.options.map(option => ({ ...option }))
@@ -1632,50 +2153,78 @@ function applyServerWorkspace(payload, { preserveUndo = true, personalSave = fal
     state.personalEntries = cloneEntries(payload.personalPie.entries);
     state.personalFallbackRules = cloneFallbackRules(payload.personalPie.fallbackRules);
     state.publicEntries = cloneEntries(payload.publicPie.entries);
-    state.publicFallbackRules = cloneFallbackRules(payload.publicPie.fallbackRules);
+    state.referenceIssues = { personal: structuredClone(payload.personalPie.referenceIssues ?? []), public: structuredClone(payload.publicPie.referenceIssues ?? []) };
+    state.effectiveEntries = { personal: structuredClone(payload.personalPie.effectiveEntries ?? null), public: structuredClone(payload.publicPie.effectiveEntries ?? null) };
+    state.publicFamilyComposition = structuredClone(payload.publicPie.familyComposition);
+    state.personalCommunityComposition = structuredClone(payload.personalPie.communityFallbackComposition ?? []);
     registerPieEntries(state.personalEntries);
     registerPieEntries(state.publicEntries);
-    state.publicParticipantCount = Number(payload.publicPie.participantCount) || 0;
+    state.publicParticipantCount = payload.publicPie.participantCount;
     state.publicIsFallback = Boolean(payload.publicPie.isFallback);
+    invalidateRankingPages();
+    state.rankingPagination = payload.rankingPagination;
+    benchmarkFallbackCatalogue.setSnapshot(payload.rankingPagination.snapshotID, { contextChanged,
+        restoredPages: payload.rankingPagination.fallbacks ?? [] });
+    if (contextChanged || !restoringRankingProgress) {
+        lowCoverageExpanded = false;
+        otherConditionsExpanded = false;
+    }
+    state.scoreMode = payload.scoreMode;
+    renderScoringControls();
     state.benchmarks = payload.benchmarks.map(object => ({ ...object }));
+    state.benchmarkDetailsByID = new Map(state.benchmarks.filter(object => !object.isFamily).map(object => [Number(object.ID), object]));
+    for (const entry of [...state.personalEntries, ...state.publicEntries]) {
+        if (!state.benchmarkDetailsByID.has(Number(entry.conditionID))) {
+            state.benchmarkDetailsByID.set(Number(entry.conditionID), { ...entry, ID: Number(entry.conditionID) });
+        }
+    }
     state.comparison = payload.comparison;
-    renderComparisonControls(payload.comparison);
-    const requestedComparison = state.comparisonRequest ?? { mode: 'best', keys: [] };
-    if (payload.comparison.mode === requestedComparison.mode
-        && JSON.stringify([...payload.comparison.keys].sort()) === JSON.stringify([...requestedComparison.keys].sort())) {
+    comparisonControls.render(payload.comparison);
+    const requestedComparison = state.comparisonRequest ?? { mode: 'best', keys: ['model'] };
+    if (comparisonProfileKey(payload.comparison) === comparisonProfileKey({ ...requestedComparison, filters: requestedComparison.filters ?? [] })) {
         state.comparisonPending = false;
     }
     state.modelLeaderboards = {
         personal: payload.modelLeaderboards.personal.map(model => ({ ...model })),
         public: payload.modelLeaderboards.public.map(model => ({ ...model }))
     };
+    if (contextChanged) {
+        benchmarkRows.scrollTop = 0;
+        modelRows.scrollTop = 0;
+    }
     state.scoreScale = { ...payload.scoreScale };
     state.limits = { ...payload.limits };
     state.serverPersonalEntries = cloneEntries(state.personalEntries);
     state.serverPersonalFallbackRules = cloneFallbackRules(state.personalFallbackRules);
+    pieRecovery.bind(recoveryRecord);
     state.lastLoadTime = Date.parse(payload.serverTime) || Date.now();
     state.statusMessage = '';
-    state.undoSnapshot = previousUndo;
     const currentEntries = currentPieEntries();
     if (!currentEntries.some(entry => Number(entry.conditionID) === Number(state.selectedObjectID))) {
         state.selectedObjectID = currentEntries[0]?.conditionID ?? null;
+    }
+    if (state.workspaceView === 'focus' && state.selectedObjectID !== null) {
+        window.queueMicrotask(() => revealBenchmarkRow(state.selectedObjectID));
     }
     syncContextValuesToURL();
     navigationChannel.publish({
         context: payload.context,
         userID: payload.userID ?? null,
         authenticated: state.authenticated,
-        hasPersonalWeights: !state.personalIsDraft && state.personalEntries.length > 0,
+        hasPersonalWeights: state.hasSavedPersonalWeights,
         personalSave
     });
 }
 
 function workspaceLoadErrorMessage(error) {
+    if (topicReferenceError(error)) return topicReferenceError(error);
+    if (isAccountWriteError(error)) return 'Your account changed. Refresh this page before saving.';
+    if (error?.code === 'comparison_profiles_unavailable') return error.message;
     if (error?.code === 'invalid_workspace_response') {
         return error.message;
     }
     if (error?.payload?.error === 'category_not_found') {
-        return 'This category no longer exists';
+        return 'This topic no longer exists';
     }
     if (error?.payload?.error === 'ranking_root_missing') {
         return 'No ranking root is configured';
@@ -1686,11 +2235,20 @@ function workspaceLoadErrorMessage(error) {
     if (error.status >= 500) {
         return 'The ranking service is temporarily unavailable';
     }
-    return 'Could not load this ranking context';
+    return 'Could not load this ranking. Please retry.';
 }
 
 function renderLoadError(error) {
+    state.workspaceLoadError = error;
+    const accountChanged = isAccountWriteError(error);
+    if (accountChanged) state.accountWriteBlocked = true;
     state.loading = false;
+    clearRankingStatus();
+    workspaceLoadFailed = true;
+    invalidateRankingPages();
+    benchmarkCard?.setAttribute('aria-busy', 'false');
+    modelCard?.setAttribute('aria-busy', 'false');
+    notifyWorkspaceSettled();
     const message = workspaceLoadErrorMessage(error);
     benchmarkRows.replaceChildren();
     modelRows.replaceChildren();
@@ -1701,65 +2259,156 @@ function renderLoadError(error) {
         text.textContent = message;
         const retry = document.createElement('button');
         retry.type = 'button';
-        retry.textContent = 'Retry';
-        retry.addEventListener('click', () => loadWeightedWorkspace());
+        retry.textContent = accountChanged ? 'Refresh page' : 'Retry';
+        retry.addEventListener('click', () => accountChanged ? window.location.reload()
+            : loadWeightedWorkspace({ retryProfiles: Boolean(comparisonProfileFailure) }));
         errorState.append(text, retry);
         container.append(errorState);
     });
     setStatus(message);
 }
 
-async function loadWeightedWorkspace({ resetTemplates = false, retryAttempt = 0, preserveUndo = false, comparisonChange = false } = {}) {
+async function loadWeightedWorkspace({ resetTemplates = false, retryAttempt = 0, preserveUndo = false, comparisonChange = false, retryProfiles = false, pageRecovery = null, legacyClaim = false } = {}) {
     const sequence = ++state.loadSequence;
+    if (typeof modelFocus !== 'undefined') modelFocus.suspend();
+    benchmarkFallbackCatalogue.invalidate();
+    if (retryProfiles && comparisonProfileFailure) loadComparisonProfiles();
+    const profilesReady = await comparisonProfilesReady;
+    if (sequence !== state.loadSequence) return;
+    if (!profilesReady) { renderLoadError(comparisonProfileFailure); return; }
+    if ((pendingFallbackSave || state.personalSavePending) && !await flushPendingPersonalPieSave()) return;
     const adjustmentsSaved = await finishPendingWeightAdjustments();
     if (sequence !== state.loadSequence || (!adjustmentsSaved && !comparisonChange)) return;
     if (state.saving && state.savePromise) {
         await state.savePromise.catch(() => {});
     }
     if (sequence !== state.loadSequence) return;
+    invalidateRankingPages();
     state.loading = true;
-    state.statusMessage = 'Updating…';
+    state.workspaceLoadError = null;
+    workspaceLoadFailed = false;
+    state.statusMessage = '';
     renderAll();
     const requestedContextValues = resetTemplates
         ? {}
         : { ...state.selectedContextValues };
+    const requestedBenchmarkQuery = benchmarkSearch.value.trim();
+    const requestedPinPersonal = state.pinPersonalBenchmarks;
+    const requestedCategoryID = state.categoryID;
+    const requestedComparison = structuredClone(state.comparisonRequest);
+    const requestedScoreMode = state.scoreMode;
+    const requestedInferenceVersion = state.availableInferenceVersion;
+    const requestedMode = state.mode;
+    const requestedURLSearch = window.location.search;
+    const resume = !resetTemplates && pageRecovery?.snapshotID && pageRecovery.snapshotID === state.rankingPagination?.snapshotID
+        && pageRecovery.scope === rankingRecoveryScope() ? pageRecovery.resume : null;
+    let verifiedReadOwner;
+    const requestWorkspace = async body => {
+        const payload = validateWorkspacePayload(await postJSON('/api/get_weighted_workspace', {
+            ...body, availableInferenceVersion: requestedInferenceVersion,
+            ...comparisonControls.requestOptions?.(), ...(resume ? { rankingResume: resume } : {})
+        }, { timeoutMs: 60000 }), { resume, initialMode: body.initialMode });
+        if (verifiedReadOwner === undefined) verifiedReadOwner = payload.userID;
+        else if (payload.userID !== verifiedReadOwner) throw accountWriteError();
+        return payload;
+    };
     try {
-        let payload = validateWorkspacePayload(await postJSON('/api/get_weighted_workspace', {
-            categoryID: state.categoryID,
+        let payload = await requestWorkspace({
+            categoryID: requestedCategoryID,
             contextValues: requestedContextValues,
-            comparison: state.comparisonRequest
-        }));
+            comparison: requestedComparison,
+            scoreMode: requestedScoreMode,
+            initialMode: requestedMode,
+            benchmarkQuery: requestedBenchmarkQuery,
+            pinPersonal: requestedPinPersonal
+        });
+        if (sequence !== state.loadSequence) return;
+        if (state.userID !== null && payload.userID !== state.userID) throw accountWriteError();
         if (!resetTemplates) {
-            const URLContextValues = readRankingContext(window.location.search, payload.context.dimensions);
-            const resolvedContextValues = {
+            const URLContextValues = readRankingContext(requestedURLSearch, payload.context.dimensions);
+            const resolvedContextValues = payload.context.scenes !== undefined
+                ? Object.keys(requestedContextValues).length ? requestedContextValues
+                    : Object.keys(URLContextValues).length ? URLContextValues : payload.context.contextValues
+                : {
                 ...payload.context.contextValues,
                 ...URLContextValues,
-                ...state.selectedContextValues
+                ...requestedContextValues
             };
             if (!sameContextValues(resolvedContextValues, payload.context.contextValues)) {
-                payload = validateWorkspacePayload(await postJSON('/api/get_weighted_workspace', {
-                    categoryID: state.categoryID,
+                payload = await requestWorkspace({
+                    categoryID: requestedCategoryID,
                     contextValues: resolvedContextValues,
-                    comparison: state.comparisonRequest
-                }));
+                    comparison: requestedComparison,
+                    scoreMode: requestedScoreMode,
+                    initialMode: requestedMode,
+                    benchmarkQuery: requestedBenchmarkQuery,
+                    pinPersonal: requestedPinPersonal
+                });
+                if (sequence !== state.loadSequence) return;
+            }
+        }
+        const draftKey = workspaceContextFingerprint(payload.context.categoryID, payload.context.contextValues);
+        const recoveryRecord = payload.authenticated
+            ? pieRecovery.lookup(payload.userID, Number(payload.context.categoryID), payload.context.contextValues,
+                { revision: payload.personalPie.revision }) : null;
+        const legacyDraft = !recoveryRecord && legacyClaim ? guestDrafts.getLegacy(draftKey) : null;
+        const guestDraft = recoveryRecord ? recoveryRecord.value?.draft ?? null : guestDrafts.get(draftKey) ?? legacyDraft;
+        const savedPersonalWeights = payload.personalPie.entries.length > 0;
+        let draftUnavailable = false;
+        if (guestDraft) {
+            try {
+                payload = await requestWorkspace({
+                    categoryID: payload.context.categoryID,
+                    contextValues: payload.context.contextValues,
+                    comparison: requestedComparison,
+                    scoreMode: requestedScoreMode,
+                    previewPersonalPie: guestDraft,
+                    initialMode: requestedMode,
+                    benchmarkQuery: requestedBenchmarkQuery,
+                    pinPersonal: requestedPinPersonal
+                });
+                if (sequence !== state.loadSequence) return;
+            } catch (error) {
+                if (sequence !== state.loadSequence) return;
+                if (![400, 404].includes(error.status) || error.payload?.error !== 'pie_benchmark_condition_not_found') throw error;
+                draftUnavailable = true;
             }
         }
         if (sequence !== state.loadSequence) {
             return;
         }
         state.loading = false;
-        applyServerWorkspace(payload, { preserveUndo });
+        applyServerWorkspace(payload, {
+            preserveUndo,
+            usingGuestDraft: Boolean(guestDraft) && !draftUnavailable,
+            recoveryRecord,
+            legacyDraftAvailable: !guestDraft && !recoveryRecord && Boolean(guestDrafts.getLegacy(draftKey)),
+            savedPersonalWeights,
+            restoringRankingProgress: Boolean(resume)
+        });
+        state.personalDraftUnavailable = draftUnavailable;
+        if (draftUnavailable && recoveryRecord) state.personalRecoveryBlocked = true;
+        if (legacyDraft && !draftUnavailable) {
+            state.recoveredPersonalDraft = state.authenticated;
+            if (recordPersonalDraft() && state.guestDraftStorageAvailable) guestDrafts.discardLegacy(draftKey, legacyDraft);
+        }
         renderAll();
-        if (!adjustmentsSaved) setStatus('Your change was not saved');
+        if (typeof modelFocus !== 'undefined') void modelFocus.reveal();
+        if (requestedBenchmarkQuery !== benchmarkSearch.value.trim()
+            || requestedPinPersonal !== state.pinPersonalBenchmarks) {
+            reloadBenchmarkPage();
+        }
+        if (draftUnavailable) setStatus('Your draft refers to a benchmark that is no longer available. It is kept until you discard it.');
+        else if (!adjustmentsSaved) setStatus('Your change was not saved');
+        else if (comparisonProfileLoadError) setStatus(comparisonProfileLoadError);
     } catch (error) {
         if (sequence !== state.loadSequence) {
             return;
         }
-        if (error.status === 400 && error.payload?.error === 'comparison_keys_unavailable') {
-            renderComparisonControls(error.payload);
-            // Refresh weights and the key catalog, but keep model results hidden until
-            // the user explicitly resolves the unavailable comparison selection.
-            await loadWeightedWorkspace({ resetTemplates, preserveUndo, comparisonChange });
+        if (invalidSavedComparison(error)) {
+            await recoverComparison(error);
+            if (sequence !== state.loadSequence) return;
+            await loadWeightedWorkspace({ resetTemplates, preserveUndo, comparisonChange, pageRecovery, legacyClaim });
             return;
         }
         const retryDelay = WORKSPACE_LOAD_RETRY_DELAYS_MS[retryAttempt];
@@ -1768,7 +2417,7 @@ async function loadWeightedWorkspace({ resetTemplates = false, retryAttempt = 0,
             setStatus('Connection interrupted - retrying...');
             await new Promise(resolve => window.setTimeout(resolve, retryDelay));
             if (sequence === state.loadSequence) {
-                    await loadWeightedWorkspace({ resetTemplates, retryAttempt: retryAttempt + 1, preserveUndo, comparisonChange });
+                    await loadWeightedWorkspace({ resetTemplates, retryAttempt: retryAttempt + 1, preserveUndo, comparisonChange, pageRecovery, legacyClaim });
             }
             return;
         }
@@ -1780,90 +2429,250 @@ async function loadWeightedWorkspace({ resetTemplates = false, retryAttempt = 0,
     }
 }
 
-async function persistPersonalPie() {
-    window.clearTimeout(state.saveTimer);
-    state.saveTimer = null;
-    if (!state.authenticated) {
-        return false;
-    }
-    if (state.persistPromise) {
-        return state.persistPromise;
-    }
+async function previewGuestPersonalPie() {
+    if (state.persistPromise) return state.persistPromise;
+    recordPersonalDraft();
+    const contextFingerprint = workspaceContextFingerprint();
+    const usingGuestDraft = state.usingGuestDraft;
+    const savedPersonalWeights = state.hasSavedPersonalWeights;
     const task = (async () => {
-        const categoryID = state.categoryID;
-        const contextValues = { ...state.selectedContextValues };
-        const entries = state.personalEntries.map(entry => ({
-            conditionID: Number(entry.conditionID),
-            weightBasisPoints: Number(entry.weightBasisPoints)
-        }));
-        const fallbackRules = state.personalFallbackRules.map(rule => ({
-            primaryConditionID: Number(rule.primaryConditionID),
-            mode: FALLBACK_RULE_MODE,
-            entries: rule.entries.map(entry => ({
-                conditionID: Number(entry.conditionID),
-                weightBasisPoints: Number(entry.weightBasisPoints)
-            }))
-        }));
-        const expectedRevision = state.personalRevision;
-        const contextFingerprint = workspaceContextFingerprint(categoryID, contextValues);
-        let reloadAfterConflict = false;
-        let reloadAfterComparisonError = false;
-        let saved = false;
         state.saving = true;
-        setStatus('Saving your pie…');
+        state.guestPreviewError = false;
+        setStatus('');
+        renderModeState();
         updateUndoState();
-        renderInlineFallback();
-        state.savePromise = postJSON('/api/save_personal_pie', {
-            categoryID,
-            contextValues,
-            expectedRevision,
-            entries,
-            fallbackRules,
-            comparison: state.comparisonRequest
-        });
         try {
-            const payload = validateWorkspacePayload(await state.savePromise);
-            const currentFingerprint = workspaceContextFingerprint();
-            if (contextFingerprint === currentFingerprint) {
-                applyServerWorkspace(payload, { preserveUndo: true, personalSave: true });
-                state.personalIsDraft = false;
-                setStatus('Saved');
-                window.setTimeout(() => {
-                    if (state.statusMessage === 'Saved') {
-                        setStatus('');
+            while (true) {
+                const editVersion = state.personalEditVersion;
+                const requestedBenchmarkFilters = currentBenchmarkFilters();
+                try {
+                    state.savePromise = postJSON('/api/get_weighted_workspace', {
+                        categoryID: state.categoryID,
+                        contextValues: state.selectedContextValues,
+                        comparison: state.comparisonRequest,
+                        scoreMode: state.scoreMode,
+                        availableInferenceVersion: state.availableInferenceVersion,
+                        previewPersonalPie: portablePersonalPie(),
+                        initialMode: state.mode,
+                        ...requestedBenchmarkFilters
+                    }, { timeoutMs: 60000 });
+                    const payload = validateWorkspacePayload(await state.savePromise);
+                    if (contextFingerprint !== workspaceContextFingerprint()) return true;
+                    await waitForGestureToSettle();
+                    if (contextFingerprint !== workspaceContextFingerprint()) return true;
+                    if (editVersion !== state.personalEditVersion) {
+                        recordPersonalDraft();
+                        continue;
                     }
-                }, 1200);
-                renderAll();
-            }
-            saved = true;
-        } catch (error) {
-            if (error.status === 401) {
-                requestLogin();
-            }
-            state.personalEntries = cloneEntries(state.serverPersonalEntries);
-            state.personalFallbackRules = cloneFallbackRules(state.serverPersonalFallbackRules);
-            state.undoSnapshot = null;
-            if (error.status === 400 && error.payload?.error === 'comparison_keys_unavailable') {
-                renderComparisonControls(error.payload);
-                reloadAfterComparisonError = true;
-            }
-            if (error.status === 409 && error.payload?.error === 'pie_revision_conflict') {
-                reloadAfterConflict = true;
-            } else {
-                setStatus('Your change was not saved');
-                renderAll();
+                    const recoveryRecord = state.recoveredPersonalDraft
+                        ? pieRecovery.lookup(state.userID, state.categoryID, state.selectedContextValues) : null;
+                    applyServerWorkspace(payload, { usingGuestDraft, savedPersonalWeights, recoveryRecord });
+                    renderAll();
+                    refreshChangedBenchmarkFilters(requestedBenchmarkFilters);
+                    return true;
+                } catch (error) {
+                    if (contextFingerprint !== workspaceContextFingerprint()) return true;
+                    await waitForGestureToSettle();
+                    if (contextFingerprint !== workspaceContextFingerprint()) return true;
+                    if (editVersion !== state.personalEditVersion) {
+                        recordPersonalDraft();
+                        continue;
+                    }
+                    state.guestPreviewError = true;
+                    state.personalRankingError = 'Ranking update failed. Showing the previous calculation.';
+                    setStatus('Could not calculate this temporary ranking. Refresh to retry.');
+                    renderAll();
+                    return false;
+                }
             }
         } finally {
             state.saving = false;
             state.savePromise = null;
+            updateLastUpdated();
+            renderInlineFallback();
+            renderModeState();
+            updateUndoState();
+        }
+    })();
+    state.persistPromise = task;
+    try {
+        return await task;
+    } finally {
+        if (state.persistPromise === task) state.persistPromise = null;
+    }
+}
+
+async function persistPersonalPie({ forceSave = false } = {}) {
+    window.clearTimeout(state.saveTimer);
+    state.saveTimer = null;
+    if (state.accountWriteBlocked) {
+        setStatus('Your account changed. Refresh this page before saving.');
+        return false;
+    }
+    if (state.personalRecoveryBlocked) {
+        setStatus(state.personalSaveError || 'Refresh to review this draft before saving.');
+        return false;
+    }
+    if (!state.authenticated) {
+        return previewGuestPersonalPie();
+    }
+    if (state.usingGuestDraft && !forceSave) {
+        return previewGuestPersonalPie();
+    }
+    if (state.persistPromise) {
+        return state.persistPromise;
+    }
+    try {
+        if (state.usingGuestDraft && !state.recoveredPersonalDraft) pieRecovery.adoptGuest();
+        if (!recordPersonalDraft()) return false;
+    } catch (error) {
+        state.personalSaveError = error.message;
+        setStatus(error.message);
+        renderAll();
+        return false;
+    }
+    const task = (async () => {
+        const categoryID = state.categoryID;
+        const expectedUserID = state.userID;
+        const contextValues = { ...state.selectedContextValues };
+        const contextFingerprint = workspaceContextFingerprint(categoryID, contextValues);
+        state.saving = true;
+        fallbackSaveFailed = false;
+        setStatus('');
+        updateUndoState();
+        renderInlineFallback();
+        try {
+            while (true) {
+                if (contextFingerprint !== workspaceContextFingerprint()) return true;
+                if (state.userID !== expectedUserID) {
+                    state.accountWriteBlocked = true;
+                    state.personalSaveError = 'Your account changed. Refresh this page before saving.';
+                    setStatus(state.personalSaveError);
+                    renderAll();
+                    return false;
+                }
+                if (state.personalSavePending || state.personalSaveRequest || !state.personalRankingRefreshNeeded || forceSave) {
+                    const request = state.personalSaveRequest ?? pieRecovery.newRequest({
+                        body: { expectedUserID, categoryID, contextValues,
+                            expectedRevision: state.personalRevision, fallbackConfigurationVersion: FALLBACK_CONFIGURATION_VERSION,
+                            ...portablePersonalPie() },
+                        snapshot: snapshotPersonalPie(), editVersion: state.personalEditVersion
+                    });
+                    state.personalSaveRequest = request;
+                    state.personalSavePending = true;
+                    state.personalSaveError = '';
+                    state.personalSaveConflict = false;
+                    try {
+                        if (request.body.expectedUserID !== expectedUserID
+                            || workspaceContextFingerprint(request.body.categoryID, request.body.contextValues) !== contextFingerprint) {
+                            throw Object.assign(new Error('A pending save belongs to another context. Refresh to review your drafts.'),
+                                { code: 'pie_save_scope_changed' });
+                        }
+                        state.savePromise = postWriteJSON('/api/save_personal_pie', request.body,
+                            { timeoutMs: 60000, validateResponse: validatePersonalPieSave,
+                                requestKey: request.key, onIdentity: (key, body) => pieRecovery.capture(request, key, body) });
+                        const receipt = await state.savePromise;
+                        if (state.userID !== expectedUserID) throw accountWriteError();
+                        if (contextFingerprint !== workspaceContextFingerprint()) return true;
+                        pieRecovery.acknowledge(request, receipt.personalPie.revision);
+                        state.serverPersonalEntries = cloneEntries(request.snapshot.entries);
+                        state.serverPersonalFallbackRules = cloneFallbackRules(request.snapshot.fallbackRules);
+                        state.hasSavedPersonalWeights = request.snapshot.entries.length > 0;
+                        state.personalRankingRefreshNeeded = true;
+                        state.personalSavePending = request.editVersion !== state.personalEditVersion;
+                        forceSave = false;
+                        await waitForGestureToSettle();
+                        if (state.userID !== expectedUserID) throw accountWriteError();
+                        if (contextFingerprint !== workspaceContextFingerprint()) return true;
+                        if (request.editVersion !== state.personalEditVersion) {
+                            state.personalSavePending = true;
+                            setStatus('');
+                            continue;
+                        }
+                        state.usingGuestDraft = false;
+                        state.personalIsDraft = false;
+                        pendingFallbackSave = false;
+                        fallbackSaveFailed = false;
+                    } catch (error) {
+                        if (state.userID !== expectedUserID || isAccountWriteError(error) || error.status === 401) {
+                            state.accountWriteBlocked = true;
+                            state.personalSaveError = 'Your account changed. Refresh this page before saving.';
+                        } else {
+                            if (contextFingerprint !== workspaceContextFingerprint()) return true;
+                            // Retain an uncertain request so later edits cannot replace its replay identity.
+                            if (error.status >= 400 && error.status < 500 && ![408, 429].includes(error.status)
+                                && error.code !== 'invalid_personal_pie_receipt') state.personalSaveRequest = null;
+                            state.personalRecoveryBlocked ||= error.code === 'pie_recovery_changed';
+                            state.personalSaveConflict = error.payload?.error === 'pie_revision_conflict' || state.personalRecoveryBlocked;
+                            state.personalSaveError = topicReferenceError(error) || (['pie_save_scope_changed', 'pie_recovery_changed'].includes(error.code) ? error.message : state.personalSaveConflict
+                                ? 'This pie changed elsewhere. Your changes are kept; reload to review the saved version.'
+                                : error.status >= 400 && error.status < 500 && ![408, 429].includes(error.status)
+                                    ? 'Your changes could not be saved. They are kept here so you can correct them.'
+                                    : 'Could not confirm saving. Your changes are kept; retry to confirm.');
+                            fallbackSaveFailed = pendingFallbackSave || fallbackSignature(state.personalFallbackRules)
+                                !== fallbackSignature(state.serverPersonalFallbackRules);
+                        }
+                        if (contextFingerprint === workspaceContextFingerprint()) {
+                            if (state.userID === expectedUserID && !state.accountWriteBlocked) recordPersonalDraft();
+                            state.personalRankingError = state.personalSaveError;
+                            setStatus(state.personalSaveError);
+                            renderAll();
+                        }
+                        if (error.status === 401) requestLogin();
+                        return false;
+                    }
+                }
+                const editVersion = state.personalEditVersion;
+                const requestedBenchmarkFilters = currentBenchmarkFilters();
+                const presentation = JSON.stringify([state.mode, state.scoreMode, state.availableInferenceVersion, state.comparisonRequest]);
+                setStatus('');
+                state.personalRankingError = '';
+                renderModels();
+                try {
+                    state.savePromise = postJSON('/api/get_weighted_workspace', { categoryID, contextValues,
+                        comparison: state.comparisonRequest, scoreMode: state.scoreMode,
+                        availableInferenceVersion: state.availableInferenceVersion,
+                        initialMode: state.mode, ...requestedBenchmarkFilters }, { timeoutMs: 60000 });
+                    const payload = validateWorkspacePayload(await state.savePromise);
+                    if (payload.userID !== expectedUserID || state.userID !== expectedUserID) throw accountWriteError();
+                    if (contextFingerprint !== workspaceContextFingerprint()) return true;
+                    if (workspaceContextFingerprint(payload.context.categoryID, payload.context.contextValues) !== contextFingerprint) {
+                        throw new Error('The ranking response belongs to a different context.');
+                    }
+                    await waitForGestureToSettle();
+                    if (state.userID !== expectedUserID) throw accountWriteError();
+                    if (contextFingerprint !== workspaceContextFingerprint()) return true;
+                    if (editVersion !== state.personalEditVersion) { state.personalSavePending = true; continue; }
+                    if (presentation !== JSON.stringify([state.mode, state.scoreMode, state.availableInferenceVersion, state.comparisonRequest])) continue;
+                    applyServerWorkspace(payload, { preserveUndo: true, personalSave: true });
+                    state.personalIsDraft = false;
+                    setStatus('');
+                    renderAll();
+                    refreshChangedBenchmarkFilters(requestedBenchmarkFilters);
+                    return true;
+                } catch (error) {
+                    if (contextFingerprint !== workspaceContextFingerprint()) return true;
+                    if (state.userID !== expectedUserID || isAccountWriteError(error)) {
+                        state.accountWriteBlocked = true;
+                        state.personalRankingError = 'Your account changed. Refresh this page before saving.';
+                        setStatus(state.personalRankingError); renderAll(); return false;
+                    }
+                    if (editVersion !== state.personalEditVersion) { state.personalSavePending = true; continue; }
+                    if (presentation !== JSON.stringify([state.mode, state.scoreMode, state.availableInferenceVersion, state.comparisonRequest])) continue;
+                    state.personalRankingError = 'Your pie is saved. The ranking could not be updated.';
+                    setStatus('Saved. Ranking update failed.');
+                    renderAll();
+                    return true;
+                }
+            }
+        } finally {
+            state.saving = false;
+            state.savePromise = null;
+            updateLastUpdated();
             updateUndoState();
             renderInlineFallback();
+            renderModels();
         }
-        if (reloadAfterConflict || reloadAfterComparisonError) {
-            await loadWeightedWorkspace();
-            if (reloadAfterComparisonError) setStatus('Your change was not saved');
-        }
-        return saved;
     })();
     state.persistPromise = task;
     try {
@@ -1876,6 +2685,7 @@ async function persistPersonalPie() {
 }
 
 async function applyWorkspaceState(detail = {}) {
+    const accountRefresh = detail.accountRefresh === true;
     if (!await finishPendingWeightAdjustments()) return;
     if (state.saving && state.savePromise) {
         await state.savePromise.catch(() => {});
@@ -1883,20 +2693,34 @@ async function applyWorkspaceState(detail = {}) {
     if (!await flushPendingPersonalPieSave()) {
         return;
     }
+    if (accountRefresh && state.usingGuestDraft && !recordPersonalDraft()) return;
     const nextCategoryID = detail.currentCategoryID ?? null;
     const nextCategoryPath = String(detail.categoryPath || '');
     const changed = Number(nextCategoryID) !== Number(state.categoryID)
         || (nextCategoryID === null && state.categoryID !== null)
         || nextCategoryPath !== state.categoryPath;
+    const explicitContext = detail.contextValues !== undefined || detail.fromURL === true;
+    if ((changed || explicitContext) && state.categoryID !== null && typeof modelFocus !== 'undefined') {
+        modelFocus.cancel({ clearPage: true });
+        state.comparisonRequest = comparisonControls.reset() ?? state.comparisonRequest;
+    }
     state.categoryID = nextCategoryID;
     state.categoryPath = nextCategoryPath;
-    const explicitContext = detail.contextValues !== undefined || detail.fromURL === true;
+    state.topicName = String(detail.categoryName ?? state.topicName ?? '');
+    state.topicSummary = String(detail.description ?? '');
+    state.topicCreator = detail.creator ?? null;
+    state.contextIsPrivate = detail.isPrivate === true;
+    if (state.contextIsPrivate) state.mode = 'personal';
     if (changed || explicitContext) {
         state.selectedContextValues = { ...(detail.contextValues ?? {}) };
         state.dimensions = [];
         state.workspaceView = 'overview';
     }
-    if (changed || explicitContext || state.benchmarks.length === 0) {
+    if (accountRefresh) {
+        if (comparisonProfileLoading) await comparisonProfilesReady;
+        await loadComparisonProfiles();
+        await loadWeightedWorkspace({ preserveUndo: true });
+    } else if (changed || explicitContext || !state.rankingPagination) {
         await loadWeightedWorkspace();
     }
 }
@@ -1904,32 +2728,104 @@ async function applyWorkspaceState(detail = {}) {
 personalModeButton.addEventListener('click', () => setMode('personal'));
 publicModeButton.addEventListener('click', () => setMode('public'));
 personalPieCreate.addEventListener('click', () => {
+    setMode('personal');
+});
+personalEmptyPublicReturn.addEventListener('click', () => setMode('public'));
+compactPieAction.addEventListener('click', () => setMode('personal'));
+personalPieFindBenchmarks.addEventListener('click', () => {
+    benchmarkSearch.focus({ preventScroll: true });
+    benchmarkSearch.scrollIntoView({
+        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+        block: 'center'
+    });
+});
+
+document.getElementById('weight-add-benchmark').addEventListener('click', () => personalPieFindBenchmarks.click());
+document.getElementById('weight-add-topic').addEventListener('click', async event => {
+    const trigger = event.currentTarget;
+    if (state.mode !== 'personal' || state.loading || !await finishPendingWeightAdjustments()) return;
+    deactivateInlineFallbackTarget();
+    await referencePicker.open(trigger);
+});
+guestDraftSave.addEventListener('click', async () => {
+    if (state.legacyDraftAvailable || state.personalDraftUnavailable) {
+        await loadWeightedWorkspace({ preserveUndo: true, legacyClaim: state.legacyDraftAvailable });
+        return;
+    }
     if (!state.authenticated) {
         requestLogin();
         return;
     }
-    setMode('personal');
+    if (!await flushPendingPersonalPieSave()) return;
+    await persistPersonalPie({ forceSave: true });
 });
-personalEmptyPublicReturn.addEventListener('click', () => setMode('public'));
+guestDraftDiscard.addEventListener('click', async () => {
+    if ((!state.authenticated && !state.legacyDraftAvailable) || state.saving) return;
+    window.clearTimeout(state.saveTimer);
+    state.saveTimer = null;
+    const key = workspaceContextFingerprint();
+    if (state.legacyDraftAvailable) guestDrafts.discardLegacy(key, guestDrafts.getLegacy(key));
+    else if (state.recoveredPersonalDraft || state.personalRecoveryToken !== null) {
+        try { pieRecovery.discard(); }
+        catch (error) { setStatus(error.message); return; }
+    } else guestDrafts.delete(key);
+    state.usingGuestDraft = false;
+    state.personalSavePending = false;
+    state.personalSaveRequest = null;
+    state.legacyDraftAvailable = false;
+    state.editHistory.clear();
+    await loadWeightedWorkspace();
+});
 
 function isPersonalBenchmarkFocus() {
     return state.workspaceView === 'focus' && state.mode === 'personal';
 }
 
+function isWeightAdjustmentMode() {
+    return state.mode === 'personal' && state.personalEntries.length > 1
+        && selectedObjectIndex(state.personalEntries) >= 0
+        && (isPersonalBenchmarkFocus() || pieCard.classList.contains('is-adjusting-weight'));
+}
+
+function isWeightWheelTarget(target) {
+    return target instanceof Element && Boolean(target.closest('.bp-left-workspace'))
+        && (isPersonalBenchmarkFocus() || Boolean(target.closest('#weight-pie')))
+        && !target.closest('.bp-inline-fallback, .bp-benchmark-fallbacks, input, textarea, select, button, a, [contenteditable="true"], global-dialog, [role="dialog"]');
+}
+
+function updateWeightAdjustmentCursor() {
+    const active = !state.loading && isWeightAdjustmentMode();
+    const target = active && lastPointerPosition
+        ? document.elementFromPoint(lastPointerPosition.x, lastPointerPosition.y) : null;
+    const next = isWeightWheelTarget(target) ? target : null;
+    if (next === weightCursorTarget) return;
+    weightCursorTarget?.classList.remove('bp-weight-wheel-target');
+    weightCursorTarget = next;
+    weightCursorTarget?.classList.add('bp-weight-wheel-target');
+}
+
+document.addEventListener('pointermove', event => {
+    if (event.pointerType === 'touch') return;
+    lastPointerPosition = { x: event.clientX, y: event.clientY };
+    updateWeightAdjustmentCursor();
+}, { passive: true });
+document.addEventListener('pointerout', event => {
+    if (event.relatedTarget !== null) return;
+    lastPointerPosition = null;
+    updateWeightAdjustmentCursor();
+});
+window.addEventListener('blur', () => {
+    lastPointerPosition = null;
+    updateWeightAdjustmentCursor();
+});
+
 function queueSelectedWeightWheel(event) {
-    if (state.mode !== 'personal') {
-        return;
-    }
-    if (fallbackWheelCommitTimer !== null) {
-        void commitPendingFallbackWheelAdjustment();
+    if (!isWeightAdjustmentMode() || event.ctrlKey
+        || !isWeightWheelTarget(event.target)) {
         return;
     }
     event.preventDefault();
-    if (!state.authenticated) {
-        requestLogin();
-        return;
-    }
-    if (state.loading || state.saving || selectedObjectIndex(state.personalEntries) < 0) {
+    if (state.loading || selectedObjectIndex(state.personalEntries) < 0) {
         return;
     }
     if (event.deltaY === 0) {
@@ -1947,37 +2843,42 @@ function queueSelectedWeightWheel(event) {
     updateUndoState();
 }
 
-function queueSelectedFallbackWeightWheel(event) {
-    const primary = selectedInlineFallbackPrimary();
-    const rule = primary ? fallbackRuleFor(primary.ID) : null;
-    if (!rule || !isInlineFallbackTargetActive() || rule.entries.length < 2 || event.deltaY === 0) return;
-    event.preventDefault();
-    event.stopPropagation();
-    if (wheelWeightCommitTimer !== null) {
-        void commitPendingWheelAdjustment();
-        return;
+function stopWeightAdjustment() {
+    if (!isWeightAdjustmentMode()) return;
+    const returnFocus = pieAdjustmentStatus.contains(document.activeElement);
+    if (touchPieGesture) {
+        const gesture = touchPieGesture;
+        touchPieGesture = null;
+        flushTouchPiePreview(gesture);
+        if (pieSvg.hasPointerCapture(gesture.pointerID)) pieSvg.releasePointerCapture(gesture.pointerID);
     }
-    if (state.loading || state.saving || !state.authenticated) return;
-    const wheelSteps = Math.max(1, Math.min(4, Math.round(Math.abs(event.deltaY) / 100)));
-    pendingFallbackWheelBasisPoints += (event.deltaY < 0 ? 1 : -1)
-        * MIN_WEIGHT_BASIS_POINTS
-        * wheelSteps;
-    setFallbackAdjustmentActive(true);
-    scheduleFallbackWheelPreview();
-    window.clearTimeout(fallbackWheelCommitTimer);
-    fallbackWheelCommitTimer = window.setTimeout(() => {
-        void commitPendingFallbackWheelAdjustment();
-    }, WHEEL_WEIGHT_COMMIT_IDLE_MS);
-    updateUndoState();
+    // Flush queued wheel input before leaving focus; saving continues independently.
+    if (wheelWeightCommitTimer !== null || pendingWheelBasisPoints !== 0) void commitPendingWheelAdjustment();
+    else if (state.gestureOpen) void finishWeightGesture();
+    setPieAdjustmentActive(false);
+    setWorkspaceView('leaderboard');
+    renderPie();
+    if (returnFocus) {
+        const row = benchmarkRows.querySelector(`.bp-benchmark-row[data-condition-id="${Number(state.selectedObjectID)}"][data-benchmark-control="selection"]`);
+        (row?.getClientRects().length ? row : personalModeButton).focus({ preventScroll: true });
+    }
 }
+
+pieAdjustmentDismiss.addEventListener('click', stopWeightAdjustment);
+document.addEventListener('contextmenu', event => {
+    if (!isWeightAdjustmentMode() || event.pointerType === 'touch' || touchPieGesture
+        || !(event.target instanceof Element)
+        || event.target.closest('input, textarea, select, [contenteditable="true"], global-dialog, [role="dialog"]')) return;
+    event.preventDefault();
+    stopWeightAdjustment();
+});
+
 
 document.addEventListener('wheel', event => {
     if (!isPersonalBenchmarkFocus()) {
         return;
     }
-    if (!(event.target instanceof Element)
-        || event.target.closest('.bp-inline-fallback')
-        || !event.target.closest('.bp-left-workspace')) {
+    if (!isWeightWheelTarget(event.target)) {
         return;
     }
     queueSelectedWeightWheel(event);
@@ -1990,18 +2891,12 @@ pieSvg.addEventListener('wheel', event => {
     queueSelectedWeightWheel(event);
 }, { passive: false });
 
-inlineFallbackChart.addEventListener('wheel', queueSelectedFallbackWeightWheel, { passive: false });
-
 pieSvg.addEventListener('pointerdown', event => {
     if (event.pointerType !== 'touch' && event.pointerType !== 'pen') {
         return;
     }
     const slice = event.target.closest('[data-object-id]');
-    if (state.mode !== 'personal') {
-        return;
-    }
-    if (fallbackWheelCommitTimer !== null) {
-        void commitPendingFallbackWheelAdjustment();
+    if (state.mode !== 'personal' || state.personalEntries.length < 2) {
         return;
     }
     if (wheelWeightCommitTimer !== null) {
@@ -2072,17 +2967,24 @@ const endTouchPieGesture = (event, cancelled = false) => {
     touchPieGesture = null;
     setPieAdjustmentActive(false);
     if (!cancelled && !completedGesture.adjusted && completedGesture.candidateObjectID !== null) {
-        deactivateInlineFallbackTarget({ discardDraft: true });
+        deactivateInlineFallbackTarget();
         state.selectedObjectID = completedGesture.candidateObjectID;
+        state.selectedFamilyKey = null;
+        state.workspaceView = 'focus';
+        applyWorkspaceView({ animate: true });
+        renderModeState();
         renderPie();
         renderBenchmarks();
         renderBenchmarkSummary();
+        revealBenchmarkRow(completedGesture.candidateObjectID);
         return;
     }
     if (cancelled && state.gestureOpen) {
         restorePersonalPieSnapshot(state.gestureSnapshot ?? snapshotPersonalPie());
         state.gestureOpen = false;
+        notifyGestureSettled();
         state.gestureSnapshot = null;
+        recordPersonalDraft();
         renderPie();
         renderBenchmarkSummary();
         updateUndoState();
@@ -2096,165 +2998,124 @@ const endTouchPieGesture = (event, cancelled = false) => {
 pieSvg.addEventListener('pointerup', endTouchPieGesture);
 pieSvg.addEventListener('pointercancel', event => endTouchPieGesture(event, true));
 
-inlineFallbackChart.addEventListener('pointerdown', event => {
-    const segment = event.target instanceof Element
-        ? event.target.closest('.bp-inline-fallback-segment')
-        : null;
-    if (segment) {
-        activateInlineFallbackTarget(Number(segment.dataset.conditionId));
-    } else if (event.pointerType === 'touch' || event.pointerType === 'pen') {
-        activateInlineFallbackTarget();
-    }
-    if (event.pointerType !== 'touch' && event.pointerType !== 'pen') return;
-    const primary = selectedInlineFallbackPrimary();
-    const rule = primary ? fallbackRuleFor(primary.ID) : null;
-    if (!rule || rule.entries.length < 2 || wheelWeightCommitTimer !== null) return;
-    touchFallbackGesture = {
-        pointerID: event.pointerId,
-        startY: event.clientY,
-        lastY: event.clientY,
-        adjusted: false,
-        pendingBasisPoints: 0,
-        previewFrame: null
-    };
-    inlineFallbackChart.setPointerCapture(event.pointerId);
-});
 
-const flushTouchFallbackPreview = gesture => {
-    if (gesture.previewFrame !== null) {
-        cancelAnimationFrame(gesture.previewFrame);
-        gesture.previewFrame = null;
-    }
-    const deltaBasisPoints = Math.round(gesture.pendingBasisPoints);
-    gesture.pendingBasisPoints = 0;
-    if (deltaBasisPoints !== 0) {
-        adjustSelectedFallbackWeight(deltaBasisPoints);
-    }
-};
-
-inlineFallbackChart.addEventListener('pointermove', event => {
-    if (!touchFallbackGesture || touchFallbackGesture.pointerID !== event.pointerId) return;
-    const deltaY = touchFallbackGesture.lastY - event.clientY;
-    touchFallbackGesture.lastY = event.clientY;
-    if (!touchFallbackGesture.adjusted
-        && Math.abs(event.clientY - touchFallbackGesture.startY) < TOUCH_DRAG_THRESHOLD_PX) {
-        return;
-    }
-    event.preventDefault();
-    touchFallbackGesture.adjusted = true;
-    setFallbackAdjustmentActive(true);
-    touchFallbackGesture.pendingBasisPoints += deltaY * TOUCH_WEIGHT_BASIS_POINTS_PER_PIXEL;
-    if (touchFallbackGesture.previewFrame === null) {
-        const gesture = touchFallbackGesture;
-        gesture.previewFrame = requestAnimationFrame(() => flushTouchFallbackPreview(gesture));
-    }
-});
-
-const endTouchFallbackGesture = (event, cancelled = false) => {
-    if (!touchFallbackGesture || touchFallbackGesture.pointerID !== event.pointerId) return;
-    const completedGesture = touchFallbackGesture;
-    if (!cancelled) {
-        flushTouchFallbackPreview(completedGesture);
-    } else if (completedGesture.previewFrame !== null) {
-        cancelAnimationFrame(completedGesture.previewFrame);
-        completedGesture.previewFrame = null;
-    }
-    if (inlineFallbackChart.hasPointerCapture(event.pointerId)) {
-        inlineFallbackChart.releasePointerCapture(event.pointerId);
-    }
-    touchFallbackGesture = null;
-    setFallbackAdjustmentActive(false);
-    if (cancelled && state.gestureOpen) {
-        restorePersonalPieSnapshot(state.gestureSnapshot ?? snapshotPersonalPie());
-        state.gestureOpen = false;
-        state.gestureSnapshot = null;
-        renderInlineFallback();
-        updateUndoState();
-        return;
-    }
-    if (completedGesture.adjusted && state.gestureOpen) {
-        void finishWeightGesture();
-    }
-};
-inlineFallbackChart.addEventListener('pointerup', endTouchFallbackGesture);
-inlineFallbackChart.addEventListener('pointercancel', event => endTouchFallbackGesture(event, true));
-
-undoButton.addEventListener('click', () => {
-    if (!state.undoSnapshot
-        || state.saving
-        || state.gestureOpen
-        || wheelWeightCommitTimer !== null
-        || fallbackWheelCommitTimer !== null
-        || !state.authenticated) {
+function restoreHistory(direction) {
+    if (state.gestureOpen
+        || wheelWeightCommitTimer !== null) {
         return;
     }
     window.clearTimeout(state.saveTimer);
     state.saveTimer = null;
-    const current = snapshotPersonalPie();
-    restorePersonalPieSnapshot(state.undoSnapshot);
-    state.undoSnapshot = current;
+    const snapshot = state.editHistory[direction](snapshotPersonalPie());
+    if (!snapshot) return;
+    // A history edit must outlive any workspace result requested before it.
+    state.loadSequence += 1;
+    state.loading = false;
+    benchmarkFallbackCatalogue.setSnapshot(state.rankingPagination?.snapshotID ?? null);
+    restorePersonalPieSnapshot(snapshot);
+    state.personalEditVersion += 1;
+    state.personalSavePending = true;
+    state.personalSaveError = '';
+    state.personalRankingDirty = true;
+    state.personalRankingError = '';
+    recordPersonalDraft();
+    for (const entry of state.personalEntries) {
+        hiddenPersonalBenchmarkIDs.delete(Number(entry.conditionID));
+    }
     if (!state.personalEntries.some(entry => Number(entry.conditionID) === Number(state.selectedObjectID))) {
         state.selectedObjectID = state.personalEntries[0]?.conditionID ?? null;
     }
     renderAll();
     void persistPersonalPie();
+}
+function bindHistoryControl(button, direction) {
+    let touchStart = null;
+    button.addEventListener('pointerdown', event => {
+        if (event.pointerType === 'touch' && event.isPrimary && !button.disabled) {
+            touchStart = { ID: event.pointerId, x: event.clientX, y: event.clientY };
+        }
+    });
+    button.addEventListener('pointercancel', () => { touchStart = null; });
+    button.addEventListener('pointerup', event => {
+        if (!touchStart || touchStart.ID !== event.pointerId) return;
+        const start = touchStart; touchStart = null;
+        const bounds = button.getBoundingClientRect();
+        if (button.disabled || Math.hypot(event.clientX - start.x, event.clientY - start.y) > 10
+            || event.clientX < bounds.left || event.clientX > bounds.right
+            || event.clientY < bounds.top || event.clientY > bounds.bottom) return;
+        // Touch activation must not depend on a delayed compatibility click after dragging.
+        event.preventDefault();
+        restoreHistory(direction);
+    });
+    button.addEventListener('touchend', event => event.preventDefault(), { passive: false });
+    button.addEventListener('click', () => restoreHistory(direction));
+}
+bindHistoryControl(undoButton, 'undo');
+bindHistoryControl(redoButton, 'redo');
+
+function retainPieBeforeExit() {
+    if (touchPieGesture) flushTouchPiePreview(touchPieGesture);
+    const delta = Math.round(pendingWheelBasisPoints);
+    pendingWheelBasisPoints = 0;
+    if (delta) adjustSelectedWeight(delta, { animateWeights: false });
+    if (state.personalSavePending || state.personalSaveRequest || state.usingGuestDraft) recordPersonalDraft();
+}
+window.addEventListener('pagehide', retainPieBeforeExit);
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') retainPieBeforeExit();
 });
 
-benchmarkSearch.addEventListener('input', renderBenchmarks);
+benchmarkSearch.addEventListener('input', () => {
+    hiddenPersonalBenchmarkIDs.clear();
+    window.clearTimeout(benchmarkSearchTimer);
+    if (!state.rankingPagination || state.loading || workspaceLoadFailed) return;
+    state.rankingPageSequence.benchmarks += 1;
+    state.rankingPageLoading.benchmarks = true;
+    state.benchmarks = [];
+    renderBenchmarks();
+    benchmarkSearchTimer = window.setTimeout(() => {
+        state.rankingPageLoading.benchmarks = false;
+        reloadBenchmarkPage();
+    }, 180);
+});
 
 benchmarkPersonalPin.addEventListener('click', () => {
     if (benchmarkPersonalPin.disabled) {
         return;
     }
     state.pinPersonalBenchmarks = !state.pinPersonalBenchmarks;
-    renderBenchmarks();
+    reloadBenchmarkPage();
 });
 
-inlineFallbackEnabled.addEventListener('change', () => {
+function loadVisibleRankingPages() {
+    loadVisibleBenchmarkPage();
+    if (shouldLoadMore(modelRows)) void loadNextRankingPage(state.mode);
+}
+// Capture also covers scrolling the document or a containing mobile panel.
+window.addEventListener('scroll', loadVisibleRankingPages, { passive: true, capture: true });
+window.addEventListener('resize', loadVisibleRankingPages, { passive: true });
+
+inlineFallbackToggle.addEventListener('click', () => {
     const primary = selectedInlineFallbackPrimary();
-    const rule = primary ? fallbackRuleFor(primary.ID) : null;
-    if (!primary) {
-        renderInlineFallback();
-        return;
-    }
-    if (inlineFallbackEnabled.checked && !rule) {
-        fallbackDraftPrimaryID = Number(primary.ID);
+    if (!primary || state.loading) return;
+    if (!fallbackRuleFor(primary.ID)) { openInlineFallbackPicker(); return; }
+    state.personalFallbackExpanded = !state.personalFallbackExpanded;
+    if (!state.personalFallbackExpanded) {
+        fallbackEditorScope = null;
         deactivateInlineFallbackTarget();
-        renderInlineFallback();
-        renderBenchmarks();
-        return;
     }
-    if (!inlineFallbackEnabled.checked) {
-        void removeInlineFallbackRule();
-        return;
-    }
-    renderInlineFallback();
-});
-publicFallbackToggle.addEventListener('click', () => {
-    if (state.mode !== 'public' || state.loading || state.saving || !selectedPublicFallbackPrimary()) return;
-    state.publicFallbackVisible = !state.publicFallbackVisible;
     writeWorkspacePreferences(state);
-    selectedPublicFallbackComponentID = null;
-    renderInlineFallback();
+    renderInlineFallback(); renderBenchmarks();
 });
-inlineFallbackRemove.addEventListener('click', () => {
-    removeSelectedFallbackComponent();
-});
-inlineFallbackChart.addEventListener('click', event => {
-    if (state.mode !== 'personal') {
-        return;
-    }
-    if (event.target instanceof Element && event.target.closest('.bp-inline-fallback-segment')) {
-        return;
-    }
-    activateInlineFallbackTarget();
+inlineFallbackSaveRetry.addEventListener('click', () => { void persistPersonalPie(); });
+publicFallbackToggle.addEventListener('click', () => {
+    const primary = selectedPublicFallbackPrimary();
+    if (state.mode !== 'public' || state.loading || !primary) return;
+    fallbackPicker.open(primary, { action: 'view', getReturnFocus: () => publicFallbackToggle });
 });
 inlineFallbackChart.addEventListener('keydown', event => {
-    if (event.target !== inlineFallbackChart || state.mode !== 'personal') return;
-    if (event.key === 'Enter' || event.key === ' ') {
-        event.preventDefault();
-        activateInlineFallbackTarget();
-    } else if (event.key === 'Escape' && isInlineFallbackTargetActive()) {
+    if (state.mode !== 'personal') return;
+    if (event.key === 'Escape' && isInlineFallbackTargetActive()) {
         event.preventDefault();
         deactivateInlineFallbackTarget();
         renderInlineFallback();
@@ -2269,7 +3130,8 @@ refreshButton.addEventListener('click', async () => {
     if (!await flushPendingPersonalPieSave()) {
         return;
     }
-    await loadWeightedWorkspace();
+    hiddenPersonalBenchmarkIDs.clear();
+    await loadWeightedWorkspace({ retryProfiles: Boolean(comparisonProfileFailure) });
 });
 
 workspaceChannel.beforeChange(async () => {
@@ -2277,8 +3139,6 @@ workspaceChannel.beforeChange(async () => {
     return flushPendingPersonalPieSave();
 });
 
-termsButton.addEventListener('click', () => {
-    termsDialog.hidden = false;
-});
+categoryNavigationMedia.addEventListener('change', renderBreadcrumb);
 
 workspaceChannel.subscribe(detail => applyWorkspaceState(detail));

@@ -1,3 +1,9 @@
+import { FEATURED_TOPIC_ID, topicURL } from '../shared/topics.js';
+import { searchItems } from '../shared/search.js';
+import { orderedScenes, sceneURL } from './scenes.js';
+
+const configuredSearchFields = item => [item.categoryName, item.description, item.lineage.map(category => category.name).join(' / '), item.contextLabel];
+
 // Navigation identities and order are independent of pie mode, saves and the DOM.
 export function contextKey(categoryID, values = {}) {
     return `${Number(categoryID)}:${JSON.stringify(Object.fromEntries(
@@ -6,21 +12,39 @@ export function contextKey(categoryID, values = {}) {
 }
 
 export function entryFromContext(context) {
-    const lineage = (context.lineage ?? []).map(item => ({ ID: Number(item.ID), name: String(item.name) }));
+    const lineage = (context.lineage ?? [{ ID: context.categoryID ?? context.ID, name: context.categoryName ?? context.name }]).map(item => ({
+        ID: Number(item.ID), name: String(item.name), position: Number(item.position ?? 0)
+    }));
     if (!lineage.length) return null;
     const dimensions = context.dimensions ?? [];
     const values = { ...context.contextValues };
+    const scenes = orderedScenes(context.scenes);
+    const sceneID = context.sceneID ?? (values.scene ? Number(values.scene) : null);
+    const scene = scenes.find(item => Number(item.ID) === Number(sceneID));
     return {
-        contextID: context.ID ?? null,
-        categoryID: Number(context.categoryID),
+        contextID: context.contextID ?? (context.categoryID ? context.ID : null) ?? null,
+        scenes,
+        sceneID,
+        defaultContextID: context.defaultContextID,
+        rootContextID: context.rootContextID,
+        sceneName: scene?.name ?? context.sceneName ?? '',
+        categoryID: Number(context.categoryID ?? context.ID),
         categoryName: lineage.at(-1).name,
+        description: typeof context.description === 'string' ? context.description : '',
+        creator: context.creator ? { name: context.creator.name, avatarURL: context.creator.avatarURL } : null,
+        isPrivate: context.isPrivate === true,
+        slug: context.slug,
+        url: context.url || (context.path ? `/${context.path.replace(/^\/+/, '')}`
+            : context.categoryPath ? `/${context.categoryPath.replace(/^\/+/, '')}` : undefined),
+        isMine: context.isMine === true,
+        configured: context.configured === true,
         lineage,
         contextValues: values,
-        contextLabel: dimensions.map(dimension => {
+        contextLabel: scene?.name ?? context.sceneName ?? context.contextLabel ?? dimensions.map(dimension => {
             const selected = dimension.options.find(option => option.key === values[dimension.key]);
             return `${dimension.name}: ${selected?.name ?? values[dimension.key]}`;
-        }).join(' · '),
-        contextOrder: dimensions.map(dimension => dimension.options.findIndex(option => option.key === values[dimension.key])),
+        }).join(' / '),
+        contextOrder: scene ? [scenes.indexOf(scene)] : dimensions.map(dimension => dimension.options.findIndex(option => option.key === values[dimension.key])),
         available: true
     };
 }
@@ -33,55 +57,43 @@ function compareNumbers(left, right) {
 }
 
 export function compareLocations(left, right) {
-    // Sibling order matches getSubCategories: ORDER BY categories.ID. A prefix
-    // precedes all of its descendants: this is a fully expanded tree, not BFS.
-    return compareNumbers(left.lineage.map(item => item.ID), right.lineage.map(item => item.ID))
+    // Topic positions and context option order are stable across saves and views.
+    return compareNumbers(left.lineage.flatMap(item => [item.position ?? 0, item.ID]),
+        right.lineage.flatMap(item => [item.position ?? 0, item.ID]))
         || compareNumbers(left.contextOrder ?? [], right.contextOrder ?? [])
         || contextKey(left.categoryID, left.contextValues).localeCompare(contextKey(right.categoryID, right.contextValues), 'en');
 }
 
-export function locationURL(entry) {
-    const path = entry.lineage.map(item => encodeURIComponent(item.name.trim().replace(/\s+/g, '-'))).join('/');
-    const params = new URLSearchParams();
-    Object.keys(entry.contextValues).sort().forEach(key => params.set(`context_${key}`, entry.contextValues[key]));
-    return `/rankings/${path}${params.size ? `?${params}` : ''}`;
+export function popularTopics(items) {
+    // Heat and exploration are server-owned. Only enforce the featured-topic invariant.
+    return [...items.filter(item => item.categoryID === FEATURED_TOPIC_ID),
+        ...items.filter(item => item.categoryID !== FEATURED_TOPIC_ID)];
 }
 
-export function configuredRows(items, current, query = '') {
-    const entries = new Map(items.map(item => [contextKey(item.categoryID, item.contextValues), item]));
-    const savedCategories = new Set(items.map(item => item.categoryID));
+export function locationURL(entry) {
+    if (!Number.isSafeInteger(Number(entry.categoryID)) || Number(entry.categoryID) < 1) throw new TypeError('Invalid topic ID');
+    const name = entry.categoryName ?? entry.name ?? entry.lineage?.at(-1)?.name ?? '';
+    const path = entry.url || topicURL(entry.categoryID, name, entry.isPrivate, entry.slug);
+    const url = new URL(path, 'https://navigation.invalid');
+    if (!path.startsWith('/') || url.origin !== 'https://navigation.invalid') throw new TypeError('Invalid topic URL');
+    if (entry.contextValues?.scene) return sceneURL(path, entry.contextValues.scene);
+    Object.keys(entry.contextValues ?? {}).sort().forEach(key => url.searchParams.set(`context_${key}`, entry.contextValues[key]));
+    return `${url.pathname}${url.search}`;
+}
+
+export function configuredRows(items, current, query = '', privateTopics = []) {
+    const entries = new Map([...privateTopics.filter(item => item.isPrivate === true && item.isMine === true)
+        .map(item => ({ ...item, weightCount: 0 })), ...items.filter(item => item.weightCount > 0)]
+        .map(item => [contextKey(item.categoryID, item.contextValues), item]));
     const currentKey = current ? contextKey(current.categoryID, current.contextValues) : null;
-    const rows = [...entries].map(([key, item]) => {
-        const configuredPath = item.lineage.filter(category => savedCategories.has(category.ID));
-        return { ...item, key, configured: true, current: key === currentKey,
-            groupID: configuredPath[0]?.ID ?? item.categoryID,
-            depth: Math.max(0, configuredPath.length - 1) };
-    }).sort(compareLocations);
-    if (current && !entries.has(currentKey)) {
-        const configuredPath = current.lineage.filter(category => savedCategories.has(category.ID));
-        const after = rows.findIndex(item => compareLocations(current, item) < 0);
-        const index = after < 0 ? rows.length : after;
-        // A temporary ancestor joins the first following group for presentation
-        // only; it must never absorb or split the saved groups underneath it.
-        const descendant = rows.find(item => item.lineage.some(category => category.ID === current.categoryID));
-        const groupID = configuredPath[0]?.ID ?? descendant?.groupID
-            ?? rows[index - 1]?.groupID ?? rows[index]?.groupID ?? current.categoryID;
-        rows.splice(index, 0, { ...current, key: currentKey, configured: false, current: true,
-            groupID, depth: configuredPath.filter(item => item.ID !== current.categoryID).length });
-    }
-    const names = new Map();
-    rows.forEach(item => {
-        if (!names.has(item.categoryName)) names.set(item.categoryName, new Set());
-        names.get(item.categoryName).add(item.categoryID);
-    });
-    const terms = query.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
-    const filtered = rows.filter(item => {
-        const text = `${item.lineage.map(category => category.name).join(' / ')} ${item.contextLabel}`.toLocaleLowerCase();
-        return terms.every(term => text.includes(term));
-    });
+    const rows = [...entries].map(([key, item]) => ({ ...item, key, configured: item.weightCount > 0,
+        current: key === currentKey, groupID: item.categoryID, depth: 0
+    })).sort(compareLocations);
+    const filtered = searchItems(rows, query, configuredSearchFields);
     return filtered.map((item, index) => ({ ...item,
-        groupStart: index > 0 && item.groupID !== filtered[index - 1].groupID,
-        pathLabel: names.get(item.categoryName).size > 1 ? item.lineage.slice(0, -1).map(category => category.name).join(' / ') : ''
+        groupStart: false,
+        pathLabel: filtered.some((other, otherIndex) => otherIndex !== index
+            && other.categoryName === item.categoryName && other.categoryID !== item.categoryID) ? `Topic ${item.categoryID}` : ''
     }));
 }
 
@@ -93,15 +105,23 @@ export function validateNavigationPayload(payload) {
         if (!item || !Number.isSafeInteger(item.categoryID) || item.categoryID < 1
             || typeof item.categoryName !== 'string' || typeof item.contextLabel !== 'string'
             || !Array.isArray(item.lineage) || !item.lineage.length || item.lineage.length > 64
-            || item.lineage.some(category => !Number.isSafeInteger(category.ID) || category.ID < 1 || typeof category.name !== 'string')
+            || item.lineage.some(category => !Number.isSafeInteger(category.ID) || category.ID < 1 || typeof category.name !== 'string'
+                || (category.position !== undefined && (!Number.isSafeInteger(category.position) || category.position < 0)))
             || item.lineage.at(-1).ID !== item.categoryID
             || new Set(item.lineage.map(category => category.ID)).size !== item.lineage.length
             || !item.contextValues || typeof item.contextValues !== 'object' || Array.isArray(item.contextValues)
             || Object.values(item.contextValues).some(value => typeof value !== 'string')
             || !Array.isArray(item.contextOrder) || item.contextOrder.some(value => !Number.isSafeInteger(value))
-            || typeof item.available !== 'boolean') invalid();
+            || typeof item.available !== 'boolean'
+            || (item.weightCount !== undefined && (!Number.isSafeInteger(item.weightCount) || item.weightCount < 0))
+            || (item.isPrivate !== undefined && typeof item.isPrivate !== 'boolean')
+            || (item.isPrivate === true && (item.lineage.length !== 1
+                || Object.keys(item.contextValues).some(key => key !== 'scene')))
+            || (item.contextValues.scene !== undefined && (!/^[1-9]\d*$/.test(item.contextValues.scene)
+                || !Number.isSafeInteger(Number(item.contextValues.scene))))) invalid();
         const key = contextKey(item.categoryID, item.contextValues);
         if (keys.has(key)) invalid();
+        try { locationURL(item); } catch { invalid(); }
         keys.add(key);
     }
     return payload;

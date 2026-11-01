@@ -1,3 +1,4 @@
+import { normalizeScoreFieldRequests, normalizeFieldContribution } from '../score-field-service.js';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import fs from 'node:fs';
@@ -9,19 +10,19 @@ import { upgradeScoreContent } from '../scripts/migrate-remove-score-providers.m
 
 function contract() {
     const text = fs.readFileSync(new URL('../server.js', import.meta.url), 'utf8');
-    const sandbox = vm.createContext({ URL, crypto, structuredClone });
+    const sandbox = vm.createContext({ normalizeScoreFieldRequests, normalizeFieldContribution, URL, crypto, structuredClone });
     vm.runInContext(text.slice(text.indexOf('function normalizeString('), text.indexOf('function parseModerationContent('))
         + '\nthis.api = { buildContributionContent, normalizeStoredModerationContent };', sandbox);
     return sandbox.api;
 }
 const request = (source = {}) => ({ type: 'benchmark_result', reviewerNotes: 'Review only', results: [{ clientRef: 'score', modelID: 1,
-    modelConditionID: 2, benchmarkID: 3, benchmarkConditionID: 4, rawScore: 55,
+    scoreFields: [], benchmarkID: 3, benchmarkConditionID: 4, rawScore: 55,
     source: { type: 'other', url: 'https://example.com/report', title: '', ...source } }] });
 
 test('scores require a source URL and reject removed provider fields and applications', () => {
     const api = contract();
     const content = api.buildContributionContent(request());
-    assert.equal(content.schemaVersion, 8);
+    assert.equal(content.schemaVersion, 9);
     assert.deepEqual(Object.keys(content.results[0].source).sort(), ['title', 'type', 'url']);
     assert.equal(api.normalizeStoredModerationContent(content).results[0].source.url, 'https://example.com/report');
     for (const source of [{ url: '' }, { providerID: 1 }, { providerRef: null }]) {
@@ -42,13 +43,17 @@ test('deduplication uses exact numeric values within condition pairs without rou
 });
 
 const base = { model_ID: 1, model_name: 'Model', vendor_name: 'Lab', vendor_slug: 'lab', logo_key: null,
-    model_condition_ID: 2, model_condition_name: 'default', parameters: {}, condition_key: 'default', model_condition_is_default: 1,
+    score_fields: [],
     benchmark_condition_ID: 3, uses_percentage_scale: 1, score_min: null, score_max: null,
     score_direction: 'higher', target_value: null };
 async function aggregate(values, overrides = {}) {
-    const [model] = await loadModels({ async execute() { return [values.map((raw_score, i) => ({ ...base, ...overrides,
-        result_ID: i + 1, raw_score, source_url: `https://example.com/report-${i}` })), []]; } });
-    return model.results.get('3');
+    const [model] = await loadModels({ async execute(sql) {
+        if (sql.includes('FROM models JOIN') || sql.includes('FROM benchmark_conditions WHERE')) return [[{ ...base, ...overrides }], []];
+        return [values.map((raw_score, i) => ({ ...base, ...overrides,
+        result_ID: i + 1, raw_score, source_url: `https://example.com/report-${i}` })), []]; } }, []);
+    const { evidenceHash, ...statistics } = model.results.get('3');
+    assert.match(evidenceHash, /^[a-f0-9]{64}$/);
+    return statistics;
 }
 
 test('different URLs and repeated values cannot skew the median', async () => {

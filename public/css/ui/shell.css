@@ -23,7 +23,7 @@ body.bp-home  {
     height: 100dvh;
     padding: 28px 16px 18px;
     border-right: 1px solid var(--bp-line);
-    background: #edf1eb;
+    background: var(--bp-sidebar);
     min-width: 0;
     z-index: 20;
 }
@@ -91,27 +91,27 @@ body.bp-home  {
     padding: 8px 10px;
     text-align: left;
     background: transparent;
-    color: #58655c;
+    color: var(--bp-muted);
     cursor: pointer;
     border-radius: 6px;
     font-size: 13px;
 }
 
 #tree-content button:hover  {
-    background: #e2e9e0;
+    background: var(--bp-hover);
     color: var(--bp-ink);
 }
 
 #tree-content button.selected  {
-    background: #dce8dc;
-    color: #174b36;
+    background: var(--bp-selected);
+    color: var(--bp-purple-dark);
     font-weight: 650;
 }
 
 .tree-children  {
     margin-left: 13px;
     padding-left: 6px;
-    border-left: 1px solid #d4ddd3;
+    border-left: 1px solid var(--bp-line);
 }
 
 .icon-folder  {
@@ -137,7 +137,7 @@ body.bp-home  {
 .bp-sidebar-actions  {
     margin-top: 16px;
     padding-top: 14px;
-    border-top: 1px solid #d6dfd4;
+    border-top: 1px solid var(--bp-line);
     display: grid;
     gap: 5px;
 }
@@ -148,7 +148,7 @@ body.bp-home  {
     min-height: 38px;
     gap: 10px;
     padding: 7px 10px;
-    color: #516359;
+    color: var(--bp-muted);
     text-decoration: none;
     background: transparent;
     border: 0;
@@ -160,13 +160,13 @@ body.bp-home  {
 
 .bp-sidebar-action:hover  {
     color: var(--bp-purple-dark);
-    background: #e2e9e0;
+    background: var(--bp-hover);
 }
 
 .bp-sidebar-account  {
     margin-top: 20px;
     padding-top: 16px;
-    border-top: 1px solid #d6dfd4;
+    border-top: 1px solid var(--bp-line);
 }
 
 .bp-user-profile, .bp-login-button  {
@@ -208,18 +208,21 @@ body.bp-home  {
 
 .bp-sidebar-footer  {
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     justify-content: space-between;
-    gap: 7px;
+    gap: 6px;
     margin: 20px 7px 0;
     font-size: 10px;
-    color: #69786b;
+    color: var(--bp-muted);
 }
 
 .bp-sidebar-footer nav  {
     display: flex;
-    gap: 9px;
+    gap: 7px;
+    white-space: nowrap;
 }
+
+.bp-sidebar-footer > span { white-space: nowrap; }
 
 .bp-sidebar-footer a, .bp-sidebar-footer button  {
     color: inherit;
@@ -235,42 +238,41 @@ body.bp-home  {
     display: none;
 }
 
+.bp-account-dialog::part(content) { width: 400px; max-width: calc(100vw - 32px); padding: 20px; gap: 16px; }
+.bp-account-dialog::part(actions) { display: none; }
+.bp-account-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; }
+.bp-account-dialog-body { display: grid; min-width: 0; }
+.bp-account-dialog .bp-account-dialog-picture { width: 48px; height: 48px; flex-basis: 48px; background-color: var(--bp-track); }
 .bp-account-summary  {
     display: flex;
     gap: 12px;
     align-items: center;
-    padding-bottom: 22px;
+    padding-block: 4px 18px;
 }
 
 .bp-account-copy  {
     display: grid;
     gap: 4px;
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
+.bp-account-copy strong { font-size: 17px; font-weight: 650; color: var(--bp-ink); }
 
 .bp-account-copy small  {
     color: var(--bp-muted);
+    font-size: 12px;
 }
 
 .bp-account-operations  {
     display: grid;
-    gap: 8px;
+    gap: 2px;
+    padding-top: 10px;
 }
-
-.bp-account-action  {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 12px;
-    background: #f5f6f2;
-    border: 1px solid var(--bp-line);
-    border-radius: 7px;
-    cursor: pointer;
-    color: var(--bp-text);
-}
-
-.bp-account-action.danger  {
-    color: #a5483b;
-}
+.bp-account-operations > .bp-ui-action { justify-content: flex-start; width: 100%; min-height: 44px; padding: 8px 0; }
+.bp-account-operations > .bp-ui-action .bp-ui-action-label { flex: 1; text-align: left; }
+.bp-account-operations > .bp-ui-action > i:last-child { color: var(--bp-muted); font-size: 11px; }
+.bp-account-operations > .bp-ui-action.danger { color: var(--bp-muted); }
+.bp-account-operations > .bp-ui-action.danger:hover { color: #b03535; }
 
 @media (max-width: 1100px) and (min-width: 761px)  {
     :root  {
@@ -285,6 +287,19 @@ body.bp-home  {
 }
 
 @media (max-width: 760px)  {
+    body.taxonomy-open {
+        overflow: hidden;
+    }
+    body.taxonomy-open::before {
+        content: '';
+        position: fixed;
+        inset: 0 0 auto;
+        height: 60px;
+        border-bottom: 1px solid var(--bp-line);
+        background: var(--bp-sidebar);
+        z-index: 95;
+        pointer-events: none;
+    }
     .bp-shell  {
         display: block;
     }
@@ -348,6 +363,7 @@ body.bp-home  {
     }
     .taxonomy-open .bp-taxonomy  {
         flex-direction: column;
+        overscroll-behavior: contain;
     }
     .taxonomy-open .bp-taxonomy-toggle  {
         display: none;
@@ -367,5 +383,50 @@ body.bp-home  {
         z-index: 90;
         border: 0;
         background: #172d2866;
+    }
+}
+
+@media (max-width: 760px) and (prefers-reduced-motion: no-preference) {
+    @keyframes bp-drawer-enter {
+        from { transform: translateX(-100%); }
+        to { transform: translateX(0); }
+    }
+    @keyframes bp-drawer-exit {
+        from { transform: translateX(0); }
+        to { transform: translateX(-100%); }
+    }
+    @keyframes bp-drawer-scrim-enter {
+        from { opacity: 0; }
+        to { opacity: 1; }
+    }
+    @keyframes bp-drawer-scrim-exit {
+        from { opacity: 1; }
+        to { opacity: 0; }
+    }
+    @keyframes bp-drawer-content-rise {
+        from { transform: translateY(60px); }
+        to { transform: translateY(0); }
+    }
+    @keyframes bp-drawer-content-drop {
+        from { transform: translateY(0); }
+        to { transform: translateY(60px); }
+    }
+    .taxonomy-open .bp-sidebar {
+        animation: bp-drawer-enter 280ms cubic-bezier(.2, .7, .2, 1) both;
+    }
+    .taxonomy-open .bp-taxonomy-scrim {
+        animation: bp-drawer-scrim-enter 280ms ease both;
+    }
+    .taxonomy-open :is(.bp-workspace, .contribution-workspace, .bp-how-main, .bp-legal-main) {
+        animation: bp-drawer-content-rise 280ms ease both;
+    }
+    .taxonomy-open.taxonomy-closing .bp-sidebar {
+        animation: bp-drawer-exit 280ms cubic-bezier(.4, 0, .8, .3) both;
+    }
+    .taxonomy-open.taxonomy-closing .bp-taxonomy-scrim {
+        animation: bp-drawer-scrim-exit 280ms ease both;
+    }
+    .taxonomy-open.taxonomy-closing :is(.bp-workspace, .contribution-workspace, .bp-how-main, .bp-legal-main) {
+        animation: bp-drawer-content-drop 280ms ease both;
     }
 }

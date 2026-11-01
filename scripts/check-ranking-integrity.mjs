@@ -1,15 +1,20 @@
 #!/usr/bin/env node
-import { normalizeModelParameters, modelParameterLabel } from '../public/js/shared/model-parameters.js';
+import { normalizeScoreFields } from '../public/js/shared/score-fields.js';
+import { loadScoreFieldCatalog } from '../score-field-service.js';
+import { DEFAULT_RANKING_CATEGORY_NAME } from '../ranking-entry-url.js';
+import { loadBenchmarkFamilies } from '../benchmark-family-service.js';
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import mysql from 'mysql2/promise';
 
 function readCredentialFile() {
     const environmentPassword = process.env.BENCHPOLL_DB_PASSWORD ?? process.env.DB_PASSWORD;
     if (environmentPassword !== undefined) {
         return {
+            socketPath: process.env.BENCHPOLL_DB_SOCKET || undefined,
             host: process.env.BENCHPOLL_DB_HOST || 'localhost',
             port: Number(process.env.BENCHPOLL_DB_PORT || 3306),
             user: process.env.BENCHPOLL_DB_USER || 'root',
@@ -74,24 +79,157 @@ async function hasConstraint(connection, table, constraint) {
           AND TABLE_NAME = ? AND CONSTRAINT_NAME = ?`, [table, constraint]) === 1;
 }
 
-const checks = [];
-function record(name, count, severity = 'error', details = undefined) {
-    checks.push({
+function integrityCheck(name, count, details = undefined, severity = 'error') {
+    return {
         name,
         count: Number(count),
         severity,
         passed: Number(count) === 0,
         ...(details === undefined ? {} : { details })
-    });
+    };
 }
 
-const connection = await mysql.createConnection(readCredentialFile());
-try {
+function contextValues(value) {
+    try {
+        const parsed = typeof value === 'string' ? JSON.parse(value) : value;
+        return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+    } catch { return null; }
+}
+
+export async function readTopicReferenceSchema(connection) {
+    const tables = {};
+    for (const table of ['topic_scenes', 'personal_pie_topic_weights', 'topic_reference_lock']) {
+        tables[table] = await hasTable(connection, table);
+    }
+    const migrated = await scalar(connection, `SELECT COUNT(*) AS count FROM schema_migrations
+        WHERE migration_id = 'topic_scenes_references_20261031'`) === 1;
+    const enabled = migrated || Object.values(tables).some(Boolean);
+    const checks = [];
+    if (enabled) {
+        checks.push(integrityCheck('topic scenes migration missing', migrated ? 0 : 1));
+        for (const [table, exists] of Object.entries(tables)) {
+            checks.push(integrityCheck(`topic reference table missing: ${table}`, exists ? 0 : 1));
+        }
+        for (const [table, constraint] of [
+            ['topic_scenes', 'fk_topic_scene_context'],
+            ['topic_scenes', 'fk_topic_scene_category'],
+            ['personal_pie_topic_weights', 'fk_topic_weight_pie'],
+            ['personal_pie_topic_weights', 'fk_topic_weight_context']
+        ]) {
+            if (tables[table]) checks.push(integrityCheck(`topic reference foreign key missing: ${constraint}`,
+                await hasConstraint(connection, table, constraint) ? 0 : 1));
+        }
+        for (const [table, index] of [
+            ['ranking_contexts', 'uq_ranking_context_identity'],
+            ['topic_scenes', 'uq_topic_scene_default']
+        ]) {
+            if (table === 'ranking_contexts' || tables[table]) {
+                checks.push(integrityCheck(`scene identity index missing: ${index}`,
+                    await hasIndex(connection, table, index) ? 0 : 1));
+            }
+        }
+        if (tables.topic_reference_lock) {
+            checks.push(integrityCheck('topic reference graph lock missing or invalid', await scalar(connection,
+                'SELECT ABS(COUNT(*) - 1) + COALESCE(SUM(ID <> 1), 0) AS count FROM topic_reference_lock')));
+        }
+    }
+    return { enabled, tables, checks };
+}
+
+export function inspectTopicSceneIntegrity({ categories, contexts, scenes, referencedContextIDs = [] }) {
+    const categoryByID = new Map(categories.map(row => [Number(row.ID), row]));
+    const contextByID = new Map(contexts.map(row => [Number(row.ID), row]));
+    const sceneByContextID = new Map();
+    const activeScenesByCategoryID = new Map();
+    const invalidParents = [], invalidIdentities = [], invalidFlags = [], duplicateIdentities = [];
+    for (const scene of scenes) {
+        const contextID = Number(scene.context_ID), categoryID = Number(scene.category_ID);
+        const category = categoryByID.get(categoryID), context = contextByID.get(contextID);
+        const values = contextValues(context?.context_values);
+        const expected = JSON.stringify({ scene: String(contextID) });
+        if (!category || category.parent_ID !== null) invalidParents.push(contextID);
+        if (!Number.isSafeInteger(contextID) || contextID <= 0 || !context
+            || Number(context.category_ID) !== categoryID || !values
+            || Object.keys(values).length !== 1 || values.scene !== String(contextID)
+            || context.context_hash !== crypto.createHash('sha256').update(expected).digest('hex')) {
+            invalidIdentities.push(contextID);
+        }
+        if (sceneByContextID.has(contextID)) duplicateIdentities.push(contextID);
+        sceneByContextID.set(contextID, scene);
+        if (scene.is_active == null || scene.is_default == null
+            || ![0, 1].includes(Number(scene.is_active)) || ![0, 1].includes(Number(scene.is_default))
+            || (Number(scene.is_default) === 1 && Number(scene.is_active) !== 1)) invalidFlags.push(contextID);
+        if (Number(scene.is_active) === 1) {
+            if (!activeScenesByCategoryID.has(categoryID)) activeScenesByCategoryID.set(categoryID, []);
+            activeScenesByCategoryID.get(categoryID).push(scene);
+        }
+    }
+    const invalidDefaults = [...activeScenesByCategoryID].filter(([, rows]) =>
+        rows.filter(row => Number(row.is_default) === 1).length !== 1).map(([ID]) => ID);
+    const rootCategoryIDs = new Set(contexts.filter(context => {
+        const values = contextValues(context.context_values);
+        return values && Object.keys(values).length === 0 && !sceneByContextID.has(Number(context.ID));
+    }).map(context => Number(context.category_ID)));
+    const missingRoots = categories.filter(category => Number(category.is_active) === 1
+        && !activeScenesByCategoryID.has(Number(category.ID)) && !rootCategoryIDs.has(Number(category.ID)))
+        .map(category => Number(category.ID));
+    const unregisteredScenes = contexts.filter(context => {
+        const values = contextValues(context.context_values);
+        return values && Object.hasOwn(values, 'scene') && !sceneByContextID.has(Number(context.ID));
+    }).map(context => Number(context.ID));
+    // Retired scenes and unused legacy contexts keep their stable identity for historical data.
+    const invalidReferencedContexts = [...new Set(referencedContextIDs.map(Number))].filter(ID => {
+        const context = contextByID.get(ID);
+        if (!context) return true;
+        const category = categoryByID.get(Number(context.category_ID));
+        if (!category) return true;
+        if (Number(category.is_active) !== 1 || sceneByContextID.has(ID)) return false;
+        const values = contextValues(context.context_values);
+        return activeScenesByCategoryID.has(Number(category.ID)) || !values || Object.keys(values).length !== 0;
+    });
+    return [
+        integrityCheck('topics with nested parents', categories.filter(row => row.parent_ID !== null).length),
+        integrityCheck('scenes without a root topic', invalidParents.length, invalidParents),
+        integrityCheck('scenes with invalid active/default flags', invalidFlags.length, invalidFlags),
+        integrityCheck('topics without exactly one active default scene', invalidDefaults.length, invalidDefaults),
+        integrityCheck('active topics without scenes lack a root context', missingRoots.length, missingRoots),
+        integrityCheck('scenes with mismatched context identity', invalidIdentities.length, invalidIdentities),
+        integrityCheck('duplicate scene context identities', duplicateIdentities.length, duplicateIdentities),
+        integrityCheck('scene contexts without a scene record', unregisteredScenes.length, unregisteredScenes),
+        integrityCheck('referenced contexts are not a concrete topic or scene', invalidReferencedContexts.length, invalidReferencedContexts)
+    ];
+}
+
+export async function countInvalidPersonalPieTotals(connection, includeTopicReferences) {
+    // UNION ALL preserves equal weights and avoids multiplying rows in mixed configurations.
+    return scalar(connection, `
+        SELECT COUNT(*) AS count FROM (
+            SELECT personal_pies.ID FROM personal_pies
+            LEFT JOIN (
+                SELECT pie_ID, weight_basis_points FROM personal_pie_weights
+                ${includeTopicReferences ? 'UNION ALL SELECT pie_ID, weight_basis_points FROM personal_pie_topic_weights' : ''}
+            ) weights ON weights.pie_ID = personal_pies.ID
+            GROUP BY personal_pies.ID
+            HAVING COALESCE(SUM(weights.weight_basis_points), 0) NOT IN (0, 10000)
+        ) invalid_pies`);
+}
+
+export async function checkRankingIntegrity(connection) {
+    const checks = [];
+    const record = (name, count, severity = 'error', details = undefined) => {
+        checks.push(integrityCheck(name, count, details, severity));
+    };
+    const topicSchema = await readTopicReferenceSchema(connection);
+    checks.push(...topicSchema.checks);
     record('strict benchmark schema migration missing', await scalar(connection, `
         SELECT CASE WHEN EXISTS(
             SELECT 1 FROM schema_migrations
             WHERE migration_id = '015_strict_benchmark_schema'
         ) THEN 0 ELSE 1 END AS count`));
+    record('obsolete benchmark-condition active column',
+        await hasColumn(connection, 'benchmark_conditions', 'is_active') ? 1 : 0);
+    record('benchmark-condition deletion column missing',
+        await hasColumn(connection, 'benchmark_conditions', 'deleted_at') ? 0 : 1);
     record('required score ranges migration missing', await scalar(connection, `
         SELECT CASE WHEN EXISTS(
             SELECT 1 FROM schema_migrations
@@ -107,35 +245,36 @@ try {
             SELECT 1 FROM schema_migrations
             WHERE migration_id = '021_context_free_results'
         ) THEN 0 ELSE 1 END AS count`));
-    record('personal fallback rules migration missing', await scalar(connection, `
-        SELECT CASE WHEN EXISTS(
-            SELECT 1 FROM schema_migrations
-            WHERE migration_id = '022_personal_fallback_rules'
-        ) THEN 0 ELSE 1 END AS count`));
+    record('ordered benchmark families migration missing', await scalar(connection, `
+        SELECT CASE WHEN EXISTS(SELECT 1 FROM schema_migrations
+            WHERE migration_id = '050_ordered_benchmark_families') THEN 0 ELSE 1 END AS count`));
     const fallbackRuleTableExists = await hasTable(connection, 'personal_pie_score_rules');
-    const fallbackComponentTableExists = await hasTable(connection, 'personal_pie_score_rule_components');
-    record('personal fallback rule table missing', fallbackRuleTableExists ? 0 : 1);
-    record('personal fallback component table missing', fallbackComponentTableExists ? 0 : 1);
-    if (fallbackRuleTableExists && fallbackComponentTableExists) {
+    const familyTableExists = await hasTable(connection, 'benchmark_families');
+    const familyMemberTableExists = await hasTable(connection, 'benchmark_family_members');
+    record('personal family association table missing', fallbackRuleTableExists ? 0 : 1);
+    record('benchmark family catalogue missing', familyTableExists ? 0 : 1);
+    record('benchmark family member table missing', familyMemberTableExists ? 0 : 1);
+    record('obsolete weighted component table remains', await hasTable(connection, 'personal_pie_score_rule_components') ? 1 : 0);
+    record('obsolete fallback mode column remains', await hasColumn(connection, 'personal_pie_score_rules', 'mode') ? 1 : 0);
+    if (fallbackRuleTableExists && familyTableExists && familyMemberTableExists) {
         for (const [table, constraint] of [
-            ['personal_pie_score_rules', 'fk_pie_score_rule_primary_weight'],
-            ['personal_pie_score_rule_components', 'fk_pie_score_component_rule'],
-            ['personal_pie_score_rule_components', 'fk_pie_score_component_fallback']
-        ]) {
-            record(
-                `personal fallback foreign key missing: ${table}.${constraint}`,
-                await hasConstraint(connection, table, constraint) ? 0 : 1
-            );
-        }
+            ['personal_pie_score_rules', 'fk_ordered_rule_weight'],
+            ['personal_pie_score_rules', 'fk_ordered_rule_family'],
+            ['benchmark_families', 'fk_family_primary'],
+            ['benchmark_family_members', 'fk_family_member_family'],
+            ['benchmark_family_members', 'fk_family_member_condition']
+        ]) record('family foreign key missing: ' + table + '.' + constraint,
+            await hasConstraint(connection, table, constraint) ? 0 : 1);
     }
     for (const legacyTable of [
         'objects', 'evaluation_profiles', 'evaluation_tags', 'evaluation_object_tags',
-        'evaluation_results', 'model_configurations', 'votes', 'category_templates'
+        'evaluation_results', 'model_configurations', 'votes', 'category_templates', 'model_conditions'
     ]) {
         record(`legacy table remains: ${legacyTable}`, await hasTable(connection, legacyTable) ? 1 : 0);
     }
     for (const [table, column] of [
         ['categories', 'template'], ['categories', 'is_folder'],
+        ['benchmark_results', 'model_condition_ID'], ['benchmark_results', 'model_condition_snapshot'],
         ['users', 'vote_quota'], ['users', 'vote_used'], ['models', 'url'],
         ['vendors', 'url'], ['ranking_contexts', 'template_values'],
         ['ranking_contexts', 'template_hash']
@@ -154,8 +293,6 @@ try {
         await hasColumn(connection, 'personal_pie_weights', 'benchmark_condition_ID') ? 0 : 1);
     for (const [table, constraint] of [
         ['benchmark_conditions', 'fk_benchmark_conditions_benchmark'],
-        ['model_conditions', 'fk_model_conditions_model'],
-        ['benchmark_results', 'fk_benchmark_results_model_condition'],
         ['benchmark_results', 'fk_benchmark_results_benchmark_condition'],
         ['personal_pie_weights', 'fk_personal_pie_weights_condition']
     ]) {
@@ -199,12 +336,10 @@ try {
         ) THEN 0 ELSE 1 END AS count`));
     record('category parent foreign key missing',
         await hasConstraint(connection, 'categories', 'fk_categories_parent') ? 0 : 1);
-    record('category tree does not have exactly one root', await scalar(connection, `
-        SELECT ABS(COUNT(*) - 1) AS count FROM categories WHERE parent_ID IS NULL`));
-    record('active category tree does not have exactly one root', await scalar(connection, `
+    record('default category is missing or duplicated', await scalar(connection, `
         SELECT ABS(COUNT(*) - 1) AS count
         FROM categories
-        WHERE parent_ID IS NULL AND is_active = 1`));
+        WHERE parent_ID IS NULL AND is_active = 1 AND name = ?`, [DEFAULT_RANKING_CATEGORY_NAME]));
     record('active category nodes have inactive parents', await scalar(connection, `
         SELECT COUNT(*) AS count
         FROM categories AS child
@@ -249,10 +384,10 @@ try {
         ID: Number(category.ID),
         parentID: category.parent_ID === null ? null : Number(category.parent_ID),
         name: category.name,
-        isActive: Boolean(category.is_active)
+        isActive: Number(category.is_active) === 1
     }]));
     const activeChildCategoryIDs = new Set(categoryRows
-        .filter(category => category.parent_ID !== null && Boolean(category.is_active))
+        .filter(category => category.parent_ID !== null && Number(category.is_active) === 1)
         .map(category => Number(category.parent_ID)));
     const [dimensionRows] = await connection.execute(`
         SELECT ID, scope_category_ID, dimension_key
@@ -319,6 +454,18 @@ try {
         Number(row.context_ID),
         Number(row.count)
     ]));
+    if (topicSchema.enabled) {
+        const [scenes] = topicSchema.tables.topic_scenes ? await connection.execute(`
+            SELECT context_ID, category_ID, is_active, is_default FROM topic_scenes`) : [[]];
+        const [referenceTargets] = topicSchema.tables.personal_pie_topic_weights ? await connection.execute(`
+            SELECT DISTINCT target_context_ID AS context_ID FROM personal_pie_topic_weights`) : [[]];
+        checks.push(...inspectTopicSceneIntegrity({
+            categories: categoryRows, contexts: rankingContexts, scenes,
+            referencedContextIDs: [...pieReferenceRows, ...referenceTargets].map(row => row.context_ID)
+        }));
+        record('legacy context selectors remain active on current topics', dimensionRows.filter(row =>
+            Number(row.scope_category_ID) === 0 || categoryByID.get(Number(row.scope_category_ID))?.isActive).length);
+    }
     let invalidContextJSON = 0;
     let noncanonicalContextHashes = 0;
     let duplicateCanonicalContexts = 0;
@@ -326,8 +473,8 @@ try {
     const contextOptionMismatchDetails = [];
     const canonicalContextIdentities = new Set();
     for (const context of rankingContexts) {
-        const values = context.context_values;
-        if (!values || Array.isArray(values) || typeof values !== 'object') {
+        const values = contextValues(context.context_values);
+        if (!values) {
             invalidContextJSON += 1;
             continue;
         }
@@ -352,6 +499,7 @@ try {
             });
             continue;
         }
+        if (topicSchema.enabled) continue;
         const effectiveDimensions = new Map();
         if (!activeChildCategoryIDs.has(categoryID)) {
             for (const scopeID of [0, ...lineage]) {
@@ -402,15 +550,18 @@ try {
         contextOptionMismatchDetails
     );
 
-    record('personal pies with totals other than zero or 100 percent', await scalar(connection, `
-        SELECT COUNT(*) AS count
-        FROM (
-            SELECT personal_pies.ID
-            FROM personal_pies
-            LEFT JOIN personal_pie_weights ON personal_pie_weights.pie_ID = personal_pies.ID
-            GROUP BY personal_pies.ID
-            HAVING COALESCE(SUM(personal_pie_weights.weight_basis_points), 0) NOT IN (0, 10000)
-        ) invalid_pies`));
+    record('personal pies with totals other than zero or 100 percent',
+        await countInvalidPersonalPieTotals(connection, topicSchema.tables.personal_pie_topic_weights));
+    if (topicSchema.tables.personal_pie_topic_weights) {
+        record('topic reference weights with missing pie or target context', await scalar(connection, `
+            SELECT COUNT(*) AS count FROM personal_pie_topic_weights weights
+            LEFT JOIN personal_pies pies ON pies.ID = weights.pie_ID
+            LEFT JOIN ranking_contexts contexts ON contexts.ID = weights.target_context_ID
+            WHERE pies.ID IS NULL OR contexts.ID IS NULL`));
+        record('topic reference weights outside 100 to 10000 basis points', await scalar(connection, `
+            SELECT COUNT(*) AS count FROM personal_pie_topic_weights
+            WHERE weight_basis_points IS NULL OR weight_basis_points NOT BETWEEN 100 AND 10000`));
+    }
     record('duplicate personal pies per user and context', await scalar(connection, `
         SELECT COUNT(*) AS count
         FROM (
@@ -419,91 +570,42 @@ try {
             GROUP BY user_ID, context_ID
             HAVING COUNT(*) > 1
         ) duplicate_pies`));
-    record('personal pies referencing inactive benchmark conditions', await scalar(connection, `
+    record('personal pies referencing deleted benchmark conditions', await scalar(connection, `
         SELECT COUNT(*) AS count
         FROM personal_pie_weights
         LEFT JOIN benchmark_conditions
           ON benchmark_conditions.ID = personal_pie_weights.benchmark_condition_ID
-         AND benchmark_conditions.is_active = 1
+         AND benchmark_conditions.deleted_at IS NULL
         WHERE benchmark_conditions.ID IS NULL`));
-    if (fallbackRuleTableExists && fallbackComponentTableExists) {
-        record('personal fallback rules without their primary pie weight', await scalar(connection, `
-            SELECT COUNT(*) AS count
-            FROM personal_pie_score_rules AS rules
-            LEFT JOIN personal_pie_weights AS weights
-              ON weights.pie_ID = rules.pie_ID
-             AND weights.benchmark_condition_ID = rules.primary_benchmark_condition_ID
+    if (fallbackRuleTableExists && familyTableExists && familyMemberTableExists) {
+        record('family associations without their entrance weight', await scalar(connection, `
+            SELECT COUNT(*) AS count FROM personal_pie_score_rules rules
+            LEFT JOIN personal_pie_weights weights ON weights.pie_ID = rules.pie_ID
+                AND weights.benchmark_condition_ID = rules.primary_benchmark_condition_ID
             WHERE weights.pie_ID IS NULL`));
-        record('personal fallback rules with unsupported modes', await scalar(connection, `
-            SELECT COUNT(*) AS count
-            FROM personal_pie_score_rules
-            WHERE mode <> 'fallback_if_missing'`));
-        record('personal fallback rules without components', await scalar(connection, `
-            SELECT COUNT(*) AS count
-            FROM (
-                SELECT rules.pie_ID, rules.primary_benchmark_condition_ID
-                FROM personal_pie_score_rules AS rules
-                LEFT JOIN personal_pie_score_rule_components AS components
-                  ON components.pie_ID = rules.pie_ID
-                 AND components.primary_benchmark_condition_ID = rules.primary_benchmark_condition_ID
-                GROUP BY rules.pie_ID, rules.primary_benchmark_condition_ID
-                HAVING COUNT(components.fallback_benchmark_condition_ID) = 0
-            ) empty_fallback_rules`));
-        record('personal fallback component totals other than 100 percent', await scalar(connection, `
-            SELECT COUNT(*) AS count
-            FROM (
-                SELECT pie_ID, primary_benchmark_condition_ID
-                FROM personal_pie_score_rule_components
-                GROUP BY pie_ID, primary_benchmark_condition_ID
-                HAVING SUM(weight_basis_points) <> 10000
-            ) invalid_fallback_totals`));
-        record('personal fallback components with invalid values', await scalar(connection, `
-            SELECT COUNT(*) AS count
-            FROM personal_pie_score_rule_components AS components
-            LEFT JOIN benchmark_conditions
-              ON benchmark_conditions.ID = components.fallback_benchmark_condition_ID
-             AND benchmark_conditions.is_active = 1
-            WHERE benchmark_conditions.ID IS NULL
-               OR components.primary_benchmark_condition_ID = components.fallback_benchmark_condition_ID
-               OR components.weight_basis_points < 100
-               OR components.weight_basis_points > 10000`));
-
-        const [fallbackGraphRows] = await connection.execute(`
-            SELECT pie_ID, primary_benchmark_condition_ID, fallback_benchmark_condition_ID
-            FROM personal_pie_score_rule_components
-            ORDER BY pie_ID, primary_benchmark_condition_ID, fallback_benchmark_condition_ID`);
-        const graphsByPie = new Map();
-        for (const row of fallbackGraphRows) {
-            const pieID = Number(row.pie_ID);
-            if (!graphsByPie.has(pieID)) graphsByPie.set(pieID, new Map());
-            const graph = graphsByPie.get(pieID);
-            const primaryID = Number(row.primary_benchmark_condition_ID);
-            if (!graph.has(primaryID)) graph.set(primaryID, []);
-            graph.get(primaryID).push(Number(row.fallback_benchmark_condition_ID));
+        record('family associations referencing a different entrance', await scalar(connection, `
+            SELECT COUNT(*) AS count FROM personal_pie_score_rules rules
+            LEFT JOIN benchmark_families families ON families.ID = rules.family_ID
+                AND families.primary_benchmark_condition_ID = rules.primary_benchmark_condition_ID
+            WHERE rules.family_ID IS NOT NULL AND families.ID IS NULL`));
+        record('family members referencing themselves or deleted conditions', await scalar(connection, `
+            SELECT COUNT(*) AS count FROM benchmark_family_members members
+            JOIN benchmark_families families ON families.ID = members.family_ID
+            LEFT JOIN benchmark_conditions conditions ON conditions.ID = members.benchmark_condition_ID
+                AND conditions.deleted_at IS NULL
+            WHERE members.benchmark_condition_ID IS NOT NULL
+                AND (conditions.ID IS NULL OR members.benchmark_condition_ID = families.primary_benchmark_condition_ID)`));
+        record('family entrances referencing deleted conditions', await scalar(connection, `
+            SELECT COUNT(*) AS count FROM benchmark_families families
+            LEFT JOIN benchmark_conditions conditions ON conditions.ID = families.primary_benchmark_condition_ID
+                AND conditions.deleted_at IS NULL WHERE conditions.ID IS NULL`));
+        let invalidFamilies = 0;
+        try { await loadBenchmarkFamilies(connection); }
+        catch (error) {
+            if (error.body?.error !== 'benchmark_family_invariant_failed') throw error;
+            invalidFamilies = 1;
         }
-        let cyclicFallbackPies = 0;
-        for (const graph of graphsByPie.values()) {
-            const primaries = new Set(graph.keys());
-            const visiting = new Set();
-            const visited = new Set();
-            let cyclic = false;
-            const visit = conditionID => {
-                if (visiting.has(conditionID)) {
-                    cyclic = true;
-                    return;
-                }
-                if (visited.has(conditionID) || cyclic) return;
-                visiting.add(conditionID);
-                for (const targetID of graph.get(conditionID) ?? []) {
-                    if (primaries.has(targetID)) visit(targetID);
-                }
-                visiting.delete(conditionID);
-                visited.add(conditionID);
-            };
-            graph.forEach((_, conditionID) => visit(conditionID));
-            if (cyclic) cyclicFallbackPies += 1;
-        }
-        record('personal fallback rule graphs with cycles', cyclicFallbackPies);
+        record('family catalogue has invalid member order or identity hash', invalidFamilies);
     }
     record('active context dimensions with invalid option invariants', await scalar(connection, `
         SELECT COUNT(*) AS count
@@ -543,14 +645,12 @@ try {
     record('accepted results with mismatched model or benchmark identity', await scalar(connection, `
         SELECT COUNT(*) AS count
         FROM benchmark_results
-        LEFT JOIN model_conditions
-          ON model_conditions.ID = benchmark_results.model_condition_ID
+        LEFT JOIN models ON models.ID = benchmark_results.model_ID
         LEFT JOIN benchmark_conditions
           ON benchmark_conditions.ID = benchmark_results.benchmark_condition_ID
         WHERE benchmark_results.status = 'accepted'
-          AND (model_conditions.ID IS NULL
+          AND (models.ID IS NULL
                OR benchmark_conditions.ID IS NULL
-               OR model_conditions.model_ID <> benchmark_results.model_ID
                OR benchmark_conditions.benchmark_ID <> benchmark_results.benchmark_ID)`));
     record('percentage results outside 0 to 100', await scalar(connection, `
         SELECT COUNT(*) AS count
@@ -560,18 +660,15 @@ try {
         WHERE benchmark_results.status = 'accepted'
           AND benchmark_conditions.uses_percentage_scale = 1
           AND (benchmark_results.raw_score < 0 OR benchmark_results.raw_score > 100)`));
-    record('accepted results referencing inactive ranking entities', await scalar(connection, `
+    record('accepted results referencing unavailable ranking entities', await scalar(connection, `
         SELECT COUNT(*) AS count
         FROM benchmark_results
         JOIN models ON models.ID = benchmark_results.model_ID
-        JOIN model_conditions
-          ON model_conditions.ID = benchmark_results.model_condition_ID
         JOIN benchmark_conditions
           ON benchmark_conditions.ID = benchmark_results.benchmark_condition_ID
         WHERE benchmark_results.status = 'accepted'
           AND (models.is_active <> 1
-               OR model_conditions.is_active <> 1
-               OR benchmark_conditions.is_active <> 1)`));
+               OR benchmark_conditions.deleted_at IS NOT NULL)`));
     record('benchmark conditions with invalid score invariants', await scalar(connection, `
         SELECT COUNT(*) AS count
         FROM benchmark_conditions
@@ -598,7 +695,6 @@ try {
         FROM benchmark_results
         WHERE benchmark_results.status = 'accepted'
           AND (JSON_TYPE(benchmark_results.benchmark_condition_snapshot) <> 'OBJECT'
-               OR JSON_TYPE(benchmark_results.model_condition_snapshot) <> 'OBJECT'
                OR JSON_EXTRACT(benchmark_results.benchmark_condition_snapshot, '$.conditionID') IS NULL
                OR CAST(JSON_UNQUOTE(JSON_EXTRACT(
                     benchmark_results.benchmark_condition_snapshot,
@@ -608,55 +704,31 @@ try {
                OR CAST(JSON_UNQUOTE(JSON_EXTRACT(
                     benchmark_results.benchmark_condition_snapshot,
                     '$.benchmarkID'
-                  )) AS UNSIGNED) <> benchmark_results.benchmark_ID
-               OR JSON_EXTRACT(benchmark_results.model_condition_snapshot, '$.conditionID') IS NULL
-               OR CAST(JSON_UNQUOTE(JSON_EXTRACT(
-                    benchmark_results.model_condition_snapshot,
-                    '$.conditionID'
-                  )) AS UNSIGNED) <> benchmark_results.model_condition_ID
-               OR JSON_EXTRACT(benchmark_results.model_condition_snapshot, '$.modelID') IS NULL
-               OR CAST(JSON_UNQUOTE(JSON_EXTRACT(
-                    benchmark_results.model_condition_snapshot,
-                    '$.modelID'
-                  )) AS UNSIGNED) <> benchmark_results.model_ID)`));
-    record('model parameters migration missing', await scalar(connection, `
-        SELECT CASE WHEN EXISTS(SELECT 1 FROM schema_migrations WHERE migration_id = '028_model_parameters') THEN 0 ELSE 1 END AS count`));
-    const [modelConditions] = await connection.query('SELECT ID, parameters, name, condition_key, is_default FROM model_conditions WHERE is_active = 1');
-    let invalidParameters = 0;
-    for (const condition of modelConditions) {
-        try {
-            const parameters = condition.parameters === null ? null : normalizeModelParameters(
-                typeof condition.parameters === 'string' ? JSON.parse(condition.parameters) : condition.parameters);
-            const key = parameters === null ? `unconfigured-${condition.ID}`
-                : 'kv-' + crypto.createHash('sha256').update(JSON.stringify(parameters)).digest('hex');
-            if (condition.name !== modelParameterLabel(parameters, condition.ID).slice(0, 192)
-                || condition.condition_key !== key || Boolean(condition.is_default) !== (parameters !== null && Object.keys(parameters).length === 0)) invalidParameters++;
-        } catch { invalidParameters++; }
+                  )) AS UNSIGNED) <> benchmark_results.benchmark_ID)`));
+    record('score fields migration missing', await scalar(connection, `
+        SELECT CASE WHEN EXISTS(SELECT 1 FROM schema_migrations WHERE migration_id = '029_score_fields') THEN 0 ELSE 1 END AS count`));
+    const fields = await loadScoreFieldCatalog(connection);
+    const [scores] = await connection.execute('SELECT ID, score_fields FROM benchmark_results');
+    let invalidFields = 0;
+    for (const score of scores) {
+        try { normalizeScoreFields(typeof score.score_fields === 'string' ? JSON.parse(score.score_fields) : score.score_fields, fields); }
+        catch { invalidFields++; }
     }
-    record('model parameters or derived labels are invalid', invalidParameters);
-    record('active benchmark condition default flags that disagree with the literal default name', await scalar(connection, `
+    record('invalid per-score field assignments', invalidFields);
+    record('benchmark condition default flags that disagree with the literal default name', await scalar(connection, `
         SELECT COUNT(*) AS count
         FROM benchmark_conditions
-        WHERE is_active = 1
+        WHERE deleted_at IS NULL
           AND (is_default <> (LOWER(TRIM(name)) = 'default')
                OR (condition_key = 'default') <> (LOWER(TRIM(name)) = 'default'))`));
-    record('active models without an active condition', await scalar(connection, `
-        SELECT COUNT(*) AS count
-        FROM models
-        WHERE models.is_active = 1
-          AND NOT EXISTS (
-              SELECT 1 FROM model_conditions
-              WHERE model_conditions.model_ID = models.ID
-                AND model_conditions.is_active = 1
-          )`));
-    record('active benchmarks without an active condition', await scalar(connection, `
+    record('active benchmarks without a condition', await scalar(connection, `
         SELECT COUNT(*) AS count
         FROM benchmarks
         WHERE benchmarks.is_active = 1
           AND NOT EXISTS (
               SELECT 1 FROM benchmark_conditions
               WHERE benchmark_conditions.benchmark_ID = benchmarks.ID
-                AND benchmark_conditions.is_active = 1
+                AND benchmark_conditions.deleted_at IS NULL
           )`));
     record('malformed moderation JSON', await scalar(connection, `
         SELECT COUNT(*) AS count
@@ -665,26 +737,32 @@ try {
     record('moderation records with noncanonical schema versions', await scalar(connection, `
         SELECT COUNT(*) AS count
         FROM moderation_logs
-        WHERE JSON_VALID(content) = 1
+        WHERE status = 'pending' AND JSON_VALID(content) = 1
           AND COALESCE((
               JSON_TYPE(JSON_EXTRACT(content, '$.schemaVersion')) = 'INTEGER'
               AND (
-                  (JSON_UNQUOTE(JSON_EXTRACT(content, '$.type')) IN ('feedback', 'report_issue', 'discussion_report')
+                  (JSON_UNQUOTE(JSON_EXTRACT(content, '$.type')) IN ('feedback', 'report_issue', 'discussion_report', 'score_field', 'score_field_option')
                    AND JSON_EXTRACT(content, '$.schemaVersion') = 1)
                   OR
-                  (JSON_UNQUOTE(JSON_EXTRACT(content, '$.type')) IN ('new_category', 'new_benchmark', 'new_model')
+                  (JSON_UNQUOTE(JSON_EXTRACT(content, '$.type')) IN ('new_category', 'new_benchmark')
                    AND JSON_EXTRACT(content, '$.schemaVersion') = 5)
                   OR
+                  (JSON_UNQUOTE(JSON_EXTRACT(content, '$.type')) = 'new_model'
+                   AND JSON_EXTRACT(content, '$.schemaVersion') = 6)
+                  OR
                   (JSON_UNQUOTE(JSON_EXTRACT(content, '$.type')) = 'benchmark_result'
-                   AND JSON_EXTRACT(content, '$.schemaVersion') = 8)
+                   AND JSON_EXTRACT(content, '$.schemaVersion') = 9)
                   OR
                   (JSON_UNQUOTE(JSON_EXTRACT(content, '$.type')) = 'entity_change'
                    AND (
-                       (JSON_UNQUOTE(JSON_EXTRACT(content, '$.targetKind')) IN ('benchmark', 'model')
+                       (JSON_UNQUOTE(JSON_EXTRACT(content, '$.targetKind')) = 'benchmark'
                         AND JSON_EXTRACT(content, '$.schemaVersion') = 5)
                        OR
+                       (JSON_UNQUOTE(JSON_EXTRACT(content, '$.targetKind')) = 'model'
+                        AND JSON_EXTRACT(content, '$.schemaVersion') = 6)
+                       OR
                        (JSON_UNQUOTE(JSON_EXTRACT(content, '$.targetKind')) = 'result'
-                        AND JSON_EXTRACT(content, '$.schemaVersion') = 8)
+                        AND JSON_EXTRACT(content, '$.schemaVersion') = 9)
                    ))
               )
           ), 0) = 0`));
@@ -697,13 +775,29 @@ try {
           AND COALESCE(JSON_LENGTH(JSON_EXTRACT(content, '$.options')), 0) < 2`));
 
     const failures = checks.filter(check => !check.passed && check.severity === 'error');
-    console.log(JSON.stringify({
+    return {
         status: failures.length === 0 ? 'passed' : 'failed',
         checks
-    }, null, 2));
-    if (failures.length > 0) {
-        process.exitCode = 1;
+    };
+}
+
+export async function runRankingIntegrityAudit(connection) {
+    await connection.query('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ');
+    await connection.query('START TRANSACTION WITH CONSISTENT SNAPSHOT, READ ONLY');
+    try {
+        return await checkRankingIntegrity(connection);
+    } finally {
+        await connection.rollback();
     }
-} finally {
-    await connection.end();
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+    const connection = await mysql.createConnection(readCredentialFile());
+    try {
+        const report = await runRankingIntegrityAudit(connection);
+        console.log(JSON.stringify(report, null, 2));
+        if (report.status === 'failed') process.exitCode = 1;
+    } finally {
+        await connection.end();
+    }
 }

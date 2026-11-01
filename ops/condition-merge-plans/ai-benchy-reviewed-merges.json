@@ -1,0 +1,36 @@
+{
+  "groups": [
+    {
+      "benchmarkName": "AI BENCHY model reliability suite",
+      "targetID": 584,
+      "sourceIDs": [725, 1273, 3836, 7634, 7938, 8330, 10695, 10821, 11620, 11968, 14151, 15709, 16465, 17419, 18294, 18733],
+      "targetName": "AI BENCHY; suite v22; metric=Reliability (run-history reliability column)",
+      "targetScale": { "usesPercentageScale": false, "scoreMin": 0, "scoreMax": 10 },
+      "reason": "Same suite v22 run-history reliability metric; run timestamps and reasoning effort differ by scored model and are retained in score evidence/fields."
+    },
+    {
+      "benchmarkName": "AI BENCHY model reliability suite",
+      "targetID": 637,
+      "sourceIDs": [1183, 2067, 3254, 3687, 3705, 6441, 8919, 8976, 10449, 10703, 10859, 11503, 12062, 13061, 13301, 14092, 14193, 14596, 14824, 15051, 16043, 16279, 16932, 18784, 18990, 19055, 19703, 21591],
+      "targetName": "AI BENCHY; suite v22; metric=Median",
+      "targetScale": { "usesPercentageScale": false, "scoreMin": 0, "scoreMax": 10 },
+      "reason": "Same suite v22 median metric; run timestamps, failure summaries, and reasoning effort are per-score evidence/configuration."
+    },
+    {
+      "benchmarkName": "AI BENCHY model reliability suite",
+      "targetID": 1176,
+      "sourceIDs": [1699, 2747, 2850, 3075, 3183, 4378, 4823, 5151, 5305, 5797, 6768, 7607, 8459, 8618, 8900, 12103, 12826, 13148, 13171, 13244, 16087, 16433, 16782, 17652, 19345, 19405, 20031, 20465],
+      "targetName": "AI BENCHY; suite v22; metric=Tests fully passed",
+      "targetScale": { "usesPercentageScale": false, "scoreMin": 0, "scoreMax": 22 },
+      "reason": "Same suite v22 fully-passed test metric; run timestamps, failure summaries, and reasoning effort are per-score evidence/configuration."
+    },
+    {
+      "benchmarkName": "AI BENCHY model reliability suite",
+      "targetID": 2176,
+      "sourceIDs": [3083, 3681, 4784, 6250, 8373, 12825, 13936, 17012, 17782, 18783, 19788, 20726],
+      "targetName": "AI BENCHY; suite v22; metric=Reliability",
+      "targetScale": { "usesPercentageScale": false, "scoreMin": 0, "scoreMax": 10 },
+      "reason": "Same suite v22 reliability metric, distinct from the run-history reliability column; per-run metadata remains on score evidence."
+    }
+  ]
+}

@@ -1,13 +1,39 @@
-import { comparisonOptions, groupComparisonModels } from './model-comparison.js';
-import { normalizeModelParameters } from './public/js/shared/model-parameters.js';
+import { comparisonOptions, groupComparisonModels, comparisonGroupIsComparable } from './model-comparison.js';
+import { selectableBenchmarkConditionSQL, conditionCoverage } from './benchmark-condition-visibility.js';
+import { fieldKey, fieldDisplayValue, normalizeScoreFields } from './public/js/shared/score-fields.js';
+import { loadScoreFieldCatalog } from './score-field-service.js';
 import crypto from 'node:crypto';
-import { scoreValueKey } from './score-aggregation.js';
+import { claimWriteIntent, completeWriteIntent } from './write-idempotency.js';
+import { ownsCategory } from './private-category-service.js';
+import { topicCreator } from './topic-service.js';
+import { FEATURED_TOPIC_ID, topicURL } from './public/js/shared/topics.js';
+import { currentScoreSQL } from './score-aggregation.js';
+import { scoreEvidenceHash } from './score-evidence.js';
+import { FALLBACK_RULE_MODE, familyKey, resolvedFamilyConditionIDs } from './public/js/shared/benchmark-families.js';
+import { FALLBACK_SELECTION_SOURCES } from './public/js/shared/fallback-choice.js';
+import { loadBenchmarkFamilies, ensureBenchmarkFamily, parseFamilyRows, pruneUnusedBenchmarkFamilies } from './benchmark-family-service.js';
+import { availableResultInference, normalizeAvailableInferenceVersion,
+    AVAILABLE_INFERENCE_VERSION } from './public/js/shared/available-score.js';
+import { createPairwiseReference } from './pairwise-score.js';
+import { benchmarkVersionTieOrder } from './public/js/shared/benchmark-version-order.js';
+import { isAACondition, AA_DISPLAY_RESTRICTION } from './public/js/shared/aa-ranking-policy.js';
+import { aaResultReason } from './aa-archive-policy.js';
+import { resolveTopicScene } from './topic-scenes-service.js';
+import { loadTopicReferenceTargets, referenceCondition, missingReferenceCondition,
+    lockTopicReferences, validateTopicReferences, expandTopicReferences, publicReferenceWeights } from './topic-reference-service.js';
+import { startTransactionConnection, commitTransactionConnection, rollbackTransactionConnection,
+    releaseTransactionConnection, destroyTransactionConnection } from './db-transaction.js';
+import { cachedRankingRead, cachedRankingCalculation, cloneRankingMetadata, cloneRankingMembersForJSON, deferRankingMetadata, hasRankingReadCache, withRankingReadCache } from './ranking-read-cache.js';
 
 export const PIE_TOTAL_BASIS_POINTS = 10000;
 export const PIE_MIN_ITEM_BASIS_POINTS = 100;
 export const MAX_PIE_ITEMS = PIE_TOTAL_BASIS_POINTS / PIE_MIN_ITEM_BASIS_POINTS;
-export const FALLBACK_RULE_MODE = 'fallback_if_missing';
-export const MAX_FALLBACK_COMPONENTS = 12;
+export { FALLBACK_RULE_MODE };
+export const MIN_COMPARABLE_MODELS = 3;
+export const PUBLIC_PIE_SAMPLE_HOURS = 72;
+export const PUBLIC_CONTEXT_ACTIVITY_DAYS = 14;
+export const PUBLIC_PIE_MIN_SAMPLES = 10;
+export const RANKING_READ_TIMEOUT_MS = 45000;
 
 function requestError(status, error, details = {}) {
     return { status, body: { error, ...details } };
@@ -51,6 +77,7 @@ export function normalizeUserID(value) {
 
 function roundTo(value, places = 2) {
     const scale = 10 ** places;
+    if (Math.abs(Number(value)) > Number.MAX_VALUE / scale) return Number(value);
     return Math.round((Number(value) + Number.EPSILON) * scale) / scale;
 }
 
@@ -87,91 +114,35 @@ function normalizeWeights(entries) {
     return distributed.map(({ rawWeight, exact, fraction, index, ...entry }) => entry);
 }
 
-async function resolveCategory(connection, requestedCategoryID) {
-    const categoryWasOmitted = requestedCategoryID === undefined || requestedCategoryID === null;
-    let categoryID = categoryWasOmitted ? null : parseSafeInteger(requestedCategoryID, { minimum: 1 });
-    if (categoryID === null) {
-        if (!categoryWasOmitted) {
-            throw requestError(400, 'invalid_category_id');
-        }
-        const [roots] = await connection.execute(`
-            SELECT ID, parent_ID, name
-            FROM categories
-            WHERE parent_ID IS NULL AND is_active = 1
-            ORDER BY ID`);
-        if (roots.length === 0) {
-            throw requestError(409, 'ranking_root_missing');
-        }
-        if (roots.length > 1) {
-            throw requestError(409, 'multiple_ranking_roots', {
-                categoryIDs: roots.map(root => Number(root.ID))
-            });
-        }
-        categoryID = Number(roots[0].ID);
+async function resolveCategory(connection, requestedCategoryID, userID = null) {
+    const categoryID = requestedCategoryID == null ? FEATURED_TOPIC_ID
+        : parseSafeInteger(requestedCategoryID, { minimum: 1 });
+    if (categoryID === null) throw requestError(400, 'invalid_category_id');
+    const [rows] = await connection.execute(`SELECT c.ID, c.name, c.slug, c.description, c.position, c.owner_user_ID,
+        c.created_by_user_ID, COALESCE(NULLIF(p.display_name, ''), creator.name) AS creator_name,
+        COALESCE(p.avatar_data_url, creator.profile_picture_URL) AS creator_avatar
+        FROM categories c LEFT JOIN users creator ON creator.ID = c.created_by_user_ID AND creator.deleted_at IS NULL
+        LEFT JOIN user_public_profiles p ON p.user_ID = creator.ID WHERE c.ID = ? AND c.is_active = 1`, [categoryID]);
+    if (!rows.length || rows[0].owner_user_ID != null && !ownsCategory(rows[0], userID)) {
+        throw requestError(404, 'category_not_found');
     }
-
-    const lineage = [];
-    const visited = new Set();
-    let cursorID = categoryID;
-    while (cursorID !== null) {
-        if (visited.has(cursorID) || lineage.length >= 64) {
-            throw requestError(409, 'category_cycle_detected');
-        }
-        visited.add(cursorID);
-        const [rows] = await connection.execute(
-            'SELECT ID, parent_ID, name FROM categories WHERE ID = ? AND is_active = 1',
-            [cursorID]
-        );
-        if (rows.length === 0) {
-            throw requestError(404, 'category_not_found');
-        }
-        const category = rows[0];
-        lineage.unshift({
-            ID: Number(category.ID),
-            parentID: category.parent_ID === null ? null : Number(category.parent_ID),
-            name: category.name
-        });
-        cursorID = category.parent_ID === null ? null : Number(category.parent_ID);
-    }
-    const [[childCount]] = await connection.execute(
-        'SELECT COUNT(*) AS count FROM categories WHERE parent_ID = ? AND is_active = 1',
-        [categoryID]
-    );
+    const category = rows[0];
+    const isPrivate = category.owner_user_ID != null;
+    const lineage = [{ ID: categoryID, name: category.name, position: Number(category.position ?? 0) }];
     return {
         ID: categoryID,
-        path: lineage.map(category => category.name).join('/'),
+        description: category.description ?? '',
+        creator: topicCreator(category),
+        path: topicURL(categoryID, category.name, isPrivate, category.slug).slice(1),
         lineage,
-        isLeaf: Number(childCount.count) === 0
+        isPrivate,
+        isLeaf: true
     };
 }
 
-async function loadDimensions(connection, category) {
-    if (!category.isLeaf) {
-        return [];
-    }
-    const scopedIDs = [0, ...category.lineage.map(item => item.ID)];
-    const [rows] = await connection.execute(`
-        SELECT ID, scope_category_ID, dimension_key, name, position
-        FROM ranking_dimensions
-        WHERE is_active = 1
-          AND scope_category_ID IN (${scopedIDs.map(() => '?').join(', ')})
-        ORDER BY position, ID`, scopedIDs);
-    const selected = selectScopedDimensions(rows, category);
-    if (selected.length === 0) {
-        return [];
-    }
-    const dimensionIDs = selected.map(dimension => Number(dimension.ID));
-    const [options] = await connection.execute(`
-        SELECT dimension_ID, option_key, name, position, is_default, is_neutral
-        FROM ranking_dimension_options
-        WHERE dimension_ID IN (${dimensionIDs.map(() => '?').join(', ')})
-        ORDER BY dimension_ID, position, ID`, dimensionIDs);
-    return decorateDimensions(selected, options);
-}
-
 export function selectScopedDimensions(rows, category) {
-    if (!category.isLeaf) return [];
-    const scopedIDs = [0, ...category.lineage.map(item => item.ID)];
+    if (!category.isLeaf || category.isPrivate) return [];
+    const scopedIDs = [Number(category.ID ?? category.lineage.at(-1).ID)];
     const priority = new Map(scopedIDs.map((scopeID, index) => [Number(scopeID), index]));
     const selectedByKey = new Map();
     for (const row of rows.filter(row => scopedIDs.includes(Number(row.scope_category_ID)))) {
@@ -269,13 +240,13 @@ export function serializeRankingContextValues(contextValues) {
     };
 }
 
-async function findContext(connection, categoryID, contextValues) {
+async function findContext(connection, categoryID, contextValues, { currentRead = false } = {}) {
     const { serialized, contextHash } = serializeRankingContextValues(contextValues);
     const [rows] = await connection.execute(`
         SELECT ID
         FROM ranking_contexts
         WHERE category_ID = ? AND context_hash = ?
-        LIMIT 1`, [categoryID, contextHash]);
+        LIMIT 1${currentRead ? ' FOR SHARE' : ''}`, [categoryID, contextHash]);
     return {
         ID: rows.length > 0 ? Number(rows[0].ID) : null,
         categoryID,
@@ -287,15 +258,21 @@ async function findContext(connection, categoryID, contextValues) {
 
 async function ensureContext(connection, categoryID, contextValues) {
     const context = await findContext(connection, categoryID, contextValues);
+    if (context.ID !== null) return context;
     const [result] = await connection.execute(`
         INSERT INTO ranking_contexts (category_ID, context_values, context_hash)
         VALUES (?, ?, ?)
         ON DUPLICATE KEY UPDATE ID = LAST_INSERT_ID(ID)`,
     [categoryID, context.serialized, context.contextHash]);
-    if (!Number(result.insertId)) {
+    const insertedID = parseSafeInteger(result.insertId, { minimum: 1 });
+    if (insertedID !== null) return { ...context, ID: insertedID };
+    // An UPDATE trigger can clear the duplicate-key insert ID. Read the row,
+    // not the transaction's older snapshot, if another writer created it first.
+    const current = await findContext(connection, categoryID, contextValues, { currentRead: true });
+    if (current.ID === null) {
         throw requestError(500, 'ranking_context_upsert_failed');
     }
-    return { ...context, ID: Number(result.insertId) };
+    return current;
 }
 
 function parseContextValues(value, contextID) {
@@ -313,11 +290,55 @@ function parseContextValues(value, contextID) {
     throw requestError(409, 'ranking_context_values_invalid', { contextID });
 }
 
-export async function loadBenchmarkConditions(connection) {
+export async function loadBenchmarkConditions(connection, { includeConditionIDs = [] } = {}) {
+    if (!Array.isArray(includeConditionIDs)
+        || includeConditionIDs.some(id => parseSafeInteger(id, { minimum: 1 }) === null)) {
+        throw requestError(400, 'invalid_pie_condition_ids');
+    }
+    const preservedIDs = [...new Set(includeConditionIDs)];
+    const previewClause = preservedIDs.length
+        ? `OR candidate_conditions.ID IN (${preservedIDs.map(() => '?').join(', ')})`
+        : '';
     const [rows] = await connection.execute(`
+        WITH model_coverage AS (
+            SELECT benchmark_results.benchmark_condition_ID,
+                   COUNT(*) AS approved_score_count,
+                   COUNT(DISTINCT benchmark_results.model_ID) AS scored_model_count
+            FROM benchmark_results
+            JOIN models ON models.ID = benchmark_results.model_ID AND models.is_active = 1
+            WHERE ${currentScoreSQL()}
+            GROUP BY benchmark_results.benchmark_condition_ID
+        ), eligible_benchmarks AS (
+            SELECT DISTINCT candidate_conditions.benchmark_ID
+            FROM benchmark_conditions candidate_conditions
+            LEFT JOIN model_coverage candidate_coverage
+                ON candidate_coverage.benchmark_condition_ID = candidate_conditions.ID
+            WHERE ${selectableBenchmarkConditionSQL('candidate_conditions')}
+              AND (
+                  candidate_coverage.scored_model_count >= ?
+                  OR EXISTS (
+                      SELECT 1 FROM personal_pie_weights
+                      WHERE personal_pie_weights.benchmark_condition_ID = candidate_conditions.ID
+                  )
+                  OR EXISTS (
+                      SELECT 1 FROM benchmark_family_members
+                      WHERE benchmark_family_members.benchmark_condition_ID = candidate_conditions.ID
+                        AND EXISTS (SELECT 1 FROM personal_pie_score_rules r
+                            WHERE r.family_ID = benchmark_family_members.family_ID)
+                  )
+                  OR EXISTS (
+                      SELECT 1 FROM benchmark_families
+                      WHERE benchmark_families.primary_benchmark_condition_ID = candidate_conditions.ID
+                        AND EXISTS (SELECT 1 FROM personal_pie_score_rules r
+                            WHERE r.family_ID = benchmark_families.ID)
+                  )
+                  ${previewClause}
+              )
+        )
         SELECT benchmark_conditions.ID AS condition_ID,
                benchmark_conditions.benchmark_ID,
                benchmark_conditions.condition_key,
+               benchmark_conditions.score_source,
                benchmark_conditions.name AS condition_name,
                benchmark_conditions.uses_percentage_scale,
                benchmark_conditions.score_min,
@@ -325,26 +346,20 @@ export async function loadBenchmarkConditions(connection) {
                benchmark_conditions.score_direction,
                benchmark_conditions.target_value,
                benchmark_conditions.is_default,
+               benchmark_conditions.is_primary,
                benchmarks.name,
                benchmarks.introduction_url,
-               GROUP_CONCAT(benchmark_tags.name ORDER BY benchmark_tags.name SEPARATOR '\n') AS tags
+               COALESCE(model_coverage.scored_model_count, 0) AS scored_model_count,
+               COALESCE(model_coverage.approved_score_count, 0) AS approved_score_count
         FROM benchmark_conditions
         JOIN benchmarks ON benchmarks.ID = benchmark_conditions.benchmark_ID
-        LEFT JOIN benchmark_tag_links
-          ON benchmark_tag_links.benchmark_ID = benchmarks.ID
-        LEFT JOIN benchmark_tags
-          ON benchmark_tags.ID = benchmark_tag_links.tag_ID
-         AND benchmark_tags.is_active = 1
-        WHERE benchmark_conditions.is_active = 1
+        JOIN eligible_benchmarks ON eligible_benchmarks.benchmark_ID = benchmark_conditions.benchmark_ID
+        LEFT JOIN model_coverage ON model_coverage.benchmark_condition_ID = benchmark_conditions.ID
+        WHERE ${selectableBenchmarkConditionSQL()}
           AND benchmarks.is_active = 1
-        GROUP BY benchmark_conditions.ID, benchmark_conditions.benchmark_ID,
-                 benchmark_conditions.condition_key, benchmark_conditions.name,
-                 benchmark_conditions.uses_percentage_scale,
-                 benchmark_conditions.score_min, benchmark_conditions.score_max,
-                 benchmark_conditions.score_direction, benchmark_conditions.target_value,
-                 benchmark_conditions.is_default, benchmarks.name, benchmarks.introduction_url
         ORDER BY benchmarks.name, benchmark_conditions.is_default DESC,
-                 benchmark_conditions.name, benchmark_conditions.ID`);
+                  benchmark_conditions.name, benchmark_conditions.ID`,
+    [MIN_COMPARABLE_MODELS, ...preservedIDs]);
     return rows.map(row => {
         const conditionName = row.condition_name;
         const normalizedConditionName = String(conditionName ?? '')
@@ -379,7 +394,12 @@ export async function loadBenchmarkConditions(connection) {
                 conditionID: Number(row.condition_ID)
             });
         }
-        const tags = row.tags ? String(row.tags).split('\n') : [];
+        const scoreCount = Number(row.approved_score_count);
+        if (!Number.isSafeInteger(scoreCount) || scoreCount < 0) {
+            throw requestError(409, 'benchmark_condition_score_count_invalid', {
+                conditionID: Number(row.condition_ID)
+            });
+        }
         return {
             ID: Number(row.condition_ID),
             conditionID: Number(row.condition_ID),
@@ -388,27 +408,28 @@ export async function loadBenchmarkConditions(connection) {
             baseName: row.name,
             conditionKey: row.condition_key,
             conditionName,
+            excludedFromRanking: isAACondition({ benchmarkID: Number(row.benchmark_ID), benchmarkName: row.name,
+                conditionKey: row.condition_key, conditionName, scoreSource: row.score_source }),
             isDefaultCondition: isDefault,
-            tags,
-            type: tags[0] ?? 'benchmark',
+            isPrimaryCondition: Boolean(row.is_primary),
             url: row.introduction_url,
             usesPercentageScale,
             scoreMin,
             scoreMax,
             scoreDirection,
-            targetValue
+            targetValue,
+            scoredModelCount: Number(row.scored_model_count ?? 0),
+            scoreCount
         };
     });
 }
 
 function contextMatchesSelection(candidateValues, context) {
     const expectedKeys = new Set(context.dimensions.map(dimension => dimension.key));
-    if (expectedKeys.size > 0) {
-        const candidateKeys = Object.keys(candidateValues);
-        if (candidateKeys.length !== expectedKeys.size
-            || candidateKeys.some(key => !expectedKeys.has(key))) {
-            throw requestError(409, 'ranking_context_values_mismatch');
-        }
+    const candidateKeys = Object.keys(candidateValues);
+    if (candidateKeys.length !== expectedKeys.size
+        || candidateKeys.some(key => !expectedKeys.has(key))) {
+        throw requestError(409, 'ranking_context_values_mismatch');
     }
     for (const dimension of context.dimensions) {
         const selected = dimension.options.find(option => option.key === context.contextValues[dimension.key]);
@@ -430,23 +451,16 @@ function contextMatchesSelection(candidateValues, context) {
 }
 
 async function loadMatchingContexts(connection, context) {
+    if (context.sceneID != null || context.sceneMode === true) {
+        return context.ID == null ? [] : [{ ID: context.ID, categoryID: context.categoryID,
+            contextValues: context.contextValues }];
+    }
     const [rows] = await connection.execute(`
-        WITH RECURSIVE category_scope AS (
-            SELECT ID, CAST(ID AS CHAR(4096)) AS visited
-            FROM categories
-            WHERE ID = ? AND is_active = 1
-            UNION ALL
-            SELECT child.ID, CONCAT(category_scope.visited, ',', child.ID)
-            FROM categories child
-            JOIN category_scope ON child.parent_ID = category_scope.ID
-            WHERE child.is_active = 1
-              AND FIND_IN_SET(child.ID, category_scope.visited) = 0
-        )
-        SELECT ranking_contexts.ID, ranking_contexts.category_ID,
-               ranking_contexts.context_values
-        FROM ranking_contexts
-        JOIN category_scope ON category_scope.ID = ranking_contexts.category_ID
-        ORDER BY ranking_contexts.category_ID, ranking_contexts.ID`, [context.categoryID]);
+        SELECT rc.ID, rc.category_ID, rc.context_values
+        FROM ranking_contexts rc
+        JOIN categories c ON c.ID = rc.category_ID
+        WHERE rc.category_ID = ? AND c.is_active = 1 AND c.owner_user_ID IS NULL
+        ORDER BY rc.ID`, [context.categoryID]);
     return rows.map(row => ({
         ID: Number(row.ID),
         categoryID: Number(row.category_ID),
@@ -455,30 +469,45 @@ async function loadMatchingContexts(connection, context) {
 }
 
 export async function loadPublicPie(connection, context, conditionsByID) {
+    if (context.isPrivate) return { entries: [], familyComposition: [], participantCount: 0,
+        isFallback: false, scoringEntries: [], contextIDs: [] };
     const matchingContexts = await loadMatchingContexts(connection, context);
     if (matchingContexts.length === 0) {
-        return { entries: [], fallbackRules: [], participantCount: 0, isFallback: false, scoringEntries: [], contextIDs: [] };
+        return { entries: [], familyComposition: [], participantCount: 0, isFallback: false, scoringEntries: [], contextIDs: [] };
     }
     const contextIDs = matchingContexts.map(candidate => candidate.ID);
     const [rows] = await connection.execute(`
         SELECT personal_pies.ID AS pie_ID, personal_pies.context_ID,
+               personal_pies.updated_at >= NOW() - INTERVAL ${PUBLIC_PIE_SAMPLE_HOURS} HOUR AS is_recent,
+               personal_pies.updated_at >= NOW() - INTERVAL ${PUBLIC_CONTEXT_ACTIVITY_DAYS} DAY AS is_influence_recent,
                personal_pie_weights.benchmark_condition_ID,
                personal_pie_weights.weight_basis_points
         FROM personal_pies
         JOIN users ON users.ID = personal_pies.user_ID
-        LEFT JOIN personal_pie_weights ON personal_pie_weights.pie_ID = personal_pies.ID
+        LEFT JOIN (SELECT pie_ID, benchmark_condition_ID, weight_basis_points FROM personal_pie_weights
+            UNION ALL SELECT pie_ID, -target_context_ID AS benchmark_condition_ID, weight_basis_points
+            FROM personal_pie_topic_weights) personal_pie_weights ON personal_pie_weights.pie_ID = personal_pies.ID
         WHERE personal_pies.context_ID IN (${contextIDs.map(() => '?').join(', ')})
           AND users.deleted_at IS NULL
           AND (users.banned_at IS NULL
                OR (users.banned_until IS NOT NULL AND users.banned_until <= NOW()))
-        ORDER BY personal_pies.ID, personal_pie_weights.benchmark_condition_ID`, contextIDs);
+        ORDER BY personal_pies.context_ID, personal_pies.updated_at DESC,
+                 personal_pies.ID DESC, personal_pie_weights.benchmark_condition_ID`, contextIDs);
 
     const pies = new Map();
     for (const row of rows) {
         const pieID = Number(row.pie_ID);
+        const recent = Number(row.is_recent);
+        const influential = Number(row.is_influence_recent);
+        if ((recent !== 0 && recent !== 1) || (influential !== 0 && influential !== 1)
+            || (recent === 1 && influential !== 1)) {
+            throw requestError(409, 'personal_pie_recency_invalid', { pieID });
+        }
         if (!pies.has(pieID)) {
             pies.set(pieID, {
                 contextID: Number(row.context_ID),
+                isRecent: recent === 1,
+                isInfluential: influential === 1,
                 entries: [],
                 conditionIDs: new Set(),
                 total: 0
@@ -488,6 +517,9 @@ export async function loadPublicPie(connection, context, conditionsByID) {
             continue;
         }
         const conditionID = Number(row.benchmark_condition_ID);
+        if (conditionID < 0 && !conditionsByID.has(conditionID)) {
+            conditionsByID.set(conditionID, missingReferenceCondition(-conditionID));
+        }
         if (!conditionsByID.has(conditionID)) {
             throw requestError(409, 'personal_pie_references_unavailable_condition', { pieID, conditionID });
         }
@@ -517,40 +549,61 @@ export async function loadPublicPie(connection, context, conditionsByID) {
         if (pie.total !== PIE_TOTAL_BASIS_POINTS) {
             throw requestError(409, 'personal_pie_total_invalid', { pieID, totalBasisPoints: pie.total });
         }
+        const eligible = pie.entries.filter(entry => !conditionsByID.get(entry.conditionID)?.excludedFromRanking);
+        if (!eligible.length) continue;
+        if (eligible.length !== pie.entries.length) pie.entries = normalizeWeights(eligible.map(entry => ({
+            conditionID: entry.conditionID, rawWeight: entry.weightBasisPoints
+        })));
         validPies.set(pieID, pie);
     }
     if (validPies.size === 0) {
-        return { entries: [], fallbackRules: [], participantCount: 0, isFallback: false, scoringEntries: [], contextIDs };
+        return { entries: [], familyComposition: [], participantCount: 0, isFallback: false, scoringEntries: [], contextIDs };
+    }
+
+    const piesByContext = new Map(contextIDs.map(ID => [ID, []]));
+    for (const [pieID, pie] of validPies) {
+        const group = piesByContext.get(pie.contextID);
+        if (!group) throw requestError(409, 'public_pie_context_outside_scope', { contextID: pie.contextID });
+        group.push([pieID, pie]);
+    }
+    const selectedPies = new Map();
+    const influenceCountByContext = new Map();
+    for (const [contextID, group] of piesByContext) {
+        const recent = group.filter(([, pie]) => pie.isRecent);
+        const influenceCount = group.filter(([, pie]) => pie.isInfluential).length;
+        influenceCountByContext.set(contextID, influenceCount);
+        if (influenceCount === 0) continue;
+        const sample = recent.length >= PUBLIC_PIE_MIN_SAMPLES ? recent : group.slice(0, PUBLIC_PIE_MIN_SAMPLES);
+        for (const [pieID, pie] of sample) {
+            selectedPies.set(pieID, { ...pie, sampleWeight: influenceCount / sample.length });
+        }
+    }
+    const participantCount = Array.from(influenceCountByContext.values()).reduce((sum, count) => sum + count, 0);
+    if (participantCount === 0) {
+        return { entries: [], familyComposition: [], participantCount: 0, isFallback: false, scoringEntries: [], contextIDs };
     }
 
     const aggregateWeights = new Map();
     const scoringWeights = new Map();
-    for (const pie of validPies.values()) {
+    for (const pie of selectedPies.values()) {
         for (const entry of pie.entries) {
             aggregateWeights.set(
                 entry.conditionID,
-                (aggregateWeights.get(entry.conditionID) ?? 0) + entry.weightBasisPoints
+                (aggregateWeights.get(entry.conditionID) ?? 0) + entry.weightBasisPoints * pie.sampleWeight
             );
             const scoringKey = `${pie.contextID}:${entry.conditionID}`;
             const current = scoringWeights.get(scoringKey);
             scoringWeights.set(scoringKey, {
                 contextID: pie.contextID,
                 conditionID: entry.conditionID,
-                weightBasisPoints: (current?.weightBasisPoints ?? 0) + entry.weightBasisPoints
+                weightBasisPoints: (current?.weightBasisPoints ?? 0) + entry.weightBasisPoints * pie.sampleWeight
             });
         }
     }
-    const pieIDs = Array.from(validPies.keys());
-    const [fallbackRows] = await connection.execute(`
-        SELECT rules.pie_ID, rules.primary_benchmark_condition_ID, rules.mode,
-               components.fallback_benchmark_condition_ID, components.weight_basis_points
-        FROM personal_pie_score_rules AS rules
-        LEFT JOIN personal_pie_score_rule_components AS components
-          ON components.pie_ID = rules.pie_ID
-         AND components.primary_benchmark_condition_ID = rules.primary_benchmark_condition_ID
-        WHERE rules.pie_ID IN (${pieIDs.map(() => '?').join(', ')})
-        ORDER BY rules.pie_ID, rules.primary_benchmark_condition_ID,
-                 components.fallback_benchmark_condition_ID`, pieIDs);
+    // Explicit choices have their own electorate; passive recent pies must not crowd them out.
+    const configuringPies = new Map([...validPies].filter(([, pie]) => pie.isInfluential));
+    const pieIDs = Array.from(configuringPies.keys());
+    const fallbackRows = await loadPieFallbackRows(connection, pieIDs);
     const rowsByPie = new Map(pieIDs.map(ID => [ID, []]));
     for (const row of fallbackRows) {
         const pieID = Number(row.pie_ID);
@@ -560,43 +613,55 @@ export async function loadPublicPie(connection, context, conditionsByID) {
         rowsByPie.get(pieID).push(row);
     }
     const aggregates = new Map();
-    for (const [pieID, pie] of validPies) {
+    const configuredCounts = new Map();
+    for (const [pieID, pie] of configuringPies) {
         const rules = parseStoredFallbackRules(rowsByPie.get(pieID), pie.conditionIDs, pieID);
-        for (const rule of rules) {
-            const primaryWeight = pie.entries.find(entry => entry.conditionID === rule.primaryConditionID).weightBasisPoints;
-            if (!aggregates.has(rule.primaryConditionID)) {
-                aggregates.set(rule.primaryConditionID, { configuredWeight: 0, components: new Map() });
+        const rulesByPrimary = new Map(rules.map(rule => [rule.primaryConditionID, rule]));
+        for (const entry of pie.entries) {
+            const rule = rulesByPrimary.get(entry.conditionID);
+            if (!rule) continue;
+            const members = rule.entries;
+            for (const member of members) {
+                if (!conditionsByID.has(member.conditionID)) throw requestError(409, 'personal_pie_fallback_condition_not_available', { pieID, conditionID: member.conditionID });
             }
-            const aggregate = aggregates.get(rule.primaryConditionID);
-            aggregate.configuredWeight += primaryWeight;
-            for (const entry of rule.entries) {
-                if (!conditionsByID.has(entry.conditionID)) {
-                    throw requestError(409, 'personal_pie_fallback_condition_not_available', { pieID, conditionID: entry.conditionID });
-                }
-                aggregate.components.set(entry.conditionID,
-                    (aggregate.components.get(entry.conditionID) ?? 0) + primaryWeight * entry.weightBasisPoints);
-            }
+            if (!aggregates.has(entry.conditionID)) aggregates.set(entry.conditionID, new Map());
+            const families = aggregates.get(entry.conditionID);
+            configuredCounts.set(entry.conditionID, (configuredCounts.get(entry.conditionID) ?? 0) + 1);
+            const key = familyKey(entry.conditionID, members);
+            const previous = families.get(key);
+            families.set(key, { primaryConditionID: entry.conditionID, familyID: rule?.familyID ?? null,
+                entries: members, rawWeight: (previous?.rawWeight ?? 0) + entry.weightBasisPoints });
         }
     }
-    // Include holders without a rule in the denominator; never inflate the configured subset.
-    const fallbackRules = Array.from(aggregates, ([primaryConditionID, aggregate]) => {
-        const denominator = aggregateWeights.get(primaryConditionID);
+    // Keep whole chains separate. Mixing alternative positions changes first-present semantics.
+    const communityComposition = Array.from(new Set([...aggregateWeights.keys(), ...aggregates.keys()].filter(ID => ID > 0)), primaryConditionID => {
+        const totalWeight = aggregateWeights.get(primaryConditionID) ?? 0;
+        const families = aggregates.get(primaryConditionID) ?? new Map();
+        const denominator = [...families.values()].reduce((sum, family) => sum + family.rawWeight, 0);
+        const configuredPieCount = configuredCounts.get(primaryConditionID) ?? 0;
+        const choices = denominator > 0 ? [...families.values()] : [
+            { primaryConditionID, familyID: null, entries: [], rawWeight: 1 }
+        ];
         return {
             primaryConditionID,
-            mode: FALLBACK_RULE_MODE,
-            unconfiguredWeightBasisPoints: (denominator - aggregate.configuredWeight) / denominator * PIE_TOTAL_BASIS_POINTS,
-            entries: Array.from(aggregate.components, ([conditionID, weightedSum]) => ({
-                conditionID, weightBasisPoints: weightedSum / denominator
-            })).sort((a, b) => b.weightBasisPoints - a.weightBasisPoints || a.conditionID - b.conditionID)
+            configuredPieCount,
+            isDefault: configuredPieCount === 0,
+            families: choices.map(({ rawWeight, ...family }) => ({ ...family,
+                weightBasisPoints: rawWeight / (denominator || 1) * PIE_TOTAL_BASIS_POINTS,
+                overallWeightBasisPoints: totalWeight / participantCount * rawWeight / (denominator || 1)
+            })).sort((a, b) => b.weightBasisPoints - a.weightBasisPoints
+                || familyKey(primaryConditionID, a.entries).localeCompare(familyKey(primaryConditionID, b.entries)))
         };
     });
+    const familyComposition = communityComposition.filter(group => aggregateWeights.has(group.primaryConditionID));
     return {
-        fallbackRules,
+        familyComposition,
+        communityComposition,
         entries: normalizeWeights(Array.from(aggregateWeights, ([conditionID, rawWeight]) => ({
             conditionID,
             rawWeight
         }))),
-        participantCount: validPies.size,
+        participantCount,
         isFallback: false,
         scoringEntries: Array.from(scoringWeights.values()),
         contextIDs
@@ -618,7 +683,9 @@ export async function loadPersonalPie(connection, contextID, userID) {
     const pie = pies[0];
     const [weights] = await connection.execute(`
         SELECT benchmark_condition_ID, weight_basis_points
-        FROM personal_pie_weights
+        FROM (SELECT pie_ID, benchmark_condition_ID, weight_basis_points FROM personal_pie_weights
+            UNION ALL SELECT pie_ID, -target_context_ID AS benchmark_condition_ID, weight_basis_points
+            FROM personal_pie_topic_weights) personal_pie_weights
         WHERE pie_ID = ?
         ORDER BY weight_basis_points DESC, benchmark_condition_ID`, [pie.ID]);
     const entries = weights.map(row => ({
@@ -628,7 +695,7 @@ export async function loadPersonalPie(connection, contextID, userID) {
     const conditionIDs = new Set();
     for (const entry of entries) {
         if (!Number.isSafeInteger(entry.conditionID)
-            || entry.conditionID < 1
+            || entry.conditionID === 0
             || !Number.isSafeInteger(entry.weightBasisPoints)
             || entry.weightBasisPoints < PIE_MIN_ITEM_BASIS_POINTS
             || entry.weightBasisPoints > PIE_TOTAL_BASIS_POINTS) {
@@ -646,20 +713,7 @@ export async function loadPersonalPie(connection, contextID, userID) {
     if (entries.length > 0 && total !== PIE_TOTAL_BASIS_POINTS) {
         throw requestError(409, 'personal_pie_total_invalid', { pieID: Number(pie.ID), totalBasisPoints: total });
     }
-    const [fallbackRows] = await connection.execute(`
-        SELECT personal_pie_score_rules.primary_benchmark_condition_ID,
-               personal_pie_score_rules.mode,
-               personal_pie_score_rule_components.fallback_benchmark_condition_ID,
-               personal_pie_score_rule_components.weight_basis_points
-        FROM personal_pie_score_rules
-        LEFT JOIN personal_pie_score_rule_components
-          ON personal_pie_score_rule_components.pie_ID = personal_pie_score_rules.pie_ID
-         AND personal_pie_score_rule_components.primary_benchmark_condition_ID =
-             personal_pie_score_rules.primary_benchmark_condition_ID
-        WHERE personal_pie_score_rules.pie_ID = ?
-        ORDER BY personal_pie_score_rules.primary_benchmark_condition_ID,
-                 personal_pie_score_rule_components.weight_basis_points DESC,
-                 personal_pie_score_rule_components.fallback_benchmark_condition_ID`, [pie.ID]);
+    const fallbackRows = await loadPieFallbackRows(connection, [Number(pie.ID)]);
     return {
         ID: Number(pie.ID),
         revision: Number(pie.revision),
@@ -669,120 +723,78 @@ export async function loadPersonalPie(connection, contextID, userID) {
     };
 }
 
-function parseStoredFallbackRules(fallbackRows, conditionIDs, pieID) {
-    const pie = { ID: pieID };
-    const fallbackRulesByPrimary = new Map();
-    for (const row of fallbackRows) {
-        const primaryConditionID = Number(row.primary_benchmark_condition_ID);
-        if (!Number.isSafeInteger(primaryConditionID) || !conditionIDs.has(primaryConditionID)) {
-            throw requestError(409, 'personal_pie_fallback_primary_invalid', {
-                pieID: Number(pie.ID),
-                primaryConditionID
-            });
+async function loadPieFallbackRows(connection, pieIDs) {
+    const [rows] = await connection.execute(`SELECT rules.pie_ID, rules.primary_benchmark_condition_ID,
+        rules.family_ID AS selected_family_ID, rules.selection_source,
+        f.ID AS family_ID, f.chain_hash, m.position,
+        m.benchmark_condition_ID AS fallback_benchmark_condition_ID
+        FROM personal_pie_score_rules rules
+        LEFT JOIN benchmark_families f ON f.ID = rules.family_ID
+          AND f.primary_benchmark_condition_ID = rules.primary_benchmark_condition_ID
+        LEFT JOIN benchmark_family_members m ON m.family_ID = f.ID
+        WHERE rules.pie_ID IN (${pieIDs.map(() => '?').join(', ')})
+        ORDER BY rules.pie_ID, rules.primary_benchmark_condition_ID, m.position`, pieIDs);
+    return rows;
+}
+
+function parseStoredFallbackRules(rows, conditionIDs, pieID) {
+    const explicitNone = rows.filter(row => row.selected_family_ID === null);
+    for (const row of explicitNone) {
+        if (row.family_ID !== null || row.position !== null || row.fallback_benchmark_condition_ID !== null) {
+            throw requestError(409, 'benchmark_family_invariant_failed', { pieID });
         }
-        if (row.mode !== FALLBACK_RULE_MODE) {
-            throw requestError(409, 'personal_pie_fallback_mode_invalid', {
-                pieID: Number(pie.ID),
-                primaryConditionID,
-                mode: row.mode
-            });
-        }
-        if (!fallbackRulesByPrimary.has(primaryConditionID)) {
-            fallbackRulesByPrimary.set(primaryConditionID, {
-                primaryConditionID,
-                mode: FALLBACK_RULE_MODE,
-                entries: [],
-                conditionIDs: new Set(),
-                total: 0
-            });
-        }
-        if (row.fallback_benchmark_condition_ID === null) {
-            throw requestError(409, 'personal_pie_fallback_empty', {
-                pieID: Number(pie.ID),
-                primaryConditionID
-            });
-        }
-        const conditionID = Number(row.fallback_benchmark_condition_ID);
-        const weightBasisPoints = Number(row.weight_basis_points);
-        const rule = fallbackRulesByPrimary.get(primaryConditionID);
-        if (!Number.isSafeInteger(conditionID)
-            || conditionID < 1
-            || conditionID === primaryConditionID
-            || !Number.isSafeInteger(weightBasisPoints)
-            || weightBasisPoints < PIE_MIN_ITEM_BASIS_POINTS
-            || weightBasisPoints > PIE_TOTAL_BASIS_POINTS) {
-            throw requestError(409, 'personal_pie_fallback_component_invalid', {
-                pieID: Number(pie.ID),
-                primaryConditionID,
-                conditionID
-            });
-        }
-        if (rule.conditionIDs.has(conditionID)) {
-            throw requestError(409, 'personal_pie_fallback_component_duplicate', {
-                pieID: Number(pie.ID),
-                primaryConditionID,
-                conditionID
-            });
-        }
-        rule.conditionIDs.add(conditionID);
-        rule.entries.push({ conditionID, weightBasisPoints });
-        rule.total += weightBasisPoints;
     }
-    const fallbackRules = Array.from(fallbackRulesByPrimary.values(), rule => {
-        if (rule.entries.length > MAX_FALLBACK_COMPONENTS) {
-            throw requestError(409, 'personal_pie_fallback_too_large', {
-                pieID: Number(pie.ID),
-                primaryConditionID: rule.primaryConditionID,
-                maxComponents: MAX_FALLBACK_COMPONENTS
-            });
+    const families = [...parseFamilyRows(rows.filter(row => row.selected_family_ID !== null)),
+        ...explicitNone.map(row => ({ primaryConditionID: Number(row.primary_benchmark_condition_ID),
+            familyID: null, mode: FALLBACK_RULE_MODE, entries: [] }))];
+    const primaryIDs = new Set();
+    const selectionSources = new Map(rows.map(row => [Number(row.primary_benchmark_condition_ID), row.selection_source]));
+    for (const family of families) {
+        if (!conditionIDs.has(family.primaryConditionID) || primaryIDs.has(family.primaryConditionID)) {
+            throw requestError(409, 'personal_pie_fallback_primary_invalid', { pieID, primaryConditionID: family.primaryConditionID });
         }
-        if (rule.total !== PIE_TOTAL_BASIS_POINTS) {
-            throw requestError(409, 'personal_pie_fallback_total_invalid', {
-                pieID: Number(pie.ID),
-                primaryConditionID: rule.primaryConditionID,
-                totalBasisPoints: rule.total
-            });
+        primaryIDs.add(family.primaryConditionID);
+        const source = selectionSources.get(family.primaryConditionID);
+        if (source !== undefined) {
+            if (!FALLBACK_SELECTION_SOURCES.includes(source)) throw requestError(409, 'personal_pie_fallback_source_invalid', { pieID });
+            family.selectionSource = source;
         }
-        return {
-            primaryConditionID: rule.primaryConditionID,
-            mode: rule.mode,
-            entries: rule.entries
-        };
-    });
-    try {
-        assertFallbackRulesAcyclic(fallbackRules);
-    } catch {
-        throw requestError(409, 'personal_pie_fallback_cycle_invalid', {
-            pieID: Number(pie.ID)
-        });
     }
-    return fallbackRules;
+    return families;
 }
 
 export function decoratePieEntries(entries, conditionsByID) {
     return entries.map(entry => {
-        const condition = conditionsByID.get(Number(entry.conditionID));
+        const condition = conditionsByID.get(Number(entry.conditionID))
+            ?? (entry.conditionID < 0 ? missingReferenceCondition(-entry.conditionID) : null);
         if (!condition) {
             throw requestError(409, 'pie_condition_not_available', { conditionID: Number(entry.conditionID) });
         }
         return {
+            ...(condition.type === 'topic' ? condition : {}),
             conditionID: condition.conditionID,
             benchmarkID: condition.benchmarkID,
             name: condition.name,
             conditionKey: condition.conditionKey,
             conditionName: condition.conditionName,
+            excludedFromRanking: condition.excludedFromRanking === true,
             isDefaultCondition: condition.isDefaultCondition,
-            type: condition.type,
+            isPrimaryCondition: condition.isPrimaryCondition,
+            lowCoverage: condition.lowCoverage,
+            scoredModelCount: condition.scoredModelCount,
+            scoreCount: condition.scoreCount,
             weightBasisPoints: Number(entry.weightBasisPoints),
             weight: roundTo(Number(entry.weightBasisPoints) / 100)
         };
-    }).sort((a, b) => (b.weightBasisPoints - a.weightBasisPoints) || a.name.localeCompare(b.name));
+    }).sort((a, b) => (b.weightBasisPoints - a.weightBasisPoints) || benchmarkVersionTieOrder(a, b));
 }
 
 function decorateFallbackRules(rules, conditionsByID) {
     return rules.map(rule => ({
         primaryConditionID: rule.primaryConditionID,
         mode: rule.mode,
+        familyID: rule.familyID ?? null,
+        ...(rule.selectionSource ? { selectionSource: rule.selectionSource } : {}),
         entries: rule.entries.map(entry => {
             const condition = conditionsByID.get(Number(entry.conditionID));
             if (!condition) {
@@ -797,18 +809,30 @@ function decorateFallbackRules(rules, conditionsByID) {
                 name: condition.name,
                 conditionKey: condition.conditionKey,
                 conditionName: condition.conditionName,
+                excludedFromRanking: condition.excludedFromRanking === true,
                 isDefaultCondition: condition.isDefaultCondition,
-                type: condition.type,
-                weightBasisPoints: Number(entry.weightBasisPoints),
-                weight: roundTo(Number(entry.weightBasisPoints) / 100)
+                isPrimaryCondition: condition.isPrimaryCondition,
+                lowCoverage: condition.lowCoverage
             };
         })
     }));
 }
 
-function buildBenchmarkList(conditions, publicEntries, personalEntries) {
+export function buildBenchmarkList(conditions, publicEntries, personalEntries, families = [], familyComposition = [], personalRules = []) {
+    conditions = conditionCoverage(conditions);
     const publicWeights = new Map(publicEntries.map(entry => [entry.conditionID, entry.weightBasisPoints]));
     const personalWeights = new Map(personalEntries.map(entry => [entry.conditionID, entry.weightBasisPoints]));
+    const conditionsByBenchmark = new Map();
+    for (const condition of conditions) {
+        const benchmarkID = condition.benchmarkID;
+        if (!conditionsByBenchmark.has(benchmarkID)) conditionsByBenchmark.set(benchmarkID, []);
+        conditionsByBenchmark.get(benchmarkID).push(condition);
+    }
+    for (const family of conditionsByBenchmark.values()) {
+        if (family.filter(condition => condition.isPrimaryCondition).length !== 1) {
+            throw requestError(409, 'benchmark_primary_condition_invariant_failed', { benchmarkID: family[0].benchmarkID });
+        }
+    }
     const rows = conditions.map(condition => ({
         ...condition,
         publicWeightBasisPoints: publicWeights.get(condition.conditionID) ?? 0,
@@ -817,15 +841,28 @@ function buildBenchmarkList(conditions, publicEntries, personalEntries) {
         personalWeight: personalWeights.has(condition.conditionID)
             ? roundTo(personalWeights.get(condition.conditionID) / 100)
             : null
-    })).sort((a, b) => (
-        (b.publicWeightBasisPoints - a.publicWeightBasisPoints)
-        || (b.personalWeightBasisPoints ?? -1) - (a.personalWeightBasisPoints ?? -1)
-        || a.name.localeCompare(b.name)
-        || a.conditionID - b.conditionID
-    ));
+    }));
+    const rowsByConditionID = new Map(rows.map(row => [row.conditionID, row]));
+    const publicFamilies = new Map(familyComposition.flatMap(group => group.families.map(family => [
+        familyKey(group.primaryConditionID, family.entries), family.overallWeightBasisPoints
+    ])));
+    const personalFamilies = new Map(personalRules.map(rule => [familyKey(rule.primaryConditionID, rule.entries), rule]));
+    for (const family of families) {
+        const primary = rowsByConditionID.get(family.primaryConditionID);
+        if (!primary) continue;
+        const key = familyKey(family.primaryConditionID, family.entries);
+        const publicWeightBasisPoints = publicFamilies.get(key) ?? 0;
+        const personalWeightBasisPoints = personalFamilies.has(key) ? personalWeights.get(family.primaryConditionID) ?? null : null;
+        rows.push({ ...primary, familyID: family.familyID, familyKey: key, isFamily: true,
+            familyEntries: family.entries, publicWeightBasisPoints, publicWeight: roundTo(publicWeightBasisPoints / 100),
+            personalWeightBasisPoints, personalWeight: personalWeightBasisPoints === null ? null : roundTo(personalWeightBasisPoints / 100) });
+    }
+    rows.sort((a, b) => b.publicWeightBasisPoints - a.publicWeightBasisPoints
+        || benchmarkVersionTieOrder(a, b) || Number(a.isFamily ?? false) - Number(b.isFamily ?? false)
+        || (a.familyKey ?? '').localeCompare(b.familyKey ?? ''));
     let previousWeight = null;
     let previousRank = 0;
-    rows.forEach((row, index) => {
+    rows.filter(row => !row.isFamily).forEach((row, index) => {
         if (row.publicWeightBasisPoints === previousWeight) {
             row.rank = previousRank;
         } else {
@@ -834,6 +871,8 @@ function buildBenchmarkList(conditions, publicEntries, personalEntries) {
             previousWeight = row.publicWeightBasisPoints;
         }
     });
+    const entranceRanks = new Map(rows.filter(row => !row.isFamily).map(row => [row.conditionID, row.rank]));
+    rows.filter(row => row.isFamily).forEach(row => { row.rank = entranceRanks.get(row.conditionID); });
     return rows;
 }
 
@@ -888,11 +927,20 @@ export function medianOfFiniteNumbers(values) {
 export async function resolveRankingContext(connection, {
     categoryID,
     contextValues = {},
+    userID = null,
     create = false,
     requireAllDimensions = false
 } = {}) {
-    const category = await resolveCategory(connection, categoryID);
-    const dimensions = await loadDimensions(connection, category);
+    const category = await resolveCategory(connection, categoryID, userID);
+    const scene = await resolveTopicScene(connection, category, contextValues, { create, requireAllDimensions });
+    if (scene) return {
+        ...scene, categoryID: category.ID, categoryPath: category.path,
+        categoryName: category.lineage.at(-1).name, description: scene.scene?.description || category.description,
+        topicDescription: category.description, creator: category.creator,
+        lineage: category.lineage, isPrivate: category.isPrivate, isLeafCategory: true,
+        sceneMode: true
+    };
+    const dimensions = [];
     const resolvedContext = canonicalizeContextValues(
         contextValues,
         dimensions,
@@ -905,7 +953,11 @@ export async function resolveRankingContext(connection, {
         ID: context.ID,
         categoryID: category.ID,
         categoryPath: category.path,
-        lineage: category.lineage.map(item => ({ ID: item.ID, name: item.name })),
+        categoryName: category.lineage.at(-1).name,
+        description: category.description,
+        creator: category.creator,
+        lineage: category.lineage.map(item => ({ ID: item.ID, name: item.name, position: item.position })),
+        isPrivate: category.isPrivate,
         isLeafCategory: category.isLeaf,
         contextHash: context.contextHash,
         contextValues: resolvedContext.contextValues,
@@ -918,142 +970,153 @@ function resultKey(conditionID) {
     return String(Number(conditionID));
 }
 
-function indexFallbackRules(fallbackRules, scope) {
+function indexFallbackRules(fallbackRules) {
     if (!Array.isArray(fallbackRules)) {
         throw new TypeError('fallback rules must be an array');
     }
-    if (!['personal', 'public'].includes(scope)) throw new TypeError('invalid fallback scope');
-    const isPublic = scope === 'public';
     const rulesByPrimary = new Map();
     for (const rule of fallbackRules) {
         if (!rule || typeof rule !== 'object' || Array.isArray(rule)
             || rule.mode !== FALLBACK_RULE_MODE
             || !Number.isSafeInteger(rule.primaryConditionID)
             || !Array.isArray(rule.entries)
-            || rule.entries.length === 0
-            || (!isPublic && rule.entries.length > MAX_FALLBACK_COMPONENTS)
             || rulesByPrimary.has(rule.primaryConditionID)) {
             throw new TypeError('invalid fallback rule');
         }
-        const seen = new Set();
-        let total = 0;
-        const entries = rule.entries.map(entry => {
-            const conditionID = Number(entry?.conditionID);
-            const weightBasisPoints = Number(entry?.weightBasisPoints);
-            if (!Number.isSafeInteger(conditionID)
-                || conditionID < 1
-                || conditionID === rule.primaryConditionID
-                || seen.has(conditionID)
-                || (isPublic ? !Number.isFinite(weightBasisPoints) || weightBasisPoints <= 0
-                    : !Number.isSafeInteger(weightBasisPoints) || weightBasisPoints < PIE_MIN_ITEM_BASIS_POINTS)
-                || weightBasisPoints > PIE_TOTAL_BASIS_POINTS) {
-                throw new TypeError('invalid fallback rule component');
-            }
-            seen.add(conditionID);
-            total += weightBasisPoints;
-            return { conditionID, weightBasisPoints };
-        });
-        const unconfiguredWeightBasisPoints = isPublic ? rule.unconfiguredWeightBasisPoints : 0;
-        if (isPublic ? !Number.isFinite(unconfiguredWeightBasisPoints)
-            || unconfiguredWeightBasisPoints < 0 || unconfiguredWeightBasisPoints > PIE_TOTAL_BASIS_POINTS
-            || Math.abs(total + unconfiguredWeightBasisPoints - PIE_TOTAL_BASIS_POINTS) > 1e-6
-            : total !== PIE_TOTAL_BASIS_POINTS) {
-            throw new TypeError('fallback components and unconfigured weight must total 100 percent');
-        }
-        rulesByPrimary.set(rule.primaryConditionID, { ...rule, entries, unconfiguredWeightBasisPoints });
+        if (rule.entries.some(entry => Object.hasOwn(entry, 'weightBasisPoints'))) throw new TypeError('Weighted fallbacks are no longer supported');
+        familyKey(rule.primaryConditionID, rule.entries);
+        rulesByPrimary.set(rule.primaryConditionID, rule);
     }
     return rulesByPrimary;
 }
 
-function directModelScore(model, conditionID) {
-    const result = model.results.get(resultKey(conditionID));
-    if (!result) return null;
-    const normalizedScore = parseFiniteNumber(result.normalizedScore);
-    return normalizedScore === null ? null : normalizedScore;
-}
-
-function resolveDirectFallback(model, rule) {
-    let lower = 0;
-    // Public holders without a fallback retain the normal missing-score interval.
-    let upper = rule.unconfiguredWeightBasisPoints / PIE_TOTAL_BASIS_POINTS * 100;
-    let coveredBasisPoints = 0;
-    const resultKeys = new Set();
-    const components = rule.entries.map(entry => {
-        const normalizedScore = directModelScore(model, entry.conditionID);
-        const fraction = entry.weightBasisPoints / PIE_TOTAL_BASIS_POINTS;
-        if (normalizedScore === null) {
-            upper += fraction * 100;
-            return {
-                conditionID: entry.conditionID,
-                weightBasisPoints: entry.weightBasisPoints,
-                status: 'missing',
-                normalizedScore: null
-            };
+function indexPublicFamilies(composition) {
+    if (!Array.isArray(composition)) throw new TypeError('Invalid public family composition');
+    const indexed = new Map();
+    for (const group of composition) {
+        if (!Number.isSafeInteger(group.primaryConditionID) || group.primaryConditionID < 1
+            || indexed.has(group.primaryConditionID) || !Array.isArray(group.families) || !group.families.length) {
+            throw new TypeError('Invalid public family composition');
         }
-        lower += fraction * normalizedScore;
-        upper += fraction * normalizedScore;
-        coveredBasisPoints += entry.weightBasisPoints;
-        resultKeys.add(resultKey(entry.conditionID));
-        return {
-            conditionID: entry.conditionID,
-            weightBasisPoints: entry.weightBasisPoints,
-            status: 'direct',
-            normalizedScore
-        };
-    });
-    return { lower, upper, coveredBasisPoints, resultKeys, components };
+        const seen = new Set();
+        let total = 0;
+        for (const family of group.families) {
+            const key = familyKey(group.primaryConditionID, family.entries);
+            if (family.primaryConditionID !== group.primaryConditionID || seen.has(key)
+                || !Number.isFinite(family.weightBasisPoints) || family.weightBasisPoints <= 0 || family.weightBasisPoints > 10000) {
+                throw new TypeError('Invalid public family share');
+            }
+            seen.add(key);
+            total += family.weightBasisPoints;
+        }
+        if (Math.abs(total - 10000) > 1e-6) throw new TypeError('Public family shares must total 100 percent');
+        indexed.set(group.primaryConditionID, group.families);
+    }
+    return indexed;
 }
 
-export function scoreModels(models, weightedEntries, totalBasisPoints, { fallbackRules = [], fallbackScope = 'personal' } = {}) {
+function currentInferenceVersion(version) {
+    try { return normalizeAvailableInferenceVersion(version); }
+    catch { throw requestError(400, 'invalid_available_inference_version'); }
+}
+
+export function scoreModels(models, weightedEntries, totalBasisPoints, { fallbackRules = [], familyComposition = [], fallbackScope = 'personal', scoreMode = 'range', availableInferenceVersion = AVAILABLE_INFERENCE_VERSION, percentileReference = null, comparisonScoreIndexes = null, deferMetadata = false, excludedConditionIDs = new Set() } = {}) {
+    currentInferenceVersion(availableInferenceVersion);
+    if (!['range', 'available'].includes(scoreMode)) {
+        throw { status: 400, body: { error: 'invalid_score_mode' } };
+    }
     if (!Number.isFinite(totalBasisPoints) || totalBasisPoints <= 0 || weightedEntries.length === 0) {
         return [];
     }
-    const fallbackRulesByPrimary = indexFallbackRules(fallbackRules, fallbackScope);
+    if (!['personal', 'public'].includes(fallbackScope)) throw new TypeError('Invalid fallback scope');
+    if (fallbackScope === 'public' && fallbackRules.length) throw new TypeError('Public scoring requires whole family shares');
+    const fallbackRulesByPrimary = indexFallbackRules(fallbackRules);
+    const publicFamilies = indexPublicFamilies(familyComposition);
+    const reference = scoreMode === 'available' ? percentileReference ?? createPairwiseReference(models) : null;
+    const plans = weightedEntries.filter(entry => entry.weightBasisPoints > 0).map(entry => {
+        const rule = fallbackRulesByPrimary.get(entry.conditionID);
+        const families = fallbackScope === 'public' || !rule ? publicFamilies.get(entry.conditionID) : null;
+        return { entry, families: (families ?? [{ familyID: rule?.familyID ?? null,
+            entries: rule?.entries ?? [], weightBasisPoints: 10000 }]).map(family => ({
+            family, fraction: family.weightBasisPoints / 10000,
+            chain: entry.conditionID < 0 ? []
+                : resolvedFamilyConditionIDs(entry.conditionID, family.entries).filter(ID => !excludedConditionIDs.has(ID))
+        })) };
+    });
     return models.map(model => {
         let lower = 0;
         let upper = 0;
         let coveredBasisPoints = 0;
         let fallbackCoveredBasisPoints = 0;
         const resultKeys = new Set();
-        const fallbackResolutions = new Map();
-        for (const entry of weightedEntries) {
+        const fallbackResolutions = [];
+        const calculationScores = [];
+        const inferredScores = [];
+        const estimate = reference?.estimate(model);
+        let inferredBasisPoints = 0;
+        const comparisonScores = comparisonScoreIndexes?.get(model)
+            ?? new Map((model.comparisonScores ?? []).map(score => [Number(score.conditionID), score]));
+        const recordScore = (conditionID, normalizedScore, weightBasisPoints, fallbackFor = null, familyID = null, chain = []) => {
+            if (weightBasisPoints <= 0) return;
+            const comparison = comparisonScores.get(Number(conditionID));
+            calculationScores.push({ conditionID: Number(conditionID), normalizedScore,
+                weightBasisPoints, fallbackFor, familyID, familyConditionIDs: deferMetadata ? chain : [...chain],
+                memberIDs: comparison ? deferMetadata ? comparison.memberIDs : [...comparison.memberIDs] : [model.ID],
+                matchedCount: comparison?.matchedCount ?? null,
+                memberWeights: (deferMetadata ? comparison?.memberWeights : comparison?.memberWeights.map(item => ({ ...item }))) ?? [{ ID: model.ID, weight: 1 }] });
+            calculationScores.at(-1).memberEvidence = (deferMetadata ? comparison?.memberEvidence : comparison?.memberEvidence.map(item => ({ ...item }))) ?? [];
+        };
+        for (const { entry, families } of plans) {
             const entryFraction = entry.weightBasisPoints / totalBasisPoints;
-            const normalizedScore = directModelScore(model, entry.conditionID);
-            if (normalizedScore !== null) {
-                lower += entryFraction * normalizedScore;
-                upper += entryFraction * normalizedScore;
-                coveredBasisPoints += entry.weightBasisPoints;
-                resultKeys.add(resultKey(entry.conditionID));
-                continue;
+            for (const { family, fraction, chain } of families) {
+                let conditionID = null, normalizedScore = null, attemptedCount = chain.length;
+                for (let index = 0; index < chain.length; index++) {
+                    const result = model.results.get(resultKey(chain[index]));
+                    if (!result || result.normalizedScore === null || result.normalizedScore === undefined) continue;
+                    if (!Number.isFinite(result.normalizedScore)) throw new TypeError('Invalid normalized family score');
+                    conditionID = chain[index]; normalizedScore = result.normalizedScore; attemptedCount = index + 1; break;
+                }
+                const resolved = { conditionID, normalizedScore };
+                if (resolved.conditionID === null) {
+                    upper += entryFraction * fraction * 100;
+                    const prediction = entry.conditionID > 0 ? reference?.predict(model, entry.conditionID) : null;
+                    if (prediction) {
+                        const weight = entry.weightBasisPoints * fraction;
+                        inferredBasisPoints += weight;
+                        inferredScores.push({ conditionID: entry.conditionID, familyID: family.familyID,
+                            ...prediction, weightBasisPoints: weight,
+                            originalWeight: weight / totalBasisPoints * 100 });
+                    }
+                } else {
+                    lower += entryFraction * fraction * resolved.normalizedScore;
+                    upper += entryFraction * fraction * resolved.normalizedScore;
+                    const weight = entry.weightBasisPoints * fraction;
+                    coveredBasisPoints += weight;
+                    resultKeys.add(resultKey(resolved.conditionID));
+                    const isFallback = resolved.conditionID !== entry.conditionID;
+                    if (isFallback) fallbackCoveredBasisPoints += weight;
+                    recordScore(resolved.conditionID, resolved.normalizedScore, weight, isFallback ? entry.conditionID : null,
+                        family.familyID, chain);
+                }
+                if (family.entries.length && resolved.conditionID !== entry.conditionID) fallbackResolutions.push({
+                    primaryConditionID: entry.conditionID, familyID: family.familyID,
+                    conditionID: resolved.conditionID, normalizedScore: resolved.normalizedScore,
+                    attemptedConditionIDs: chain.slice(0, attemptedCount),
+                    weightBasisPoints: entry.weightBasisPoints * fraction
+                });
             }
-            const fallbackRule = fallbackRulesByPrimary.get(Number(entry.conditionID));
-            if (!fallbackRule) {
-                upper += entryFraction * 100;
-                continue;
-            }
-            const fallback = resolveDirectFallback(model, fallbackRule);
-            lower += entryFraction * fallback.lower;
-            upper += entryFraction * fallback.upper;
-            const coveredFromFallback = entry.weightBasisPoints
-                * fallback.coveredBasisPoints / PIE_TOTAL_BASIS_POINTS;
-            coveredBasisPoints += coveredFromFallback;
-            fallbackCoveredBasisPoints += coveredFromFallback;
-            fallback.resultKeys.forEach(key => resultKeys.add(key));
-            fallbackResolutions.set(Number(entry.conditionID), {
-                primaryConditionID: Number(entry.conditionID),
-                lower: roundTo(fallback.lower),
-                upper: roundTo(fallback.upper),
-                coverage: roundTo(fallback.coveredBasisPoints / PIE_TOTAL_BASIS_POINTS * 100),
-                unconfiguredWeightBasisPoints: fallbackRule.unconfiguredWeightBasisPoints,
-                components: fallback.components.map(component => ({
-                    ...component,
-                    normalizedScore: component.normalizedScore === null
-                        ? null
-                        : roundTo(component.normalizedScore)
-                }))
-            });
         }
-        return {
+        const observedFraction = coveredBasisPoints / totalBasisPoints;
+        const availableInference = scoreMode === 'available' && coveredBasisPoints > 0
+            ? availableResultInference(calculationScores.reduce((sum, score) => sum
+                + score.normalizedScore * (score.weightBasisPoints / coveredBasisPoints), 0), observedFraction,
+            inferredScores.map(score => ({ normalizedScore: score.normalizedScore, weightFraction: score.weightBasisPoints / totalBasisPoints })),
+            estimate.percentile, estimate.sourceCount) : null;
+        const availableScore = availableInference ? roundTo(availableInference.totalScore) : null;
+        const scoringBasisPoints = scoreMode === 'available' ? coveredBasisPoints + inferredBasisPoints : totalBasisPoints;
+        const weightedScore = score => ({ ...score, effectiveWeight: score.weightBasisPoints / scoringBasisPoints * 100,
+            contribution: score.normalizedScore * (score.weightBasisPoints / scoringBasisPoints) });
+        const response = {
             ID: model.ID,
             modelID: model.modelID,
             name: model.name,
@@ -1061,209 +1124,573 @@ export function scoreModels(models, weightedEntries, totalBasisPoints, { fallbac
             vendorSlug: model.vendorSlug,
             logoKey: model.logoKey,
             introductionURL: model.introductionURL,
-            condition: model.condition,
-            lower: roundTo(lower),
-            upper: roundTo(upper),
-            coverage: roundTo(coveredBasisPoints / totalBasisPoints * 100),
+            condition: deferMetadata ? null : cloneRankingMetadata(model.condition),
+            lower: scoreMode === 'available' ? availableScore : roundTo(lower),
+            upper: scoreMode === 'available' ? availableScore : roundTo(upper),
+            coverage: roundTo(observedFraction * 100),
+            availableInference,
+            inferredScores: coveredBasisPoints > 0 ? inferredScores.map(weightedScore) : [],
             resultCount: resultKeys.size,
-            fallbackUsageCount: fallbackResolutions.size,
+            fallbackUsageCount: new Set(fallbackResolutions.filter(resolution => resolution.conditionID !== null)
+                .map(resolution => resolution.primaryConditionID)).size,
             fallbackCoverage: roundTo(fallbackCoveredBasisPoints / totalBasisPoints * 100),
-            fallbackResolutions: Array.from(fallbackResolutions.values())
+            fallbackResolutions,
+            calculationScores: deferMetadata ? null : calculationScores.map(weightedScore),
+            missingWeight: Math.max(0, totalBasisPoints - coveredBasisPoints) / totalBasisPoints * 100
         };
+        if (deferMetadata) {
+            deferRankingMetadata(response, 'condition', () => cloneRankingMetadata(model.condition));
+            deferRankingMetadata(response, 'calculationScores', () => cloneRankingMetadata(calculationScores).map(weightedScore));
+        }
+        return response;
     });
 }
 
-export function scoreComparison(models, entries, total, rules, options) {
-    const grouped = groupComparisonModels(models, options, entries);
+export function scoreComparison(models, entries, total, rules, options, preparedGroups = null) {
+    if (!Number.isFinite(total) || total <= 0 || entries.length === 0) return [];
+    const grouped = preparedGroups ?? groupComparisonModels(models, options, entries, { includeReferenceVersions: rules.scoreMode === 'available' });
     const groupsByID = new Map(grouped.map(group => [group.ID, group]));
-    const scores = scoreModels(grouped, entries, total, options.mode === 'matched' ? {} : rules);
+    const scoreMode = rules.scoreMode ?? 'range';
+    const availableInferenceVersion = currentInferenceVersion(rules.availableInferenceVersion);
+    // A model display limit keeps the comparison peers needed for missing-score estimates.
+    const referenceOptions = { ...options, filters: (options.filters ?? []).filter(filter => filter.key !== 'model') };
+    const reference = scoreMode === 'available' ? rules.percentileReference ?? createPairwiseReference(
+        referenceOptions.filters.length === (options.filters ?? []).length ? grouped
+            : groupComparisonModels(models, referenceOptions, entries, { includeReferenceVersions: true })) : null;
+    const scores = scoreModels(grouped, entries, total, { ...(options.mode === 'matched' ? { scoreMode } : rules), percentileReference: reference,
+        availableInferenceVersion,
+        excludedConditionIDs: rules.excludedConditionIDs,
+        comparisonScoreIndexes: rules.comparisonScoreIndexes, deferMetadata: rules.jsonMemberMetadata === true });
     return scores.map(score => {
         const group = groupsByID.get(score.ID);
-        return { ...score, comparable: group.comparable, comparisonMode: group.comparisonMode,
-            members: group.members, comparisonScores: group.comparisonScores,
-            lower: group.comparable ? score.lower : null, upper: group.comparable ? score.upper : null };
+        const comparisonMetadata = () => {
+            const usedConditions = new Set(score.calculationScores.map(item => item.conditionID));
+            return cloneRankingMetadata(group.comparisonScores.filter(item => usedConditions.has(item.conditionID)));
+        };
+        // Evidence eligibility must not depend on how missing weights are scored.
+        const comparable = score.resultCount > 0
+            && comparisonGroupIsComparable(group, grouped.length, options.mode, entries);
+        const response = rules.jsonMemberMetadata ? Object.defineProperties({}, Object.getOwnPropertyDescriptors(score)) : { ...score };
+        Object.assign(response, { comparable, comparisonIdentity: group.comparisonIdentity, comparisonMode: group.comparisonMode,
+            lower: comparable ? score.lower : null, upper: comparable ? score.upper : null });
+        if (rules.jsonMemberMetadata) {
+            deferRankingMetadata(response, 'members', () => cloneRankingMembersForJSON(group.members));
+            deferRankingMetadata(response, 'comparisonScores', comparisonMetadata);
+        } else {
+            response.members = cloneRankingMetadata(group.members);
+            response.comparisonScores = comparisonMetadata();
+        }
+        return response;
     });
 }
 
-export async function loadModels(connection) {
-    const [rows] = await connection.execute(`
-        SELECT models.ID AS model_ID, models.name AS model_name,
-               models.introduction_url AS introductionURL,
-               vendors.name AS vendor_name, vendors.slug AS vendor_slug, vendors.logo_key,
-               model_conditions.ID AS model_condition_ID,
-               model_conditions.name AS model_condition_name,
-               model_conditions.condition_key, model_conditions.parameters,
-               model_conditions.is_default AS model_condition_is_default,
-               benchmark_results.ID AS result_ID,
-               benchmark_results.benchmark_condition_ID,
-               benchmark_results.raw_score,
-               benchmark_results.source_url,
-               benchmark_conditions.uses_percentage_scale,
-               benchmark_conditions.score_min,
-               benchmark_conditions.score_max,
-               benchmark_conditions.score_direction,
-               benchmark_conditions.target_value
-        FROM models
-        JOIN organizations vendors ON vendors.ID = models.vendor_ID
-        JOIN model_conditions
-          ON model_conditions.model_ID = models.ID
-         AND model_conditions.is_active = 1
-        LEFT JOIN benchmark_results
-          ON benchmark_results.model_condition_ID = model_conditions.ID
-         AND benchmark_results.status = 'accepted'
-         LEFT JOIN benchmark_conditions
-           ON benchmark_conditions.ID = benchmark_results.benchmark_condition_ID
-          AND benchmark_conditions.is_active = 1
-        WHERE models.is_active = 1
-        ORDER BY models.name, models.ID,
-                 model_conditions.is_default DESC,
-                 model_conditions.name, model_conditions.ID,
-                 benchmark_results.ID`);
-    const modelConditions = new Map();
-    const evidence = new Set();
+export async function loadApprovedModelConfigurations(connection, modelIDs, definitions = null, {
+    includeVersions = false, includeDisplayRestrictions = false
+} = {}) {
+    if (!Array.isArray(modelIDs) || !modelIDs.length || modelIDs.length > 2048
+        || modelIDs.some(ID => !Number.isSafeInteger(ID) || ID < 1)
+        || new Set(modelIDs).size !== modelIDs.length) throw requestError(400, 'invalid_model_ids');
+    if (typeof includeVersions !== 'boolean' || typeof includeDisplayRestrictions !== 'boolean'
+        || includeVersions && modelIDs.length > 32) throw requestError(400, 'invalid_model_score_index');
+    const fields = definitions ?? await loadScoreFieldCatalog(connection);
+    const [rows] = await connection.execute(`SELECT r.ID, r.benchmark_ID, m.ID AS modelID, m.name AS modelName,
+        r.score_fields AS scoreFields, 1 AS scoreCount,
+        b.ID AS benchmarkID, b.name AS benchmarkName, c.name AS benchmarkConditionName, c.condition_key AS conditionKey,
+        c.score_source AS scoreSource, r.source_url, r.source_title, r.notes
+        ${includeVersions ? `, r.raw_score AS rawScore,
+            c.ID AS benchmarkConditionID, c.is_default AS benchmarkConditionIsDefault,
+            c.uses_percentage_scale AS usesPercentageScale, c.score_min AS scoreMin, c.score_max AS scoreMax,
+            c.score_direction AS scoreDirection, c.target_value AS targetValue` : ''}
+        FROM benchmark_results r JOIN models m ON m.ID = r.model_ID AND m.is_active = 1
+        JOIN benchmarks b ON b.ID = r.benchmark_ID
+        JOIN benchmark_conditions c ON c.ID = r.benchmark_condition_ID
+        WHERE ${currentScoreSQL('r')} AND b.is_active = 1 AND ${selectableBenchmarkConditionSQL('c')}
+          AND m.ID IN (${modelIDs.map(() => '?').join(',')})
+        ORDER BY m.name, m.ID`, modelIDs);
+    const configurations = new Map();
+    const groups = new Map();
+    const omittedConfigurations = new Map();
     for (const row of rows) {
-        const modelConditionID = Number(row.model_condition_ID);
-        if (!modelConditions.has(modelConditionID)) {
-            const isDefaultCondition = Boolean(row.model_condition_is_default);
-            modelConditions.set(modelConditionID, {
-                ID: modelConditionID,
-                modelID: Number(row.model_ID),
-                modelName: row.model_name,
-                name: isDefaultCondition
-                    ? row.model_name
-                    : `${row.model_name} · ${row.model_condition_name}`,
-                vendor: row.vendor_name,
-                vendorSlug: row.vendor_slug,
-                logoKey: row.logo_key,
-                introductionURL: row.introductionURL,
-                condition: {
-                    ID: modelConditionID,
-                    name: row.model_condition_name,
-                    parameters: row.parameters === null ? null : normalizeModelParameters(typeof row.parameters === 'string' ? JSON.parse(row.parameters) : row.parameters)
-                },
-                resultSamples: new Map(),
-                results: new Map()
-            });
+        const scoreFields = normalizeScoreFields(typeof row.scoreFields === 'string'
+            ? JSON.parse(row.scoreFields) : row.scoreFields, fields);
+        const key = JSON.stringify([Number(row.modelID), scoreFields]);
+        if (isAACondition({ benchmarkID: Number(row.benchmarkID), benchmarkName: row.benchmarkName, conditionName: row.benchmarkConditionName,
+            conditionKey: row.conditionKey, scoreSource: row.scoreSource }) || aaResultReason(row, undefined, fields)) {
+            omittedConfigurations.set(key, { modelID: Number(row.modelID), scoreFields,
+                displayRestriction: AA_DISPLAY_RESTRICTION });
+            continue;
         }
-        if (row.result_ID !== null && row.benchmark_condition_ID !== null && row.score_direction !== null) {
-            const evidenceKey = scoreValueKey(modelConditionID, row.benchmark_condition_ID, row.raw_score);
-            if (evidence.has(evidenceKey)) continue;
-            evidence.add(evidenceKey);
-            const key = resultKey(row.benchmark_condition_ID);
-            const normalizedScore = normalizedResultScore({
-                rawScore: row.raw_score,
-                usesPercentageScale: Boolean(row.uses_percentage_scale),
-                scoreMin: row.score_min,
-                scoreMax: row.score_max,
-                scoreDirection: row.score_direction,
-                targetValue: row.target_value
+        if (!configurations.has(key)) configurations.set(key, {
+            modelID: Number(row.modelID), modelName: row.modelName, scoreFields,
+            configurationName: scoreFields.map(item => {
+                const field = fields.find(field => field.ID === item.fieldID);
+                return field.name + '=' + fieldDisplayValue(field, item.value);
+            }).join(', '), scoreCount: 0
+        });
+        configurations.get(key).scoreCount += Number(row.scoreCount);
+        if (includeVersions) {
+            if (!groups.has(key)) groups.set(key, new Map());
+            const byCondition = groups.get(key), conditionID = Number(row.benchmarkConditionID);
+            if (!byCondition.has(conditionID)) byCondition.set(conditionID, {
+                benchmarkID: Number(row.benchmarkID), benchmarkName: row.benchmarkName,
+                benchmarkConditionID: conditionID, benchmarkConditionName: row.benchmarkConditionName,
+                conditionKey: row.conditionKey, scoreSource: row.scoreSource,
+                benchmarkConditionIsDefault: Boolean(row.benchmarkConditionIsDefault),
+                usesPercentageScale: Boolean(row.usesPercentageScale), scoreDirection: row.scoreDirection,
+                scoreMin: row.scoreMin == null ? null : Number(row.scoreMin), scoreMax: row.scoreMax == null ? null : Number(row.scoreMax),
+                targetValue: row.targetValue == null ? null : Number(row.targetValue), sampleCount: 0, values: new Map()
             });
-            if (normalizedScore === null) {
-                throw requestError(409, 'accepted_result_score_invalid', {
-                    resultID: Number(row.result_ID),
-                    modelConditionID,
-                    conditionID: Number(row.benchmark_condition_ID)
-                });
+            const group = byCondition.get(conditionID);
+            const rawScore = Number(row.rawScore), normalizedScore = normalizedResultScore({ ...group, rawScore });
+            if (row.rawScore == null || !Number.isFinite(rawScore) || normalizedScore === null) {
+                throw requestError(409, 'accepted_result_score_invalid', { modelID: Number(row.modelID), benchmarkConditionID: conditionID });
             }
-            const samples = modelConditions.get(modelConditionID).resultSamples;
-            if (!samples.has(key)) {
-                samples.set(key, []);
-            }
-            samples.get(key).push(normalizedScore);
-        } else if (row.result_ID !== null) {
-            throw requestError(409, 'accepted_result_condition_unavailable', {
-                resultID: Number(row.result_ID),
-                conditionID: Number(row.benchmark_condition_ID)
+            group.sampleCount += Number(row.scoreCount);
+            group.values.set(rawScore, normalizedScore);
+        }
+    }
+    const visible = [...configurations].map(([key, configuration]) => includeVersions ? { ...configuration,
+        scoreGroups: [...groups.get(key).values()].map(({ values, ...group }) => ({ ...group,
+            distinctScoreCount: values.size, medianRawScore: medianOfFiniteNumbers([...values.keys()]),
+            medianNormalizedScore: medianOfFiniteNumbers([...values.values()]) }))
+            .sort((left, right) => left.benchmarkName.localeCompare(right.benchmarkName, 'en')
+                || Number(right.benchmarkConditionIsDefault) - Number(left.benchmarkConditionIsDefault)
+                || left.benchmarkConditionName.localeCompare(right.benchmarkConditionName, 'en')
+                || left.benchmarkConditionID - right.benchmarkConditionID)
+    } : configuration);
+    return includeDisplayRestrictions ? { configurations: visible,
+        displayPolicy: AA_DISPLAY_RESTRICTION, omittedConfigurations: [...omittedConfigurations.values()] } : visible;
+}
+
+async function loadModelMetadata(connection) {
+    const [rows] = await connection.execute(`
+        SELECT models.ID AS model_ID, models.name AS model_name, models.introduction_url AS introductionURL,
+               vendors.name AS vendor_name, vendors.slug AS vendor_slug, vendors.logo_key
+        FROM models JOIN organizations vendors ON vendors.ID = models.vendor_ID
+        WHERE models.is_active = 1 ORDER BY models.name, models.ID`);
+    return rows;
+}
+
+export async function loadModels(connection, definitions = null, {
+    conditionIDs = null, evidenceConditionIDs = null, conditionDefinitions = null
+} = {}) {
+    if (conditionIDs !== null && (!Array.isArray(conditionIDs)
+        || conditionIDs.some(ID => !Number.isSafeInteger(ID) || ID < 1)
+        || new Set(conditionIDs).size !== conditionIDs.length)) {
+        throw requestError(400, 'invalid_score_scope');
+    }
+    if (evidenceConditionIDs !== null && (!Array.isArray(evidenceConditionIDs)
+        || evidenceConditionIDs.some(ID => !Number.isSafeInteger(ID) || ID < 1)
+        || new Set(evidenceConditionIDs).size !== evidenceConditionIDs.length)) throw requestError(400, 'invalid_score_scope');
+    if (conditionDefinitions !== null && (!Array.isArray(conditionDefinitions)
+        || conditionDefinitions.some(condition => !Number.isSafeInteger(condition?.benchmark_condition_ID)
+            || condition.benchmark_condition_ID < 1)
+        || new Set(conditionDefinitions.map(condition => condition.benchmark_condition_ID)).size !== conditionDefinitions.length)) {
+        throw requestError(400, 'invalid_condition_definitions');
+    }
+    const fields = definitions ?? await loadScoreFieldCatalog(connection);
+    const evidenceScope = evidenceConditionIDs === null ? null : new Set(evidenceConditionIDs.map(resultKey));
+    const modelRows = await loadModelMetadata(connection);
+    const scope = conditionIDs === null ? '' : conditionIDs.length
+        ? ` AND benchmark_results.benchmark_condition_ID IN (${conditionIDs.map(() => '?').join(',')})` : ' AND 0 = 1';
+    const conditionScope = conditionIDs === null ? '' : conditionIDs.length
+        ? ` WHERE ID IN (${conditionIDs.map(() => '?').join(',')})` : ' WHERE 0 = 1';
+    const conditionRows = conditionDefinitions ?? (await connection.execute(`
+        SELECT ID AS benchmark_condition_ID, uses_percentage_scale, score_min, score_max, score_direction, target_value
+        FROM benchmark_conditions${conditionScope}`, conditionIDs ?? []))[0];
+    const [rows] = await connection.execute(`
+        SELECT benchmark_results.ID AS result_ID, benchmark_results.model_ID,
+               benchmark_results.score_fields, benchmark_results.benchmark_condition_ID, benchmark_results.raw_score,
+               benchmark_results.benchmark_ID, benchmark_results.source_url, benchmark_results.source_title, benchmark_results.notes
+        FROM benchmark_results
+        JOIN models ON models.ID = benchmark_results.model_ID AND models.is_active = 1
+        WHERE ${currentScoreSQL()}${scope}`, conditionIDs ?? []);
+    // Configuration IDs stay global even when a pie uses only a small evidence subset.
+    const identities = conditionIDs === null ? rows : (await connection.execute(`
+        SELECT MIN(benchmark_results.ID) AS result_ID, benchmark_results.model_ID, benchmark_results.score_fields
+        FROM benchmark_results
+        JOIN models ON models.ID = benchmark_results.model_ID AND models.is_active = 1
+        WHERE ${currentScoreSQL()}
+        GROUP BY benchmark_results.model_ID, benchmark_results.score_fields`))[0];
+    const modelsByID = new Map(modelRows.map((model, index) => [Number(model.model_ID), { ...model, order: index }]));
+    const conditionsByID = new Map(conditionRows.map(condition => [Number(condition.benchmark_condition_ID), condition]));
+    const fieldsByID = new Map(fields.map(field => [field.ID, field]));
+    const assignmentCache = new Map();
+    const configurations = new Map();
+    const seenModels = new Set();
+    // Keep evidence order and configuration identity without a database filesort on wide joined rows.
+    identities.sort((left, right) => Number(left.result_ID) - Number(right.result_ID));
+    for (const row of identities) seenModels.add(Number(row.model_ID));
+    for (const model of modelRows) {
+        if (!seenModels.has(Number(model.model_ID))) identities.push({ model_ID: model.model_ID, result_ID: null });
+    }
+    const signatureFor = row => {
+        const rawFields = row.result_ID === null ? '[]'
+            : typeof row.score_fields === 'string' ? row.score_fields : JSON.stringify(row.score_fields);
+        let assignments = assignmentCache.get(rawFields);
+        if (!assignments) {
+            assignments = normalizeScoreFields(JSON.parse(rawFields), fields);
+            assignmentCache.set(rawFields, assignments);
+        }
+        return { assignments, signature: JSON.stringify([Number(row.model_ID), assignments]) };
+    };
+    for (const row of identities) {
+        const { assignments, signature } = signatureFor(row);
+        const metadata = modelsByID.get(Number(row.model_ID));
+        if (!metadata) throw requestError(409, 'accepted_result_model_unavailable', { resultID: Number(row.result_ID) });
+        if (!configurations.has(signature)) {
+            const parameters = Object.fromEntries(assignments.map(item => [fieldKey(item.fieldID), item.value]));
+            const label = assignments.map(item => {
+                const field = fieldsByID.get(item.fieldID);
+                return `${field.name}=${fieldDisplayValue(field, item.value)}`;
+            }).join(', ');
+            configurations.set(signature, {
+                ID: row.result_ID === null ? -Number(row.model_ID) : Number(row.result_ID),
+                modelID: Number(row.model_ID), modelName: metadata.model_name,
+                name: metadata.model_name + (label ? ' (' + label + ')' : ''),
+                vendor: metadata.vendor_name, vendorSlug: metadata.vendor_slug, logoKey: metadata.logo_key, introductionURL: metadata.introductionURL,
+                condition: { name: label, parameters, scoreFields: assignments },
+                resultSamples: new Map(), resultEvidence: new Map(), results: new Map()
             });
         }
     }
-    return Array.from(modelConditions.values()).map(model => {
-        for (const [key, samples] of model.resultSamples) {
-            model.results.set(key, {
-                normalizedScore: medianOfFiniteNumbers(samples),
-                sampleCount: samples.length
-            });
+    rows.sort((left, right) => Number(left.result_ID) - Number(right.result_ID));
+    for (const row of rows) {
+        if (row.result_ID === null) continue;
+        if (aaResultReason({ ...row, ID: row.result_ID }, undefined, fields)) continue;
+        const { signature } = signatureFor(row);
+        if (!configurations.has(signature)) {
+            throw requestError(409, 'accepted_result_configuration_unavailable', { resultID: Number(row.result_ID) });
         }
+        const condition = conditionsByID.get(Number(row.benchmark_condition_ID));
+        if (!condition) throw requestError(409, 'accepted_result_condition_unavailable', { resultID: Number(row.result_ID) });
+        const samples = configurations.get(signature).resultSamples;
+        const key = resultKey(row.benchmark_condition_ID);
+        if (!samples.has(key)) samples.set(key, new Map());
+        const rawScore = Number(row.raw_score);
+        if (row.raw_score === null || row.raw_score === undefined || row.raw_score === '' || !Number.isFinite(rawScore)) {
+            throw requestError(409, 'accepted_result_score_invalid', { resultID: Number(row.result_ID) });
+        }
+        if (evidenceScope === null || evidenceScope.has(key)) {
+            const evidence = configurations.get(signature).resultEvidence;
+            if (!evidence.has(key)) evidence.set(key, []);
+            evidence.get(key).push({ ID: Number(row.result_ID), rawScore });
+        }
+        if (samples.get(key).has(rawScore)) continue;
+        const normalizedScore = normalizedResultScore({
+            rawScore: row.raw_score, usesPercentageScale: Boolean(condition.uses_percentage_scale),
+            scoreMin: condition.score_min, scoreMax: condition.score_max, scoreDirection: condition.score_direction, targetValue: condition.target_value
+        });
+        if (normalizedScore === null) throw requestError(409, 'accepted_result_score_invalid', { resultID: Number(row.result_ID) });
+        samples.get(key).set(rawScore, normalizedScore);
+    }
+    return [...configurations.values()].map(model => {
+        for (const [key, samples] of model.resultSamples) model.results.set(key, {
+            normalizedScore: medianOfFiniteNumbers([...samples.values()]), sampleCount: samples.size,
+            ...(model.resultEvidence.has(key) ? { evidenceHash: scoreEvidenceHash({
+                usesPercentageScale: Boolean(conditionsByID.get(Number(key)).uses_percentage_scale),
+                scoreDirection: conditionsByID.get(Number(key)).score_direction,
+                scoreMin: conditionsByID.get(Number(key)).score_min, scoreMax: conditionsByID.get(Number(key)).score_max,
+                targetValue: conditionsByID.get(Number(key)).target_value
+            }, model.resultEvidence.get(key)) } : {})
+        });
         delete model.resultSamples;
+        delete model.resultEvidence;
         return model;
+    }).sort((left, right) => modelsByID.get(left.modelID).order - modelsByID.get(right.modelID).order || left.ID - right.ID);
+}
+
+function rankingReadError(cancelled = false) {
+    const error = cancelled ? 'ranking_read_cancelled' : 'ranking_read_timeout';
+    return Object.assign(new Error(error), { code: cancelled ? 'RANKING_READ_CANCELLED' : 'RANKING_READ_TIMEOUT',
+        status: 503, body: { error, retryable: true } });
+}
+
+async function readRankingSnapshot(db, build, signal, rankingCache) {
+    if (signal?.aborted) throw rankingReadError(true);
+    const label = 'RANKING WORKSPACE';
+    const deadline = performance.now() + RANKING_READ_TIMEOUT_MS;
+    let connection, failure, rejectCancellation;
+    const cancelled = new Promise((_, reject) => { rejectCancellation = reject; });
+    const stop = error => {
+        if (failure) return;
+        failure = error;
+        if (connection) destroyTransactionConnection(connection, label);
+        rejectCancellation(error);
+    };
+    const assertActive = () => {
+        if (!failure && performance.now() >= deadline) stop(rankingReadError());
+        if (failure) throw failure;
+    };
+    const abort = () => stop(rankingReadError(true));
+    signal?.addEventListener('abort', abort, { once: true });
+    const timer = setTimeout(() => stop(rankingReadError()), RANKING_READ_TIMEOUT_MS);
+    const work = Promise.resolve().then(async () => {
+        assertActive();
+        const lease = await db.getConnection();
+        if (failure) {
+            // An acquisition cannot be removed from mysql2's queue; return it unused.
+            releaseTransactionConnection(lease, label);
+            throw failure;
+        }
+        const methods = {};
+        for (const method of ['query', 'execute', 'beginTransaction', 'commit', 'rollback']) {
+            methods[method] = async (...args) => {
+                assertActive();
+                const result = await lease[method](...args);
+                assertActive();
+                return result;
+            };
+        }
+        connection = new Proxy(lease, { get(target, property) {
+            if (Object.hasOwn(methods, property)) return methods[property];
+            const value = Reflect.get(target, property, target);
+            return typeof value === 'function' && !['constructor', 'Promise'].includes(property) ? value.bind(target) : value;
+        } });
+        try {
+            // Weights and rules must come from the same revision during concurrent saves.
+            await startTransactionConnection(connection, label, { readOnlySnapshot: true });
+            const workspace = await withRankingReadCache(connection, rankingCache, () => build(connection), assertActive);
+            assertActive();
+            await commitTransactionConnection(connection, label);
+            return workspace;
+        } catch (error) {
+            await rollbackTransactionConnection(connection, label, error);
+            throw error;
+        } finally {
+            const completedLease = connection;
+            connection = null;
+            releaseTransactionConnection(completedLease, label);
+        }
     });
+    try { return await Promise.race([work, cancelled]); }
+    finally {
+        clearTimeout(timer);
+        signal?.removeEventListener('abort', abort);
+    }
 }
 
 export async function getRankingWorkspace(db, options = {}) {
-    const connection = await db.getConnection();
-    try {
-        // Weights and rules must come from the same revision during concurrent saves.
-        await connection.query('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ');
-        await connection.query('START TRANSACTION WITH CONSISTENT SNAPSHOT, READ ONLY');
-        const workspace = await buildRankingWorkspace(connection, options);
-        await connection.commit();
-        return workspace;
-    } catch (error) {
-        await connection.rollback();
-        throw error;
-    } finally {
-        connection.release();
+    const scoreMode = options.scoreMode ?? 'range';
+    if (!['range', 'available'].includes(scoreMode)) {
+        throw { status: 400, body: { error: 'invalid_score_mode' } };
     }
+    const availableInferenceVersion = currentInferenceVersion(options.availableInferenceVersion);
+    const previewPersonalPie = options.previewPersonalPie === undefined || options.previewPersonalPie === null
+        ? null
+        : normalizePreviewPersonalPie(options.previewPersonalPie);
+    return readRankingSnapshot(db, connection => buildRankingWorkspace(connection,
+        { ...options, scoreMode, availableInferenceVersion, previewPersonalPie }), options.signal, options.rankingCache);
 }
 
 async function buildRankingWorkspace(db, {
     categoryID,
     contextValues = {},
     userID = null,
-    comparison = null
+    comparison = null,
+    scoreMode = 'range',
+    availableInferenceVersion = AVAILABLE_INFERENCE_VERSION,
+    previewPersonalPie = null,
+    jsonMemberMetadata = false
 } = {}) {
-    const context = await resolveRankingContext(db, { categoryID, contextValues, create: false });
-    const conditions = await loadBenchmarkConditions(db);
-    const conditionsByID = new Map(conditions.map(condition => [condition.conditionID, condition]));
+    const context = await resolveRankingContext(db, { categoryID, contextValues, userID, create: false });
+    const previewConditionIDs = previewPersonalPie ? [
+        ...previewPersonalPie.entries.map(entry => entry.conditionID),
+        ...previewPersonalPie.fallbackRules.flatMap(rule => rule.entries.map(entry => entry.conditionID))
+    ].filter(ID => ID > 0) : [];
+    let availableConditions = await cachedRankingRead(db, 'catalogue', 'conditions:[]', () => loadBenchmarkConditions(db));
+    const availableIDs = new Set(availableConditions.map(condition => condition.conditionID));
+    if (previewConditionIDs.some(ID => !availableIDs.has(ID))) {
+        availableConditions = await cachedRankingRead(db, 'catalogue', `conditions:${JSON.stringify(previewConditionIDs.slice().sort((a, b) => a - b))}`,
+            () => loadBenchmarkConditions(db, { includeConditionIDs: previewConditionIDs }));
+    }
+    const conditions = cloneRankingMetadata(availableConditions);
+    const conditionsByID = new Map(conditionCoverage(conditions).map(condition => [condition.conditionID, condition]));
+    const referenceTargets = await loadTopicReferenceTargets(db, userID);
+    const referencesByID = new Map(referenceTargets.map(target => [target.contextID, target]));
+    for (const target of referenceTargets) conditionsByID.set(-target.contextID, referenceCondition(target));
     const publicPie = await loadPublicPie(db, context, conditionsByID);
     const storedPersonalPie = await loadPersonalPie(db, context.ID, userID);
-    const personalSourceEntries = storedPersonalPie?.entries ?? [];
-    const personalSourceFallbackRules = storedPersonalPie?.fallbackRules ?? [];
+    const rawPersonalEntries = previewPersonalPie?.entries ?? storedPersonalPie?.entries ?? [];
+    const rawPersonalFallbackRules = previewPersonalPie?.fallbackRules ?? storedPersonalPie?.fallbackRules ?? [];
+    if (previewPersonalPie) {
+        await validateTopicReferences(db, context, rawPersonalEntries, userID);
+        const conditionIDs = new Set([
+            ...rawPersonalEntries.map(entry => entry.conditionID),
+            ...rawPersonalFallbackRules.flatMap(rule => rule.entries.map(entry => entry.conditionID))
+        ]);
+        for (const conditionID of conditionIDs) {
+            if (!conditionsByID.has(conditionID)) {
+                throw requestError(400, 'pie_benchmark_condition_not_found', { conditionID });
+            }
+            if (conditionsByID.get(conditionID).excludedFromRanking) throw requestError(409, 'pie_benchmark_condition_excluded', { conditionID });
+        }
+    }
+    const eligiblePersonalEntries = rawPersonalEntries.filter(entry => !conditionsByID.get(entry.conditionID)?.excludedFromRanking);
+    const personalSourceEntries = eligiblePersonalEntries.length === rawPersonalEntries.length ? rawPersonalEntries
+        : normalizeWeights(eligiblePersonalEntries.map(entry => ({ conditionID: entry.conditionID, rawWeight: entry.weightBasisPoints })));
+    const activePersonalIDs = new Set(personalSourceEntries.map(entry => entry.conditionID));
+    const personalSourceFallbackRules = rawPersonalFallbackRules.filter(rule => activePersonalIDs.has(rule.primaryConditionID));
+    const storedFamilies = await loadBenchmarkFamilies(db, { referencedOnly: true });
     const personalEntries = decoratePieEntries(personalSourceEntries, conditionsByID);
     const personalFallbackRules = decorateFallbackRules(personalSourceFallbackRules, conditionsByID);
     const publicEntries = decoratePieEntries(publicPie.entries, conditionsByID);
-    const benchmarkList = buildBenchmarkList(conditions, publicEntries, personalEntries);
-    const models = await loadModels(db);
-    const compareOptions = comparisonOptions(models, comparison);
-    const personalScoringEntries = context.ID === null
+    const familyComposition = publicPie.familyComposition.map(group => ({ ...group,
+        families: group.families.map(family => ({ ...family,
+            entries: decorateFallbackRules([{ ...family, mode: FALLBACK_RULE_MODE }], conditionsByID)[0].entries
+        })) }));
+    const communityByPrimary = new Map((publicPie.communityComposition ?? []).map(group => [group.primaryConditionID, group]));
+    const personalCommunityComposition = personalEntries.filter(entry => entry.conditionID > 0).map(entry => {
+        const group = communityByPrimary.get(entry.conditionID) ?? {
+            primaryConditionID: entry.conditionID, configuredPieCount: 0, isDefault: true,
+            families: [{ primaryConditionID: entry.conditionID, familyID: null, entries: [], weightBasisPoints: 10000 }]
+        };
+        return { ...group, families: group.families.map(family => ({ ...family,
+            overallWeightBasisPoints: entry.weightBasisPoints * family.weightBasisPoints / 10000,
+            entries: decorateFallbackRules([{ ...family, mode: FALLBACK_RULE_MODE }], conditionsByID)[0].entries
+        })) };
+    });
+    const availableFamilies = storedFamilies.filter(family => [family.primaryConditionID,
+        ...family.entries.map(entry => entry.conditionID)].every(ID => conditionsByID.has(ID)));
+    const familyCatalogue = decorateFallbackRules(availableFamilies, conditionsByID);
+    for (const draft of personalFallbackRules) {
+        if (!draft.entries.length) continue;
+        if (!familyCatalogue.some(family => familyKey(family.primaryConditionID, family.entries) === familyKey(draft.primaryConditionID, draft.entries))) familyCatalogue.push(draft);
+    }
+    const expandedFor = async (mode, entries, fallbackRules, composition) => {
+        if (!entries.some(entry => entry.conditionID < 0)) return null;
+        const root = { contextID: context.ID ?? 0, name: context.categoryName, entries,
+            fallbackRules, familyComposition: composition };
+        return expandTopicReferences(root, { loadTarget: async targetID => {
+            const target = referencesByID.get(targetID);
+            if (!target || mode === 'public' && target.isPrivate
+                || !context.isPrivate && target.isPrivate) return null;
+            const targetContext = await resolveRankingContext(db, { categoryID: target.categoryID,
+                contextValues: target.sceneID == null ? {} : { scene: String(target.sceneID) },
+                userID: mode === 'personal' ? userID : null });
+            const publicTarget = await loadPublicPie(db, targetContext, conditionsByID);
+            const personalTarget = mode === 'personal' ? await loadPersonalPie(db, targetID, userID) : null;
+            const personal = personalTarget?.entries.length ? personalTarget : null;
+            const raw = personal?.entries ?? publicReferenceWeights(publicTarget);
+            const eligible = raw.filter(entry => !conditionsByID.get(entry.conditionID)?.excludedFromRanking);
+            const selected = eligible.length === raw.length ? raw : normalizeWeights(eligible.map(entry => ({
+                conditionID: entry.conditionID, rawWeight: entry.weightBasisPoints
+            })));
+            return { contextID: targetID, name: target.name, entries: selected,
+                fallbackRules: personal?.fallbackRules ?? [],
+                familyComposition: publicTarget.communityComposition ?? publicTarget.familyComposition };
+        } });
+    };
+    const personalExpanded = await expandedFor('personal', personalSourceEntries, personalFallbackRules, personalCommunityComposition);
+    const publicExpanded = await expandedFor('public', publicReferenceWeights(publicPie), [], familyComposition);
+    const personalEffectiveEntries = personalExpanded?.entries ?? personalSourceEntries;
+    const publicEffectiveEntries = publicExpanded?.entries ?? publicPie.scoringEntries;
+    const personalEffectiveComposition = personalExpanded?.familyComposition ?? personalCommunityComposition;
+    const publicEffectiveComposition = publicExpanded?.familyComposition ?? familyComposition;
+    const benchmarkList = buildBenchmarkList(conditions, publicEntries, personalEntries, familyCatalogue,
+        familyComposition, personalFallbackRules);
+    const fields = await loadScoreFieldCatalog(db);
+    const scoringConditionIDs = [...new Set([
+        ...personalEffectiveEntries.map(entry => entry.conditionID),
+        ...publicEffectiveEntries.map(entry => entry.conditionID),
+        ...personalFallbackRules.flatMap(rule => resolvedFamilyConditionIDs(rule.primaryConditionID, rule.entries)),
+        ...personalEffectiveComposition.flatMap(group => group.families.flatMap(family =>
+            resolvedFamilyConditionIDs(group.primaryConditionID, family.entries))),
+        ...publicEffectiveComposition.flatMap(group => group.families.flatMap(family =>
+            resolvedFamilyConditionIDs(group.primaryConditionID, family.entries)))
+    ])].filter(ID => ID > 0 && !conditionsByID.get(ID)?.excludedFromRanking).sort((a, b) => a - b);
+    const excludedConditionIDs = new Set([...conditionsByID].filter(([, condition]) => condition.excludedFromRanking).map(([ID]) => ID));
+    const modelConditionIDs = scoreMode === 'available' && scoringConditionIDs.length
+        ? [...conditionsByID.keys()].filter(ID => ID > 0 && !excludedConditionIDs.has(ID)).sort((a, b) => a - b) : scoringConditionIDs;
+    const definitionsFor = IDs => IDs.map(ID => {
+        const condition = conditionsByID.get(ID);
+        return { benchmark_condition_ID: ID, uses_percentage_scale: condition.usesPercentageScale,
+            score_min: condition.scoreMin, score_max: condition.scoreMax,
+            score_direction: condition.scoreDirection, target_value: condition.targetValue };
+    });
+    const universeIDs = [...conditionsByID.keys()].filter(ID => ID > 0 && !excludedConditionIDs.has(ID)).sort((a, b) => a - b);
+    const universeKey = JSON.stringify(universeIDs);
+    const allModels = hasRankingReadCache(db) ? await cachedRankingRead(db, 'data', `models:${universeKey}`,
+        () => loadModels(db, fields, { conditionIDs: universeIDs, conditionDefinitions: definitionsFor(universeIDs) }),
+        models => models.reduce((sum, model) => sum + model.results.size, 0)) : null;
+    const modelScope = new Set(modelConditionIDs.map(resultKey));
+    const models = allModels && comparison?.mode !== 'matched' ? allModels : allModels
+        ? allModels.map(model => ({ ...model, results: new Map([...model.results].filter(([key]) => modelScope.has(key))) }))
+        : await loadModels(db, fields, { conditionIDs: modelConditionIDs,
+        evidenceConditionIDs: scoringConditionIDs,
+        conditionDefinitions: definitionsFor(modelConditionIDs) });
+    const compareOptions = comparisonOptions(models, comparison, fields);
+    const personalScoringEntries = context.ID === null && !previewPersonalPie
         ? []
-        : personalSourceEntries.map(entry => ({
+        : personalEffectiveEntries.map(entry => ({
             conditionID: entry.conditionID,
             weightBasisPoints: entry.weightBasisPoints
         }));
+    // Fair comparison controls belong to each pie's benchmark scope.
+    const comparisonKey = JSON.stringify([universeKey, compareOptions.keys, compareOptions.filters]);
+    const preparedGroups = compareOptions.mode === 'best' && (personalScoringEntries.length || publicEffectiveEntries.length)
+        ? await cachedRankingRead(db, 'data', `groups:${comparisonKey}`, () => groupComparisonModels(models, compareOptions, []),
+            groups => groups.reduce((sum, group) => sum + group.results.size, 0)) : null;
+    const comparisonScoreIndexes = preparedGroups
+        ? await cachedRankingRead(db, 'data', `score-indexes:${comparisonKey}`, () => new WeakMap(preparedGroups.map(group => [group,
+            new Map(group.comparisonScores.map(score => [Number(score.conditionID), score]))]))) : null;
+    const percentileReference = scoreMode === 'available' && preparedGroups
+        ? await cachedRankingRead(db, 'data', `inference:${availableInferenceVersion}:${comparisonKey}`, () => {
+            const referenceOptions = { ...compareOptions, filters: compareOptions.filters.filter(filter => filter.key !== 'model') };
+            const peers = referenceOptions.filters.length === compareOptions.filters.length ? preparedGroups
+                : groupComparisonModels(models, referenceOptions, [], { includeReferenceVersions: true });
+            const reference = createPairwiseReference(peers), estimates = new WeakMap();
+            if (reference.predict) return reference;
+            return { distributions: reference.distributions, estimate(model) {
+                if (!estimates.has(model)) estimates.set(model, reference.estimate(model));
+                return estimates.get(model);
+            } };
+        }, reference => reference.cellCount ?? 0) : null;
+    const calculate = async (scope, entries, total, rules) => {
+        const build = () => scoreComparison(models, entries, total, rules, compareOptions, preparedGroups);
+        if (!jsonMemberMetadata || !preparedGroups) return build();
+        // Read current pies first. Reuse only the exact scoring input, scoped to its owner and context.
+        const key = JSON.stringify([normalizeUserID(userID), context.categoryID, context.contextValues,
+            scope, comparisonKey, scoreMode, availableInferenceVersion, entries, total,
+            rules.fallbackRules ?? [], rules.familyComposition ?? []]);
+        return cachedRankingCalculation(db, key, build);
+    };
+    const personalRanking = await calculate('personal', personalScoringEntries, PIE_TOTAL_BASIS_POINTS,
+        { fallbackRules: personalExpanded ? [] : personalFallbackRules, familyComposition: personalEffectiveComposition,
+            scoreMode, availableInferenceVersion, percentileReference, comparisonScoreIndexes, jsonMemberMetadata, excludedConditionIDs });
+    const publicRanking = await calculate('public', publicEffectiveEntries,
+        publicExpanded ? PIE_TOTAL_BASIS_POINTS : publicPie.participantCount * PIE_TOTAL_BASIS_POINTS,
+        { familyComposition: publicEffectiveComposition, fallbackScope: 'public', scoreMode, availableInferenceVersion,
+            percentileReference, comparisonScoreIndexes, jsonMemberMetadata, excludedConditionIDs });
 
     return {
+        scoreMode,
         authenticated: Boolean(userID),
         userID: normalizeUserID(userID),
         context,
         personalPie: {
             revision: storedPersonalPie?.revision ?? 0,
-            isDraft: !storedPersonalPie,
-            editable: Boolean(userID),
+            isDraft: Boolean(previewPersonalPie) || !storedPersonalPie,
+            editable: true,
             entries: personalEntries,
-            fallbackRules: personalFallbackRules
+            effectiveEntries: personalExpanded ? decoratePieEntries(personalExpanded.entries, conditionsByID) : personalEntries,
+            referenceIssues: personalExpanded?.issues ?? [],
+            fallbackRules: personalFallbackRules,
+            communityFallbackComposition: personalCommunityComposition
         },
         publicPie: {
             participantCount: publicPie.participantCount,
             isFallback: false,
             entries: publicEntries,
-            fallbackRules: decorateFallbackRules(publicPie.fallbackRules, conditionsByID).map((rule, index) => ({
-                ...rule,
-                unconfiguredWeightBasisPoints: publicPie.fallbackRules[index].unconfiguredWeightBasisPoints
-            }))
+            effectiveEntries: publicExpanded ? decoratePieEntries(publicExpanded.entries, conditionsByID) : publicEntries,
+            referenceIssues: publicExpanded?.issues ?? [],
+            familyComposition
         },
         benchmarks: benchmarkList,
         comparison: compareOptions,
         modelLeaderboards: {
-            personal: scoreComparison(models, personalScoringEntries, PIE_TOTAL_BASIS_POINTS, {
-                fallbackRules: personalSourceFallbackRules
-            }, compareOptions),
-            public: scoreComparison(
-                models,
-                publicPie.scoringEntries,
-                publicPie.participantCount * PIE_TOTAL_BASIS_POINTS,
-                { fallbackRules: publicPie.fallbackRules, fallbackScope: 'public' }, compareOptions
-            )
+            personal: personalRanking,
+            public: publicRanking
         },
         scoreScale: {
             min: 0,
@@ -1290,7 +1717,8 @@ function validatePieEntries(entries) {
         if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
             throw requestError(400, 'invalid_pie_entry');
         }
-        const conditionID = parseSafeInteger(entry.conditionID, { minimum: 1 });
+        const conditionID = typeof entry.conditionID === 'number' && Number.isSafeInteger(entry.conditionID)
+            && entry.conditionID !== 0 ? entry.conditionID : null;
         const weightBasisPoints = parseSafeInteger(entry.weightBasisPoints, {
             minimum: PIE_MIN_ITEM_BASIS_POINTS
         });
@@ -1320,31 +1748,6 @@ function hasExactKeys(value, expectedKeys) {
         && actual.every((key, index) => key === expected[index]);
 }
 
-function assertFallbackRulesAcyclic(rules) {
-    const primaryIDs = new Set(rules.map(rule => rule.primaryConditionID));
-    const graph = new Map(rules.map(rule => [
-        rule.primaryConditionID,
-        rule.entries
-            .map(entry => entry.conditionID)
-            .filter(conditionID => primaryIDs.has(conditionID))
-    ]));
-    const visiting = new Set();
-    const visited = new Set();
-    const visit = conditionID => {
-        if (visiting.has(conditionID)) {
-            throw requestError(400, 'pie_fallback_cycle_not_allowed', { conditionID });
-        }
-        if (visited.has(conditionID)) return;
-        visiting.add(conditionID);
-        for (const targetID of graph.get(conditionID) ?? []) {
-            visit(targetID);
-        }
-        visiting.delete(conditionID);
-        visited.add(conditionID);
-    };
-    graph.forEach((_, conditionID) => visit(conditionID));
-}
-
 function validateFallbackRules(fallbackRules, pieEntries) {
     if (!Array.isArray(fallbackRules) || fallbackRules.length > pieEntries.length) {
         throw requestError(400, 'invalid_personal_pie_fallback_rules');
@@ -1352,7 +1755,8 @@ function validateFallbackRules(fallbackRules, pieEntries) {
     const pieConditionIDs = new Set(pieEntries.map(entry => entry.conditionID));
     const primaryIDs = new Set();
     const normalized = fallbackRules.map(rule => {
-        if (!hasExactKeys(rule, ['primaryConditionID', 'mode', 'entries'])) {
+        if (!hasExactKeys(rule, ['primaryConditionID', 'mode', 'entries'])
+            && !hasExactKeys(rule, ['primaryConditionID', 'mode', 'entries', 'selectionSource'])) {
             throw requestError(400, 'invalid_personal_pie_fallback_rule');
         }
         const primaryConditionID = parseSafeInteger(rule.primaryConditionID, { minimum: 1 });
@@ -1361,59 +1765,70 @@ function validateFallbackRules(fallbackRules, pieEntries) {
             || primaryIDs.has(primaryConditionID)
             || rule.mode !== FALLBACK_RULE_MODE
             || !Array.isArray(rule.entries)
-            || rule.entries.length === 0
-            || rule.entries.length > MAX_FALLBACK_COMPONENTS) {
+            || Object.hasOwn(rule, 'selectionSource') && !FALLBACK_SELECTION_SOURCES.includes(rule.selectionSource)) {
             throw requestError(400, 'invalid_personal_pie_fallback_rule', {
-                primaryConditionID: rule.primaryConditionID,
-                maxComponents: MAX_FALLBACK_COMPONENTS
+                primaryConditionID: rule.primaryConditionID
             });
         }
         primaryIDs.add(primaryConditionID);
         const conditionIDs = new Set();
-        let totalBasisPoints = 0;
         const entries = rule.entries.map(entry => {
-            if (!hasExactKeys(entry, ['conditionID', 'weightBasisPoints'])) {
+            if (!hasExactKeys(entry, ['conditionID'])) {
                 throw requestError(400, 'invalid_personal_pie_fallback_component', { primaryConditionID });
             }
             const conditionID = parseSafeInteger(entry.conditionID, { minimum: 1 });
-            const weightBasisPoints = parseSafeInteger(entry.weightBasisPoints, {
-                minimum: PIE_MIN_ITEM_BASIS_POINTS
-            });
             if (conditionID === null
                 || conditionID === primaryConditionID
-                || conditionIDs.has(conditionID)
-                || weightBasisPoints === null
-                || weightBasisPoints > PIE_TOTAL_BASIS_POINTS) {
+                || conditionIDs.has(conditionID)) {
                 throw requestError(400, 'invalid_personal_pie_fallback_component', {
                     primaryConditionID,
                     conditionID: entry.conditionID
                 });
             }
             conditionIDs.add(conditionID);
-            totalBasisPoints += weightBasisPoints;
-            return { conditionID, weightBasisPoints };
+            return { conditionID };
         });
-        if (totalBasisPoints !== PIE_TOTAL_BASIS_POINTS) {
-            throw requestError(400, 'pie_fallback_total_must_equal_100_percent', {
-                primaryConditionID,
-                totalBasisPoints
-            });
-        }
-        return { primaryConditionID, mode: FALLBACK_RULE_MODE, entries };
+        try { familyKey(primaryConditionID, entries); }
+        catch { throw requestError(400, 'invalid_personal_pie_fallback_component', { primaryConditionID }); }
+        return { primaryConditionID, mode: FALLBACK_RULE_MODE, entries,
+            ...(rule.selectionSource ? { selectionSource: rule.selectionSource } : {}) };
     });
-    assertFallbackRulesAcyclic(normalized);
     return normalized;
 }
 
-export async function savePersonalPie(db, {
+function normalizePreviewPersonalPie(value) {
+    if (!hasExactKeys(value, ['entries', 'fallbackRules'])) {
+        throw requestError(400, 'invalid_personal_pie_preview');
+    }
+    const entries = validatePieEntries(value.entries);
+    return { entries, fallbackRules: validateFallbackRules(value.fallbackRules, entries) };
+}
+
+export async function savePersonalPie(db, options) {
+    for (let attempt = 0; ; attempt++) {
+        try {
+            return await savePersonalPieAttempt(db, options);
+        } catch (error) {
+            // InnoDB rolls back a deadlock victim; reuse the same identity for a bounded retry.
+            if (error.code !== 'ER_LOCK_DEADLOCK' || attempt >= 2) throw error;
+        }
+    }
+}
+
+async function savePersonalPieAttempt(db, {
     userID,
+    writeIdentity,
     categoryID,
     contextValues = {},
     expectedRevision,
     entries,
     fallbackRules,
-    comparison = null
+    comparison = null,
+    scoreMode = 'range'
 }) {
+    if (!['range', 'available'].includes(scoreMode)) {
+        throw requestError(400, 'invalid_score_mode');
+    }
     const normalizedUserID = normalizeUserID(userID);
     const normalizedCategoryID = parseSafeInteger(categoryID, { minimum: 1 });
     const revision = parseSafeInteger(expectedRevision);
@@ -1427,10 +1842,16 @@ export async function savePersonalPie(db, {
     const connection = await db.getConnection();
     let resolvedCategoryID;
     let resolvedContextValues;
-    let returnEarly = false;
+    let savedRevision = 0;
+    let previousFamilyIDs = [];
     try {
-        if (comparison !== null) comparisonOptions(await loadModels(connection), comparison);
-        await connection.beginTransaction();
+        if (comparison !== null) {
+            const metadata = await loadModelMetadata(connection);
+            comparisonOptions(metadata.map(model => ({ modelID: Number(model.model_ID), modelName: model.model_name,
+                vendor: model.vendor_name, condition: { parameters: {} } })), comparison, await loadScoreFieldCatalog(connection));
+        }
+        await startTransactionConnection(connection, 'SAVE PERSONAL PIE');
+        await lockTopicReferences(connection);
         const [users] = await connection.execute(`
             SELECT ID
             FROM users
@@ -1441,32 +1862,43 @@ export async function savePersonalPie(db, {
             throw requestError(403, 'account_unavailable');
         }
 
-        const category = await resolveCategory(connection, normalizedCategoryID);
+        const intent = await claimWriteIntent(connection, { userID: normalizedUserID,
+            key: writeIdentity, action: 'save_personal_pie', payload: {
+                categoryID: normalizedCategoryID, contextValues, expectedRevision: revision,
+                entries: normalizedEntries, fallbackRules: normalizedFallbackRules
+            } });
+        if (intent.response) {
+            await commitTransactionConnection(connection, 'SAVE PERSONAL PIE');
+            return intent.response.body;
+        }
+
+        const category = await resolveCategory(connection, normalizedCategoryID, normalizedUserID);
         resolvedCategoryID = category.ID;
-        const dimensions = await loadDimensions(connection, category);
-        const resolvedContext = canonicalizeContextValues(
-            contextValues,
-            dimensions,
-            { requireAllDimensions: true }
-        );
+        const scene = await resolveTopicScene(connection, category, contextValues, { requireAllDimensions: true, create: true });
+        const resolvedContext = scene ?? canonicalizeContextValues(contextValues, [], { requireAllDimensions: true });
         resolvedContextValues = resolvedContext.contextValues;
-        let context = await findContext(connection, category.ID, resolvedContextValues);
+        let context = scene ?? await findContext(connection, category.ID, resolvedContextValues);
 
         if (context.ID === null && normalizedEntries.length === 0) {
             if (revision !== 0) {
                 throw requestError(409, 'pie_revision_conflict', { currentRevision: 0 });
             }
-            returnEarly = true;
         } else {
             if (context.ID === null) {
                 context = await ensureContext(connection, category.ID, resolvedContextValues);
             }
+            await validateTopicReferences(connection, { ...context, isPrivate: category.isPrivate }, normalizedEntries, normalizedUserID);
 
             const [pies] = await connection.execute(`
                 SELECT ID, revision
                 FROM personal_pies
                 WHERE user_ID = ? AND context_ID = ?
                 FOR UPDATE`, [normalizedUserID, context.ID]);
+            if (pies.length) {
+                const [rules] = await connection.execute(`SELECT family_ID FROM personal_pie_score_rules
+                    WHERE pie_ID = ? ORDER BY family_ID FOR UPDATE`, [Number(pies[0].ID)]);
+                previousFamilyIDs = rules.filter(rule => rule.family_ID !== null).map(rule => Number(rule.family_ID));
+            }
             if (normalizedEntries.length === 0) {
                 if (pies.length === 0) {
                     if (revision !== 0) {
@@ -1479,21 +1911,31 @@ export async function savePersonalPie(db, {
                     }
                     await connection.execute('DELETE FROM personal_pies WHERE ID = ?', [Number(pies[0].ID)]);
                 }
-                returnEarly = true;
             } else {
-                const primaryConditionIDs = normalizedEntries.map(entry => entry.conditionID);
+                const primaryConditionIDs = normalizedEntries.filter(entry => entry.conditionID > 0).map(entry => entry.conditionID);
                 const fallbackConditionIDs = normalizedFallbackRules.flatMap(rule => (
                     rule.entries.map(entry => entry.conditionID)
                 ));
                 const conditionIDs = [...new Set([...primaryConditionIDs, ...fallbackConditionIDs])];
-                const [conditions] = await connection.execute(`
+                const [conditions] = conditionIDs.length ? await connection.execute(`
                     SELECT ID
                     FROM benchmark_conditions
                     WHERE ID IN (${conditionIDs.map(() => '?').join(', ')})
-                      AND is_active = 1
-                    FOR SHARE`, conditionIDs);
+                      AND ${selectableBenchmarkConditionSQL()}
+                    FOR SHARE`, conditionIDs) : [[]];
                 if (conditions.length !== conditionIDs.length) {
                     throw requestError(404, 'pie_benchmark_condition_not_found');
+                }
+                const selectable = await loadBenchmarkConditions(connection);
+                const excludedID = conditionIDs.find(id => selectable.some(condition => condition.conditionID === id && condition.excludedFromRanking));
+                if (excludedID !== undefined) throw requestError(409, 'pie_benchmark_condition_excluded', { conditionID: excludedID });
+                const selectableIDs = new Set(selectable.map(condition => condition.conditionID));
+                const notComparableID = conditionIDs.find(id => !selectableIDs.has(id));
+                if (notComparableID !== undefined) {
+                    throw requestError(409, 'pie_benchmark_condition_not_comparable', {
+                        conditionID: notComparableID,
+                        minimumModelCount: MIN_COMPARABLE_MODELS
+                    });
                 }
 
                 let pieID;
@@ -1505,73 +1947,62 @@ export async function savePersonalPie(db, {
                         INSERT INTO personal_pies (user_ID, context_ID, revision)
                         VALUES (?, ?, 1)`, [normalizedUserID, context.ID]);
                     pieID = Number(result.insertId);
+                    savedRevision = 1;
                 } else {
                     const currentRevision = Number(pies[0].revision);
                     if (revision !== currentRevision) {
                         throw requestError(409, 'pie_revision_conflict', { currentRevision });
                     }
                     pieID = Number(pies[0].ID);
+                    savedRevision = currentRevision + 1;
                     await connection.execute(`
                         UPDATE personal_pies
                         SET revision = revision + 1, updated_at = CURRENT_TIMESTAMP
                         WHERE ID = ?`, [pieID]);
                     await connection.execute('DELETE FROM personal_pie_weights WHERE pie_ID = ?', [pieID]);
+                    await connection.execute('DELETE FROM personal_pie_topic_weights WHERE pie_ID = ?', [pieID]);
                 }
 
-                const valueSQL = normalizedEntries.map(() => '(?, ?, ?)').join(', ');
-                const valueParams = normalizedEntries.flatMap(entry => [pieID, entry.conditionID, entry.weightBasisPoints]);
-                await connection.execute(`
+                const benchmarkEntries = normalizedEntries.filter(entry => entry.conditionID > 0);
+                const referenceEntries = normalizedEntries.filter(entry => entry.conditionID < 0);
+                const valueSQL = benchmarkEntries.map(() => '(?, ?, ?)').join(', ');
+                const valueParams = benchmarkEntries.flatMap(entry => [pieID, entry.conditionID, entry.weightBasisPoints]);
+                if (benchmarkEntries.length) await connection.execute(`
                     INSERT INTO personal_pie_weights (pie_ID, benchmark_condition_ID, weight_basis_points)
                     VALUES ${valueSQL}`, valueParams);
+                if (referenceEntries.length) await connection.execute(`INSERT INTO personal_pie_topic_weights
+                    (pie_ID, target_context_ID, weight_basis_points)
+                    VALUES ${referenceEntries.map(() => '(?, ?, ?)').join(', ')}`,
+                referenceEntries.flatMap(entry => [pieID, -entry.conditionID, entry.weightBasisPoints]));
 
                 if (normalizedFallbackRules.length > 0) {
-                    const ruleValueSQL = normalizedFallbackRules.map(() => '(?, ?, ?)').join(', ');
-                    const ruleValueParams = normalizedFallbackRules.flatMap(rule => [
-                        pieID,
-                        rule.primaryConditionID,
-                        rule.mode
-                    ]);
+                    const ruleValueSQL = normalizedFallbackRules.map(() => '(?, ?, ?, ?)').join(', ');
+                    const ruleValueParams = [];
+                    for (const rule of normalizedFallbackRules) {
+                        const familyID = rule.entries.length
+                            ? await ensureBenchmarkFamily(connection, rule.primaryConditionID, rule.entries) : null;
+                        ruleValueParams.push(pieID, rule.primaryConditionID, familyID, rule.selectionSource ?? 'selected');
+                    }
                     await connection.execute(`
                         INSERT INTO personal_pie_score_rules
-                            (pie_ID, primary_benchmark_condition_ID, mode)
+                            (pie_ID, primary_benchmark_condition_ID, family_ID, selection_source)
                         VALUES ${ruleValueSQL}`, ruleValueParams);
-
-                    const components = normalizedFallbackRules.flatMap(rule => (
-                        rule.entries.map(entry => ({
-                            primaryConditionID: rule.primaryConditionID,
-                            ...entry
-                        }))
-                    ));
-                    const componentValueSQL = components.map(() => '(?, ?, ?, ?)').join(', ');
-                    const componentValueParams = components.flatMap(component => [
-                        pieID,
-                        component.primaryConditionID,
-                        component.conditionID,
-                        component.weightBasisPoints
-                    ]);
-                    await connection.execute(`
-                        INSERT INTO personal_pie_score_rule_components
-                            (pie_ID, primary_benchmark_condition_ID,
-                             fallback_benchmark_condition_ID, weight_basis_points)
-                        VALUES ${componentValueSQL}`, componentValueParams);
                 }
             }
         }
-        await connection.commit();
+        await pruneUnusedBenchmarkFamilies(connection, previousFamilyIDs);
+        const receipt = { saved: true, requestKey: intent.key, userID: normalizedUserID,
+            categoryID: resolvedCategoryID, contextValues: resolvedContextValues,
+            personalPie: { revision: savedRevision, entries: normalizedEntries, fallbackRules: normalizedFallbackRules } };
+        // The receipt and weights commit together; ranking reads must not change this outcome.
+        await completeWriteIntent(connection, intent, { status: 200, body: receipt });
+        await commitTransactionConnection(connection, 'SAVE PERSONAL PIE');
+        return receipt;
     } catch (error) {
-        await connection.rollback();
+        await rollbackTransactionConnection(connection, 'SAVE PERSONAL PIE', error);
         throw error;
     } finally {
-        connection.release();
+        releaseTransactionConnection(connection, 'SAVE PERSONAL PIE');
     }
 
-    if (returnEarly || normalizedEntries.length > 0) {
-        return getRankingWorkspace(db, {
-            categoryID: resolvedCategoryID,
-            contextValues: resolvedContextValues,
-            userID: normalizedUserID,
-            comparison
-        });
-    }
-    throw requestError(500, 'personal_pie_save_incomplete');
 }

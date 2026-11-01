@@ -80,7 +80,20 @@ test('edited moderation apply is bound to the current reviewer user and a fresh 
     assert.match(server, /preview\.updatedAt !== moderationTimestamp\(rows\[0\]\.updated_at\)/);
     assert.match(server, /preview\.contentHash !== moderationPreviewContentHash\(editedContent\)/);
     assert.match(server, /preview\.reviewerUserID !== String\(req\.user\.ID\)/);
-    assert.match(client, /return fetch\('\/api\/preview_moderation_sql'/);
+    assert.match(client, /await postJSON\('\/api\/preview_moderation_sql'/);
     assert.match(client, /await previewSQL\(activeEditorLog, content\)/);
-    assert.match(client, /previewToken: activeEditorPreviewToken/);
+    assert.match(client, /const previewToken = activeEditorPreviewToken/);
+    assert.match(client, /ID,\s*content: editedContent,\s*previewToken/);
+    assert.match(client, /activeEditorPreviewToken !== previewToken/);
+});
+
+test('moderation callbacks respect the current editor session and latest read intent', () => {
+    assert.match(client, /function isCurrentOverlay\(overlay, session\)/);
+    assert.match(client, /!overlay\.hidden && overlaySessions\.get\(overlay\) === session/);
+    assert.match(client, /editorRevision === revision/);
+    assert.match(client, /if \(!current\(\)\) return undefined/);
+    assert.match(client, /const requestID = \+\+messagesRequestID/);
+    assert.match(client, /requestID === messagesRequestID\) renderAdminMessages\(messages\)/);
+    assert.match(client, /requestID === recordRequestID && activeWorkspaceView === 'explorer'/);
+    assert.match(client, /requestID === auditDetailRequestID && activeWorkspaceView === 'audit'/);
 });

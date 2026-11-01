@@ -6,6 +6,7 @@ import test from 'node:test';
 const html = fs.readFileSync(new URL('../private/home.html', import.meta.url), 'utf8');
 const home = frontendSource('public/js/home.js');
 const workspace = frontendSource('public/js/home-workspace.js');
+const rankingPages = fs.readFileSync(new URL('../ranking-pagination.js', import.meta.url), 'utf8');
 const styles = frontendStyles('public/css/home-v2.css');
 
 test('homepage keeps pie, benchmark leaderboard, and model leaderboard in three persistent columns', () => {
@@ -25,40 +26,51 @@ test('homepage keeps pie, benchmark leaderboard, and model leaderboard in three 
     assert.match(workspace, /pieCard\.parentElement !== pieHomeSlot/);
     assert.match(styles, /\.bp-workspace-grid\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1\.62fr\) minmax\(340px, 1fr\)/s);
     assert.match(styles, /\.bp-left-workspace\s*\{[^}]*grid-template-columns:\s*minmax\(240px, \.88fr\) minmax\(285px, 1\.12fr\)/s);
-    assert.match(workspace, /state\.workspaceView === 'focus' && selected/);
+    assert.match(workspace, /function onBenchmarkInspection\(event\)/);
     assert.match(workspace, /row\.classList\.toggle\('is-muted'/);
     assert.doesNotMatch(html, /id="pie-focus-close"/);
     assert.doesNotMatch(workspace, /pieFocusClose/);
 });
 
-test('non-root breadcrumbs omit the AI Evaluation root while the root remains visible alone', () => {
-    assert.match(workspace, /const rootOffset = displayParts\.length > 1 \? 1 : 0/);
-    assert.match(workspace, /displayParts\.slice\(rootOffset\)/);
+test('the workspace breadcrumb shows the flat topic name instead of URL segments or ancestors', () => {
+    const breadcrumb = workspace.slice(workspace.indexOf('function renderBreadcrumb('), workspace.indexOf('async function prepareContextChange('));
+    assert.match(breadcrumb, /currentCategoryNode\(state\.topicName \|\| 'Topics'\)/);
+    assert.match(breadcrumb, /breadcrumb\.append\(name, updateIndicator\.element\)/);
+    assert.doesNotMatch(breadcrumb, /categoryPath|lineage|displayParts|rootOffset/);
 });
 
-test('the current homepage category is emphasized above context selectors', () => {
-    assert.match(workspace, /if \(isCurrent\) node\.className = 'bp-breadcrumb-current'/);
+test('the current homepage topic is emphasized and opens topic navigation on mobile', () => {
+    assert.match(workspace, /node\.className = 'bp-breadcrumb-current'/);
+    assert.match(workspace, /document\.createElement\(categoryNavigationMedia\.matches \? 'button' : 'span'\)/);
+    assert.match(workspace, /node\.textContent = name/);
+    assert.match(workspace, /node\.setAttribute\('aria-label', `Open topics: \$\{name\}`\)/);
     assert.match(styles, /\.bp-breadcrumb-current\s*\{[^}]*font-size:\s*17px[^}]*font-weight:\s*680/s);
 });
 
-test('taxonomy renders the database root directly without an All Categories wrapper', () => {
+test('topic navigation preserves a flat identity and explicit selection without an artificial root', () => {
+    const topicSelection = home.slice(home.indexOf('function normalizeTopic('), home.indexOf('async function selectTopic('));
     assert.doesNotMatch(home, /name:\s*'All Categories'/);
     assert.doesNotMatch(home, /dataset\.categoryId\s*=\s*root\s*\?/);
-    assert.match(home, /treeContent\.replaceChildren\(\.\.\.currentTree\.map\(category =>/);
-    assert.match(home, /currentCategoryID === null && currentTree\.length === 1 \? currentTree\[0\] : null/);
+    assert.match(topicSelection, /lineage: \[\{ ID: categoryID, name: categoryName \}\]/);
+    assert.match(topicSelection, /sidebarNavigation\.setCurrentTopic\(topic\)/);
+    assert.doesNotMatch(topicSelection, /parent_ID|children|currentTree/);
+    assert.match(home, /requestJSON\('\/api\/get_topic', \{ categoryID: Number\(publicMatch\[1\]\) \}\)/);
+    assert.doesNotMatch(home, /currentTree\[0\]/);
+    assert.match(home, /if \(!selected\) throw new Error\('Current topic is missing'\)/);
+    assert.match(home, /if \(topic\.categoryID !== Number\(publicMatch\[1\]\)\) throw new Error\('Topic identity changed'\)/);
     assert.match(html, /\/js\/home\.js\?v=[^"']+/);
 });
 
-test('pie slices scale around the center on hover and selected slices render last', () => {
-    assert.match(styles, /\.bp-pie-slice-lift\s*\{[^}]*transform-origin:\s*180px 180px/s);
-    assert.match(styles, /g\[data-object-id\]:hover \.bp-pie-slice-lift\s*\{[^}]*transform:\s*scale\(1\.025\)/s);
-    assert.doesNotMatch(styles, /g\[data-object-id\]:hover \.bp-pie-slice-lift\s*\{[^}]*translate/s);
-    assert.match(workspace, /pieSvg\.append\(selectedGroup\)/);
+test('weight blocks enlarge within their viewport and active blocks render last', () => {
+    assert.match(styles, /#weight-pie \.bp-weight-tile-lift\s*\{[^}]*transform-box:\s*view-box/s);
+    assert.match(styles, /#weight-pie g\[data-object-id\]:is\(:hover, :focus-visible\) \.bp-weight-tile-lift\s*\{[^}]*scale\(var\(--bp-tile-hover-scale\)\)/s);
+    assert.match(workspace, /treemapHoverTransform\(tile, width, height\)/);
+    assert.match(workspace, /pieSvg\.append\(active\.group\)/);
 });
 
-test('category creation actions live in the path-aligned overflow menu and legal links stay in the sidebar', () => {
-    assert.match(html, /id="category-actions-menu"/);
-    assert.match(html, /id="new-category-button"/);
+test('category creation actions are absent while legal links stay in the sidebar', () => {
+    assert.doesNotMatch(html, /id="(?:category-actions-menu|new-category-button|adjust-category-button)"/);
+    assert.doesNotMatch(home, /buildContributeURL\('new_category'\)/);
     assert.match(html, /class="bp-sidebar-footer"/);
     assert.match(html, />Terms</);
     assert.match(html, /https:\/\/x\.com\/BenchPoll/);
@@ -67,9 +79,10 @@ test('category creation actions live in the path-aligned overflow menu and legal
 test('personal benchmark focus captures wheel input only in the pie and benchmark workspace', () => {
     assert.match(workspace, /function isPersonalBenchmarkFocus\(\)/);
     assert.match(workspace, /document\.addEventListener\('wheel'/);
-    assert.match(workspace, /!event\.target\.closest\('\.bp-left-workspace'\)/);
+    assert.match(workspace, /isWeightWheelTarget\(event\.target\)/);
     assert.match(workspace, /queueSelectedWeightWheel\(event\)/);
-    assert.match(workspace, /Scroll to adjust \$\{focusedName\}/);
+    assert.match(workspace, /renderSelectedWeightHeading\(\)/);
+    assert.doesNotMatch(workspace, /Scroll to adjust \$\{focusedName\}/);
     assert.doesNotMatch(workspace, /Scroll anywhere outside the sidebar/);
     assert.doesNotMatch(workspace, /These weights belong only to the selected category and context/);
 });
@@ -79,15 +92,19 @@ test('focused weight adjustment leaves the sidebar, context controls, and model 
         workspace.indexOf("document.addEventListener('wheel'"),
         workspace.indexOf("pieSvg.addEventListener('wheel'")
     );
-    assert.match(wheelListener, /closest\('\.bp-left-workspace'\)/);
+    assert.match(wheelListener, /isWeightWheelTarget\(event\.target\)/);
     assert.doesNotMatch(wheelListener, /preventDefault\(\)/);
     assert.doesNotMatch(wheelListener, /bp-sidebar|bp-context-row|bp-model-card/);
     assert.match(wheelListener, /queueSelectedWeightWheel\(event\)/);
 });
 
-test('clicking any benchmark row exits personal weight focus instead of changing the target', () => {
-    assert.match(workspace, /state\.workspaceView === 'focus' && state\.mode === 'personal'/);
-    assert.match(workspace, /Exit weight adjustment for/);
+test('benchmark names inspect information while the rest of a row selects its weight target', () => {
+    assert.match(workspace, /const name = createBenchmarkInformationLink\(object/);
+    assert.match(workspace, /onInspect: onBenchmarkInspection, className: 'bp-benchmark-name'/);
+    assert.match(workspace, /onBenchmarkActivation\(event, object\)/);
+    assert.doesNotMatch(workspace, /informationLink\.click\(\)/);
+    assert.match(workspace, /if \(isPersonalBenchmarkFocus\(\)\) setWorkspaceView\('leaderboard'\)/);
+    assert.doesNotMatch(workspace, /Exit weight adjustment for/);
 });
 
 test('benchmark leaderboard stays public-ranked and can pin personal benchmarks as a separate group', () => {
@@ -100,12 +117,14 @@ test('benchmark leaderboard stays public-ranked and can pin personal benchmarks 
     assert.match(workspace, /pinPersonalBenchmarks:\s*false/);
     assert.match(workspace, /const personalControlsActive = state\.mode === 'personal'/);
     assert.match(workspace, /benchmarkPersonalPin\.hidden = !canPinPersonal/);
-    assert.match(workspace, /rightIsPinned - leftIsPinned/);
-    assert.match(workspace, /personalWeightFor\(right\) - personalWeightFor\(left\)/);
-    assert.match(workspace, /Number\(right\.publicWeight\) - Number\(left\.publicWeight\)/);
+    assert.match(rankingPages, /snapshot\.personalWeights\.get/);
+    assert.match(rankingPages, /return rightWeight - leftWeight/);
+    assert.match(rankingPages, /right\.publicWeightBasisPoints - left\.publicWeightBasisPoints/);
+    assert.match(rankingPages, /benchmarkVersionTieOrder\(left, right\)/);
+    assert.match(workspace, /reloadBenchmarkPage\(\)/);
     assert.doesNotMatch(workspace, /benchmarkSort/);
-    assert.match(workspace, /rank\.textContent = String\(object\.rank\)/);
-    assert.match(workspace, /row\.append\(rank, identity, personalValue, publicValue, actionCell\)/);
+    assert.match(workspace, /rank\.textContent = object\.isFamily \? '' : String\(object\.rank\)/);
+    assert.match(workspace, /row\.append\(rank, identity, personalValue, publicValue\)/);
     assert.doesNotMatch(workspace, /identity\.append\(name, type\)/);
     assert.match(styles, /\.bp-benchmark-head,\s*\.bp-benchmark-row\s*\{[^}]*grid-template-columns:\s*20px minmax\(0, 1fr\) 52px 52px 68px/s);
 });
@@ -114,28 +133,30 @@ test('personal-mode benchmark rows keep a persistent remove action without expos
     assert.match(workspace, /function removeObjectFromPersonalPie\(object\)/);
     assert.match(workspace, /state\.personalEntries\.filter\(entry => Number\(entry\.conditionID\) !== objectID\)/);
     assert.match(workspace, /distributeToTarget\([\s\S]*state\.limits\.totalBasisPoints[\s\S]*\)/);
-    assert.match(workspace, /if \(personalControlsActive && inPersonalPie\) \{[\s\S]*classList\.add\('has-personal-remove'\)[\s\S]*bp-personal-weight-remove/);
-    assert.match(workspace, /actionCell\.append\(edit\)[\s\S]*actionCell\.append\(remove\)/);
-    assert.match(styles, /\.bp-benchmark-action-cell\.has-personal-remove\s*\{[^}]*width:\s*68px/s);
+    assert.match(workspace, /if \(personalControlsActive && inPersonalPie && !fallbackTargetActive\) \{[\s\S]*classList\.add\('has-personal-remove'\)[\s\S]*bp-personal-weight-remove/);
+    assert.match(workspace, /actionCell\.append\(remove\)/);
+    assert.doesNotMatch(workspace, /actionCell\.append\(discussion\)/);
+    assert.match(styles, /\.bp-benchmark-action-cell\.has-personal-remove\s*\{[^}]*width:\s*32px/s);
     assert.match(styles, /\.bp-personal-weight-remove\s*\{[^}]*opacity:\s*1/s);
     assert.match(styles, /\.bp-row-edit-action\s*\{[^}]*opacity:\s*0/s);
     assert.doesNotMatch(styles, /\.bp-benchmark-row\.is-personal-pinned::before/);
 });
 
-test('new benchmark is a subdued text link and sidebar legal content can wrap without clipping', () => {
-    assert.doesNotMatch(html, /id="contribute-button"[^>]*>[\s\S]*?fa-plus[\s\S]*?<\/a>/);
+test('new benchmark uses the fixed heading action and compact sidebar legal content stays on one row', () => {
+    assert.match(html, /<h2 id="benchmark-heading">Evaluation items<\/h2>\s*<a id="contribute-button"/);
+    assert.match(html, /id="contribute-button"[^>]*>[\s\S]*?fa-plus[\s\S]*?<\/a>/);
     assert.match(styles, /\.bp-inline-create-evaluation,\s*\.bp-contribute-data\s*\{[^}]*background:\s*transparent/s);
-    assert.match(styles, /\.bp-sidebar-footer\s*\{[^}]*display:\s*flex[^}]*flex-wrap:\s*wrap/s);
+    assert.match(styles, /\.bp-sidebar-footer\s*\{[^}]*display:\s*flex[^}]*flex-wrap:\s*nowrap/s);
 });
 
 test('empty personal state uses a creation card instead of an inactive mode switch', () => {
     assert.match(html, /id="personal-pie-create"[^>]*hidden/);
-    assert.match(html, /Create your benchmark mix/);
-    assert.match(html, /Your weights\. Your leaderboard\./);
+    assert.match(html, /Create your own index/);
+    assert.match(html, /Choose what counts\. Set your weights\./);
     assert.match(html, /id="personal-empty-public-return"/);
     assert.match(workspace, /modeSwitch\.hidden = !hasPersonalWeights/);
     assert.match(workspace, /personalPieCreate\.hidden = !showCreatePersonal/);
-    assert.match(workspace, /Choose a benchmark on the right to begin/);
+    assert.match(workspace, /personalPieEmpty.hidden = !showEmptyPersonal/);
     assert.doesNotMatch(workspace, /No weights in this context/);
 });
 
@@ -156,10 +177,14 @@ test('benchmark conditions render as separate muted labels and default stays hid
     assert.match(labelHelper, /conditionName\.toLocaleLowerCase\('en-US'\) === 'default'/);
     assert.doesNotMatch(labelHelper, /object\.isDefaultCondition/);
     assert.match(workspace, /condition\.className = 'bp-benchmark-condition'/);
-    assert.match(workspace, /class: 'bp-pie-condition'/);
-    assert.match(workspace, /benchmarkConditionLabel\(object\)\.toLowerCase\(\)\.includes\(query\)/);
-    assert.match(styles, /\.bp-benchmark-condition\s*\{[^}]*color:\s*#[a-f0-9]{6}/s);
-    assert.match(styles, /\.bp-pie-condition\s*\{[^}]*fill:\s*#4e6755/s);
+    assert.match(workspace, /kind: 'version', text, size: 11/);
+    assert.match(rankingPages, /if \(query && !snapshot\.search\)/);
+    assert.match(rankingPages, /snapshot\.search = benchmarkSearchIndex\(snapshot\.benchmarks, snapshot\.familiesByEntrance\)/);
+    assert.match(rankingPages, /createSearchIndex\(benchmarks, row => \[row\.name, row\.conditionName,/);
+    assert.doesNotMatch(rankingPages, /\.\.\.row\.tags/);
+    assert.match(rankingPages, /family\.familyEntries/);
+    assert.match(styles, /\.bp-benchmark-condition\s*\{[^}]*color:\s*var\(--bp-muted\)/s);
+    assert.match(styles, /#weight-pie \[data-label-kind="version"\]\s*\{[^}]*fill:\s*#596575/s);
 });
 
 test('leaderboard headers leave action cells unlabeled', () => {
@@ -174,9 +199,17 @@ test('leaderboard headers leave action cells unlabeled', () => {
     assert.doesNotMatch(benchmarkHead, /Personal Weight|Public Weight/);
 });
 
-test('model and benchmark edit actions use the same circled information icon treatment', () => {
-    assert.ok((workspace.match(/className = 'bp-row-edit-action bp-benchmark-edit'/g) ?? []).length >= 3);
-    assert.match(styles, /\.bp-benchmark-edit i::before\s*\{[^}]*content:\s*"i"/s);
+test('benchmark rows have one information entry; model changes live in the score panel', () => {
+    const rows = workspace.slice(workspace.indexOf('function renderBenchmarks('), workspace.indexOf('function renderModeState('));
+    assert.doesNotMatch(rows, /className = 'bp-row-edit-action bp-benchmark-edit'/);
+    assert.match(rows, /createBenchmarkInformationLink\(object, \{ getURL: getBenchmarkMemberURL/);
+    assert.match(workspace, /member\.benchmarkID, member\.conditionID \?\? member\.ID/);
+    const modelRows = fs.readFileSync(new URL('../public/js/workspace/model-list.js', import.meta.url), 'utf8');
+    assert.doesNotMatch(modelRows, /buildModelEditURL|bp-row-edit-action|bp-model-action-cell/);
+    assert.match(workspace, /createAction\(\{ label:[\s\S]*?className: 'bp-model-change-information'/);
+    assert.match(workspace, /Change information/);
+    assert.match(html, /id="model-scores-change-controls"/);
+    assert.doesNotMatch(styles, /\.bp-benchmark-edit i::before\s*\{[^}]*content:\s*"i"/s);
 });
 
 test('mobile header and explicit panel navigation keep every workspace available', () => {
@@ -194,7 +227,7 @@ test('model leaderboard is fixed to lower-bound ranking without a visible bound 
     assert.match(head, /class="bp-model-score-heading">Score</);
     assert.doesNotMatch(head, /Lower|Upper|bound-toggle|fa-right-left/);
     assert.doesNotMatch(workspace, /state\.bound|boundToggle/);
-    assert.match(workspace, /Number\(b\.lower\) - Number\(a\.lower\)/);
+    assert.match(rankingPages, /Number\(right\.lower\) - Number\(left\.lower\)/);
     assert.match(workspace, /const selectedScore = Number\(model\.lower\)/);
     assert.match(styles, /\.bp-model-score-heading\s*\{/);
     assert.match(styles, /\.bp-score-track\s*\{[^}]*grid-row:\s*2/s);
@@ -203,7 +236,7 @@ test('model leaderboard is fixed to lower-bound ranking without a visible bound 
 test('pie geometry remains contained while wheel and touch adjustments are active', () => {
     assert.match(styles, /\.bp-pie-stage\s*\{[^}]*overflow:\s*hidden[^}]*contain:\s*paint/s);
     assert.match(styles, /#weight-pie\s*\{[^}]*width:\s*100%[^}]*height:\s*100%[^}]*overflow:\s*hidden[^}]*transform:\s*none/s);
-    assert.match(styles, /\.bp-pie-card\.is-adjusting-weight #weight-pie g\[data-object-id\]:hover \.bp-pie-slice-lift\s*\{[^}]*scale\(1\)/s);
+    assert.match(styles, /\.bp-pie-card\.is-adjusting-weight #weight-pie g\[data-object-id\] \.bp-weight-tile-lift\s*\{[^}]*transform:\s*none/s);
     assert.match(workspace, /setPieAdjustmentActive\(true\)/);
     assert.match(workspace, /setPieAdjustmentActive\(false\)/);
 });

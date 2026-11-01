@@ -22,13 +22,13 @@
     max-height: min(760px, calc(100vh - 40px));
     padding: 29px 30px 27px;
     overflow: auto;
-    border: 1px solid #e2ece7;
+    border: 1px solid var(--bp-line);
     border-radius: 8px;
     background: #fff;
     box-shadow:
         0 2px 5px rgba(35, 54, 45, 0.06),
         0 22px 58px rgba(53, 84, 69, 0.18);
-    color: var(--bp-text, #293b36);
+    color: var(--bp-text, var(--bp-text));
     transform: translateY(10px) scale(0.985);
     transition: transform 220ms var(--bp-ease-soft, cubic-bezier(0.22, 1, 0.36, 1));
 }
@@ -48,7 +48,7 @@ body.bp-home .bp-welcome-dialog:focus-visible {
     left: 30px;
     width: 72px;
     height: 3px;
-    background: #246650;
+    background: var(--bp-purple);
     content: "";
 }
 
@@ -63,14 +63,14 @@ body.bp-home .bp-welcome-dialog:focus-visible {
     border: 0;
     border-radius: 6px;
     background: transparent;
-    color: #587465;
+    color: var(--bp-muted);
     cursor: pointer;
     transition: background-color 150ms ease, color 150ms ease;
 }
 
 .bp-welcome-close:hover {
     background: #f5f8f6;
-    color: #335042;
+    color: var(--bp-text);
 }
 
 .bp-welcome-brand {
@@ -104,7 +104,7 @@ body.bp-home .bp-welcome-dialog:focus-visible {
 
 .bp-welcome-eyebrow {
     margin: 0 0 8px;
-    color: #296a4a;
+    color: var(--bp-purple);
     font-size: 12px;
     font-weight: 700;
     line-height: 1.4;
@@ -114,7 +114,7 @@ body.bp-home .bp-welcome-dialog:focus-visible {
 .bp-welcome-dialog h2 {
     max-width: 560px;
     margin: 0;
-    color: #172d28;
+    color: var(--bp-ink);
     font-family: "Segoe UI Variable Display", "Segoe UI", Inter, Arial, sans-serif;
     font-size: 30px;
     font-weight: 720;
@@ -125,7 +125,7 @@ body.bp-home .bp-welcome-dialog:focus-visible {
 .bp-welcome-description {
     max-width: 570px;
     margin: 13px 0 0;
-    color: #567866;
+    color: var(--bp-muted);
     font-size: 15px;
     line-height: 1.6;
 }
@@ -143,13 +143,13 @@ body.bp-home .bp-welcome-dialog:focus-visible {
     justify-content: space-between;
     gap: 18px;
     margin-bottom: 9px;
-    color: #567766;
+    color: var(--bp-text);
     font-size: 12px;
 }
 
 .bp-welcome-weight-caption strong {
     flex: 0 0 auto;
-    color: #375747;
+    color: var(--bp-muted);
     font-weight: 650;
 }
 
@@ -171,12 +171,12 @@ body.bp-home .bp-welcome-dialog:focus-visible {
 
 .bp-welcome-weight-segment.is-purple {
     flex: 42;
-    background: #296a4a;
+    background: var(--bp-purple);
 }
 
 .bp-welcome-weight-segment.is-blue {
     flex: 27;
-    background: #296a4a;
+    background: var(--bp-purple);
 }
 
 .bp-welcome-weight-segment.is-teal {
@@ -195,7 +195,7 @@ body.bp-home .bp-welcome-dialog:focus-visible {
     gap: 12px 20px;
     margin: 18px 0 0;
     padding: 0;
-    color: #3b5c4b;
+    color: var(--bp-text);
     list-style: none;
 }
 
@@ -211,7 +211,7 @@ body.bp-home .bp-welcome-dialog:focus-visible {
 .bp-welcome-signals i {
     width: 17px;
     flex: 0 0 17px;
-    color: #246650;
+    color: var(--bp-purple);
     text-align: center;
 }
 
@@ -229,9 +229,9 @@ body.bp-home .bp-welcome-dialog:focus-visible {
     justify-content: center;
     gap: 10px;
     padding: 0 18px;
-    border: 1px solid #296a4a;
+    border: 1px solid var(--bp-purple);
     border-radius: 6px;
-    background: #296a4a;
+    background: var(--bp-purple);
     box-shadow: 0 5px 14px rgba(41, 106, 74, 0.16);
     color: #fff !important;
     font-weight: 650;
@@ -240,8 +240,8 @@ body.bp-home .bp-welcome-dialog:focus-visible {
 }
 
 .bp-welcome-primary:hover {
-    border-color: #296a4a;
-    background: #296a4a;
+    border-color: var(--bp-purple);
+    background: var(--bp-purple);
     box-shadow: 0 7px 18px rgba(41, 106, 74, 0.21);
 }
 
@@ -251,8 +251,8 @@ body.bp-home .bp-welcome-dialog:focus-visible {
 
 .bp-welcome-methodology {
     padding: 7px 0 5px;
-    border-bottom: 1px solid #d4e3dc;
-    color: #296a4a !important;
+    border-bottom: 1px solid var(--bp-line);
+    color: var(--bp-purple) !important;
     font-size: 13px;
     font-weight: 620;
     text-decoration: none;
@@ -260,8 +260,8 @@ body.bp-home .bp-welcome-dialog:focus-visible {
 }
 
 .bp-welcome-methodology:hover {
-    border-color: #296a4a;
-    color: #296a4a !important;
+    border-color: var(--bp-purple);
+    color: var(--bp-purple) !important;
 }
 
 body.bp-welcome-open {
