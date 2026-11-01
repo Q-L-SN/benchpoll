@@ -14,7 +14,9 @@ build/
 /%SystemDrive%/
 /test-results/
 /playwright-report/
-/*.sql
+*.sql
+!/docs/cloud/schema-20261101.sql
+/[A-Za-z]:/
 *.sql.gz
 *.dump
 *.sqlite

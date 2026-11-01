@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -9,9 +11,12 @@ import { ARC_SOURCES, absoluteSourceURL, collectArcOfficial, fractionToPercent,
 import { ARC_EXPORT_COLUMNS, SOURCE_TITLE, applyArcPlan, buildArcPlan, buildArcRollbackPlan, durableBackup,
     exportReadOnlySQL, fitsRawScore, loadArcSnapshot, normalizeDatabaseTables, objectHash,
     projectionSQL, quantizePercent, readDatabaseState, rollbackArcImport, verifyArcImport } from '../scripts/import-arc-official.mjs';
-import { remoteModuleProgram, reviewedSSHMain } from '../artifacts/arc-official-20261006/reviewed-ssh-apply.mjs';
+import { remoteModuleProgram, reviewedSSHMain } from '../scripts/reviewed-arc-ssh-apply.mjs';
 
 const artifacts = fileURLToPath(new URL('../artifacts/arc-official-20261006/', import.meta.url));
+const archivedInputs = (...paths) => ({ skip: paths.every(path => existsSync(resolve(artifacts, path)))
+    ? false : 'Private historical audit inputs are not included in the source repository' });
+const reviewedInputs = ['snapshot.json', 'canonical-read-v6/production-state.json', 'mapping-v6.json'];
 const hashes = { snapshotHash: 'a'.repeat(64), mappingHash: 'b'.repeat(64) };
 function sourceRow(overrides = {}) {
     return { datasetId: 'v1_Semi_Private', datasetDisplayName: 'ARC-AGI-1', modelId: 'fixture-high',
@@ -124,8 +129,9 @@ function memoryDatabase(state) {
     return db;
 }
 async function temporary(t) {
-    const path = await mkdtemp(resolve(artifacts, 'test-temp-'));
-    t.after(async () => { assert.ok(path.startsWith(artifacts)); await rm(path, { recursive: true, force: true }); });
+    const prefix = resolve(tmpdir(), 'benchpoll-arc-test-');
+    const path = await mkdtemp(prefix);
+    t.after(async () => { assert.ok(path.startsWith(prefix)); await rm(path, { recursive: true, force: true }); });
     return path;
 }
 function applyOptions(f, approvedPlan, backupPath, overrides = {}) {
@@ -194,7 +200,7 @@ test('conflicting repeated source model IDs do not silently overwrite', () => {
     assert.ok(plan.blockers.some(issue => issue.code === 'source_identity_collision'));
 });
 
-test('real raw evidence accounts for all 510 evaluations, 11 unlabelled and one duplicate', async () => {
+test('real raw evidence accounts for all 510 evaluations, 11 unlabelled and one duplicate', archivedInputs('snapshot.json'), async () => {
     const { snapshot } = await loadArcSnapshot(resolve(artifacts, 'snapshot.json'));
     assert.deepEqual(snapshot.sources.map(item => item.entries.length), [253, 257]);
     const rows = snapshot.sources.flatMap(item => item.entries);
@@ -776,7 +782,7 @@ test('in-memory SSH module bundle parses and removes relative imports without co
     assert.equal(typeof loaded.rollbackArcImport, 'function');
 });
 
-test('reviewed real identities keep LLM harnesses on their base and Deep Think variants separate', async () => {
+test('reviewed real identities keep LLM harnesses on their base and Deep Think variants separate', archivedInputs(...reviewedInputs), async () => {
     const { snapshot, hash: snapshotHash } = await loadArcSnapshot(resolve(artifacts, 'snapshot.json'));
     const state = JSON.parse(await readFile(resolve(artifacts, 'canonical-read-v6/production-state.json'), 'utf8'));
     const mappingBytes = await readFile(resolve(artifacts, 'mapping-v6.json')), mapping = JSON.parse(mappingBytes.toString('utf8'));
@@ -814,7 +820,8 @@ test('reviewed real identities keep LLM harnesses on their base and Deep Think v
     assert.equal(plan.creates.organizations.some(row => /poetiq|berman/.test(row.slug)), false);
 });
 
-test('generic Gemini baseline aliases retain explicit approved inference without unbound run parameters', async () => {
+test('generic Gemini baseline aliases retain explicit approved inference without unbound run parameters',
+    archivedInputs(...reviewedInputs, 'arc-launch-config-reference.json', 'arc-launch-models-1870664.yml'), async () => {
     const { snapshot, hash: snapshotHash } = await loadArcSnapshot(resolve(artifacts, 'snapshot.json'));
     const state = JSON.parse(await readFile(resolve(artifacts, 'canonical-read-v6/production-state.json'), 'utf8'));
     const mappingBytes = await readFile(resolve(artifacts, 'mapping-v6.json')), mapping = JSON.parse(mappingBytes.toString('utf8'));
@@ -843,7 +850,8 @@ test('generic Gemini baseline aliases retain explicit approved inference without
     }
 });
 
-test('refreshed live read paths include score-update dates and match the pinned v6 plan exactly', async () => {
+test('refreshed live read paths include score-update dates and match the pinned v6 plan exactly',
+    archivedInputs(...reviewedInputs, 'canonical-read-v6/direct-state.json', 'canonical-read-v6/read-path-comparison.json', 'plan-v6.json'), async () => {
     const { snapshot, hash: snapshotHash } = await loadArcSnapshot(resolve(artifacts, 'snapshot.json'));
     const state = JSON.parse(await readFile(resolve(artifacts, 'canonical-read-v6/production-state.json'), 'utf8'));
     const direct = JSON.parse(await readFile(resolve(artifacts, 'canonical-read-v6/direct-state.json'), 'utf8'));

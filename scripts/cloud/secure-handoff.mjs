@@ -7,7 +7,16 @@ const format = 'benchpoll-private-handoff/v1';
 const limit = 64 * 1024 * 1024;
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const validPath = value => typeof value === 'string' && /^[a-zA-Z0-9._/-]+$/.test(value)
-    && !isAbsolute(value) && !value.split('/').some(part => !part || ['.', '..', '.git'].includes(part));
+    && !isAbsolute(value) && !value.split('/').some(part => !part || ['.', '..', '.git'].includes(part.toLowerCase()));
+
+function envelopeBytes(value, length) {
+    if (typeof value !== 'string') throw new Error('Invalid encrypted package');
+    const bytes = Buffer.from(value, 'base64');
+    if (bytes.toString('base64') !== value || (length && bytes.length !== length)) {
+        throw new Error('Invalid encrypted package');
+    }
+    return bytes;
+}
 
 function decodeKey(value) {
     const text = String(value || '').trim();
@@ -49,12 +58,14 @@ export function decryptHandoff(envelope, keyText) {
     if (envelope?.format !== format || typeof envelope.ciphertext !== 'string' || envelope.ciphertext.length > limit * 2) {
         throw new Error('Invalid encrypted package');
     }
+    const nonce = envelopeBytes(envelope.nonce, 12), tag = envelopeBytes(envelope.tag, 16);
+    const ciphertext = envelopeBytes(envelope.ciphertext);
     let plaintext;
     try {
-        const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from(envelope.nonce, 'base64'));
+        const decipher = createDecipheriv('aes-256-gcm', key, nonce);
         decipher.setAAD(Buffer.from(format));
-        decipher.setAuthTag(Buffer.from(envelope.tag, 'base64'));
-        plaintext = Buffer.concat([decipher.update(Buffer.from(envelope.ciphertext, 'base64')), decipher.final()]);
+        decipher.setAuthTag(tag);
+        plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
     } catch { throw new Error('Cannot decrypt: incorrect key or modified package'); }
     const payload = JSON.parse(plaintext);
     if (payload.format !== format) throw new Error('Invalid plaintext format');

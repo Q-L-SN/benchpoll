@@ -103,7 +103,7 @@ test('WebKit query-stripped stacks retain raw evidence and use actual caller imp
     });
     assert.equal(imports['/js/home-workspace.js'], '/js/shared/motion.js?v=comparison-experiment-20261007');
     assert.equal(imports['/js/navigation/sidebar.js'], '/js/shared/motion.js');
-    const evidence = JSON.parse(await readFile(new URL('../artifacts/review-20261008/coordination-after2/webkit-desktop/failure.json', import.meta.url), 'utf8'));
+    const evidence = JSON.parse(await readFile(new URL('./fixtures/motion-query-stripped.json', import.meta.url), 'utf8'));
     const versioned = evidence.state.trace.find(item => item.id === 'inline-fallback-settings');
     assert.equal(versioned.motion, '/js/shared/motion.js', 'Preserved failed harness misattribution');
     assert.deepEqual(motionTraceIdentity(versioned.stack, imports), {

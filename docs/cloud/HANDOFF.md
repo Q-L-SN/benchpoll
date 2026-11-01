@@ -90,10 +90,9 @@ current frontend. Do not spend the next task redesigning retired pages.
 
 ## Production Access And Release Safety
 
-Production is Ubuntu at `18.226.222.18`, application `/home/ubuntu/benchpoll`,
-service `benchpoll.service`, MySQL database `benchmarks`. Production runtime
-secrets stay in `/home/ubuntu/benchpoll/.env`. Database backups are protected in
-`/var/backups/benchpoll`; code backups in `/home/ubuntu/benchpoll-code-backups`.
+The encrypted `OPERATIONS.md` records the production host, application and
+backup paths, service name and database name. Production runtime secrets stay
+on the server. Restore that note privately before any authorized production work.
 The last disk check showed about 12 GiB free on a 77 GiB volume. Do not create
 another multi-gigabyte rehearsal database without checking the disk reserve.
 
@@ -121,9 +120,11 @@ Do not expose MySQL or SSH management through an ad hoc web endpoint.
 ## Verification And Remaining Limits
 
 During this handoff, the full unit suite passed 3,246 tests with 3 intentional
-skips (including the Bash-only check on Windows), with no failures. The Linux
-fixture setup, clean dependency install, both asset builds and focused tests
-also passed; see `docs/cloud-runtime.md`. Header-specific local checks passed
+skips (including the Bash-only check on Windows), with no failures. A fresh
+Linux source archive then passed setup, both builds and the complete suite with
+Chromium/WebKit installed: 3,243 passed, zero failed, 6 skipped (4 private
+historical audit cases plus 2 existing opt-in cases). No production rows were
+supplied. See `docs/cloud-runtime.md`. Header-specific local checks passed
 18 Chromium/WebKit cases at 320,
 390 and 1440 px; search/short-directory regressions passed 60 cases. Public
 header checks passed 6 desktop/mobile cases, including both directions, reversals

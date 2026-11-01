@@ -37,16 +37,18 @@ npm run build:home -- --index
 ```
 
 Run installation/builds again when dependencies or source assets change. A source
-preview does not need a build. Browser binaries are optional for HTTP/unit tests
-and preview serving. For browser tests, use the installed, pinned Playwright CLI:
+preview does not need a build. Browser binaries are optional for the focused
+cloud-runtime HTTP/unit tests and preview serving. The full `npm test` suite
+also includes browser-backed tests and requires Chromium AND WebKit. Use the
+installed, pinned Playwright CLI:
 
 ```bash
-node node_modules/playwright/cli.js install --with-deps chromium
+node node_modules/playwright/cli.js install --with-deps chromium webkit
 ```
 
-On Windows/macOS, use `install chromium` instead. Linux `--with-deps` may require
-administrator access for system packages. Only install WebKit when running an
-existing test that actually uses it. Package and browser downloads require network
+On Windows/macOS, use `install chromium webkit` instead. Linux `--with-deps` may
+require administrator access for system packages. For only the fixture browser
+smoke test, Chromium alone is sufficient. Package and browser downloads require network
 access; the fixture preview itself has no external-service requirement.
 
 ## Preview and New Codex Cloud
@@ -102,7 +104,11 @@ desktop/mobile overflow. Screenshots default to `artifacts/cloud-runtime/`; set
 behavior test is skipped on native Windows and runs on Linux/macOS.
 
 `npm test` runs only `test/**/*.test.mjs`; it does not run `*.browser.mjs` or
-`scripts/frontend/*`. Existing `npm run test:frontend` uses local fixtures, but is
+`scripts/frontend/*`, although several `.test.mjs` files launch real browsers.
+Four historical ARC import audit cases require private archived production
+snapshots; they report an explicit skip when those files are absent. The ordinary
+importer tests still run against synthetic fixtures. No production snapshots are
+required or published to make the default suite run. Existing `npm run test:frontend` uses local fixtures, but is
 a broader historical UI suite, not this bootstrap's smoke gate. Do not glob-run
 all frontend scripts: many `*-live*` and historical review scripts target production.
 
@@ -149,8 +155,17 @@ Verified on 2026-11-01 with Node 22.22.1:
   HTTP failures or uncaught browser errors.
 - Focused ESLint checks passed on both platforms. The existing D3 bundling test
   emits two import-is-undefined warnings but passes its runtime assertions.
-- The full `npm test` suite, Linux browser binaries, actual hosted Cloud port
-  forwarding and production-backed services were not exercised by this task.
+- Final publication gate: a fresh LF Git-source archive was installed and built
+  in isolated Ubuntu/WSL, with Chromium, WebKit and their system dependencies.
+  All 3,249 tests ran to completion: 3,243 passed, zero failed, and 6 skipped
+  (4 private historical audit cases and 2 existing opt-in cases). The only
+  patches to that archive were the committed privacy-test cleanup and optional
+  historical design-study expectation. No production snapshots were supplied.
+- Git text files use LF across platforms to preserve shell behavior, source
+  assertions and recorded asset hashes. When exporting an archive from an old
+  Windows checkout, disable `core.autocrlf` for the export.
+- Actual hosted Cloud port forwarding and production-backed services were not
+  exercised. Local Linux verification does not prove cloud SSH connectivity.
 
 ## Handoff Boundary
 

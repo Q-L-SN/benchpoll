@@ -1,0 +1,16 @@
+{
+  "state": {
+    "trace": [
+      {
+        "id": "inline-fallback-settings",
+        "motion": "/js/shared/motion.js",
+        "stack": "@web-inspector://bootstrap.js:33:32\nsetVisible@http://127.0.0.1:60818/js/shared/motion.js:77:38\nrenderInlineFallback@http://127.0.0.1:60818/js/home-workspace.js:1314:20\n@http://127.0.0.1:60818/js/home-workspace.js:2839:25"
+      },
+      {
+        "id": "configured-search-wrap",
+        "motion": "/js/shared/motion.js",
+        "stack": "@web-inspector://bootstrap.js:33:32\nsetVisible@http://127.0.0.1:60818/js/shared/motion.js:77:38\nsetSearchOpen@http://127.0.0.1:60818/js/navigation/sidebar.js:93:19"
+      }
+    ]
+  }
+}

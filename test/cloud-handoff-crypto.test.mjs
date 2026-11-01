@@ -26,10 +26,16 @@ test('wrong keys, damaged ciphertext and authentication tags fail closed', () =>
     const data = Buffer.from(encrypted.ciphertext, 'base64'); data[0] ^= 1;
     assert.throws(() => decryptHandoff({ ...encrypted, ciphertext: data.toString('base64') }, secret), /Cannot decrypt/);
     assert.throws(() => decryptHandoff({ ...encrypted, tag: randomBytes(16).toString('base64') }, secret), /Cannot decrypt/);
+    for (const length of [4, 8, 12, 13, 14, 15]) {
+        const tag = Buffer.from(encrypted.tag, 'base64').subarray(0, length).toString('base64');
+        assert.throws(() => decryptHandoff({ ...encrypted, tag }, secret), /Invalid encrypted package/);
+    }
+    assert.throws(() => decryptHandoff({ ...encrypted, nonce: randomBytes(16).toString('base64') }, secret), /Invalid encrypted package/);
+    assert.throws(() => decryptHandoff({ ...encrypted, ciphertext: encrypted.ciphertext + '\n' }, secret), /Invalid encrypted package/);
 });
 
 test('unsafe paths, duplicate names and malformed keys or content are rejected', () => {
-    for (const path of ['../escape', '/absolute', 'C:/key', 'safe/../../key', '.git/config', 'a//b', 'a\\b']) {
+    for (const path of ['../escape', '/absolute', 'C:/key', 'safe/../../key', '.git/config', '.GIT/config', 'a//b', 'a\\b']) {
         assert.throws(() => encryptHandoff([entry(path, 'x')], key()), /path/);
     }
     assert.throws(() => encryptHandoff([entry('key', 'x'), entry('KEY', 'y')], key()), /duplicate/);

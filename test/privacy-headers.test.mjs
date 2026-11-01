@@ -140,6 +140,7 @@ async function fixture() {
 
 test('locally served real HTML and native browser behavior obey the enforced policy', { timeout: 120000 }, async t => {
     const site = await fixture();
+    t.after(() => site.close());
     const browser = await chromium.launch({ headless: true });
     try {
         await t.test('headers cover static, pages, HEAD and error responses without creating cookies', async () => {
@@ -177,7 +178,10 @@ test('locally served real HTML and native browser behavior obey the enforced pol
                     }
                 }
             }
-            assert.deepEqual([...observed].sort(), Object.keys(REVIEWED_INLINE_SCRIPT_HASHES).sort());
+            // Only the excluded historical design study is optional; application pages remain required.
+            const expectedInlineFiles = Object.keys(REVIEWED_INLINE_SCRIPT_HASHES).filter(file =>
+                file !== 'public/assets/color-studies-20260909/index.html' || files.includes(file));
+            assert.deepEqual([...observed].sort(), expectedInlineFiles.sort());
             await page.close();
         });
 
@@ -328,7 +332,7 @@ test('locally served real HTML and native browser behavior obey the enforced pol
             }
         });
     } finally {
-        await browser.close(); await site.close();
+        await browser.close();
     }
 });
 
