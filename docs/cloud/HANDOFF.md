@@ -3,12 +3,14 @@
 This is the operational entry point for the 2026-11-01 handoff. Read it before
 making changes. It describes the current project, not the old `main` branch.
 
-The pending 2026-11-03 presentation update unifies all loading indicators and
-fixes the All scores empty-parameter label. See
-[`../unified-loading-20261103.md`](../unified-loading-20261103.md) for checks,
-the combined release exporter and the observed intermittent 502. Deployment is
-authorized but remains blocked by missing production VPN/TCP access; no live
-release or data migration has been performed from this environment.
+The combined 2026-11-03 release is now deployed. The owner asked the local
+desktop agent to deploy the GitHub changes because cloud environment setup was
+blocked. Application commit `5a8f096fda624faa0ed69958facc6b040283deec` includes
+the cloud changes and five pre-release correctness/safety fixes. The snapshot
+table and reviewed ARC condition split are installed. Read
+[`../releases/20261103-local-rollout.md`](../releases/20261103-local-rollout.md)
+before any further production work; do not repeat the migrations based on the
+older pending-release notes. This does not establish cloud VPN/TCP access.
 
 ## Repositories And Starting Point
 
@@ -51,9 +53,9 @@ environment has already been created, published or successfully tested.
 The owner subsequently authorized the ARC harness condition correction. See
 [`docs/harness-conditions-20261103.md`](../harness-conditions-20261103.md) for its
 611-record public review, 71 condition moves, retained primary IDs and guarded
-one-time transactional script. It is locally rehearsed, not installed in
-production; the VPN/TCP boundary below still applies. Never replay the older
-condition-normalization migrations as part of this release.
+one-time transactional script. The local desktop agent applied it on 2026-11-03
+and verified zero remaining mutations. The cloud VPN/TCP boundary below still
+applies. Never replay the older condition-normalization migrations.
 
 The frontend fixtures use synthetic evidence and do not contact the production
 database. They cover the homepage, workspaces and interaction tests. They are
@@ -112,11 +114,14 @@ on the server. Restore that note privately before any authorized production work
 The last disk check showed about 12 GiB free on a 77 GiB volume. Do not create
 another multi-gigabyte rehearsal database without checking the disk reserve.
 
-Last verified release: `search-legal-20261101-1793466600021`, installed
-`2026-11-01T06:08:28.625Z` (14:08:28 Asia/Shanghai). It changed two source files
-plus five generated artifacts. Health passed; database and score timer unchanged.
-The encrypted handoff includes release receipts/manifests and an SSH key plus
-the trusted host identity. Verify host identity; never disable host-key checks.
+Last verified application release: `unified-loading-20261103-fa3f4ac`, installed
+`2026-11-03T13:42:07.200Z` (21:42:07 Asia/Shanghai), at commit `5a8f096`.
+It changed 96 files within a 99-file reviewed allowlist. The additive snapshot
+table was verified before installation; the ARC correction completed at
+`2026-11-03T13:44:52.457Z`. Application and score-sync timer were restored and
+health checks passed. The encrypted handoff still contains historical release
+receipts plus the SSH key and trusted host identity; use the current rollout
+note for deployment state. Verify host identity; never disable host-key checks.
 
 Production has been assembled using narrow source-hash guards, build manifests,
 backups and health checks. Do not use a blanket `git pull`, rsync the entire
