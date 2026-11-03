@@ -5494,7 +5494,9 @@ app.use((err, req, res, next) => {
 
 const options = {
     key: fs.readFileSync(currentDir + '/server.key'),
-    cert: fs.readFileSync(currentDir + '/server.crt')
+    cert: fs.readFileSync(currentDir + '/server.crt'),
+    // Nginx retires idle upstream sockets after 3s; leave room for a busy event loop.
+    keepAliveTimeout: 65000
 };
 
 https.createServer(options, app).listen(listenPort, process.env.BENCHPOLL_BIND_HOST || undefined, () => {

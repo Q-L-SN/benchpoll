@@ -80,3 +80,26 @@ old full database over later user writes.
 Cloud environment publishing/VPN access is still a separate unresolved setup
 issue. This rollout does not claim it was repaired. The local Windows C: volume
 is critically low; subsequent local testing should use D: for temporary data.
+
+## Follow-up connection hardening
+
+A repeated public check subsequently hit the previously reported intermittent
+502 at 13:51 UTC. Nginx recorded premature upstream connection closure on API,
+page and static-asset reads; the Node process had no restart. Thus this occurrence
+was confirmed at the origin, not inferred to be an outbound-proxy error. The
+earlier successful smoke run did not establish sustained transport stability.
+
+An isolated HTTPS fixture kept a connection idle, blocked the server event loop
+for eight seconds and reused the connection before Nginx's three-second idle
+window. With Node's default five-second idle timeout, both runs returned
+`ECONNRESET`; with 65 seconds, both returned 200 on the reused socket. This
+reproduces a compatible timeout race without modifying production data. It does
+not quantify all causes of event-loop delay or prove that every historical 502
+had the same cause.
+
+The follow-up changes only `https.createServer`'s `keepAliveTimeout` to 65,000 ms.
+Nginx still retires cached idle upstream connections after three seconds. Header
+and request deadlines retain their 60-second and 300-second defaults; proxy
+deadlines and mutation retry behavior are unchanged. A regression test evaluates
+the actual HTTPS server options. See the [Node HTTP timeout documentation](https://nodejs.org/api/http.html#serverkeepalivetimeout)
+and [Nginx upstream idle timeout](https://nginx.org/en/docs/http/ngx_http_upstream_module.html#keepalive_timeout).

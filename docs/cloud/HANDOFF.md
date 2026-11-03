@@ -7,7 +7,9 @@ The combined 2026-11-03 release is now deployed. The owner asked the local
 desktop agent to deploy the GitHub changes because cloud environment setup was
 blocked. Application commit `5a8f096fda624faa0ed69958facc6b040283deec` includes
 the cloud changes and five pre-release correctness/safety fixes. The snapshot
-table and reviewed ARC condition split are installed. Read
+table and reviewed ARC condition split are installed. A follow-up transport
+hardening sets the HTTPS keep-alive idle timeout to 65 seconds; see the rollout
+note for the reproduced reset race and verification. Read
 [`../releases/20261103-local-rollout.md`](../releases/20261103-local-rollout.md)
 before any further production work; do not repeat the migrations based on the
 older pending-release notes. This does not establish cloud VPN/TCP access.

@@ -2,8 +2,24 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import https from 'node:https';
 import test from 'node:test';
+import vm from 'node:vm';
 
 const config = await readFile(new URL('../ops/nginx/benchpoll.conf', import.meta.url), 'utf8');
+const source = await readFile(new URL('../server.js', import.meta.url), 'utf8');
+
+test('the HTTPS application leaves an idle-timeout margin without weakening request deadlines', () => {
+    const options = source.match(/const options = (\{[^}]+\});\s*https\.createServer\(options, app\)/)?.[1];
+    assert.ok(options, 'Test the options actually passed to the HTTPS server');
+    const server = https.createServer(vm.runInNewContext('(' + options + ')', {
+        fs: { readFileSync: () => undefined }, currentDir: ''
+    }));
+    try {
+        assert.equal(server.keepAliveTimeout, 65000);
+        assert.equal(server.headersTimeout, 60000);
+        assert.equal(server.requestTimeout, 300000);
+        assert.equal(server.timeout, 0);
+    } finally { server.close(); }
+});
 
 test('Nginx releases idle upstream sockets before the application deadline', () => {
     const upstream = config.match(/upstream\s+benchpoll_app\s*\{([^{}]+)\}/)?.[1];
