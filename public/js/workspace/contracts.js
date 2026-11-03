@@ -1,4 +1,5 @@
 import { FALLBACK_RULE_MODE } from './constants.js';
+import { expandCommunityVersions } from '../shared/benchmark-version-choice.js';
 import { familyKey, resolvedFamilyConditionIDs } from '../shared/benchmark-families.js';
 import { FALLBACK_CONFIGURATION_PAGE_SIZE, FEATURED_FALLBACK_LIMIT, FEATURED_FALLBACK_MIN_BASIS_POINTS } from '../shared/fallback-catalogue-policy.js';
 import { BENCHMARK_GROUPS, benchmarkConditionGroup } from '../shared/benchmark-condition-groups.js?v=fallback-discovery-20261005';
@@ -53,6 +54,8 @@ function requireWorkspaceConditionIdentity(value, path) {
 
 function requireWeightEntry(value, path) {
     const entry = requireWorkspaceObject(value, path);
+    if (Object.hasOwn(entry, 'followCommunityVersion') && (typeof entry.followCommunityVersion !== 'boolean'
+        || entry.followCommunityVersion && entry.conditionID < 0)) throw invalidWorkspaceResponse(path, 'has an invalid version choice');
     if (entry.type === 'topic' || Number(entry.conditionID) < 0) {
         if (entry.type !== 'topic' || !Number.isSafeInteger(entry.referenceContextID) || entry.referenceContextID < 1
             || entry.conditionID !== -entry.referenceContextID || typeof entry.name !== 'string' || !entry.name.trim()
@@ -62,6 +65,36 @@ function requireWeightEntry(value, path) {
         return entry;
     }
     return requireWorkspaceConditionIdentity(entry, path);
+}
+
+function validateVersionComposition(value) {
+    const groups = requireWorkspaceArray(value, 'versionComposition'), benchmarks = new Set(), IDs = new Set();
+    for (const group of groups) {
+        const path = 'versionComposition';
+        if (!Number.isSafeInteger(group.benchmarkID) || group.benchmarkID < 1 || benchmarks.has(group.benchmarkID)
+            || !Number.isSafeInteger(group.configuredPieCount) || group.configuredPieCount < 0
+            || group.isDefault !== (group.configuredPieCount === 0)) throw invalidWorkspaceResponse(path, 'has invalid benchmark choice metadata');
+        benchmarks.add(group.benchmarkID);
+        const versions = requireWorkspaceArray(group.versions, path + '.versions');
+        if (!versions.length || !versions.some(version => version.conditionID === group.primaryConditionID)) throw invalidWorkspaceResponse(path, 'has no primary version');
+        let selectionTotal = 0, weightTotal = 0;
+        for (const version of versions) {
+            requireWorkspaceConditionIdentity(version, path);
+            if (!Number.isSafeInteger(version.conditionID) || version.conditionID < 1 || IDs.has(version.conditionID)
+                || version.benchmarkID !== group.benchmarkID || version.excludedFromRanking
+                || !Number.isSafeInteger(version.scoreCount) || version.scoreCount < 0
+                || !Number.isFinite(version.selectionBasisPoints) || version.selectionBasisPoints < 0 || version.selectionBasisPoints > 10000
+                || !Number.isFinite(version.weightBasisPoints) || version.weightBasisPoints < 0 || version.weightBasisPoints > 10000
+                || !group.isDefault && Math.abs(version.selectionBasisPoints - version.weightBasisPoints) > 1e-6) {
+                throw invalidWorkspaceResponse(path, 'has invalid version proportions');
+            }
+            IDs.add(version.conditionID); selectionTotal += version.selectionBasisPoints; weightTotal += version.weightBasisPoints;
+        }
+        if (Math.abs(weightTotal - 10000) > 1e-6 || Math.abs(selectionTotal - (group.isDefault ? 0 : 10000)) > 1e-6) {
+            throw invalidWorkspaceResponse(path, 'has inconsistent version totals');
+        }
+    }
+    return groups;
 }
 
 function validateReferenceStatus(pie, path) {
@@ -333,6 +366,13 @@ function validateWorkspacePayload(payload, { resume = null, initialMode = 'publi
         }
     }
     const personalPie = requireWorkspaceObject(response.personalPie, 'personalPie');
+    const versionComposition = response.versionComposition === undefined ? null : validateVersionComposition(response.versionComposition);
+    const versionWeights = entries => {
+        const expanded = versionComposition ? expandCommunityVersions(entries, versionComposition) : entries;
+        const weights = new Map();
+        for (const entry of expanded) weights.set(entry.conditionID, (weights.get(entry.conditionID) ?? 0) + entry.weightBasisPoints);
+        return [...weights].map(([conditionID, weightBasisPoints]) => ({ conditionID, weightBasisPoints }));
+    };
     const personalEntries = requireWorkspaceArray(personalPie.entries, 'personalPie.entries');
     personalEntries.forEach((entry, index) => {
         requireWeightEntry(entry, `personalPie.entries[${index}]`);
@@ -340,7 +380,7 @@ function validateWorkspacePayload(payload, { resume = null, initialMode = 'publi
     validateReferenceStatus(personalPie, 'personalPie');
     validateWorkspaceFallbackRules(personalPie.fallbackRules, personalEntries, 'personalPie');
     if (personalPie.communityFallbackComposition !== undefined) {
-        validateFamilyComposition(personalPie.communityFallbackComposition, personalEntries, 'personalPie.communityFallbackComposition');
+        validateFamilyComposition(personalPie.communityFallbackComposition, versionWeights(personalEntries), 'personalPie.communityFallbackComposition');
     }
     const publicPie = requireWorkspaceObject(response.publicPie, 'publicPie');
     if (!Number.isSafeInteger(publicPie.participantCount) || publicPie.participantCount < 0) {
@@ -351,7 +391,7 @@ function validateWorkspacePayload(payload, { resume = null, initialMode = 'publi
         requireWeightEntry(entry, `publicPie.entries[${index}]`);
     });
     validateReferenceStatus(publicPie, 'publicPie');
-    validateFamilyComposition(publicPie.familyComposition, publicEntries, 'publicPie.familyComposition');
+    validateFamilyComposition(publicPie.familyComposition, versionWeights(publicEntries), 'publicPie.familyComposition');
     requireWorkspaceArray(response.benchmarks, 'benchmarks').forEach((entry, index) => {
         requireBenchmarkRow(entry, `benchmarks[${index}]`);
     });

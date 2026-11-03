@@ -93,8 +93,12 @@ export async function seedSnapshotTopic(connection, topic, owner, snapshot, { ro
         const [inserted] = await connection.execute(`INSERT INTO personal_pies (user_ID, context_ID, revision) VALUES (?, ?, 1)`, [owner, contextID]);
         const pieID = Number(inserted.insertId);
         for (const entry of scene.entries) {
-            if (entry.conditionID > 0) await connection.execute(`INSERT INTO personal_pie_weights
-                (pie_ID, benchmark_condition_ID, weight_basis_points) VALUES (?, ?, ?)`, [pieID, entry.conditionID, entry.weightBasisPoints]);
+            if (entry.conditionID > 0) {
+                const follows = entry.followCommunityVersion === true;
+                await connection.execute(`INSERT INTO personal_pie_weights
+                    (pie_ID, benchmark_condition_ID, weight_basis_points${follows ? ', follow_community_version' : ''})
+                    VALUES (?, ?, ?${follows ? ', ?' : ''})`, [pieID, entry.conditionID, entry.weightBasisPoints, ...(follows ? [1] : [])]);
+            }
             else await connection.execute(`INSERT INTO personal_pie_topic_weights
                 (pie_ID, target_context_ID, weight_basis_points) VALUES (?, ?, ?)`, [pieID, -entry.conditionID, entry.weightBasisPoints]);
         }

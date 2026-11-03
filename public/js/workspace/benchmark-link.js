@@ -7,7 +7,7 @@ export function appendBenchmarkIdentity(element, member) {
     if (isTopicReference(member)) renderTopicLabel(name, topicLabelText(member));
     else name.textContent = member.name;
     element.append(name);
-    const version = isTopicReference(member) ? '' : benchmarkConditionLabel(member);
+    const version = isTopicReference(member) || member.isBenchmarkGroup ? '' : benchmarkConditionLabel(member);
     if (version) {
         const detail = document.createElement('span');
         detail.className = 'bp-benchmark-condition'; detail.textContent = version;

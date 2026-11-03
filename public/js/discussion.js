@@ -48,6 +48,10 @@ const sidebar = document.querySelector('.bp-shell > .bp-sidebar');
 const brand = sidebar.querySelector('.bp-brand');
 const workspace = document.querySelector('.bp-workspace');
 const mobile = window.matchMedia('(max-width: 760px)');
+const mobileDiscussionPage = $('workspace-discussion-page');
+const discussionHome = panel.parentElement;
+const isMobilePage = () => mobile.matches && mobileDiscussionPage?.parentElement?.id === 'workspace-scene-panel';
+let mobileReturnPanel = 'models', hasMobileView = false;
 const drafts = new Map();
 let isOpen = false;
 let returnFocus = null;
@@ -65,7 +69,7 @@ const benchmarkScores = createBenchmarkScoresView({ onViewChange(showScores) {
     $('benchmark-scores-view').hidden = !showScores;
     $('benchmark-discussion-view').hidden = showScores || informationOnly;
     $('discussion-composer').hidden = showScores || informationOnly;
-    $('private-benchmark-discussion-notice').hidden = showScores || !informationOnly || !state.conditionID;
+    $('private-benchmark-discussion-notice').hidden = showScores || !informationOnly;
     $('benchmark-information-condition').hidden = showScores;
     $('benchmark-information-status').hidden = showScores;
     for (const [id, selected] of [['benchmark-scores-back', !showScores], ['benchmark-scores-open', showScores]]) {
@@ -108,17 +112,22 @@ function setComposerExpanded(expanded, focus = false) {
     if (focus) (expanded ? text : $('discussion-compose-toggle')).focus({ preventScroll: true });
 }
 function updatePanelAccess() {
-    if (isOpen) $('discussion-brand-slot').append(brand);
+    const embedded = isMobilePage();
+    if (embedded && panel.parentElement !== mobileDiscussionPage) mobileDiscussionPage.append(panel);
+    else if (!embedded && panel.parentElement !== discussionHome) discussionHome.append(panel);
+    if (isOpen && !embedded) document.body.classList.add('discussion-open');
+    else document.body.classList.remove('discussion-open');
+    if (isOpen && !embedded) $('discussion-brand-slot').append(brand);
     else sidebar.prepend(brand);
     const entry = $('discussion-entry');
     $('workspace-refresh').before(entry);
-    sidebar.inert = isOpen;
-    sidebar.setAttribute('aria-hidden', String(isOpen));
-    workspace.inert = isOpen && mobile.matches;
+    sidebar.inert = isOpen && !embedded;
+    sidebar.setAttribute('aria-hidden', String(sidebar.inert));
+    workspace.inert = isOpen && mobile.matches && !embedded;
     panel.inert = !isOpen;
     panel.setAttribute('aria-hidden', String(!isOpen));
-    panel.setAttribute('role', mobile.matches ? 'dialog' : 'complementary');
-    if (mobile.matches) panel.setAttribute('aria-modal', String(isOpen));
+    panel.setAttribute('role', embedded ? 'region' : mobile.matches ? 'dialog' : 'complementary');
+    if (mobile.matches && !embedded) panel.setAttribute('aria-modal', String(isOpen));
     else panel.removeAttribute('aria-modal');
 }
 function closeDiscussion() {
@@ -136,6 +145,11 @@ function closeDiscussion() {
     setDiscussionEntryView($('discussion-entry'), false);
     updatePanelAccess();
     closeSuggestions();
+    if (isMobilePage()) {
+        workspace.dataset.mobilePanel = mobileReturnPanel;
+        document.querySelector(`[data-mobile-panel="${mobileReturnPanel}"]`)?.focus({ preventScroll: true });
+        return;
+    }
     if (mobile.matches) window.scrollTo({ top: workspaceScrollY, behavior: 'instant' });
     const sourceRow = returnFocus?.closest('.bp-benchmark-row');
     const familyKey = sourceRow?.dataset.familyKey;
@@ -148,7 +162,7 @@ function closeDiscussion() {
         : currentRow?.querySelector('[data-benchmark-control="information"], [data-family-control="information"]');
     (returnFocus?.isConnected ? returnFocus : currentControl ?? $('discussion-entry')).focus({ preventScroll: true });
 }
-async function openDiscussion(url, trigger = null, { allCategories = false } = {}) {
+async function openDiscussion(url, trigger = null, { allCategories = false, navigate = true } = {}) {
     let contextValues;
     try { contextValues = readRankingContext(url.search); }
     catch (error) { showError(error); return; }
@@ -180,13 +194,17 @@ async function openDiscussion(url, trigger = null, { allCategories = false } = {
         workspaceScrollY = window.scrollY;
     } else if (trigger === $('discussion-entry')) returnFocus = trigger;
     isOpen = true;
+    if (isMobilePage()) {
+        hasMobileView = true;
+        if (navigate) workspace.dataset.mobilePanel = 'discussion';
+    }
     document.body.classList.remove('taxonomy-open');
     $('taxonomy-toggle').setAttribute('aria-expanded', 'false');
     document.body.classList.add('discussion-open');
     $('discussion-entry').setAttribute('aria-expanded', 'true');
     setDiscussionEntryView($('discussion-entry'), state.benchmarkID !== null && !informationOnly);
     updatePanelAccess();
-    $('discussion-close').focus({ preventScroll: true });
+    if (!isMobilePage()) $('discussion-close').focus({ preventScroll: true });
     await Promise.all([loadBenchmarkInformation(), informationOnly ? Promise.resolve() : load()]);
 }
 document.addEventListener('click', event => {
@@ -205,7 +223,7 @@ function updateWorkspaceContext(event) {
         void openDiscussion(new URL(location.href));
         return;
     }
-    if (next.isPrivate) { workspaceContext = next; if (isOpen) closeDiscussion(); return; }
+    if (next.isPrivate && !isMobilePage()) { workspaceContext = next; if (isOpen) closeDiscussion(); return; }
     const changed = workspaceContext && JSON.stringify(workspaceContext) !== JSON.stringify(next);
     const initialContext = !workspaceContext && isOpen && !state.threadID
         && (state.categoryID === null || Number(state.categoryID) === Number(next.categoryID));
@@ -216,9 +234,32 @@ function updateWorkspaceContext(event) {
             ...Object.fromEntries(Object.entries(next.contextValues).filter(([key]) => key !== 'scene').map(([key, value]) => [`context_${key}`, value])) });
         if (state.benchmarkID !== null) url.searchParams.set('benchmarkID', state.benchmarkID);
         if (state.conditionID !== null) url.searchParams.set('conditionID', state.conditionID);
-        openDiscussion(url, null, { allCategories: state.allCategories });
+        openDiscussion(url, null, { allCategories: state.allCategories, navigate: !isMobilePage() || workspace.dataset.mobilePanel === 'discussion' });
     }
+    if (isMobilePage() && workspace.dataset.mobilePanel === 'discussion' && !isOpen) activateMobileDiscussion();
 }
+function activateMobileDiscussion() {
+    if (!isMobilePage() || isOpen || !workspaceContext) return;
+    const url = new URL(location.href);
+    url.search = new URLSearchParams({ discussion: '1', categoryID: String(workspaceContext.categoryID) });
+    const sameContext = Number(state.categoryID) === Number(workspaceContext.categoryID)
+        && JSON.stringify(state.contextValues) === JSON.stringify(workspaceContext.contextValues);
+    if (hasMobileView && sameContext) {
+        for (const key of ['benchmarkID', 'conditionID', 'threadID']) if (state[key] !== null) url.searchParams.set(key, String(state[key]));
+    }
+    void openDiscussion(url, null, { navigate: false, allCategories: hasMobileView && sameContext && state.allCategories });
+}
+window.addEventListener('benchpoll:mobile-panel-preview', event => {
+    if (event.detail.panel === 'discussion') activateMobileDiscussion();
+});
+window.addEventListener('benchpoll:mobile-panel', event => {
+    if (!isMobilePage()) return;
+    if (event.detail.panel === 'discussion') { activateMobileDiscussion(); return; }
+    mobileReturnPanel = event.detail.panel;
+    if (!isOpen) return;
+    saveDraft(); isOpen = false; viewSequence++; informationSequence++;
+    stopDiscussionRead(); closeSuggestions(); updatePanelAccess();
+});
 window.addEventListener('benchpoll:discussion-context', updateWorkspaceContext);
 window.addEventListener('benchpoll:context-weights', event => {
     contextWeights = event.detail;
@@ -514,7 +555,6 @@ function renderContext(data, requestedContextValues) {
         button.setAttribute('aria-controls', 'discussion-feed');
         button.setAttribute('aria-selected', String(Number(state.contextValues.scene) === Number(scene.ID)));
         button.tabIndex = String(scene.ID) === (focusedScene ?? state.contextValues.scene) ? 0 : -1;
-        if (scene.isDefault) button.append(node('small', 'bp-scene-default', 'Default'));
         button.addEventListener('click', () => {
             if (String(scene.ID) === state.contextValues.scene) return;
             saveDraft(); viewSequence++; state.contextID = null; state.contextValues = { scene: String(scene.ID) };
@@ -762,7 +802,7 @@ mobile.addEventListener('change', updatePanelAccess);
 window.addEventListener('keydown', event => {
     if (!isOpen || event.defaultPrevented || !panel.contains(document.activeElement)) return;
     if (event.key === 'Escape') { event.preventDefault(); closeDiscussion(); }
-    if (event.key === 'Tab' && mobile.matches) {
+    if (event.key === 'Tab' && mobile.matches && !isMobilePage()) {
         const focusable = [...panel.querySelectorAll('a[href], button:not(:disabled), textarea, select, input')].filter(element => element.getClientRects().length);
         const first = focusable[0], last = focusable.at(-1);
         if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }

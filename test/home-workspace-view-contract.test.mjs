@@ -131,7 +131,7 @@ test('benchmark leaderboard stays public-ranked and can pin personal benchmarks 
 
 test('personal-mode benchmark rows keep a persistent remove action without exposing it in public mode', () => {
     assert.match(workspace, /function removeObjectFromPersonalPie\(object\)/);
-    assert.match(workspace, /state\.personalEntries\.filter\(entry => Number\(entry\.conditionID\) !== objectID\)/);
+    assert.match(workspace, /state\.personalEntries\.filter\(entry => !removedIDs\.has\(entry\.conditionID\)\)/);
     assert.match(workspace, /distributeToTarget\([\s\S]*state\.limits\.totalBasisPoints[\s\S]*\)/);
     assert.match(workspace, /if \(personalControlsActive && inPersonalPie && !fallbackTargetActive\) \{[\s\S]*classList\.add\('has-personal-remove'\)[\s\S]*bp-personal-weight-remove/);
     assert.match(workspace, /actionCell\.append\(remove\)/);

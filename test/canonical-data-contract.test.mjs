@@ -392,14 +392,14 @@ test('public weights average local configurations without combining independent 
         { categoryID: 1, dimensions: [{ key: 'tools', options: [
             { key: 'any', isNeutral: true }, { key: 'allowed', isNeutral: false }
         ] }], contextValues: { tools: 'any' } },
-        new Map([[21, {}], [22, {}]])
+        new Map([21, 22].map(ID => [ID, { conditionID: ID, benchmarkID: ID, isPrimaryCondition: true, scoreCount: 1 }]))
     );
     assert.equal(publicPie.participantCount, 2);
     assert.deepEqual(publicPie.contextIDs, [10, 11]);
     assert.equal(Object.hasOwn(publicPie, 'composition'), false);
     assert.deepEqual(publicPie.entries, [
-        { conditionID: 21, weightBasisPoints: 4000 },
-        { conditionID: 22, weightBasisPoints: 6000 }
+        { conditionID: 21, weightBasisPoints: 4000, followCommunityVersion: true },
+        { conditionID: 22, weightBasisPoints: 6000, followCommunityVersion: true }
     ]);
     assert.deepEqual(publicPie.scoringEntries, [
         { contextID: 10, conditionID: 21, weightBasisPoints: 6000 },
@@ -433,10 +433,10 @@ test('public weights average local configurations without combining independent 
     assert.equal(scored[0].resultCount, 2);
 
     const otherTopic = await loadPublicPie(connection,
-        { categoryID: 2, dimensions: [], contextValues: {} }, new Map([[21, {}], [22, {}]]));
+        { categoryID: 2, dimensions: [], contextValues: {} }, new Map([21, 22].map(ID => [ID, { conditionID: ID, benchmarkID: ID, isPrimaryCondition: true, scoreCount: 1 }])));
     assert.deepEqual(otherTopic.contextIDs, [12]);
     assert.equal(otherTopic.participantCount, 1);
-    assert.deepEqual(otherTopic.entries, [{ conditionID: 22, weightBasisPoints: 10000 }]);
+    assert.deepEqual(otherTopic.entries, [{ conditionID: 22, weightBasisPoints: 10000, followCommunityVersion: true }]);
     assert.deepEqual(requestedContexts, [[10, 11], [12]]);
     const otherScores = scoreModels(models, otherTopic.scoringEntries, PIE_TOTAL_BASIS_POINTS);
     assert.equal(otherScores[0].lower, 50);

@@ -729,7 +729,7 @@ test('private topics resolve only for their owner and never load public dimensio
 test('private topics have no public contribution and perform no public aggregation reads', async () => {
     const result = await loadPublicPie({ execute() { throw new Error('Private public-aggregation query'); } },
         { categoryID: 8, isPrivate: true, dimensions: [], contextValues: {} }, new Map());
-    assert.deepEqual(result, { entries: [], familyComposition: [], participantCount: 0,
+    assert.deepEqual(result, { entries: [], familyComposition: [], versionComposition: [], participantCount: 0,
         isFallback: false, scoringEntries: [], contextIDs: [] });
 });
 
@@ -759,13 +759,13 @@ test('public pies isolate each topic even when legacy parents, private topics an
             throw new Error(`Unexpected SQL: ${sql}`);
         }
     };
-    const conditions = new Map([[21, {}], [22, {}]]);
+    const conditions = new Map([[21, { conditionID: 21, benchmarkID: 21, isPrimaryCondition: true, scoreCount: 1 }], [22, { conditionID: 22, benchmarkID: 22, isPrimaryCondition: true, scoreCount: 1 }]]);
     for (const [categoryID, contextID, shares] of [[1, 10, [6000, 4000]], [2, 11, [2000, 8000]]]) {
         const result = await loadPublicPie(connection, { categoryID, dimensions: [], contextValues: {} }, conditions);
         assert.equal(result.participantCount, 1);
-        assert.deepEqual(result.entries, shares.map((weightBasisPoints, index) => ({ conditionID: 21 + index, weightBasisPoints })));
+        assert.deepEqual(result.entries, shares.map((weightBasisPoints, index) => ({ conditionID: 21 + index, weightBasisPoints, followCommunityVersion: true })));
         assert.deepEqual(result.contextIDs, [contextID]);
-        assert.deepEqual(result.scoringEntries, result.entries.map(entry => ({ contextID, ...entry })));
+        assert.deepEqual(result.scoringEntries, result.entries.map(({ conditionID, weightBasisPoints }) => ({ contextID, conditionID, weightBasisPoints })));
         assert.equal(Object.hasOwn(result, 'composition'), false);
     }
     assert.deepEqual(queriedContexts, [[10], [11]]);
@@ -795,12 +795,12 @@ test('public pie weights contexts by valid personal-pie count, with absent bench
     const result = await loadPublicPie(
         connection,
         { categoryID: 1, dimensions: webDimensions, contextValues: { web: 'any' } },
-        new Map([[21, {}], [22, {}]])
+        new Map([[21, { conditionID: 21, benchmarkID: 21, isPrimaryCondition: true, scoreCount: 1 }], [22, { conditionID: 22, benchmarkID: 22, isPrimaryCondition: true, scoreCount: 1 }]])
     );
     assert.equal(result.participantCount, 3);
     assert.deepEqual(result.entries, [
-        { conditionID: 21, weightBasisPoints: 6667 },
-        { conditionID: 22, weightBasisPoints: 3333 }
+        { conditionID: 21, weightBasisPoints: 6667, followCommunityVersion: true },
+        { conditionID: 22, weightBasisPoints: 3333, followCommunityVersion: true }
     ]);
 });
 
@@ -823,10 +823,10 @@ test('empty personal pies are excluded rather than counted or treated as corrupt
     const result = await loadPublicPie(
         connection,
         { categoryID: 1, dimensions: [], contextValues: {} },
-        new Map([[21, {}]])
+        new Map([[21, { conditionID: 21, benchmarkID: 21, isPrimaryCondition: true, scoreCount: 1 }]])
     );
     assert.equal(result.participantCount, 1);
-    assert.deepEqual(result.entries, [{ conditionID: 21, weightBasisPoints: 10000 }]);
+    assert.deepEqual(result.entries, [{ conditionID: 21, weightBasisPoints: 10000, followCommunityVersion: true }]);
 });
 
 test('public pie queries only the active public topic and counts each recent pie once', async () => {
@@ -853,11 +853,11 @@ test('public pie queries only the active public topic and counts each recent pie
     const result = await loadPublicPie(
         connection,
         { categoryID: 1, dimensions: [], contextValues: {} },
-        new Map([[21, {}]])
+        new Map([[21, { conditionID: 21, benchmarkID: 21, isPrimaryCondition: true, scoreCount: 1 }]])
     );
     assert.equal(result.participantCount, 1);
     assert.deepEqual(result.contextIDs, [10]);
-    assert.deepEqual(result.entries, [{ conditionID: 21, weightBasisPoints: 10000 }]);
+    assert.deepEqual(result.entries, [{ conditionID: 21, weightBasisPoints: 10000, followCommunityVersion: true }]);
     assert.equal(Object.hasOwn(result, 'composition'), false);
 });
 
@@ -893,7 +893,7 @@ test('neutral and specific context choices filter configurations only inside the
             { key: 'disallowed', isNeutral: false }
         ]
     }];
-    const conditions = new Map([[21, {}], [22, {}], [23, {}]]);
+    const conditions = new Map([[21, { conditionID: 21, benchmarkID: 21, isPrimaryCondition: true, scoreCount: 1 }], [22, { conditionID: 22, benchmarkID: 22, isPrimaryCondition: true, scoreCount: 1 }], [23, { conditionID: 23, benchmarkID: 23, isPrimaryCondition: true, scoreCount: 1 }]]);
     const neutral = await loadPublicPie(
         connection,
         { categoryID: 2, dimensions, contextValues: { web: 'any' } },
@@ -909,7 +909,7 @@ test('neutral and specific context choices filter configurations only inside the
     );
     assert.equal(specific.participantCount, 1);
     assert.deepEqual(specific.contextIDs, [11]);
-    assert.deepEqual(specific.entries, [{ conditionID: 22, weightBasisPoints: 10000 }]);
+    assert.deepEqual(specific.entries, [{ conditionID: 22, weightBasisPoints: 10000, followCommunityVersion: true }]);
 });
 
 test('independent context choices match each dimension separately in public weights', async () => {
@@ -931,7 +931,7 @@ test('independent context choices match each dimension separately in public weig
         { key: 'realtime', options: [{ key: 'any', isNeutral: true }, { key: 'yes' }, { key: 'no' }] },
         { key: 'output', options: [{ key: 'any', isNeutral: true }, { key: 'vector' }, { key: 'bitmap' }] }
     ];
-    const conditions = new Map([[21, {}]]);
+    const conditions = new Map([[21, { conditionID: 21, benchmarkID: 21, isPrimaryCondition: true, scoreCount: 1 }]]);
     const mixed = await loadPublicPie(connection,
         { categoryID: 2, dimensions, contextValues: { realtime: 'any', output: 'vector' } }, conditions);
     assert.deepEqual(mixed.contextIDs, [10, 11]);
@@ -994,7 +994,7 @@ test('public pie rejects stored pies that are neither empty nor exactly 100 perc
         }
     };
     await assert.rejects(
-        loadPublicPie(connection, { categoryID: 1, dimensions: [], contextValues: {} }, new Map([[21, {}]])),
+        loadPublicPie(connection, { categoryID: 1, dimensions: [], contextValues: {} }, new Map([[21, { conditionID: 21, benchmarkID: 21, isPrimaryCondition: true, scoreCount: 1 }]])),
         error => error?.status === 409 && error?.body?.error === 'personal_pie_total_invalid'
     );
 });
@@ -1015,7 +1015,7 @@ test('public pie rejects out-of-range stored weights before aggregation', async 
         loadPublicPie(
             connection,
             { categoryID: 1, dimensions: [], contextValues: {} },
-            new Map([[21, {}], [22, {}]])
+            new Map([[21, { conditionID: 21, benchmarkID: 21, isPrimaryCondition: true, scoreCount: 1 }], [22, { conditionID: 22, benchmarkID: 22, isPrimaryCondition: true, scoreCount: 1 }]])
         ),
         error => error?.status === 409 && error?.body?.error === 'personal_pie_weight_invalid'
     );
@@ -1037,7 +1037,7 @@ test('public pie rejects duplicate condition rows instead of silently combining 
         loadPublicPie(
             connection,
             { categoryID: 1, dimensions: [], contextValues: {} },
-            new Map([[21, {}]])
+            new Map([[21, { conditionID: 21, benchmarkID: 21, isPrimaryCondition: true, scoreCount: 1 }]])
         ),
         error => error?.status === 409 && error?.body?.error === 'personal_pie_condition_duplicate'
     );

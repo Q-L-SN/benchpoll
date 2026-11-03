@@ -1,4 +1,31 @@
 .bp-fallback-picker { --dialog-width: 1140px; --dialog-padding: 24px; --dialog-gap: 18px; }
+.bp-benchmark-settings { --dialog-width: 720px; --dialog-padding: 24px; }
+.bp-benchmark-settings::part(content) { width: 720px; max-height: 90dvh; }
+.bp-benchmark-settings::part(body) { overflow: auto; }
+.bp-benchmark-settings-body { min-width: 0; color: var(--bp-ink); }
+.bp-benchmark-settings-name { font-size: 18px; font-weight: 650; margin: 0 0 8px; }
+.bp-benchmark-settings-intro, .bp-benchmark-settings-explanation, .bp-benchmark-settings-hint { font-size: 13px; line-height: 1.6; }
+.bp-benchmark-settings-explanation, .bp-benchmark-settings-hint { color: var(--bp-muted); }
+.bp-benchmark-settings-section { margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--bp-line); }
+.bp-benchmark-settings-section h3 { font-size: 16px; margin: 0 0 8px; }
+.bp-version-choices { display: grid; gap: 8px; margin-top: 12px; }
+.bp-version-choice { display: flex; align-items: center; justify-content: space-between; gap: 12px; text-align: left; padding: 12px; min-width: 0; border: 1px solid var(--bp-line-strong); border-radius: 6px; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.bp-version-choice[aria-pressed="true"], .bp-version-community[aria-pressed="true"] { background: var(--bp-purple-soft); border-color: var(--bp-accent); }
+.bp-version-choice-name { display: block; font-size: 14px; overflow-wrap: anywhere; }
+.bp-version-choice small { display: block; margin-top: 4px; color: var(--bp-muted); font-size: 12px; }
+.bp-version-choice-share { font-variant-numeric: tabular-nums; font-size: 14px; flex: 0 0 auto; }
+.bp-version-choice:disabled { cursor: default; }
+.bp-custom-fallback-editor { margin-top: 18px; }
+.bp-custom-fallback-editor ol { padding-left: 24px; font-size: 13px; }
+.bp-custom-fallback-editor li { margin: 8px 0; }
+.bp-custom-fallback-editor li > span { display: block; }
+.bp-custom-fallback-editor input { box-sizing: border-box; width: 100%; padding: 10px; border: 1px solid var(--bp-line-strong); border-radius: 6px; font: inherit; }
+.bp-custom-fallback-results { display: grid; max-height: 200px; overflow: auto; margin: 8px 0 16px; }
+.bp-custom-fallback-results button { justify-content: flex-start; text-align: left; white-space: normal; }
+@media (max-width: 760px) {
+    .bp-benchmark-settings { --dialog-padding: 16px; }
+    .bp-benchmark-settings .bp-fallback-picker-heading { font-size: 18px; }
+}
 .bp-fallback-picker::part(content) { width: 1140px; height: min(86dvh, 760px); overflow: hidden; }
 .bp-fallback-picker::part(title) { display: block; min-width: 0; flex: 0 0 auto; }
 .bp-fallback-picker::part(body) { display: flex; min-width: 0; min-height: 0; flex: 1 1 auto; overflow: hidden; }

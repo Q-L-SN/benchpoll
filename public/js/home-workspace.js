@@ -36,6 +36,7 @@ import { createFamilyView } from './workspace/family-view.js?v=percentile-rankin
 import { createBenchmarkRowFocus } from './workspace/benchmark-family-row.js?v=fallback-picker-20261008';
 import { createBenchmarkFallbackCatalogue } from './workspace/benchmark-fallback-catalogue.js?v=fallback-picker-20261008';
 import { createFallbackPicker } from './workspace/fallback-picker.js?v=fallback-controls-20261009';
+import { createBenchmarkSettings } from './workspace/benchmark-settings.js';
 import { fallbackStatusLabel } from './shared/fallback-choice.js';
 import { initializeFallbackAppearance } from './workspace/fallback-appearance.js?v=fallback-appearance-20261014';
 import { createBenchmarkInformationLink } from './workspace/benchmark-link.js';
@@ -206,10 +207,35 @@ const fallbackPicker = createFallbackPicker({ catalogue: benchmarkFallbackCatalo
     getComposition: publicFallbackRuleFor, getCurrent: fallbackRuleFor,
     canApply: (ID, action) => state.mode === 'personal' && !state.loading && !state.gestureOpen
         && (action === 'replace'
-            ? state.personalEntries.some(entry => Number(entry.conditionID) === Number(ID))
+            ? state.personalEntries.some(entry => Number(entry.conditionID) === Number(ID) && entry.followCommunityVersion !== true)
             : !state.personalEntries.some(entry => Number(entry.conditionID) === Number(ID))),
-    onApply: applyFallbackConfiguration, onCustomize: beginInlineFallbackEditing,
+    onApply: applyFallbackConfiguration, onCustomize: primary => state.versionComposition
+        ? benchmarkSettings.open(primary, { custom: true }) : beginInlineFallbackEditing(primary),
     getMemberURL: getBenchmarkMemberURL, onInspectVersion: onBenchmarkInspection
+});
+const benchmarkSettings = createBenchmarkSettings({
+    getScope: () => `${workspaceContextFingerprint()}|${state.userID ?? 'guest'}`,
+    getData(benchmarkID) {
+        const group = state.versionComposition?.find(item => item.benchmarkID === benchmarkID);
+        if (!group) return null;
+        const IDs = new Set(group.versions.map(version => version.conditionID));
+        const entries = state.personalEntries.filter(entry => IDs.has(entry.conditionID));
+        return { group, entries, isPrivate: state.contextIsPrivate, rule: entries.length === 1 ? fallbackRuleFor(entries[0].conditionID) : null,
+            editable: state.mode === 'personal' && entries.length > 0 && !state.loading && !state.gestureOpen,
+            busy: state.loading || state.gestureOpen,
+            allVersions: state.versionComposition.flatMap(item => item.versions) };
+    },
+    onVersion: chooseBenchmarkVersion,
+    async onContribute(group) {
+        const scope = workspaceContextFingerprint();
+        await setMode('personal');
+        if (scope !== workspaceContextFingerprint() || state.mode !== 'personal') return;
+        const primary = group.versions.find(version => version.conditionID === group.primaryConditionID);
+        if (!state.personalEntries.some(entry => entry.benchmarkID === group.benchmarkID)) addObjectToPersonalPie(primary);
+    },
+    onFallback: primary => fallbackPicker.open(primary, { action: 'replace', getReturnFocus: () => inlineFallbackToggle }),
+    onCustom: (primary, entries) => applyFallbackConfiguration(primary,
+        { community: entries === null, entries: entries ?? [], selectionSource: 'custom' }, 'replace')
 });
 initializeFallbackAppearance();
 let benchmarkSearchTimer = null;
@@ -472,7 +498,8 @@ function portablePersonalPie() {
     return {
         entries: state.personalEntries.map(entry => ({
             conditionID: Number(entry.conditionID),
-            weightBasisPoints: Number(entry.weightBasisPoints)
+            weightBasisPoints: Number(entry.weightBasisPoints),
+            ...(entry.followCommunityVersion === true ? { followCommunityVersion: true } : {})
         })),
         fallbackRules: state.personalFallbackRules.map(rule => ({
             primaryConditionID: Number(rule.primaryConditionID),
@@ -995,7 +1022,7 @@ async function loadNextRankingPage(list, group = 'primary') {
             query: list === 'benchmarks' ? benchmarkSearch.value.trim() : '',
             pinPersonal: list === 'benchmarks' ? state.pinPersonalBenchmarks : false
         }), { list, offset, group, scoreMode: state.scoreMode,
-            grouping: benchmarkSearch.value.trim() ? 'versions' : 'flat' });
+            grouping: !state.versionComposition && benchmarkSearch.value.trim() ? 'versions' : 'flat' });
         if (sequence !== state.rankingPageSequence[key] || workspaceSequence !== state.loadSequence
             || snapshotID !== state.rankingPagination?.snapshotID) return;
         if (list === 'benchmarks') {
@@ -1041,7 +1068,7 @@ async function loadNextRankingPage(list, group = 'primary') {
 
 function reloadBenchmarkPage() {
     if (!state.rankingPagination || workspaceLoadFailed) return;
-    state.rankingPagination.benchmarkGrouping = benchmarkSearch.value.trim() ? 'versions' : 'flat';
+    state.rankingPagination.benchmarkGrouping = !state.versionComposition && benchmarkSearch.value.trim() ? 'versions' : 'flat';
     for (const group of BENCHMARK_GROUPS) {
         const key = benchmarkPageKey(group);
         state.rankingPageSequence[key] += 1;
@@ -1190,7 +1217,8 @@ function fallbackSignature(rules) {
 
 function publicFallbackRuleFor(primaryConditionID) {
     const composition = state.mode === 'personal'
-        ? [...state.personalCommunityComposition, ...state.publicFamilyComposition] : state.publicFamilyComposition;
+        ? [...state.personalCommunityComposition, ...state.publicFamilyComposition, ...state.communityFallbackComposition]
+        : [...state.publicFamilyComposition, ...state.communityFallbackComposition];
     return composition.find(rule => (
         Number(rule.primaryConditionID) === Number(primaryConditionID)
     )) ?? null;
@@ -1293,6 +1321,24 @@ function activateInlineFallbackTarget() {
 
 function renderInlineFallback() {
     fallbackPicker.refresh();
+    benchmarkSettings.refresh();
+    if (state.versionComposition) {
+        const primary = state.mode === 'personal' ? selectedInlineFallbackPrimary() : selectedPublicFallbackPrimary();
+        void setVisible(inlineFallback, Boolean(primary), { collapse: true });
+        pieCard.classList.toggle('has-inline-fallback', Boolean(primary));
+        inlineFallbackPersonalControl.hidden = state.mode !== 'personal';
+        publicFallbackToggle.hidden = state.mode === 'personal';
+        for (const control of [inlineFallbackToggle, publicFallbackToggle]) {
+            (control.querySelector('span') ?? control).textContent = state.contextIsPrivate
+                ? 'Configure versions and fallback' : 'Know this benchmark? Help configure it';
+            control.setAttribute('aria-haspopup', 'dialog'); control.setAttribute('aria-controls', 'benchmark-settings');
+            control.removeAttribute('aria-expanded'); control.disabled = state.loading;
+        }
+        inlineFallbackGuide.hidden = true;
+        inlineFallbackSaveError.hidden = !fallbackSaveFailed;
+        void setVisible(inlineFallbackSettings, false, { collapse: true });
+        return;
+    }
     if (!isInlineFallbackEditing()) {
         fallbackEditorScope = null;
         deactivateInlineFallbackTarget();
@@ -1452,6 +1498,7 @@ function focusPersonalBenchmark(object) {
 
 function applyFallbackConfiguration(primary, choice, action) {
     if (state.mode !== 'personal' || state.loading) return false;
+    if (state.personalEntries.find(entry => entry.conditionID === Number(primary.ID))?.followCommunityVersion === true) return false;
     if (!choice.community && (excludedFromRanking(primary) || choice.entries.some(excludedFromRanking))) {
         setStatus(AA_EXCLUSION_MESSAGE); return false;
     }
@@ -1473,7 +1520,29 @@ function applyFallbackConfiguration(primary, choice, action) {
     state.personalFallbackExpanded = true;
     writeWorkspacePreferences(state);
     focusPersonalBenchmark(primary);
-    if (choice.configureOwn) beginInlineFallbackEditing(primary);
+    if (choice.configureOwn) {
+        if (state.versionComposition) benchmarkSettings.open(primary, { custom: true });
+        else beginInlineFallbackEditing(primary);
+    }
+    return true;
+}
+
+function chooseBenchmarkVersion(group, conditionID) {
+    if (state.mode !== 'personal' || state.loading || state.gestureOpen) return false;
+    const version = group.versions.find(item => item.conditionID === (conditionID ?? group.primaryConditionID));
+    if (!version) return false;
+    const IDs = new Set(group.versions.map(item => item.conditionID));
+    const existing = state.personalEntries.filter(entry => IDs.has(entry.conditionID));
+    if (!existing.length || !beginMutation()) return false;
+    const weightBasisPoints = existing.reduce((sum, entry) => sum + entry.weightBasisPoints, 0);
+    const entry = { ...version, weightBasisPoints, weight: weightBasisPoints / 100,
+        ...(conditionID === null ? { followCommunityVersion: true } : {}) };
+    state.personalEntries = [...state.personalEntries.filter(item => !IDs.has(item.conditionID)), entry];
+    state.personalFallbackRules = state.personalFallbackRules.filter(rule => !IDs.has(rule.primaryConditionID));
+    state.selectedObjectID = entry.conditionID;
+    state.benchmarkDetailsByID.set(entry.conditionID, { ...entry, ID: entry.conditionID });
+    registerPieEntries([entry]);
+    renderPie(); renderBenchmarks(); scheduleSave();
     return true;
 }
 
@@ -1501,7 +1570,8 @@ function addObjectToPersonalPie(object) {
     if (excludedFromRanking(object) || object.familyEntries?.some(excludedFromRanking)) {
         setStatus(AA_EXCLUSION_MESSAGE); return false;
     }
-    const existing = state.personalEntries.find(entry => Number(entry.conditionID) === Number(object.ID));
+    const existing = state.personalEntries.find(entry => Number(entry.conditionID) === Number(object.ID)
+        || state.versionComposition && !isTopicReference(object) && !object.isFamily && entry.benchmarkID === object.benchmarkID);
     if (existing) {
         if (object.isFamily && familyKey(existing.conditionID, fallbackRuleFor(existing.conditionID)?.entries ?? []) !== object.familyKey) {
             if (!beginMutation()) return false;
@@ -1539,7 +1609,8 @@ function addObjectToPersonalPie(object) {
         type: object.type,
         scoredModelCount: Number(object.scoredModelCount ?? 0),
         weightBasisPoints: initialWeight,
-        weight: initialWeight / 100
+        weight: initialWeight / 100,
+        ...(state.versionComposition && !isTopicReference(object) && !object.isFamily ? { followCommunityVersion: true } : {})
     };
     if (isTopicReference(object)) {
         Object.assign(newEntry, { referenceContextID: object.referenceContextID,
@@ -1562,7 +1633,8 @@ function addObjectToPersonalPie(object) {
 }
 
 function objectInPersonalPie(object) {
-    const exists = state.personalEntries.some(entry => entry.conditionID === Number(object.ID));
+    const exists = state.personalEntries.some(entry => entry.conditionID === Number(object.ID)
+        || object.isBenchmarkGroup && entry.benchmarkID === object.benchmarkID);
     return exists && (!object.isFamily || familyKey(Number(object.ID), fallbackRuleFor(object.ID)?.entries ?? []) === object.familyKey);
 }
 
@@ -1575,13 +1647,15 @@ function removeObjectFromPersonalPie(object) {
         return false;
     }
 
+    const removedIDs = new Set(state.personalEntries.filter(entry => entry.conditionID === objectID
+        || object.isBenchmarkGroup && entry.benchmarkID === object.benchmarkID).map(entry => entry.conditionID));
     state.personalEntries = distributeToTarget(
-        state.personalEntries.filter(entry => Number(entry.conditionID) !== objectID),
+        state.personalEntries.filter(entry => !removedIDs.has(entry.conditionID)),
         state.limits.totalBasisPoints
     );
     hiddenPersonalBenchmarkIDs.add(objectID);
     state.personalFallbackRules = state.personalFallbackRules.filter(rule => (
-        Number(rule.primaryConditionID) !== objectID
+        !removedIDs.has(Number(rule.primaryConditionID))
     ));
     if (state.mode === 'personal' && Number(state.selectedObjectID) === objectID) {
         deactivateInlineFallbackTarget();
@@ -1646,13 +1720,23 @@ function renderBenchmarks() {
         Number(entry.conditionID),
         Number(entry.weight)
     ]));
-    const personalWeightFor = object => object.isFamily && !objectInPersonalPie(object) ? null : personalWeightsByID.has(Number(object.ID))
+    const personalWeightFor = object => object.isBenchmarkGroup ? object.personalWeight
+        : object.isFamily && !objectInPersonalPie(object) ? null : personalWeightsByID.has(Number(object.ID))
         ? personalWeightsByID.get(Number(object.ID))
         : object.personalWeight;
     const availableObjects = state.mode === 'personal'
         ? state.benchmarks.filter(object => !hiddenPersonalBenchmarkIDs.has(Number(object.ID)))
         : state.benchmarks;
-    const objects = fallbackTargetActive ? availableObjects.filter(object => !isTopicReference(object)) : availableObjects;
+    const objects = (fallbackTargetActive ? availableObjects.filter(object => !isTopicReference(object)) : availableObjects).map(object => {
+        if (!object.isBenchmarkGroup) return object;
+        const entries = (state.mode === 'personal' ? state.personalEntries : state.publicEntries)
+            .filter(entry => entry.benchmarkID === object.benchmarkID);
+        const current = entries.find(entry => entry.conditionID === state.selectedObjectID) ?? entries[0];
+        const personal = state.personalEntries.filter(entry => entry.benchmarkID === object.benchmarkID);
+        const total = personal.reduce((sum, entry) => sum + entry.weightBasisPoints, 0);
+        return { ...object, ...(current ? { ID: current.conditionID, conditionID: current.conditionID } : {}),
+            personalWeight: personal.length ? total / 100 : null, personalWeightBasisPoints: personal.length ? total : null };
+    });
     if (objects.length === 0 && !state.rankingPagination?.benchmarks.other.total
         && !state.rankingPagination?.benchmarks.lowCoverage.total) {
         if (state.benchmarks.length > 0 && state.rankingPagination?.benchmarks.primary.hasMore
@@ -1735,11 +1819,12 @@ function renderBenchmarks() {
             onInspect: onBenchmarkInspection, className: 'bp-benchmark-name' });
         identity.append(name);
         const scoreCount = isTopicReference(object) ? referenceCoverage.create(object)
-            : createEvidenceCount(object.scoreCount, { modelCount: object.scoredModelCount });
+            : createEvidenceCount(object.scoreCount, { modelCount: object.isBenchmarkGroup ? undefined : object.scoredModelCount });
         scoreCount.classList.add('bp-benchmark-score-count');
         identity.append(scoreCount);
         identity.dataset.tooltip = isTopicReference(object) ? accessibleName
-            : `${accessibleName}, ${object.scoreCount} approved scores from ${object.scoredModelCount} models`;
+            : object.isBenchmarkGroup ? `${object.name}, ${object.scoreCount} approved scores across versions`
+                : `${accessibleName}, ${object.scoreCount} approved scores from ${object.scoredModelCount} models`;
 
         const publicValue = document.createElement('span');
         publicValue.className = 'bp-benchmark-weight bp-benchmark-public-weight';
@@ -2200,6 +2285,8 @@ function applyServerWorkspace(payload, {
     state.effectiveEntries = { personal: structuredClone(payload.personalPie.effectiveEntries ?? null), public: structuredClone(payload.publicPie.effectiveEntries ?? null) };
     state.publicFamilyComposition = structuredClone(payload.publicPie.familyComposition);
     state.personalCommunityComposition = structuredClone(payload.personalPie.communityFallbackComposition ?? []);
+    state.versionComposition = payload.versionComposition ? structuredClone(payload.versionComposition) : null;
+    state.communityFallbackComposition = structuredClone(payload.communityFallbackComposition ?? []);
     registerPieEntries(state.personalEntries);
     registerPieEntries(state.publicEntries);
     state.publicParticipantCount = payload.publicPie.participantCount;
@@ -2216,6 +2303,9 @@ function applyServerWorkspace(payload, {
     renderScoringControls();
     state.benchmarks = payload.benchmarks.map(object => ({ ...object }));
     state.benchmarkDetailsByID = new Map(state.benchmarks.filter(object => !object.isFamily).map(object => [Number(object.ID), object]));
+    for (const version of state.versionComposition?.flatMap(group => group.versions) ?? []) {
+        state.benchmarkDetailsByID.set(version.conditionID, { ...version, ID: version.conditionID });
+    }
     for (const entry of [...state.personalEntries, ...state.publicEntries]) {
         if (!state.benchmarkDetailsByID.has(Number(entry.conditionID))) {
             state.benchmarkDetailsByID.set(Number(entry.conditionID), { ...entry, ID: Number(entry.conditionID) });
@@ -3156,6 +3246,7 @@ window.addEventListener('resize', loadVisibleRankingPages, { passive: true });
 inlineFallbackToggle.addEventListener('click', () => {
     const primary = selectedInlineFallbackPrimary();
     if (!primary || state.loading) return;
+    if (state.versionComposition) { benchmarkSettings.open(primary); return; }
     if (!fallbackRuleFor(primary.ID)) { openInlineFallbackPicker(); return; }
     state.personalFallbackExpanded = !state.personalFallbackExpanded;
     if (!state.personalFallbackExpanded) {
@@ -3169,6 +3260,7 @@ inlineFallbackSaveRetry.addEventListener('click', () => { void persistPersonalPi
 publicFallbackToggle.addEventListener('click', () => {
     const primary = selectedPublicFallbackPrimary();
     if (state.mode !== 'public' || state.loading || !primary) return;
+    if (state.versionComposition) { benchmarkSettings.open(primary); return; }
     fallbackPicker.open(primary, { action: 'view', getReturnFocus: () => publicFallbackToggle });
 });
 inlineFallbackChart.addEventListener('keydown', event => {

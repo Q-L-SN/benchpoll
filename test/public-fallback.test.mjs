@@ -36,7 +36,7 @@ function database(weights, rules) {
     } };
 }
 const load = (weights, rules, IDs = [1, 2, 3, 4]) => loadPublicPie(database(weights, rules),
-    { categoryID: 1, dimensions: [], contextValues: {} }, new Map(IDs.map(ID => [ID, {}])));
+    { categoryID: 1, dimensions: [], contextValues: {} }, new Map(IDs.map(ID => [ID, { conditionID: ID, benchmarkID: ID, isPrimaryCondition: true, scoreCount: 1 }])));
 const modelWith = entries => ({ ID: 1, modelID: 1, name: 'Fixture model',
     results: new Map(entries.map(([ID, normalizedScore]) => [String(ID), { normalizedScore, sampleCount: 1 }])) });
 const publicScore = (pie, model, scoreMode = 'range') => scoreModels([model], pie.scoringEntries, pie.participantCount * 10000,
@@ -158,7 +158,7 @@ test('explicit fallback choices use their own fourteen-day window across matchin
         throw Error('Unexpected query: ' + sql);
     } };
     const dimensions = [{ key: 'web', options: [{ key: 'any', isNeutral: true }, { key: 'allowed', isNeutral: false }] }];
-    const pie = await loadPublicPie(connection, { categoryID: 1, dimensions, contextValues: { web: 'any' } }, new Map([[1, {}], [2, {}]]));
+    const pie = await loadPublicPie(connection, { categoryID: 1, dimensions, contextValues: { web: 'any' } }, new Map([[1, { conditionID: 1, benchmarkID: 1, isPrimaryCondition: true, scoreCount: 1 }], [2, { conditionID: 2, benchmarkID: 2, isPrimaryCondition: true, scoreCount: 1 }]]));
     assert.equal(pie.participantCount, 7);
     const configured = pie.familyComposition[0].families.find(f => f.entries.length);
     assert.equal(configured.weightBasisPoints, 10000);

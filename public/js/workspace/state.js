@@ -51,6 +51,8 @@ export function createWorkspaceState() {
         personalEntries: [],
         personalFallbackRules: [],
         personalCommunityComposition: [],
+        versionComposition: null,
+        communityFallbackComposition: [],
         publicEntries: [],
         referenceIssues: { personal: [], public: [] },
         effectiveEntries: { personal: null, public: null },

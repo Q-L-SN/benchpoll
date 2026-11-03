@@ -72,7 +72,7 @@ function splitPieLabel(label) {
 }
 
 function benchmarkConditionLabel(object) {
-    if (!object) {
+    if (!object || object.isBenchmarkGroup || object.followCommunityVersion === true) {
         return '';
     }
     const conditionName = String(object.conditionName ?? '').trim();

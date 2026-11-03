@@ -274,9 +274,10 @@
                 <p id="last-updated" class="bp-last-updated" aria-live="polite" hidden></p>
                 <!--bp:scenes--><section id="bp-template-strip" class="bp-scene-strip" aria-label="Topic scenes" hidden></section><!--/bp:scenes-->
 
-            <nav class="bp-mobile-panels" aria-label="Swipe between composition and AI Index">
+            <nav class="bp-mobile-panels" aria-label="Swipe between composition, AI Index and discussion">
                 <button type="button" data-mobile-panel="mix" aria-pressed="true" aria-controls="workspace-scene-panel">Composition</button>
                 <button id="model-index-tab" type="button" data-mobile-panel="models" aria-pressed="false" aria-controls="workspace-scene-panel">AI Index</button>
+                <button type="button" data-mobile-panel="discussion" aria-pressed="false" aria-controls="workspace-discussion-page">Discussion</button>
             </nav>
             <section id="workspace-scene-panel" class="bp-workspace-grid">
                 <div class="bp-left-workspace">
@@ -468,6 +469,7 @@
                     </div>
                 </section>
                 </div>
+                <section id="workspace-discussion-page" class="bp-discussion-workspace" aria-label="Topic discussion"></section>
             </section>
         </main>
         <aside id="discussion-panel" class="discussion-rail" aria-labelledby="discussion-title" aria-hidden="true" inert>

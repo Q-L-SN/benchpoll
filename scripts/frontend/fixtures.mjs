@@ -4,6 +4,7 @@ import { createRankingPager } from '../../ranking-pagination.js';
 import { availableResultInference, AVAILABLE_INFERENCE_VERSION } from '../../public/js/shared/available-score.js';
 import { normalizeEstimationAlgorithm } from '../../public/js/shared/estimation-algorithms.js';
 import { familyKey } from '../../public/js/shared/benchmark-families.js';
+import { communityVersionComposition, expandCommunityVersions } from '../../public/js/shared/benchmark-version-choice.js';
 // Synthetic records for the isolated frontend harness; never imported by the app.
 const fixtureRankingPager = createRankingPager();
 export function rankingPage(state, body) {
@@ -119,7 +120,8 @@ export function workspace(state, body, { paginate = true } = {}) {
             ...benchmark,
             publicWeightBasisPoints: publicWeights.find(entry => entry.conditionID === benchmark.conditionID)?.weightBasisPoints ?? 0,
             publicWeight: (publicWeights.find(entry => entry.conditionID === benchmark.conditionID)?.weightBasisPoints ?? 0) / 100,
-            personalWeight: personalEntries.find(entry => entry.conditionID === benchmark.conditionID)?.weight ?? null
+            personalWeight: personalEntries.find(entry => entry.conditionID === benchmark.conditionID)?.weight ?? null,
+            ...(state.communityVersions ? { personalWeightBasisPoints: personalEntries.find(entry => entry.conditionID === benchmark.conditionID)?.weightBasisPoints ?? null } : {})
         })),
         comparison: options ?? { mode: body.comparison?.mode ?? 'best', keys: body.comparison?.keys ?? ['model'], controlKeys: body.comparison?.controlKeys ?? null,
             filters: body.comparison?.filters ?? [], availableKeys: ['model', 'field:1', 'field:2', 'field:3'], fields: catalog().scoreFields,
@@ -181,6 +183,29 @@ export function workspace(state, body, { paginate = true } = {}) {
     }
     if (options) for (const mode of ['personal', 'public']) for (const model of data.modelLeaderboards[mode]) {
         for (const score of model.calculationScores) score.memberEvidence = [...new Set(score.memberIDs)].map(ID => ({ ID, hash: 'f'.repeat(64) }));
+    }
+    if (state.communityVersions) {
+        data.versionComposition = communityVersionComposition(new Map([
+            ...(state.versionVoters ?? []),
+            ...(state.authenticated ? [[state.userID, { entries: state.personalEntries }]] : [])
+        ]), data.benchmarks.filter(row => !row.isFamily));
+        data.personalPie.effectiveEntries = weightedEntries(expandCommunityVersions(personalEntries, data.versionComposition));
+        data.publicPie.entries = data.publicPie.entries.map(entry => ({ ...entry, followCommunityVersion: true }));
+        data.publicPie.effectiveEntries = weightedEntries(expandCommunityVersions(data.publicPie.entries, data.versionComposition));
+        const compositionFor = entries => {
+            const weights = new Map();
+            for (const entry of entries) weights.set(entry.conditionID, (weights.get(entry.conditionID) ?? 0) + entry.weightBasisPoints);
+            return [...weights].map(([conditionID, weightBasisPoints]) => {
+                const group = state.publicFamilyComposition?.find(group => group.primaryConditionID === conditionID)
+                    ?? { primaryConditionID: conditionID, configuredPieCount: 0, isDefault: true,
+                        families: [{ primaryConditionID: conditionID, familyID: null, entries: [], weightBasisPoints: 10000 }] };
+                return { ...group, families: group.families.map(family => ({ ...family,
+                    overallWeightBasisPoints: weightBasisPoints * family.weightBasisPoints / 10000 })) };
+            });
+        };
+        data.personalPie.communityFallbackComposition = compositionFor(data.personalPie.effectiveEntries);
+        data.publicPie.familyComposition = compositionFor(data.publicPie.effectiveEntries);
+        data.communityFallbackComposition = data.publicPie.familyComposition;
     }
     if (!paginate) return data;
     return fixtureRankingPager.create(data, {

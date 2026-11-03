@@ -15,6 +15,11 @@ verification. Read
 before any further production work; do not repeat the migrations based on the
 older pending-release notes. This does not establish cloud VPN/TCP access.
 
+The next pending change adds optional community version choices and a third
+mobile discussion page. See [`../community-versions-20261103.md`](../community-versions-20261103.md)
+for the electorate rules, additive schema requirement and narrow release
+exporter. Version and fallback controls live in the contribution dialog.
+
 ## Repositories And Starting Point
 
 - Source: <https://github.com/Q-L-SN/benchpoll>, branch `codex/cloud-handoff-20261101`.

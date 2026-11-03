@@ -41,7 +41,7 @@ function database(contexts, weights) {
         throw Error('Unexpected SQL: ' + sql);
     } };
 }
-const conditions = new Map([[1, {}], [2, {}]]);
+const conditions = new Map([1, 2].map(ID => [ID, { conditionID: ID, benchmarkID: ID, isPrimaryCondition: true, scoreCount: 1 }]));
 const topic = { categoryID: 1, dimensions: [], contextValues: {} };
 const filteredTopic = { categoryID: 1, contextValues: { tools: 'any' },
     dimensions: [{ key: 'tools', options: [{ key: 'any', isNeutral: true }, { key: 'allowed' }, { key: 'blocked' }] }] };
@@ -59,12 +59,12 @@ test('each public topic uses its own Pies, never legacy descendants, private top
         weight(4, 51), weight(5, 30, 99), weight(6, 40, 99)]);
     const first = await loadPublicPie(db, topic, conditions);
     assert.equal(first.participantCount, 1);
-    assert.deepEqual(first.entries, [{ conditionID: 1, weightBasisPoints: 6000 }, { conditionID: 2, weightBasisPoints: 4000 }]);
+    assert.deepEqual(first.entries, [{ conditionID: 1, weightBasisPoints: 6000, followCommunityVersion: true }, { conditionID: 2, weightBasisPoints: 4000, followCommunityVersion: true }]);
     assert.deepEqual(first.contextIDs, [10]);
     assert.deepEqual(db.sampled[0], [1]);
     const second = await loadPublicPie(db, { ...topic, categoryID: 2 }, conditions);
     assert.equal(second.participantCount, 1);
-    assert.deepEqual(second.entries, [{ conditionID: 1, weightBasisPoints: 10000 }]);
+    assert.deepEqual(second.entries, [{ conditionID: 1, weightBasisPoints: 10000, followCommunityVersion: true }]);
     assert.deepEqual(second.contextIDs, [20]);
     assert.deepEqual(db.sampled[1], [2]);
     for (const pie of [first, second]) assert.equal(Object.hasOwn(pie, 'composition'), false);
@@ -76,11 +76,11 @@ test('topic-local options filter matching configurations without matching anothe
     const specific = await loadPublicPie(db, { ...filteredTopic, categoryID: 2, contextValues: { tools: 'allowed' } }, conditions);
     assert.equal(specific.participantCount, 1);
     assert.deepEqual(specific.contextIDs, [20]);
-    assert.deepEqual(specific.entries, [{ conditionID: 1, weightBasisPoints: 10000 }]);
+    assert.deepEqual(specific.entries, [{ conditionID: 1, weightBasisPoints: 10000, followCommunityVersion: true }]);
     const neutral = await loadPublicPie(db, { ...filteredTopic, categoryID: 2 }, conditions);
     assert.equal(neutral.participantCount, 2);
     assert.deepEqual(neutral.contextIDs, [20, 21]);
-    assert.deepEqual(neutral.entries, [{ conditionID: 1, weightBasisPoints: 5000 }, { conditionID: 2, weightBasisPoints: 5000 }]);
+    assert.deepEqual(neutral.entries, [{ conditionID: 1, weightBasisPoints: 5000, followCommunityVersion: true }, { conditionID: 2, weightBasisPoints: 5000, followCommunityVersion: true }]);
 });
 
 test('no contexts, only empty Pies, and only another topic produce no public weights', async () => {
@@ -110,7 +110,7 @@ test('sparse matching contexts count their selected Pies equally regardless of a
     const db = database([...matchingContexts(), contextRow(40, 2)], rows);
     const pie = await loadPublicPie(db, filteredTopic, conditions);
     assert.equal(pie.participantCount, 9);
-    assert.deepEqual(pie.entries, [{ conditionID: 1, weightBasisPoints: 3333 }, { conditionID: 2, weightBasisPoints: 6667 }]);
+    assert.deepEqual(pie.entries, [{ conditionID: 1, weightBasisPoints: 3333, followCommunityVersion: true }, { conditionID: 2, weightBasisPoints: 6667, followCommunityVersion: true }]);
     assert.deepEqual(pie.scoringEntries.map(({ contextID, conditionID }) => [contextID, conditionID]), [[10, 1], [10, 2], [20, 2], [30, 1]]);
     assert.deepEqual(db.sampled[0], [3, 2, 8, 7, 6, 5, 4], 'Fallback electorate excludes expired top-up samples');
     assert.equal(Object.hasOwn(pie, 'composition'), false);
@@ -120,7 +120,7 @@ test('an empty fallback electorate skips SQL while an older Pie still supplies p
     const db = database([contextRow(10)], [{ ...weight(1, 10), is_recent: 0, is_fallback_recent: 0 }]);
     const pie = await loadPublicPie(db, topic, conditions);
     assert.equal(pie.participantCount, 1);
-    assert.deepEqual(pie.entries, [{ conditionID: 1, weightBasisPoints: 10000 }]);
+    assert.deepEqual(pie.entries, [{ conditionID: 1, weightBasisPoints: 10000, followCommunityVersion: true }]);
     assert.equal(pie.familyComposition[0].configuredPieCount, 0);
     assert.equal(pie.familyComposition[0].isDefault, true);
     assert.deepEqual(db.sampled, [], 'No fallback query is issued for an empty electorate');
@@ -153,7 +153,7 @@ test('at least ten recent Pies uses every 72-hour Pie without adding older Pies'
         const pie = await loadPublicPie(db, topic, conditions);
         assert.equal(pie.participantCount, recentCount);
         assert.deepEqual(db.sampled[0], Array.from({ length: recentCount + 2 }, (_, index) => recentCount + 2 - index));
-        assert.deepEqual(pie.entries, [{ conditionID: 1, weightBasisPoints: 10000 }]);
+        assert.deepEqual(pie.entries, [{ conditionID: 1, weightBasisPoints: 10000, followCommunityVersion: true }]);
     }
 });
 
@@ -171,7 +171,7 @@ test('unsampled Pies do not affect context shares but recent explicit fallback c
         { contextID: 10, conditionID: 2, weightBasisPoints: 90000 },
         { contextID: 20, conditionID: 1, weightBasisPoints: 40000 }
     ]);
-    assert.deepEqual(pie.entries, [{ conditionID: 1, weightBasisPoints: 3571 }, { conditionID: 2, weightBasisPoints: 6429 }]);
+    assert.deepEqual(pie.entries, [{ conditionID: 1, weightBasisPoints: 3571, followCommunityVersion: true }, { conditionID: 2, weightBasisPoints: 6429, followCommunityVersion: true }]);
     assert.equal(db.sampled[0].length, 16, 'Fallback choices use the whole active electorate, independently of the weight sample');
 });
 
@@ -185,7 +185,7 @@ test('fewer than ten available Pies all contribute even with no 72-hour activity
     const pie = await loadPublicPie(db, topic, conditions);
     assert.equal(pie.participantCount, 3);
     assert.deepEqual(db.sampled[0], [3, 2]);
-    assert.deepEqual(pie.entries, [{ conditionID: 1, weightBasisPoints: 3333 }, { conditionID: 2, weightBasisPoints: 6667 }]);
+    assert.deepEqual(pie.entries, [{ conditionID: 1, weightBasisPoints: 3333, followCommunityVersion: true }, { conditionID: 2, weightBasisPoints: 6667, followCommunityVersion: true }]);
 });
 
 test('aging past fourteen days keeps a referenced public index and its parent score available', async () => {

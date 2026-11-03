@@ -3,6 +3,7 @@ import { BENCHMARK_GROUPS, benchmarkConditionGroup } from './public/js/shared/be
 import { createSearchIndex, dominantSearchMatch } from './public/js/shared/search.js';
 import { FEATURED_FALLBACK_LIMIT, FEATURED_FALLBACK_MIN_BASIS_POINTS } from './public/js/shared/fallback-catalogue-policy.js';
 import { benchmarkVersionTieOrder } from './public/js/shared/benchmark-version-order.js';
+import { groupBenchmarkRows } from './public/js/shared/benchmark-version-choice.js';
 import { normalizeRankingResume, RANKING_PAGE_SIZE } from './public/js/shared/ranking-resume.js';
 import { normalizeModelFocusTarget, findModelFocusIndex } from './public/js/workspace/model-focus-target.js';
 import { comparisonDisplayParts } from './public/js/shared/comparison-display.js';
@@ -132,11 +133,20 @@ function updateBenchmarkCatalogue(snapshot, catalogue) {
 }
 
 function benchmarkPage(snapshot, query, pinPersonal, offset, group, groupVersions, size = RANKING_PAGE_SIZE.benchmarks) {
-    const grouping = query || groupVersions ? 'versions' : 'flat';
+    const groupedBenchmarks = snapshot.versionComposition && !groupVersions;
+    const grouping = !groupedBenchmarks && (query || groupVersions) ? 'versions' : 'flat';
     const key = JSON.stringify([query, pinPersonal, grouping]);
     if (!snapshot.benchmarkPages.has(key)) {
         const groups = Object.fromEntries(BENCHMARK_GROUPS.map(group => [group, []]));
-        for (const row of benchmarkRows(snapshot, query, pinPersonal)) {
+        const matched = benchmarkRows(snapshot, query, pinPersonal);
+        const keyFor = row => row.conditionID < 0 ? `topic:${row.conditionID}` : `benchmark:${row.benchmarkID}`;
+        const matches = new Set(matched.map(keyFor));
+        const rows = groupedBenchmarks ? groupBenchmarkRows(snapshot.benchmarks).filter(row => matches.has(keyFor(row))) : matched;
+        if (groupedBenchmarks && pinPersonal) rows.sort((a, b) =>
+            Number(b.personalWeightBasisPoints !== null) - Number(a.personalWeightBasisPoints !== null)
+            || (b.personalWeightBasisPoints ?? 0) - (a.personalWeightBasisPoints ?? 0)
+            || b.publicWeightBasisPoints - a.publicWeightBasisPoints);
+        for (const row of rows) {
             groups[grouping === 'flat' ? 'primary' : benchmarkConditionGroup(row)].push(row);
         }
         if (snapshot.benchmarkPages.size >= 32) snapshot.benchmarkPages.delete(snapshot.benchmarkPages.keys().next().value);
@@ -289,6 +299,7 @@ export function createRankingPager({ now = () => Date.now() } = {}) {
             userID,
             scoreMode: workspace.scoreMode,
             comparison: workspace.comparison ?? { keys: ['model'], fields: [], models: [] },
+            versionComposition: workspace.versionComposition,
             benchmarkPages: new Map(),
             personalWeights: new Map(workspace.personalPie.entries.map(entry => [
                 Number(entry.conditionID), Number(entry.weightBasisPoints)

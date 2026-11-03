@@ -7,17 +7,24 @@ export function initializeMobilePanels(workspace) {
     const enabled = () => mobile.matches && workspace.dataset.display !== 'charts';
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
     const undo = workspace.querySelector('#workspace-undo');
-    let current = workspace.dataset.mobilePanel === 'models' ? 'models' : 'mix';
+    const names = controls.map(control => control.dataset.mobilePanel);
+    let current = names.includes(workspace.dataset.mobilePanel) ? workspace.dataset.mobilePanel : 'mix';
+    let lastAnnounced = null, previewingDiscussion = false;
     let frame = null, settleTimer = null;
     const identity = workspace.querySelector('.bp-context-identity');
-    const progress = () => enabled() && pager.clientWidth ? Math.max(0, Math.min(1, pager.scrollLeft / pager.clientWidth)) : current === 'models' ? 1 : 0;
+    const progress = () => enabled() && pager.clientWidth ? Math.max(0, Math.min(names.length - 1, pager.scrollLeft / pager.clientWidth)) : names.indexOf(current);
 
     function paint() {
         frame = null;
         const value = progress();
-        dock.style.setProperty('--bp-page-indicator-x', `${value * Math.max(0, (dock.clientWidth - 8) / 2)}px`);
-        workspace.style.setProperty('--bp-mobile-undo-width', `${44 * (1 - value)}px`);
-        workspace.style.setProperty('--bp-mobile-undo-opacity', String(1 - value));
+        dock.style.setProperty('--bp-page-count', String(names.length));
+        dock.style.setProperty('--bp-page-indicator-x', `${value * Math.max(0, (dock.clientWidth - 8) / names.length)}px`);
+        workspace.style.setProperty('--bp-mobile-undo-width', `${44 * Math.max(0, 1 - value)}px`);
+        workspace.style.setProperty('--bp-mobile-undo-opacity', String(Math.max(0, 1 - value)));
+        if (enabled() && value > 1.02 && !previewingDiscussion) {
+            previewingDiscussion = true;
+            window.dispatchEvent(new CustomEvent('benchpoll:mobile-panel-preview', { detail: { panel: 'discussion' } }));
+        }
         if (undo) {
             undo.inert = enabled() && value > .99;
             if (undo.inert) undo.setAttribute('aria-hidden', 'true'); else undo.removeAttribute('aria-hidden');
@@ -27,23 +34,29 @@ export function initializeMobilePanels(workspace) {
         clearTimeout(settleTimer);
         if (!enabled()) return;
         const value = progress();
-        if (Math.min(value, 1 - value) > .02) return;
-        current = value >= .5 ? 'models' : 'mix';
+        const index = Math.round(value);
+        if (Math.abs(value - index) > .02) return;
+        current = names[index];
         workspace.dataset.mobilePanel = current;
         controls.forEach(button => button.setAttribute('aria-pressed', String(button.dataset.mobilePanel === current)));
         panels.forEach((panel, index) => {
-            panel.inert = index !== (current === 'models' ? 1 : 0);
+            panel.inert = index !== names.indexOf(current);
             panel.setAttribute('aria-hidden', String(panel.inert));
         });
+        if (lastAnnounced !== current || previewingDiscussion && current !== 'discussion') {
+            window.dispatchEvent(new CustomEvent('benchpoll:mobile-panel', { detail: { panel: current } }));
+            lastAnnounced = current;
+        }
+        if (current !== 'discussion') previewingDiscussion = false;
         paint();
     }
     function select(mode, { instant = false } = {}) {
-        current = mode === 'models' ? 'models' : 'mix';
+        current = names.includes(mode) ? mode : 'mix';
         workspace.dataset.mobilePanel = current;
         controls.forEach(button => button.setAttribute('aria-pressed', String(button.dataset.mobilePanel === current)));
         if (enabled()) {
             panels.forEach(panel => { panel.inert = false; panel.removeAttribute('aria-hidden'); });
-            const left = current === 'models' ? pager.clientWidth : 0;
+            const left = names.indexOf(current) * pager.clientWidth;
             pager.scrollTo({ left,
                 behavior: instant || reduced.matches ? 'instant' : 'smooth' });
             if (Math.abs(pager.scrollLeft - left) < .5) commit();
@@ -60,7 +73,9 @@ export function initializeMobilePanels(workspace) {
     dock.addEventListener('keydown', event => {
         if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
         event.preventDefault();
-        const index = ['ArrowRight', 'End'].includes(event.key) ? 1 : 0;
+        const active = controls.indexOf(document.activeElement);
+        const index = event.key === 'Home' ? 0 : event.key === 'End' ? controls.length - 1
+            : Math.max(0, Math.min(controls.length - 1, (active < 0 ? names.indexOf(current) : active) + (event.key === 'ArrowRight' ? 1 : -1)));
         select(controls[index].dataset.mobilePanel); controls[index].focus({ preventScroll: true });
     });
     pager.addEventListener('scroll', () => {

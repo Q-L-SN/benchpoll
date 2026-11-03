@@ -114,7 +114,7 @@ test('fallback copy preserves explicit order, community inheritance, and real ze
     assert.match(fallback, /first available score counts, not the highest/);
     assert.match(fallback, /including zero and negative scores/);
     assert.match(fallback, /No fallback disables backups, not estimation/);
-    assert.match(fallback, /Only explicit public choices updated within 14 days shape the mix, weighted by benchmark allocation/);
+    assert.match(fallback, /Explicit choices updated within 14 days shape version and fallback proportions per topic\/scene, weighted by benchmark allocation/);
     assert.match(fallback, /Following adds no vote/);
     assert.match(fallback, /deselect your configuration to follow the community again/);
     assert.match(fallback, /Added benchmarks <strong>follow the community<\/strong>/);

@@ -102,6 +102,16 @@ test('full coverage stays unchanged and zero scores do not need the negative exc
     assert.doesNotMatch(incomparable, /Coverage factor:|deduction/);
 });
 
+test('adjustment details match ranked two-decimal precision at integer-rounding boundaries', () => {
+    for (const [raw, endpoint, expected] of [[49.499, 49.5, '50'], [-49.499, -49.5, '-50'],
+        [49.494, 49.49, '49'], [-49.494, -49.49, '-49']]) {
+        const text = summary(factorInference(raw, 1), 1, true, { lower: endpoint });
+        assert.ok(text.includes(`Index score ${expected};`));
+        assert.ok(text.includes(`Before adjustment: ${expected}`));
+        assert.ok(text.includes(`After adjustment: ${expected}`));
+    }
+});
+
 test('old v3 deduction summaries and v1/v2 summaries remain supported', () => {
     const legacy = { inferredFraction: .5, unresolvedFraction: 0, totalScore: 80 };
     const v3 = summary({ ...legacy, version: 3, method: 'pairwise-anchored-coverage',

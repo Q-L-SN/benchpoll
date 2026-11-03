@@ -54,7 +54,7 @@ test('counts share a focusable FontAwesome component and the existing tooltip co
 
 test('workspace heading names the selected block and preserves evidence and public participant counts', () => {
     const source = read('public/js/home-workspace.js');
-    assert.match(source, /createEvidenceCount\(object\.scoreCount, \{ modelCount: object\.scoredModelCount \}\)/);
+    assert.match(source, /createEvidenceCount\(object\.scoreCount, \{ modelCount: object\.isBenchmarkGroup \? undefined : object\.scoredModelCount \}\)/);
     assert.match(source, /!isTopicReference\(selected\) && typeof selected.scoredModelCount === 'number'/);
     assert.match(source, /updateEvidenceCount\(pieModelCount, selected.scoredModelCount, \{ kind: 'models' \}\)/);
     assert.match(source, /pieModelCount\.parentElement !== pieContextNote/);

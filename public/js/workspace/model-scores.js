@@ -439,13 +439,13 @@ export function createModelScoresView({ state, modelScoresDialog, modelScoresTit
                 const before = document.createElement('p');
                 before.textContent = `Before adjustment: ${rankingNumber(inference.unpenalizedScore)}`;
                 const after = document.createElement('p');
-                after.textContent = `After adjustment: ${rankingNumber(inference.totalScore)}`;
+                after.textContent = `After adjustment: ${rankingNumber(model.lower)}`;
                 const help = document.createElement('a');
                 help.href = '/how-it-works#rankings'; help.textContent = 'How it works';
                 calculation.append(before, after, help);
                 modelScoresSummary.append(calculation);
             } else {
-                if (inference.coveragePenalty > 0) detail.textContent += ` Before adjustment: ${rankingNumber(inference.unpenalizedScore)}. After adjustment: ${rankingNumber(inference.totalScore)}.`;
+                if (inference.coveragePenalty > 0) detail.textContent += ` Before adjustment: ${rankingNumber(inference.unpenalizedScore)}. After adjustment: ${rankingNumber(model.lower)}.`;
                 modelScoresSummary.append(detail);
             }
         }
