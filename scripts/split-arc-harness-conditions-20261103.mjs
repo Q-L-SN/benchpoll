@@ -1,4 +1,4 @@
-import { lstat, open, readFile, realpath } from 'node:fs/promises';
+import fs, { lstat, readFile, realpath } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -105,7 +105,20 @@ export async function openHarnessReceipt(path) {
         catch (error) { if (error.code !== 'ENOENT') throw error; }
         if (dirname(directory) === directory) break;
     }
-    return open(join(parent, basename(destination)), constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | constants.O_NOFOLLOW, 0o600);
+    const directory = await fs.open(parent, constants.O_RDONLY | constants.O_DIRECTORY);
+    try {
+        const file = await fs.open(join(parent, basename(destination)),
+            constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | constants.O_NOFOLLOW, 0o600);
+        return {
+            async write(result) {
+                await file.writeFile(JSON.stringify(result, null, 2) + '\n', 'utf8');
+                await file.sync();
+                // The new filename must survive a crash as well as its contents.
+                await directory.sync();
+            },
+            async close() { try { await file.close(); } finally { await directory.close(); } }
+        };
+    } catch (error) { await directory.close(); throw error; }
 }
 
 async function main() {
@@ -121,11 +134,6 @@ async function main() {
     if (apply) await verifySlugBackup(option('--backup-manifest'), database);
     const output = option('--output') ? await openHarnessReceipt(option('--output')) : null;
     let prepared;
-    const writeReceipt = async (file, result) => {
-        if (!file) return;
-        const text = JSON.stringify(result, null, 2) + '\n';
-        await file.writeFile(text, 'utf8'); await file.sync();
-    };
     let connection;
     try {
         if (apply || rehearse) prepared = await openHarnessReceipt(option('--output') + '.prepared.json');
@@ -134,8 +142,8 @@ async function main() {
             port: Number(process.env.BENCHPOLL_DB_PORT || 3306), dateStrings: true, timezone: 'Z',
             supportBigNumbers: true, bigNumberStrings: true });
         const result = apply || rehearse ? await applyHarnessSplit(connection, review,
-            { expectedPlanHash: option('--expect-plan'), rehearse, beforeCommit: result => writeReceipt(prepared, result) }) : await previewHarnessSplit(connection, review);
-        await writeReceipt(output, { ...result, phase: apply ? 'committed' : rehearse ? 'rolled-back-rehearsal' : 'preview' });
+            { expectedPlanHash: option('--expect-plan'), rehearse, beforeCommit: result => prepared.write(result) }) : await previewHarnessSplit(connection, review);
+        await output?.write({ ...result, phase: apply ? 'committed' : rehearse ? 'rolled-back-rehearsal' : 'preview' });
         console.log(JSON.stringify(apply || rehearse ? { applied: result.applied, rehearsed: result.rehearsed, counts: result.counts }
             : { canApply: result.canApply, mutations: result.mutations, planHash: result.planHash, blockers: result.blockers, counts: result.targets.map(row => row.counts) }));
     } finally { try { await connection?.end(); } finally { try { await output?.close(); } finally { await prepared?.close(); } } }

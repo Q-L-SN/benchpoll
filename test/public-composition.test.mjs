@@ -15,6 +15,7 @@ const weight = (pie, context, condition = 1, amount = 10000) => ({
 function database(contexts, weights) {
     const sampled = [];
     return { sampled, async execute(sql, params) {
+        assert.doesNotMatch(sql, /\bIN\s*\(\s*\)/i, 'Empty electorates must not generate invalid SQL');
         if (sql.includes('FROM ranking_contexts rc')) {
             assert.match(sql, /JOIN categories c ON c.ID = rc.category_ID/);
             assert.match(sql, /WHERE rc.category_ID = \? AND c.is_active = 1 AND c.owner_user_ID IS NULL/);
@@ -115,14 +116,14 @@ test('sparse matching contexts count their selected Pies equally regardless of a
     assert.equal(Object.hasOwn(pie, 'composition'), false);
 });
 
-test('a lone Pie older than fourteen days still provides public weights without reviving expired fallback votes', async () => {
+test('an empty fallback electorate skips SQL while an older Pie still supplies public weights', async () => {
     const db = database([contextRow(10)], [{ ...weight(1, 10), is_recent: 0, is_fallback_recent: 0 }]);
     const pie = await loadPublicPie(db, topic, conditions);
     assert.equal(pie.participantCount, 1);
     assert.deepEqual(pie.entries, [{ conditionID: 1, weightBasisPoints: 10000 }]);
     assert.equal(pie.familyComposition[0].configuredPieCount, 0);
     assert.equal(pie.familyComposition[0].isDefault, true);
-    assert.deepEqual(db.sampled, [[]]);
+    assert.deepEqual(db.sampled, [], 'No fallback query is issued for an empty electorate');
 });
 
 test('zero to nine 72-hour Pies top up to ten total, not ten additional Pies', async () => {

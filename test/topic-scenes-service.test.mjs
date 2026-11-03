@@ -3,9 +3,11 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { resolveTopicScene, serializeTopicScene, sceneContext, loadTopicScenes,
     createPrivateTopicScene, updatePrivateTopicScene, setPrivateTopicDefaultScene,
-    normalizeTopicSceneRequest, loadTopicSceneCatalog, ensureTopicRootContext, TOPIC_SCENE_SQL_PREVIEW } from '../topic-scenes-service.js';
+    normalizeTopicSceneRequest, loadTopicSceneCatalog, ensureTopicRootContext, topicSceneURL, TOPIC_SCENE_SQL_PREVIEW } from '../topic-scenes-service.js';
 import { searchTopicsAndScenes } from '../topic-service.js';
 import { buildCategoryNavigation, buildPersonalNavigation } from '../navigation-service.js';
+import { selectSearchScene } from '../search-presentation.js';
+import { scenePath, topicSlug } from '../public/js/shared/topics.js';
 import { sceneDatabase } from './helpers/topic-scenes-fixture-20261031.mjs';
 
 const errorIs = code => error => error.body?.error === code;
@@ -13,6 +15,50 @@ const raw = (contextID, defaults = {}) => ({ context_ID: contextID, category_ID:
     slug: `scene-${contextID}`, description: 'A useful scene.', position: contextID, is_default: 0, is_active: 1, ...defaults });
 const scenes = () => [serializeTopicScene(raw(101, { name: 'Vector output', legacy_context_values: { output: 'vector', realtime: 'any' } })),
     serializeTopicScene(raw(1095, { name: 'General', is_default: 1, legacy_context_values: { output: 'any', realtime: 'any' } }))];
+
+test('accepted long scene names serialize and resolve legacy truncated slugs without colliding with shorter names', async () => {
+    const h = sceneDatabase(), prefix = 'a'.repeat(79), name = prefix + ' b';
+    const request = normalizeTopicSceneRequest({ categoryID: 172, name, description: 'A long scene name.' });
+    const storedSlug = topicSlug(request.name), expectedSlug = storedSlug + 'scene';
+    assert.equal(storedSlug, prefix + '-');
+    for (const categoryID of [172, 501]) {
+        const ID = categoryID + 1000, siblingID = ID + 1;
+        h.seedContext(categoryID, ID, { scene: String(ID) });
+        h.seedContext(categoryID, siblingID, { scene: String(siblingID) });
+        h.state.scenes.push(raw(ID, { category_ID: categoryID, name, slug: storedSlug, is_default: 1 }),
+            raw(siblingID, { category_ID: categoryID, name: prefix, slug: prefix }));
+        const catalog = (await loadTopicSceneCatalog(h.pool, [categoryID])).get(categoryID);
+        const topic = { ...h.state.categories.find(row => row.ID === categoryID), scenes: catalog.scenes };
+        const base = categoryID === 172 ? '/image-generation' : '/personal/501';
+        const scene = catalog.scenes.find(item => item.ID === ID);
+        assert.equal(scene.name, name);
+        assert.equal(scene.slug, expectedSlug);
+        assert.equal(scene.url, `${base}/${expectedSlug}`);
+        assert.equal(topicSceneURL(topic, { name, slug: storedSlug }), scene.url);
+        assert.equal(topicSceneURL(topic, { name }), scene.url);
+        assert.equal(scenePath(base, scene), scene.url);
+        assert.equal(selectSearchScene(topic, new URLSearchParams(), expectedSlug).ID, ID);
+        assert.equal(selectSearchScene(topic, new URLSearchParams(), prefix).ID, siblingID);
+        assert.equal((await resolveTopicScene(h.pool, topic, { scene: String(ID) })).ID, ID);
+        assert.equal(h.state.scenes.find(item => item.context_ID === ID).slug, storedSlug, 'Reading does not rewrite stored identities');
+    }
+});
+
+test('creating and renaming accepted long scenes returns resolvable canonical paths', async () => {
+    const h = sceneDatabase();
+    for (const prefix of ['b'.repeat(79), 'c'.repeat(79)]) {
+        const name = prefix + ' tail', slug = prefix + '-scene';
+        const existing = h.state.scenes.find(scene => scene.name !== 'General');
+        const result = existing
+            ? await updatePrivateTopicScene(h.pool, '42', { categoryID: 501, sceneID: existing.context_ID, name, description: 'Renamed scene.' })
+            : await createPrivateTopicScene(h.pool, '42', { categoryID: 501, name, description: 'New scene.' });
+        assert.equal(result.scene.name, name);
+        assert.equal(result.scene.slug, slug);
+        assert.equal(result.scene.url, `/personal/501/${slug}`);
+        assert.equal(selectSearchScene({ scenes: result.scenes }, new URLSearchParams(), slug).ID, result.sceneID);
+        assert.equal((await resolveTopicScene(h.pool, { ID: 501 }, { scene: String(result.sceneID) })).ID, result.sceneID);
+    }
+});
 
 test('browsing selects exactly one default first, while writes and references pin explicit scene identities', async () => {
     const options = { scenes: scenes() }, topic = { ID: 172 };

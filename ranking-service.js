@@ -719,6 +719,7 @@ export async function loadPersonalPie(connection, contextID, userID) {
 }
 
 async function loadPieFallbackRows(connection, pieIDs) {
+    if (!pieIDs.length) return [];
     const [rows] = await connection.execute(`SELECT rules.pie_ID, rules.primary_benchmark_condition_ID,
         rules.family_ID AS selected_family_ID, rules.selection_source,
         f.ID AS family_ID, f.chain_hash, m.position,

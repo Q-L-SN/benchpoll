@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, rm, symlink, stat } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, symlink, stat, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { buildHarnessSplitPlan, validateHarnessReview, referencesHarnessTarget } from '../benchmark-harness-split.js';
@@ -59,6 +59,47 @@ test('a fully applied split is idempotent and preserves unrelated conditions', (
     assert.equal(again.canApply, true); assert.equal(again.mutations, 0);
 });
 
+test('visible destination-name collisions block both creation and primary-condition renaming', () => {
+    for (const target of review.targets) for (const [bucket, definition] of Object.entries(target.buckets)) {
+        for (const name of [definition.name, definition.name.toUpperCase(), '  ' + definition.name.replaceAll(' ', '  ') + '  ',
+            definition.name.replace(/[A-Za-z]/g, char => String.fromCharCode(char.charCodeAt(0) + 0xfee0))]) {
+            const state = reviewedState(), original = state.conditions.find(row => row.ID === target.conditionID);
+            state.conditions.push({ ...original, ID: 999999, condition_key: 'manually-created', name, is_primary: 0 });
+            const before = structuredClone(state), plan = buildHarnessSplitPlan(state, review);
+            assert.equal(plan.canApply, false);
+            assert.ok(plan.blockers.some(row => row.code === 'destination_condition_name_conflict'
+                && row.benchmarkID === target.benchmarkID && row.bucket === bucket && row.conditionID === 999999));
+            assert.deepEqual(state, before, 'Planning must not modify the conflicting condition');
+        }
+    }
+});
+
+test('a destination already using its reviewed key does not hide another visible-name collision', () => {
+    const state = reviewedState(), target = review.targets[0], definition = target.buckets.custom;
+    state.conditions.push({ ...state.conditions[0], ID: 90000, condition_key: definition.conditionKey,
+        name: definition.name, difference_explanation: definition.explanation, is_primary: 0 });
+    assert.equal(buildHarnessSplitPlan(state, review).canApply, true);
+    state.conditions.push({ ...state.conditions.at(-1), ID: 90001, condition_key: 'manual-copy' });
+    const plan = buildHarnessSplitPlan(state, review);
+    assert.equal(plan.canApply, false);
+    assert.ok(plan.blockers.some(row => row.code === 'destination_condition_name_conflict' && row.conditionID === 90001));
+});
+
+test('deleted labels and labels in another benchmark do not collide with a destination', () => {
+    const state = reviewedState(), definition = review.targets[0].buckets.custom;
+    state.conditions.push({ ...state.conditions[0], ID: 90000, condition_key: 'deleted-copy',
+        name: definition.name, is_primary: 0, deleted_at: '2026-11-02 00:00:00' });
+    state.conditions.push({ ...state.conditions[0], ID: 90001, benchmark_ID: 999999,
+        condition_key: 'other-benchmark', name: definition.name, is_primary: 0 });
+    assert.equal(buildHarnessSplitPlan(state, review).canApply, true);
+});
+
+test('review rejects duplicate planned visible names even before destination rows exist', () => {
+    const duplicate = structuredClone(review);
+    duplicate.targets[0].buckets.custom.name = '  ' + duplicate.targets[0].buckets.standard.name.toUpperCase() + '  ';
+    assert.throws(() => validateHarnessReview(duplicate), /Duplicate harness bucket name/);
+});
+
 test('pending requests match benchmark and condition references without mistaking model IDs', () => {
     const benchmarks = new Set([1028]), conditions = new Set([22186]);
     assert.equal(referencesHarnessTarget({ results: [{ benchmarkID: 1028 }] }, benchmarks, conditions), true);
@@ -71,9 +112,17 @@ test('private receipts reject Git directories, symlink destinations and overwrit
     const root = await mkdtemp(join(tmpdir(), 'benchpoll-harness-')); t.after(() => rm(root, { recursive: true, force: true }));
     const repo = join(root, 'repo'); await mkdir(join(repo, '.git'), { recursive: true });
     await assert.rejects(openHarnessReceipt(join(repo, 'receipt.json')), /outside every Git/);
-    await symlink(repo, join(root, 'alias'));
+    await symlink(repo, join(root, 'alias'), process.platform === 'win32' ? 'junction' : 'dir');
     await assert.rejects(openHarnessReceipt(join(root, 'alias', 'receipt.json')), /outside every Git/);
-    const destination = join(root, 'receipt.json'), file = await openHarnessReceipt(destination); await file.close();
-    assert.equal((await stat(destination)).mode & 0o777, 0o600);
-    await assert.rejects(openHarnessReceipt(destination), error => error.code === 'EEXIST');
+    await t.test('real receipt durability, permissions and exclusive creation', {
+        skip: process.platform === 'win32' ? 'Directory fsync and POSIX mode checks require a POSIX filesystem' : false
+    }, async () => {
+        const destination = join(root, 'receipt.json'), receipt = await openHarnessReceipt(destination);
+        try { await receipt.write({ phase: 'prepared' }); } finally { await receipt.close(); }
+        assert.deepEqual(JSON.parse(await readFile(destination, 'utf8')), { phase: 'prepared' });
+        assert.equal((await stat(destination)).mode & 0o777, 0o600);
+        await assert.rejects(openHarnessReceipt(destination), error => error.code === 'EEXIST');
+        await symlink(destination, join(root, 'linked-receipt.json'));
+        await assert.rejects(openHarnessReceipt(join(root, 'linked-receipt.json')), error => error.code === 'EEXIST' || error.code === 'ELOOP');
+    });
 });

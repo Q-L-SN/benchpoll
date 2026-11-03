@@ -30,11 +30,17 @@ function valuesRecord(value) {
     return Object.fromEntries(Object.keys(value).sort().map(key => [key, value[key]]));
 }
 
+function sceneURLSlug(scene) {
+    const slug = scene.slug || topicSlug(scene.name);
+    // Preserve the stored 80-character prefix so the alias cannot collide with a shorter valid slug.
+    return slug.length === 80 && /^[a-z0-9]+(?:-[a-z0-9]+)*-$/.test(slug) ? `${slug}scene` : slug;
+}
+
 export function topicSceneURL(topic, scene) {
     const ID = sceneIdentity(Number(topic.categoryID ?? topic.ID));
     const base = topicURL(ID, topic.categoryName ?? topic.name, topic.isPrivate === true || topic.owner_user_ID != null,
         topic.slug || topicSlug(topic.categoryName ?? topic.name));
-    const path = scenePath(base, scene);
+    const path = scenePath(base, scene && { ...scene, slug: sceneURLSlug(scene) });
     if (!path) fail(400, 'invalid_scene_path');
     return path;
 }
@@ -43,7 +49,7 @@ export function serializeTopicScene(row, topic = null) {
     const ID = sceneIdentity(Number(row.context_ID ?? row.contextID ?? row.ID));
     const categoryID = sceneIdentity(Number(row.category_ID ?? row.categoryID));
     const legacy = row.legacy_context_values == null ? null : valuesRecord(row.legacy_context_values);
-    const scene = { ID, contextID: ID, sceneID: ID, categoryID, name: row.name, slug: row.slug,
+    const scene = { ID, contextID: ID, sceneID: ID, categoryID, name: row.name, slug: sceneURLSlug(row),
         description: row.description ?? '', position: Number(row.position ?? 0),
         isDefault: Boolean(Number(row.is_default)), isActive: row.is_active == null || Boolean(Number(row.is_active)),
         ...sceneContext(ID), legacyContextValues: legacy };

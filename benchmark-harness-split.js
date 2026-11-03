@@ -6,6 +6,7 @@ export const canonicalJSON = value => JSON.stringify(value, (_key, item) => item
 export const harnessHash = value => createHash('sha256').update(canonicalJSON(value)).digest('hex');
 const parse = value => typeof value === 'string' ? JSON.parse(value) : value;
 const positive = value => Number.isSafeInteger(Number(value)) && Number(value) > 0;
+const visibleNameKey = value => String(value).normalize('NFKC').trim().replace(/\s+/g, ' ').toLocaleLowerCase('en-US');
 
 export function publicScoreIdentity(score) {
     if (!positive(score.ID) || !positive(score.modelID) || !Number.isFinite(Number(score.rawScore))
@@ -28,9 +29,13 @@ export function validateHarnessReview(review) {
             throw new Error('Invalid or duplicate harness target');
         }
         benchmarks.add(target.benchmarkID); conditions.add(target.conditionID);
+        const names = new Set();
         for (const [key, bucket] of Object.entries(target.buckets)) {
-            if (!/^[a-z-]+$/.test(key) || !bucket.name || bucket.name.length > 192 || !bucket.explanation
+            if (!/^[a-z-]+$/.test(key) || typeof bucket.name !== 'string' || !visibleNameKey(bucket.name) || bucket.name.length > 192 || !bucket.explanation
                 || key !== 'standard' && !/^harness-split-20261103:[a-z-]+$/.test(bucket.conditionKey)) throw new Error('Invalid harness bucket');
+            const name = visibleNameKey(bucket.name);
+            if (names.has(name)) throw new Error('Duplicate harness bucket name');
+            names.add(name);
         }
         for (const score of target.scores) {
             publicScoreIdentity(score);
@@ -65,6 +70,10 @@ export function buildHarnessSplitPlan(state, review) {
         }
         const buckets = Object.entries(target.buckets).map(([key, definition]) => {
             const row = key === 'standard' ? original : conditions.find(row => row.condition_key === definition.conditionKey);
+            for (const conflict of conditions.filter(candidate => candidate !== row && candidate.deleted_at === null
+                && visibleNameKey(candidate.name) === visibleNameKey(definition.name))) {
+                block('destination_condition_name_conflict', { benchmarkID: target.benchmarkID, bucket: key, conditionID: Number(conflict.ID) });
+            }
             if (row && (!validScale(row) || row.deleted_at !== null || row.score_source != null || key !== 'standard'
                 && (Number(row.is_primary) !== 0 || Number(row.is_default) !== 0 || row.name !== definition.name))) {
                 block('destination_condition_changed', { conditionID: Number(row.ID) });

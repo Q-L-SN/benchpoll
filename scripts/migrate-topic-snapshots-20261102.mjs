@@ -7,12 +7,19 @@ import { verifySlugBackup } from './migrate-topic-slugs-20261023.mjs';
 export const TOPIC_SNAPSHOT_MIGRATION = 'topic_snapshots_20261102';
 export async function verifyTopicSnapshotSchema(connection) {
     const [columns] = await connection.execute(`SELECT COLUMN_NAME AS name, DATA_TYPE AS type, COLUMN_TYPE AS definition,
-        IS_NULLABLE AS nullable, CHARACTER_MAXIMUM_LENGTH AS size, COLLATION_NAME AS collation FROM information_schema.COLUMNS
+        IS_NULLABLE AS nullable, CHARACTER_MAXIMUM_LENGTH AS size, COLLATION_NAME AS collation,
+        COLUMN_DEFAULT AS defaultValue, EXTRA AS extra FROM information_schema.COLUMNS
         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'topic_proposal_snapshots'`);
     for (const [name, type] of [['proposal_ID', 'int'], ['revision', 'int'], ['source_topic_ID', 'int'], ['content', 'json'], ['content_hash', 'char']]) {
         if (!columns.some(column => column.name === name && column.type === type && column.nullable === 'NO'
             && (type !== 'int' || column.definition === 'int unsigned')
             && (name !== 'content_hash' || Number(column.size) === 64 && column.collation === 'ascii_bin'))) throw new Error('Proposal snapshot schema is missing or incompatible');
+    }
+    const createdAt = columns.find(column => column.name === 'created_at');
+    if (!createdAt || createdAt.type !== 'datetime' || createdAt.definition !== 'datetime(3)' || createdAt.nullable !== 'NO'
+        || !/^CURRENT_TIMESTAMP\(3\)$/i.test(createdAt.defaultValue ?? '')
+        || !['', 'default_generated'].includes(String(createdAt.extra).toLowerCase())) {
+        throw new Error('Proposal snapshot creation timestamp is missing or incompatible');
     }
     const [keys] = await connection.execute(`SELECT COLUMN_NAME AS name FROM information_schema.KEY_COLUMN_USAGE
         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'topic_proposal_snapshots' AND CONSTRAINT_NAME = 'PRIMARY' ORDER BY ORDINAL_POSITION`);
