@@ -8,10 +8,12 @@ before creation. No recurring deployment task or Actions bridge was installed.
 
 - Source branch: `codex/cloud-handoff-20261101`; the historical `main` was not used.
 - Cloud feature commit: `fa3f4acb97d81091485d00a24ce21e1b58ce2a40`.
-- Deployed application commit: `5a8f096fda624faa0ed69958facc6b040283deec`.
+- Base application commit: `5a8f096fda624faa0ed69958facc6b040283deec`.
+- Deployed transport follow-up: `9361ce922839aea8981ac36103cc55a4202db6ca`.
 - Release: `unified-loading-20261103-fa3f4ac`.
 - Application installation: `2026-11-03T13:42:07.200Z`.
 - ARC migration verification: `2026-11-03T13:44:52.457Z`.
+- One-file transport installation: `2026-11-03T14:08:05.271Z`.
 
 The combined lifecycle, proposal snapshot, named scene URL, mobile controls,
 experimental estimation, loading and ARC harness changes are installed. The
@@ -103,3 +105,21 @@ and request deadlines retain their 60-second and 300-second defaults; proxy
 deadlines and mutation retry behavior are unchanged. A regression test evaluates
 the actual HTTPS server options. See the [Node HTTP timeout documentation](https://nodejs.org/api/http.html#serverkeepalivetimeout)
 and [Nginx upstream idle timeout](https://nginx.org/en/docs/http/ngx_http_upstream_module.html#keepalive_timeout).
+
+The guarded one-file follow-up `upstream-idle-20261103-9361ce9` was installed at
+14:08:05 UTC from commit `9361ce9`. It backed up `server.js` separately and did
+not rerun migrations, rebuild assets or change production configuration. All
+244 guarded paths matched the base release plus the explicit server-file
+override. Its private receipt and backup are retained alongside the base
+release's server-side artifacts. Use this composite verification baseline;
+the original release's server hash is intentionally superseded.
+
+The four focused transport tests passed on Windows and production Linux; syntax
+and lint checks passed. Two consecutive public smoke runs after installation
+passed the API checks and all three browser/viewport combinations (Chromium
+1440/390 and WebKit 390), including the actual mobile ranking panel. Screenshots
+were reviewed. At 14:11:31 UTC the application had no automatic restart, the
+score-sync timer was active, and no Nginx error or application error-priority
+journal entry occurred after healthy startup. Nginx did record brief connection
+failures during the deliberate 14:08:03-04 service restart. This short observation
+window is not a guarantee against all future 502s or event-loop stalls.

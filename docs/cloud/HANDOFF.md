@@ -7,9 +7,10 @@ The combined 2026-11-03 release is now deployed. The owner asked the local
 desktop agent to deploy the GitHub changes because cloud environment setup was
 blocked. Application commit `5a8f096fda624faa0ed69958facc6b040283deec` includes
 the cloud changes and five pre-release correctness/safety fixes. The snapshot
-table and reviewed ARC condition split are installed. A follow-up transport
-hardening sets the HTTPS keep-alive idle timeout to 65 seconds; see the rollout
-note for the reproduced reset race and verification. Read
+table and reviewed ARC condition split are installed. Deployed follow-up commit
+`9361ce922839aea8981ac36103cc55a4202db6ca` sets the HTTPS keep-alive idle timeout
+to 65 seconds; see the rollout note for the reproduced reset race and bounded
+verification. Read
 [`../releases/20261103-local-rollout.md`](../releases/20261103-local-rollout.md)
 before any further production work; do not repeat the migrations based on the
 older pending-release notes. This does not establish cloud VPN/TCP access.
@@ -116,12 +117,15 @@ on the server. Restore that note privately before any authorized production work
 The last disk check showed about 12 GiB free on a 77 GiB volume. Do not create
 another multi-gigabyte rehearsal database without checking the disk reserve.
 
-Last verified application release: `unified-loading-20261103-fa3f4ac`, installed
+Base application release: `unified-loading-20261103-fa3f4ac`, installed
 `2026-11-03T13:42:07.200Z` (21:42:07 Asia/Shanghai), at commit `5a8f096`.
 It changed 96 files within a 99-file reviewed allowlist. The additive snapshot
 table was verified before installation; the ARC correction completed at
 `2026-11-03T13:44:52.457Z`. Application and score-sync timer were restored and
-health checks passed. The encrypted handoff still contains historical release
+health checks passed. The latest one-file follow-up is
+`upstream-idle-20261103-9361ce9`, installed `2026-11-03T14:08:05.271Z`, at commit
+`9361ce9`. Verify the base manifest plus that explicit server-file override;
+the original server hash has been superseded. The encrypted handoff still contains historical release
 receipts plus the SSH key and trusted host identity; use the current rollout
 note for deployment state. Verify host identity; never disable host-key checks.
 
@@ -151,8 +155,10 @@ supplied. See `docs/cloud-runtime.md`. Header-specific local checks passed
 18 Chromium/WebKit cases at 320,
 390 and 1440 px; search/short-directory regressions passed 60 cases. Public
 header checks passed 6 desktop/mobile cases, including both directions, reversals
-and reduced motion. Screenshots and logs are retained locally; current release
-receipts are included in the encrypted material.
+and reduced motion. These are the original handoff checks; the newer deployment
+checks are in `docs/releases/20261103-local-rollout.md`. Screenshots and logs are
+retained locally; the encrypted material contains historical receipts, while
+the 2026-11-03 deployment receipts remain privately on the production server.
 
 Some earlier public browser runs waited too long for ranking previews; the
 header test now waits for header readiness, not unrelated preview data. This
