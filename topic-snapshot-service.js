@@ -126,6 +126,7 @@ export function createProposalPreviewService({ db, rankingCache, readProposal,
         if (!body || typeof body !== 'object' || Array.isArray(body)
             || Object.keys(body).some(key => !['proposalID', 'revision', 'sceneKey', 'entries', 'scoreMode', 'reasoning', 'harness'].includes(key))) fail(400, 'invalid_topic_proposal_preview');
         const { proposal, snapshot } = await read(userID, { proposalID: body.proposalID, revision: body.revision });
+        if (proposal.status === 'open' && !proposal.isMine && body.entries !== undefined) fail(403, 'proposal_weights_owner_only');
         const scene = body.sceneKey === undefined ? snapshot.scenes.find(item => item.isDefault)
             : snapshot.scenes.find(item => item.key === body.sceneKey);
         if (!scene) fail(404, 'topic_scene_not_found');
@@ -152,6 +153,7 @@ export function createProposalPreviewService({ db, rankingCache, readProposal,
         return privateTopicTransaction(db, userID, key, 'copy_topic_proposal', request, async (connection, owner) => {
             const proposal = await readProposal(connection, request.proposalID, owner);
             if (proposal.revision !== request.revision) fail(409, 'topic_proposal_changed');
+            if (proposal.status === 'open' && !proposal.isMine && request.sceneDrafts.length) fail(403, 'proposal_weights_owner_only');
             const saved = await loadSnapshot(connection, proposal.proposalID, proposal.revision);
             if (!saved) fail(404, 'topic_proposal_preview_unavailable');
             const snapshot = structuredClone(saved.snapshot), keys = new Set();

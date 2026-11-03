@@ -40,7 +40,7 @@ export function createPrivateTopicEditor({ beforeOpen = async () => true, onSave
             <div id="topic-editor-scenes"></div><p id="topic-editor-scene-note" class="bp-topic-editor-hint"></p>
         </section>
         <p id="create-topic-status" role="status" hidden></p>
-        <div id="topic-editor-delete-confirmation" hidden><p>Delete this private topic and all its saved scene weights? Published proposal snapshots and other private copies will remain.</p><button id="topic-editor-confirm-delete" type="button">Delete topic</button><button id="topic-editor-cancel-delete" type="button">Keep topic</button></div>
+        <div id="topic-editor-delete-confirmation" hidden><p>Delete this private topic and all its saved scene weights?</p><p id="topic-editor-delete-impact"></p><button id="topic-editor-confirm-delete" type="button">Delete topic</button><button id="topic-editor-cancel-delete" type="button">Keep topic</button></div>
         <footer><button id="topic-editor-delete" type="button" hidden>Delete topic</button><a id="topic-editor-propose" hidden>Propose as public</a><span class="bp-topic-editor-spacer"></span><button type="button" data-close-create>Cancel</button><button id="create-topic-submit" class="bp-topic-editor-primary" type="submit">Save topic</button></footer>
     </form>`;
     if (!dialog.isConnected) document.body.append(dialog);
@@ -109,7 +109,13 @@ export function createPrivateTopicEditor({ beforeOpen = async () => true, onSave
     for (const close of dialog.querySelectorAll('[data-close-create]')) close.addEventListener('click', () => { if (!busy) dialog.close(); });
     dialog.addEventListener('cancel', event => { if (busy) event.preventDefault(); });
     dialog.addEventListener('close', () => { sequence++; trigger?.focus({ preventScroll: true }); });
-    $('#topic-editor-delete').addEventListener('click', () => { $('#topic-editor-delete-confirmation').hidden = false; $('#topic-editor-cancel-delete').focus(); });
+    $('#topic-editor-delete').addEventListener('click', () => {
+        $('#topic-editor-delete-impact').textContent = (topic?.hasCollectingProposal
+            ? 'This will also withdraw your proposal if it is still collecting support. '
+            : 'Any proposal still collecting support will also be withdrawn. ')
+            + 'Proposals already in review, published topics and other private copies will remain.';
+        $('#topic-editor-delete-confirmation').hidden = false; $('#topic-editor-cancel-delete').focus();
+    });
     $('#topic-editor-cancel-delete').addEventListener('click', () => { $('#topic-editor-delete-confirmation').hidden = true; $('#topic-editor-delete').focus(); });
     $('#topic-editor-propose').addEventListener('click', event => {
         if (busy || JSON.stringify(payload()) !== savedDraft) { event.preventDefault(); message('Save your changes before proposing this topic. Only saved settings are published.'); }

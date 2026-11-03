@@ -8,13 +8,13 @@ import { modelBarColor } from './workspace/score-colors.js';
 import { referenceIssueMessage } from './workspace/topic-references.js';
 import { isTopicReference, topicLabelText, topicLabelParts, renderTopicLabel, TOPIC_ICON_FONT } from './shared/topic-label.js';
 import { readRecentTopics } from './navigation/preferences.js';
-import { orderedScenes, sceneURL, searchTopicGroups } from './navigation/scenes.js';
-import { mountSegmentedControl, mountDisclosureChevron } from './shared/ui-components.js';
+import { orderedScenes, sceneURL, searchTopicGroups, sceneMatchSummary } from './navigation/scenes.js';
+import { mountSegmentedControl } from './shared/ui-components.js';
 import { mountFittedHeadline } from './shared/fitted-headline.js';
 import { createModelSearch } from './shared/model-search.js';
 import { createFloatingSearchLayer } from './shared/floating-search-layer.js';
 import { normalizeModelFocusTarget } from './workspace/model-focus-target.js';
-import { topicURL, sceneSummary } from './shared/topics.js';
+import { topicURL } from './shared/topics.js';
 import { createPrivateTopicEditor } from './shared/private-topic-editor.js';
 import { createIdentityAvatar as avatar, createTopicCreator } from './shared/topic-identity.js';
 import { AVAILABLE_INFERENCE_VERSION } from './shared/available-score.js';
@@ -33,15 +33,15 @@ const listStatus = $('#topics-status');
 const announcement = $('#topics-announcement');
 const filters = { scoreMode: 'available', reasoning: false, harness: false, availableInferenceVersion: AVAILABLE_INFERENCE_VERSION };
 const cards = new Map();
-const expandedSearchTopics = new Set();
-let searchExpansionScope = '';
+const scenesDialog = $('#topic-scenes-dialog'), scenesGrid = $('#topic-scenes-grid');
+let openSceneTopicID = null;
 const cardKey = topic => topic.sceneID == null ? String(topic.ID) : `${topic.ID}:scene:${topic.sceneID}`;
 const sceneRequest = topic => topic.sceneID == null ? {} : { sceneID: Number(topic.sceneID) };
 
 function topicsWithScenes(topics) {
     return topics.flatMap(topic => [topic, ...orderedScenes(topic.scenes).map(scene => ({ ...topic,
         sceneID: Number(scene.ID), sceneName: scene.name, topicName: topic.name,
-        name: `${topic.name} / ${scene.name}`, description: sceneSummary(topic, scene),
+        name: scene.name, description: '', creator: null,
         url: scene.url || sceneURL(canonicalTopicURL(topic), scene), scenes: [], isDefaultScene: scene.isDefault === true
     }))]);
 }
@@ -177,12 +177,14 @@ function createCard(topic) {
     const summary = element('p', 'th-topic-summary', topic.description);
     summary.dataset.tooltip = topic.description || '';
     identity.append(title);
-    const sceneToggle = button('Show scenes', 'chevron-down', 'th-scene-toggle');
-    mountDisclosureChevron(sceneToggle);
+    const sceneToggle = button('Show scenes', 'arrow-up-right-from-square', 'th-scene-toggle');
     sceneToggle.prepend(element('span'));
     sceneToggle.hidden = true;
+    sceneToggle.setAttribute('aria-haspopup', 'dialog');
+    sceneToggle.setAttribute('aria-controls', 'topic-scenes-dialog');
     delete sceneToggle.dataset.tooltip;
-    heading.append(identity, summary, creator);
+    heading.append(identity);
+    if (topic.sceneID == null) heading.append(summary, creator);
     if (topic.isPrivate && topic.sceneID == null) {
         const edit = button('Edit private topic', 'pen-to-square', 'th-quiet th-topic-edit');
         edit.addEventListener('click', event => { event.stopPropagation(); void privateTopicEditor.open(topic.ID, edit); });
@@ -227,13 +229,7 @@ function createCard(topic) {
     };
     card.addEventListener('click', event => { if (event.button === 0) activateCard(event); });
     card.addEventListener('auxclick', event => { if (event.button === 1) activateCard(event); });
-    sceneToggle.addEventListener('click', () => {
-        const key = cardKey(state.topic);
-        if (expandedSearchTopics.has(key)) expandedSearchTopics.delete(key);
-        else expandedSearchTopics.add(key);
-        filterTopics();
-        sceneToggle.focus({ preventScroll: true });
-    });
+    sceneToggle.addEventListener('click', () => openScenes(state));
     previous.addEventListener('click', () => moveModels(state, -1));
     next.addEventListener('click', () => moveModels(state, 1));
     retryPage.addEventListener('click', () => {
@@ -268,11 +264,53 @@ function updateCardMetadata(state, topic) {
     }
     const creator = topic.creator ? createTopicCreator(topic.creator, 'th-creator') : element('span', 'th-creator');
     creator.hidden = !topic.creator;
-    state.card.querySelector('.th-creator').replaceWith(creator);
+    state.card.querySelector('.th-creator')?.replaceWith(creator);
     const summary = state.card.querySelector('.th-topic-summary');
-    summary.textContent = topic.description || ''; summary.dataset.tooltip = topic.description || '';
+    if (summary) { summary.textContent = topic.description || ''; summary.dataset.tooltip = topic.description || ''; }
     state.visual.setAttribute('aria-label', `${topic.name} preview`);
 }
+
+function renderScenes() {
+    const parent = cards.get(String(openSceneTopicID));
+    if (!parent?.topic.scenes?.length) { scenesDialog.close(); return; }
+    $('#topic-scene-dialog-title').textContent = parent.topic.name;
+    const matching = new Set((parent.matchingScenes ?? []).map(scene => Number(scene.ID)));
+    const states = orderedScenes(parent.topic.scenes).map(scene => cards.get(`${parent.topic.ID}:scene:${scene.ID}`)).filter(Boolean);
+    scenesGrid.replaceChildren(...states.map(state => state.card));
+    for (const state of states) {
+        state.card.hidden = false;
+        state.card.classList.toggle('is-search-match', matching.has(state.topic.sceneID));
+        if (visibility) { visibility.unobserve(state.card); visibility.observe(state.card); }
+        else { state.visible = true; enqueue(state); }
+        if (state.status === 'loaded') renderChart(state);
+    }
+    return states.find(state => matching.has(state.topic.sceneID));
+}
+
+function openScenes(state) {
+    openSceneTopicID = state.topic.ID;
+    scenesDialog.showModal();
+    const matched = renderScenes();
+    scenesGrid.scrollTop = 0;
+    matched?.card.scrollIntoView({ block: 'start', behavior: 'instant' });
+}
+
+$('#topic-scenes-close').addEventListener('click', () => scenesDialog.close());
+scenesDialog.addEventListener('click', event => {
+    const box = scenesDialog.getBoundingClientRect();
+    if (event.target === scenesDialog && (event.clientX < box.left || event.clientX > box.right
+        || event.clientY < box.top || event.clientY > box.bottom)) scenesDialog.close();
+});
+scenesDialog.addEventListener('close', () => {
+    const parent = cards.get(String(openSceneTopicID));
+    openSceneTopicID = null;
+    for (const state of cards.values()) if (state.topic.sceneID != null) {
+        state.card.hidden = true; state.visible = false;
+        state.job?.controller.abort(); state.locateController?.abort();
+        if (state.status === 'loading') { state.status = 'idle'; renderCardState(state); }
+    }
+    if (parent && !parent.card.hidden) parent.sceneToggle.focus({ preventScroll: true });
+});
 
 function renderCardState(state) {
     state.referenceNotice.hidden = state.status !== 'loaded' || !state.preview?.referenceIssues?.length;
@@ -780,24 +818,21 @@ function filterTopics() {
     const query = $('#topic-search').value.trim().toLocaleLowerCase();
     const topics = topicCollection([...cards.values()].map(state => state.topic).filter(topic => topic.sceneID == null), directoryView,
         readRecentTopics(profile?.userID ?? null), profile?.userID ?? null);
-    const scope = `${boundAccountID}:${directoryView}:${query}`;
-    if (scope !== searchExpansionScope) { expandedSearchTopics.clear(); searchExpansionScope = scope; }
-    const sceneDisclosures = new Set();
-    const matches = directoryView === 'search' ? searchTopicGroups(topics, query).flatMap(group => {
-        const state = cards.get(cardKey(group.topic));
-        const allScenes = orderedScenes(group.topic.scenes);
-        const expanded = expandedSearchTopics.has(cardKey(group.topic));
-        if (group.topicMatch && allScenes.length > group.scenes.length) {
-            sceneDisclosures.add(state);
-            state.sceneToggle.querySelector('span').textContent = `Scenes (${allScenes.length})`;
-            state.sceneToggle.setAttribute('aria-label', `${expanded ? 'Hide expanded' : 'Show'} scenes in ${group.topic.name}`);
-            state.sceneToggle.setAttribute('aria-expanded', String(expanded));
-            state.sceneToggle.setAttribute('aria-controls', allScenes.map(scene => cards.get(`${group.topic.ID}:scene:${scene.ID}`).card.id).join(' '));
-        }
-        const scenes = group.topicMatch && expanded ? allScenes : group.scenes;
-        return [...(group.topicMatch ? [group.topic] : []), ...scenes.map(scene => cards.get(`${group.topic.ID}:scene:${scene.ID}`).topic)];
-    }) : topics.filter(topic => `${topic.name} ${topic.description ?? ''} ${topic.creator?.name ?? ''}`.toLocaleLowerCase().includes(query));
-    for (const state of cards.values()) state.sceneToggle.hidden = !sceneDisclosures.has(state);
+    const groups = directoryView === 'search' ? searchTopicGroups(topics, query)
+        : topics.filter(topic => `${topic.name} ${topic.description ?? ''} ${topic.creator?.name ?? ''}`.toLocaleLowerCase().includes(query))
+            .map(topic => ({ topic, scenes: [] }));
+    const matches = groups.map(group => group.topic);
+    const matchedScenes = new Map(groups.map(group => [cardKey(group.topic), group.scenes]));
+    for (const state of cards.values()) {
+        state.matchingScenes = matchedScenes.get(cardKey(state.topic)) ?? [];
+        const summary = sceneMatchSummary(state.matchingScenes);
+        state.sceneToggle.hidden = !state.topic.scenes?.length;
+        state.sceneToggle.querySelector('span').textContent = summary || `Scenes (${state.topic.scenes?.length ?? 0})`;
+        state.sceneToggle.classList.toggle('has-matches', Boolean(summary));
+        state.sceneToggle.setAttribute('aria-label', `Show scenes in ${state.topic.name}${summary ? '. ' + summary : ''}`);
+        if (summary) state.sceneToggle.dataset.tooltip = summary;
+        else delete state.sceneToggle.dataset.tooltip;
+    }
     const selected = new Set(matches.map(cardKey));
     const previouslyHidden = new Set();
     for (const state of cards.values()) {
@@ -806,6 +841,11 @@ function filterTopics() {
     }
     const orderedCards = matches.map(topic => cards.get(cardKey(topic)).card);
     for (const state of cards.values()) {
+        if (state.topic.sceneID != null) {
+            if (scenesDialog.open && Number(state.topic.ID) === Number(openSceneTopicID)) continue;
+            state.card.hidden = true; state.visible = false; state.job?.controller.abort();
+            continue;
+        }
         state.card.hidden = !selected.has(cardKey(state.topic));
         if (state.card.hidden) {
             state.visible = false; state.job?.controller.abort();
@@ -817,6 +857,7 @@ function filterTopics() {
     orderedCards.forEach((card, index) => {
         if (grid.children[index] !== card) grid.insertBefore(card, grid.children[index] ?? null);
     });
+    if (scenesDialog.open) renderScenes();
     for (const state of cards.values()) if (!state.card.hidden) {
         if (previouslyHidden.has(state)) {
             // A hide/show within one frame may not produce a new intersection entry.
@@ -1031,7 +1072,8 @@ async function readTopics() {
             state.scrollLeft = state.scroll?.scrollLeft ?? state.scrollLeft;
             updateCardMetadata(state, topic);
             cards.delete(cardKey(topic)); cards.set(cardKey(topic), state);
-            fragment.append(state.card);
+            if (topic.sceneID == null) fragment.append(state.card);
+            else state.card.hidden = true;
         }
         grid.querySelectorAll('.th-server-card').forEach(card => card.remove());
         grid.append(fragment);
@@ -1105,6 +1147,7 @@ async function loadProfile() {
 }
 
 async function accountSignedOut({ signedOut = true } = {}) {
+    scenesDialog.close();
     if (!signedOut && accountSessionEnded) { location.reload(); return; }
     if (signedOut && boundAccountID !== null) {
         accountSessionEnded = true;

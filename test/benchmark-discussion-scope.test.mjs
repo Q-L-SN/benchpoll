@@ -26,8 +26,15 @@ class Element {
         this.textContent = ''; this.value = ''; this.hidden = false; this.isConnected = true;
         this.classList = {
             add: name => { if (!this.className.split(' ').includes(name)) this.className = `${this.className} ${name}`.trim(); },
-            remove: name => { this.className = this.className.split(' ').filter(item => item !== name).join(' '); }
+            remove: name => { this.className = this.className.split(' ').filter(item => item !== name).join(' '); },
+            toggle: (name, enabled) => { this.classList[enabled ? 'add' : 'remove'](name); }
         };
+    }
+    get firstChild() { return this.children[0] ?? null; }
+    insertBefore(child, anchor) {
+        child.remove?.(); child.parentElement = this;
+        const index = this.children.indexOf(anchor);
+        if (index < 0) this.children.push(child); else this.children.splice(index, 0, child);
     }
     setAttribute(name, value) { this.attributes.set(name, String(value)); }
     getAttribute(name) { return this.attributes.get(name) ?? null; }
@@ -113,6 +120,7 @@ function harness({ mobile = false, resolveRequest, sceneOptions = scenes } = {})
         createBenchmarkScoresView: ({ onViewChange }) => ({ reset() { onViewChange(false); }, open() { onViewChange(true); } }),
         pageAccountWriteScope: scope, isAccountWriteError: error => { errors.push(error); return isAccountWriteError(error); }, buildContributionURL: () => '/contribute',
         animateContent() {}, mountDisclosureMotion() {}, setDisclosureOpen() {}, mountDisclosureChevron() {},
+        mountSegmentedControl: () => ({ refresh() {} }), ResizeObserver: class { observe() {} },
         setVisible(element, visible) { element.hidden = !visible; }, relativeDateAge: () => '', loginWithGitHub() {}
     });
     const code = source.replace(/^import[^\r\n]+\r?\n/gm, '')

@@ -114,6 +114,9 @@ body.th-home .bp-profile-editor input:focus { border-color: var(--bp-accent); ba
 .th-scene-toggle { display: inline-flex; justify-self: end; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 0 4px; border: 0; background: transparent; color: var(--bp-muted); font: inherit; font-size: 12px; cursor: pointer; }
 .th-scene-toggle:hover { color: var(--bp-accent); }
 .th-scene-toggle:focus-visible { outline: 2px solid var(--bp-accent); outline-offset: 2px; }
+.th-scene-toggle.has-matches { justify-self: stretch; justify-content: space-between; text-align: left; }
+.th-scene-toggle > span { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-height: 18px; }
+.th-scene-toggle > i { flex-shrink: 0; }
 .th-visual { position: relative; min-width: 0; min-height: 0; isolation: isolate; }
 .th-chart-frame { position: relative; height: 100%; margin-inline: auto; }
 .th-treemap { position: absolute; z-index: 0; inset: 0 0 calc(var(--th-identity-height, 124px) + 1px); overflow: hidden; }
@@ -183,6 +186,14 @@ body.th-home .bp-profile-editor input:focus { border-color: var(--bp-accent); ba
 .th-form-status { margin-top: 12px; color: #7e4a35; font-size: 13px; overflow-wrap: anywhere; }
 .th-form-status a { color: var(--bp-accent); }
 .th-dialog-actions { display: flex; align-items: center; justify-content: end; gap: 22px; margin-top: 24px; }
+.th-home:has(#topic-scenes-dialog[open]) { overflow: hidden; }
+.th-scene-dialog { width: min(1160px, calc(100% - 32px)); max-height: calc(100dvh - 32px); overflow: hidden; padding: 20px; }
+.th-scene-dialog[open] { display: flex; flex-direction: column; }
+.th-scene-dialog > .th-dialog-heading { flex: 0 0 auto; gap: 16px; margin: 0 0 16px; }
+.th-scene-dialog .th-dialog-heading h2 { min-width: 0; overflow-wrap: anywhere; }
+.th-scene-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 16px; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 2px; }
+.th-scene-grid .th-card-identity { max-width: 100%; }
+.th-scene-grid .th-card.is-search-match { border-color: var(--bp-accent); }
 .th-sr-only, .th-skip:not(:focus) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .th-skip:focus { position: fixed; z-index: 40; top: 8px; left: 8px; padding: 10px; background: #fff; color: #252d38; }
 @media (max-width: 1120px) {

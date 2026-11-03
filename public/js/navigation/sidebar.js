@@ -6,8 +6,7 @@ import { postJSON } from '../shared/http.js';
 import { isAccountWriteError, accountWriteError, pageAccountWriteScope } from '../shared/account-identity.js';
 import { animateContent, setVisible } from '../shared/motion.js';
 import { normalizeTopicSummary, sceneSummary } from '../shared/topics.js';
-import { createAction, mountDisclosureChevron } from '../shared/ui-components.js';
-import { orderedScenes, sceneNavigationEntries, sceneURL, searchTopicGroups } from './scenes.js';
+import { sceneURL, searchTopicGroups, sceneMatchSummary } from './scenes.js';
 
 export function createSidebarNavigation({ onNavigate, onLogin, onSessionChange, onCreatePrivate }) {
     const tree = document.getElementById('tree-content');
@@ -41,8 +40,6 @@ export function createSidebarNavigation({ onNavigate, onLogin, onSessionChange, 
     const accessiblePrivateTopics = new Map();
     let catalog = [], catalogLoaded = false, catalogLoading = false, catalogError = false, catalogRequest = 0;
     let searchReturnView = 'popular', creating = false;
-    const expandedSearchTopics = new Set();
-    let searchExpansionScope = '';
 
     const keyFor = entry => contextKey(entry.categoryID, entry.contextValues);
 
@@ -205,10 +202,7 @@ export function createSidebarNavigation({ onNavigate, onLogin, onSessionChange, 
         const active = preferences.view === 'search';
         searchResults.hidden = !active;
         tree.hidden = ['configured', 'search'].includes(preferences.view);
-        const focusedDisclosure = searchResults.contains(document.activeElement) ? document.activeElement.dataset.sceneDisclosure : null;
         searchResults.replaceChildren();
-        const scope = `${account}:${active}:${search.value.trim().toLocaleLowerCase()}`;
-        if (scope !== searchExpansionScope) { expandedSearchTopics.clear(); searchExpansionScope = scope; }
         if (!active) return;
         const matches = searchTopicGroups(visibleTopics(), search.value);
         if (catalogLoading || catalogError || !matches.length) {
@@ -226,37 +220,14 @@ export function createSidebarNavigation({ onNavigate, onLogin, onSessionChange, 
             return link;
         };
         for (const group of matches) {
-            const id = String(group.topic.categoryID), expanded = expandedSearchTopics.has(id);
-            const allScenes = orderedScenes(group.topic.scenes);
-            const [root, ...scenes] = sceneNavigationEntries([{ ...group.topic,
-                scenes: group.topicMatch && expanded ? allScenes : group.scenes }]);
-            let sceneLinks = [];
-            if (group.topicMatch) appendResult(root);
-            if (group.topicMatch && allScenes.length > group.scenes.length) {
-                const toggle = createAction({ label: `Scenes (${allScenes.length})`, icon: 'fa-solid fa-chevron-down',
-                    variant: 'quiet', className: 'bp-scene-search-toggle' });
-                mountDisclosureChevron(toggle);
-                toggle.dataset.sceneDisclosure = id;
-                toggle.setAttribute('aria-label', `${expanded ? 'Hide expanded' : 'Show'} scenes in ${group.topic.categoryName}`);
-                toggle.setAttribute('aria-expanded', String(expanded));
-                toggle.addEventListener('click', () => {
-                    if (expandedSearchTopics.has(id)) expandedSearchTopics.delete(id);
-                    else expandedSearchTopics.add(id);
-                    const open = expandedSearchTopics.has(id);
-                    toggle.setAttribute('aria-expanded', String(open));
-                    toggle.setAttribute('aria-label', `${open ? 'Hide expanded' : 'Show'} scenes in ${group.topic.categoryName}`);
-                    sceneLinks.forEach(link => link.remove());
-                    sceneLinks = sceneNavigationEntries([{ ...group.topic, scenes: open ? allScenes : group.scenes }])
-                        .slice(1).map(appendResult);
-                    let anchor = toggle;
-                    for (const link of sceneLinks) { anchor.after(link); anchor = link; }
-                    updateTreeMarkers();
-                });
-                searchResults.append(toggle);
+            const link = appendResult({ ...group.topic, contextValues: {}, sceneID: null });
+            const summary = sceneMatchSummary(group.scenes);
+            if (summary) {
+                const matches = document.createElement('small'); matches.className = 'bp-scene-matches'; matches.textContent = summary;
+                link.querySelector('.bp-topic-copy').append(matches);
+                link.dataset.tooltip += '\n' + summary;
             }
-            sceneLinks = scenes.map(appendResult);
         }
-        if (focusedDisclosure) searchResults.querySelector(`[data-scene-disclosure="${focusedDisclosure}"]`)?.focus({ preventScroll: true });
         updateTreeMarkers();
         if (catalogLoaded && !scrollReady.search) {
             scrollReady.search = true;
@@ -329,6 +300,34 @@ export function createSidebarNavigation({ onNavigate, onLogin, onSessionChange, 
         scrollFrame = requestAnimationFrame(() => { restoring = false; scrollFrame = null; });
     }
 
+    function revealCurrentTopic() {
+        if (!current) return;
+        let host = preferences.view === 'configured' ? list : preferences.view === 'search' ? searchResults : tree;
+        let selected = host.querySelector('[aria-current="page"]');
+        if (!selected) {
+            search.value = '';
+            setView(current.isPrivate ? 'configured' : 'popular');
+            host = current.isPrivate ? list : tree;
+            selected = host.querySelector('[aria-current="page"]');
+            // The current topic is known even while its directory request is pending.
+            if (!selected) {
+                selected = topicLink(current, 'bp-topic-row selected');
+                selected.setAttribute('aria-current', 'page');
+                host.prepend(selected);
+            }
+        }
+        const box = viewport.getBoundingClientRect(), card = selected.getBoundingClientRect();
+        const top = Math.max(0, viewport.scrollTop + card.top - box.top - (box.height - card.height) / 2);
+        // Set before the drawer becomes visible. Never animate or move page focus.
+        restoring = true;
+        viewport.scrollTo({ top, behavior: 'instant' });
+        preferences.scroll[preferences.view] = viewport.scrollTop;
+        scrollReady[preferences.view] = true;
+        if (scrollFrame !== null) cancelAnimationFrame(scrollFrame);
+        scrollFrame = requestAnimationFrame(() => { restoring = false; scrollFrame = null; });
+    }
+    document.getElementById('config-sidebar')?.addEventListener('sidebar:beforeopen', revealCurrentTopic);
+
     function mark(configured, label) {
         const icon = document.createElement('span');
         icon.className = 'bp-config-mark';
@@ -344,7 +343,7 @@ export function createSidebarNavigation({ onNavigate, onLogin, onSessionChange, 
         const configuredContexts = new Set(items.map(keyFor));
         for (const row of [...tree.querySelectorAll('[data-category-id]'), ...searchResults.querySelectorAll('[data-category-id]')]) {
             const configured = row.dataset.sceneId ? configuredContexts.has(row.dataset.key) : categories.has(Number(row.dataset.categoryId));
-            const selected = ['recent', 'search'].includes(preferences.view) ? current && row.dataset.key === keyFor(current)
+            const selected = preferences.view === 'recent' ? current && row.dataset.key === keyFor(current)
                 : Number(row.dataset.categoryId) === Number(current?.categoryID);
             row.classList.toggle('selected', selected);
             row.setAttribute('aria-current', selected ? 'page' : 'false');

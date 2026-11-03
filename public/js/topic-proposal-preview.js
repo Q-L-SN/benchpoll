@@ -4,13 +4,16 @@ import { pageAccountWriteScope, canonicalAccountID } from './shared/account-iden
 import { openSignIn, installSignInLinks, listenAccountChange } from './shared/sign-in.js';
 import { rankingNumber } from './shared/ranking-number.js';
 import { modelBarColor } from './workspace/score-colors.js';
+import { mountProposalDiscussion } from './shared/proposal-discussion.js';
 
 const $ = selector => document.querySelector(selector);
 const element = (tag, className, text) => { const node = document.createElement(tag); node.className = className; if (text !== undefined) node.textContent = text; return node; };
 const proposalID = Number(location.pathname.match(/^\/topic-proposals\/([1-9]\d*)\/preview\/?$/)?.[1]);
+mountProposalDiscussion(proposalID);
 let proposal, snapshot, selectedKey, sequence = 0, busy = false, copying = false, profile = null, accountBlocked = false;
 const drafts = new Map(), weights = new Map();
 const errors = {
+    proposal_weights_owner_only: 'Only the proposer can adjust weights while support is being collected.',
     topic_proposal_changed: 'This proposal has a new version. Reload it before trying or saving more changes.',
     topic_proposal_not_found: 'This proposal is no longer available.',
     topic_proposal_preview_unavailable: 'This older proposal does not have a configuration snapshot.',
@@ -23,6 +26,7 @@ const errors = {
 };
 const message = error => errors[error.payload?.error] ?? error.message ?? 'Could not complete this request. Try again.';
 const selectedScene = () => snapshot.scenes.find(scene => scene.key === selectedKey);
+const canAdjustWeights = () => !accountBlocked && (proposal?.isMine || proposal?.status !== 'open');
 const selectedEntries = () => drafts.get(selectedKey) ?? selectedScene().entries;
 const readOptions = { timeoutMs: 60000, requireJSON: true };
 async function loadProfile() {
@@ -36,8 +40,16 @@ async function loadProfile() {
     } catch { profile = null; }
 }
 const profileReady = loadProfile();
-listenAccountChange(() => { accountBlocked = true; pageAccountWriteScope.invalidate(); $('#proposal-copy-status').textContent = 'Your account changed. Refresh before saving a private copy.'; });
+listenAccountChange(() => {
+    accountBlocked = true; drafts.clear(); pageAccountWriteScope.invalidate();
+    if (snapshot) { renderPermissions(); renderWeights(); void calculate(); }
+    $('#proposal-copy-status').textContent = 'Your account changed. Refresh before saving a private copy.';
+});
 installSignInLinks();
+function renderPermissions() {
+    $('#proposal-reset').hidden = $('#proposal-calculate').hidden = !canAdjustWeights();
+    $('#proposal-trial-guidance').hidden = !canAdjustWeights();
+}
 function renderScenes() {
     const host = $('#proposal-preview-scenes'); host.replaceChildren(); host.hidden = !snapshot.hasScenes;
     for (const scene of snapshot.scenes) {
@@ -56,7 +68,7 @@ function renderWeights() {
         if (label?.conditionName) name.append(element('small', '', label.conditionName));
         const input = element('input', ''); input.type = 'number'; input.min = '0'; input.max = '100'; input.step = '1';
         input.value = String((current.get(entry.conditionID) ?? 0) / 100); input.dataset.conditionId = String(entry.conditionID);
-        input.disabled = busy;
+        input.disabled = busy || !canAdjustWeights();
         input.setAttribute('aria-label', (label?.name ?? 'Evaluation item') + ' weight (%)');
         input.addEventListener('input', updateTotal); row.append(name, input, element('span', '', '%')); host.append(row);
     }
@@ -71,7 +83,7 @@ function updateTotal() {
     $('#proposal-trial-total').classList.toggle('is-invalid', total !== 10000 && selectedScene().entries.length > 0);
 }
 function captureDraft() {
-    if (!snapshot || !selectedKey) return true;
+    if (!snapshot || !selectedKey || !canAdjustWeights()) return true;
     const entries = readDraft().filter(item => item.weightBasisPoints !== 0);
     const total = entries.reduce((sum, item) => sum + item.weightBasisPoints, 0);
     if (entries.some(item => !Number.isSafeInteger(item.weightBasisPoints) || item.weightBasisPoints < 100 || item.weightBasisPoints > 10000)
@@ -115,7 +127,7 @@ async function calculate() {
         weights.set(sceneKey, data.weights); renderWeights(); $('#proposal-ranking-status').textContent = ''; renderRanking(data);
     } catch (error) { if (request === sequence) { $('#proposal-ranking-status').textContent = message(error); $('#proposal-preview-ranking').replaceChildren(); } }
     finally { if (request === sequence) { busy = false; $('#proposal-calculate').disabled = false;
-        $('#proposal-trial-weights').querySelectorAll('input').forEach(input => { input.disabled = false; });
+        $('#proposal-trial-weights').querySelectorAll('input').forEach(input => { input.disabled = !canAdjustWeights(); });
         $('#proposal-preview-ranking').setAttribute('aria-busy', 'false'); } }
 }
 $('#proposal-trial-form').addEventListener('submit', event => { event.preventDefault(); if (!busy && captureDraft()) void calculate(); });
@@ -147,5 +159,5 @@ try {
     $('#proposal-copy-name').value = snapshot.name;
     $('#proposal-support-link').href = '/topic-proposals#proposal-' + proposalID;
     document.title = snapshot.name + ' - Topic proposal | BenchPoll';
-    $('#proposal-preview-content').hidden = false; renderScenes(); renderWeights(); await calculate();
+    $('#proposal-preview-content').hidden = false; renderPermissions(); renderScenes(); renderWeights(); await calculate();
 } catch (error) { $('#proposal-title').textContent = 'Proposal preview unavailable'; $('#proposal-preview-status').textContent = message(error); }

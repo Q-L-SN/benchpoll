@@ -30,6 +30,9 @@ export function createTaxonomyDrawer(toggle, sidebar) {
             const wasOpen = body.classList.contains('taxonomy-open');
             body.classList.remove('taxonomy-closing');
             body.classList.add('taxonomy-open');
+            // Mobile directory content is display:none while closed. Lay it out and
+            // restore its position synchronously, before the first opening frame.
+            if (!wasOpen) sidebar.dispatchEvent(new CustomEvent('sidebar:beforeopen'));
             if (!wasOpen && !reduced.matches) {
                 setProgress(0);
                 sidebar.getBoundingClientRect();
@@ -50,7 +53,9 @@ export function createTaxonomyDrawer(toggle, sidebar) {
     sidebar.addEventListener('taxonomy:drag', event => {
         const { phase, progress, open } = event.detail;
         if (phase === 'start') {
+            const wasOpen = body.classList.contains('taxonomy-open');
             clear(); body.classList.add('taxonomy-dragging', 'taxonomy-open'); body.classList.remove('taxonomy-closing');
+            if (!wasOpen) sidebar.dispatchEvent(new CustomEvent('sidebar:beforeopen'));
             setProgress(progress);
         } else if (phase === 'move') setProgress(progress);
         else if (phase === 'end') setTaxonomyOpen(open);

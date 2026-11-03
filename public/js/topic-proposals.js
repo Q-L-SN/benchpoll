@@ -589,8 +589,10 @@ export function mountProposalHall() {
         content.append(title, element('p', 'tp-row-description', proposal.description), status, deadline);
         if (proposal.parentTopicID != null) title.before(element('p', 'tp-deadline', `Scene in ${proposal.parentTopicName ?? 'unavailable Topic'}`));
         if (proposal.isMine) content.append(element('span', 'tp-own-label', 'Your proposal'));
-        if (proposal.previewURL) content.append(createAction({ label: 'Preview & try weights', href: proposal.previewURL,
+        if (proposal.previewURL) content.append(createAction({ label: 'Preview proposal', href: proposal.previewURL,
             icon: 'fa-solid fa-chart-column', className: 'tp-row-link' }));
+        content.append(createAction({ label: `Discuss ${proposal.name}`, href: `/topic-proposals/${proposal.proposalID}/preview#discussion`,
+            icon: 'fa-regular fa-comments', iconOnly: true, className: 'tp-row-link' }));
         if (proposal.status === 'approved' && proposal.url) content.append(createAction({ label: proposal.parentTopicID != null ? 'View scene' : 'View Topic',
             href: proposal.url, icon: 'fa-solid fa-arrow-right', className: 'tp-row-link' }));
         const actions = element('div', 'tp-row-actions');

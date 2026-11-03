@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import mysql from 'mysql2/promise';
 import { ensureTopicSnapshotSchema } from '../../scripts/migrate-topic-snapshots-20261102.mjs';
 import { migrateCommunityVersions } from '../../scripts/migrate-community-versions-20261103.mjs';
+import { migrateProposalDiscussions } from '../../scripts/migrate-proposal-discussions-20261103.mjs';
 
 // Explicitly opt-in, loopback-only, synthetic schema. Never connect to an application database.
 export async function createLifecycleDatabase() {
@@ -32,6 +33,7 @@ export async function createLifecycleDatabase() {
             }
             await ensureTopicSnapshotSchema(connection);
             await migrateCommunityVersions(connection, { apply: true });
+            await migrateProposalDiscussions(connection, { apply: true });
             await connection.query('INSERT INTO topic_reference_lock (ID) VALUES (1)');
             await connection.query('INSERT INTO ranking_cache_revisions (ID, epoch, ready) VALUES (1, UUID(), 1), (2, UUID(), 1)');
             for (const ID of ['42', '43', ...Array.from({ length: 31 }, (_, index) => String(1000 + index))]) {

@@ -77,7 +77,7 @@ test('shared page navigation links to proposals while Mine only offers private t
 test('real creator metadata is the only way to show a byline, alongside the topic summary', () => {
     assert.equal((topics.match(/topic\.creator \? createTopicCreator/g) ?? []).length, 2);
     assert.equal((topics.match(/creator\.hidden = !topic\.creator/g) ?? []).length, 2);
-    assert.match(topics, /heading\.append\(identity, summary, creator\)/);
+    assert.match(topics, /if \(topic\.sceneID == null\) heading\.append\(summary, creator\)/);
     assert.match(topics, /frame\.append\(state\.pagination\)/);
     assert.match(topics, /topic\.name\), icon\('chevron-right'\)/);
     assert.match(workspace, /creator\.hidden = !state\.topicCreator/);
@@ -147,7 +147,7 @@ function rootAccountHooks(responses) {
     const source = topics.slice(topics.indexOf('async function loadProfile()'), topics.indexOf('const profileReady = loadProfile();'));
     const hooks = runInNewContext(source + '\n({ loadProfile, accountSignedOut, snapshot: () => ({ profile, accountSessionEnded, boundAccountID }) })', {
         profile: null, profileReadFailed: false, profileLoading: false, accountEpoch: 0,
-        boundAccountID: null, accountSessionEnded: false, cards: new Map(), visibility: null,
+        boundAccountID: null, accountSessionEnded: false, cards: new Map(), visibility: null, scenesDialog: { close() {} },
         pageAccountWriteScope: scope, canonicalAccountID, location: { reload: () => { reloads++; } },
         postJSON: async () => responses.shift(), renderAccount() {}, filterTopics() {}, loadTopics: async () => {}
     });

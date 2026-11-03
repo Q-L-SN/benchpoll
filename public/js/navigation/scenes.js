@@ -33,6 +33,10 @@ export function searchTopicGroups(topics, query) {
 
 export const sceneURL = scenePath;
 
+export function sceneMatchSummary(scenes) {
+    return scenes.length ? `Includes scenes: ${scenes.map(scene => `(${scene.name})`).join(', ')}` : '';
+}
+
 export function matchingScenes(topic, query) {
     const text = String(query).trim().toLocaleLowerCase();
     return orderedScenes(topic.scenes).filter(scene => !text

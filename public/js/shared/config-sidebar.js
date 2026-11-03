@@ -78,6 +78,7 @@ export function createConfigSidebar() {
 
     async function setCollapsed(next, { remember = true } = {}) {
         if (transitioning || collapsed === next || discussionOpen()) return;
+        if (!next) sidebar.dispatchEvent(new CustomEvent('sidebar:beforeopen'));
         collapsed = Boolean(next);
         if (remember) {
             try { globalThis.localStorage.setItem(STORAGE_KEY, String(collapsed)); }

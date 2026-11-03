@@ -151,8 +151,8 @@ test('new benchmark uses the fixed heading action and compact sidebar legal cont
 
 test('empty personal state uses a creation card instead of an inactive mode switch', () => {
     assert.match(html, /id="personal-pie-create"[^>]*hidden/);
-    assert.match(html, /Create your own index/);
-    assert.match(html, /Choose what counts\. Set your weights\./);
+    assert.match(html, /Rank AI your way/);
+    assert.doesNotMatch(html, /Choose what counts\. Set your weights\./);
     assert.match(html, /id="personal-empty-public-return"/);
     assert.match(workspace, /modeSwitch\.hidden = !hasPersonalWeights/);
     assert.match(workspace, /personalPieCreate\.hidden = !showCreatePersonal/);

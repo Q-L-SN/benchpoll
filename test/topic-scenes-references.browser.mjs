@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import { chromium, webkit } from 'playwright';
 import { startConfigSidebarPreview } from './helpers/config-sidebar-fixture-20261022.mjs';
@@ -319,9 +319,9 @@ test('guest references use read-only previews and retain independent scene draft
     assert.deepEqual(fixture.reads.at(-1).contextValues, { scene: '5402' });
 });
 
-test('discussion deep links, summaries and drafts are isolated by scene', async t => {
+for (const width of [390, 1440]) test(`discussion scenes share the workspace selector and all-scenes preserves drafts at ${width}`, async t => {
     const app = await startConfigSidebarPreview(), browser = await chromium.launch({ headless: true });
-    const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce' });
+    const page = await browser.newPage({ viewport: { width, height: 900 }, reducedMotion: 'no-preference' });
     const errors = []; page.on('pageerror', error => errors.push(error.message));
     t.after(async () => { await browser.close(); await app.close(); assert.deepEqual(errors, []); });
     const fixture = await mountWorkspaceFixture(page, app);
@@ -329,6 +329,14 @@ test('discussion deep links, summaries and drafts are isolated by scene', async 
     await page.waitForSelector('#discussion-context [data-scene-id="5402"][aria-selected="true"]');
     assert.ok(fixture.discussions.every(body => body.contextValues.scene === '5402'));
     assert.equal(await page.locator('#posting-context').textContent(), 'Vector images');
+    await page.waitForSelector('#discussion-context[data-ui-ready="true"]');
+    const tabStyle = selector => page.locator(selector).evaluate(node => {
+        const css = getComputedStyle(node);
+        return { color: css.color, background: css.backgroundColor, fontSize: css.fontSize, fontWeight: css.fontWeight,
+            padding: css.padding, minHeight: css.minHeight };
+    });
+    assert.deepEqual(await tabStyle('#discussion-context [aria-selected="true"]'), await tabStyle('#scene-tab-5402'));
+    assert.equal(await page.locator('#discussion-context [data-scene-id="5401"]').innerText(), 'General');
     await page.locator('#discussion-compose-toggle').click();
     await page.locator('#discussion-text').fill('Vector-only draft');
     await page.locator('#discussion-context [data-scene-id="5401"]').click();
@@ -337,8 +345,21 @@ test('discussion deep links, summaries and drafts are isolated by scene', async 
     await page.locator('#discussion-context [data-scene-id="5402"]').click();
     await page.waitForSelector('#discussion-context [data-scene-id="5402"][aria-selected="true"]');
     assert.equal(await page.locator('#discussion-text').inputValue(), 'Vector-only draft');
+    await page.locator('#discussion-all-scenes').click();
+    await page.waitForFunction(() => document.querySelector('#discussion-feed').getAttribute('aria-busy') === 'false');
+    assert.equal(fixture.discussions.at(-1).allScenes, true);
+    assert.equal(fixture.discussions.at(-1).contextValues.scene, '5402');
+    assert.equal(await page.locator('#discussion-context button:enabled').count(), 0);
+    assert.equal(await page.locator('#discussion-context').evaluate(node => getComputedStyle(node).opacity), '0.5');
+    assert.equal(await page.locator('#discussion-text').inputValue(), 'Vector-only draft');
+    await page.screenshot({ path: `${output}/discussion-all-scenes-${width}.png` });
+    await page.locator('#discussion-all-scenes').click();
+    await page.waitForFunction(() => document.querySelector('#discussion-feed').getAttribute('aria-busy') === 'false');
+    assert.equal(fixture.discussions.at(-1).allScenes, false);
+    assert.equal(await page.locator('#discussion-context [data-scene-id="5402"]').getAttribute('aria-selected'), 'true');
     await page.locator('#discussion-text').fill('');
-    await page.locator('#discussion-close').click();
+    if (width <= 760) await page.locator('.bp-mobile-panels [data-mobile-panel="mix"]').click();
+    else await page.locator('#discussion-close').click();
     await page.locator('#scene-tab-5401').click();
     await page.waitForFunction(() => document.getElementById('discussion-entry')?.dataset.discussionCount === '1');
     assert.ok(fixture.summaries.some(body => body.contextValues.scene === '5401'));
@@ -346,7 +367,7 @@ test('discussion deep links, summaries and drafts are isolated by scene', async 
     assert.match(await page.locator('#discussion-entry').getAttribute('href'), /intelligence\/general/);
 });
 
-for (const browserType of [chromium, webkit]) for (const width of [390, 1440]) test(`${browserType.name()} home scene search previews and links share the selected scene at ${width}`, async t => {
+for (const browserType of [chromium, webkit]) for (const width of [390, 1440]) test(`${browserType.name()} home scene search opens a topic dialog with correctly scoped previews at ${width}`, async t => {
     await mkdir(output, { recursive: true });
     const app = await startTopicsPreview(), browser = await browserType.launch({ headless: true, env: localBrowserEnv });
     app.state.topics[0].scenes = [{ ID: 102, name: 'Photon design', description: 'Coding: Laser systems', isDefault: false },
@@ -360,6 +381,9 @@ for (const browserType of [chromium, webkit]) for (const width of [390, 1440]) t
             weights: [{ ...targets[1], conditionID: -16702, type: 'topic', weightBasisPoints: 6000 },
                 ...data.weights.map(weight => ({ ...weight, weightBasisPoints: weight.weightBasisPoints * .4 }))] } });
     });
+    if (process.env.BP_TEST_BUILT === '1') await page.route(app.url + '/', async route => route.fulfill({
+        contentType: 'text/html', body: await readFile('private/index-built.html', 'utf8')
+    }));
     await page.goto(app.url);
     await page.waitForSelector('.th-card[data-topic-id="54"][data-preview-state="loaded"]');
     assert.equal(await page.locator('.th-card[data-topic-id="54"] .th-tile-name .fa-layer-group').count(), 1);
@@ -373,33 +397,72 @@ for (const browserType of [chromium, webkit]) for (const width of [390, 1440]) t
     assert.equal(app.state.requests.some(request => request.path === '/api/get_topic_preview' && request.body.sceneID), false,
         'collapsed scenes do not fetch previews');
     const disclosure = page.locator('.th-card[data-topic-id="1"]:not([data-scene-id]) .th-scene-toggle');
-    assert.equal(await disclosure.getAttribute('aria-expanded'), 'false');
+    assert.equal(await disclosure.getAttribute('aria-haspopup'), 'dialog');
     await disclosure.focus(); await page.keyboard.press('Enter');
     assert.equal(new URL(page.url()).pathname, '/', 'disclosure does not activate card navigation');
-    assert.equal(await disclosure.getAttribute('aria-expanded'), 'true');
-    assert.deepEqual(await page.locator('.th-card[data-scene-id]:visible').evaluateAll(nodes => nodes.map(node => node.dataset.sceneId)), ['101', '102']);
+    const dialog = page.locator('#topic-scenes-dialog');
+    await dialog.waitFor({ state: 'visible' });
+    assert.deepEqual(await dialog.locator('.th-card[data-scene-id]').evaluateAll(nodes => nodes.map(node => node.dataset.sceneId)), ['101', '102']);
+    assert.equal(await page.locator('#topics-grid .th-card[data-scene-id]').count(), 0);
+    assert.deepEqual(await dialog.locator('.th-topic-name').allTextContents(), ['General', 'Photon design']);
+    assert.equal(await dialog.locator('.th-topic-summary, .th-creator').count(), 0);
     await page.locator('.th-card[data-scene-id="101"][data-preview-state="loaded"]').waitFor();
     if (width > 760) await page.locator('.th-card[data-scene-id="102"][data-preview-state="loaded"]').waitFor();
     await page.screenshot({ path: `${output}/home-parent-expanded-${browserType.name()}-${width}.png` });
-    await disclosure.focus(); await page.keyboard.press('Space');
+    await page.keyboard.press('Escape');
+    await dialog.waitFor({ state: 'hidden' });
+    assert.equal(await disclosure.evaluate(node => node === document.activeElement), true);
     assert.equal(await page.locator('.th-card[data-scene-id]:visible').count(), 0);
     await page.screenshot({ path: `${output}/home-parent-collapsed-${browserType.name()}-${width}.png` });
-    await disclosure.click();
     if (!await page.locator('#topic-search').isVisible()) await page.locator('#topic-search-toggle').click();
     await page.locator('#topic-search').fill('Photon');
+    assert.equal(await page.locator('#topics-grid .th-card:visible').count(), 1);
+    assert.equal(await page.locator('#topics-grid .th-card[data-scene-id]').count(), 0);
+    assert.match(await disclosure.textContent(), /Includes scenes: \(Photon design\)/);
+    await disclosure.click();
     const card = page.locator('.th-card[data-scene-id="102"]');
     await card.locator('.th-model').first().waitFor();
-    assert.equal(await page.locator('.th-card:visible').count(), 1);
+    assert.equal(await card.evaluate(node => node.classList.contains('is-search-match')), true);
     assert.equal(new URL(await card.locator('.th-topic-link').getAttribute('href'), app.url).pathname, '/coding/photon-design');
     assert.equal(new URL(await card.locator('.th-model').first().getAttribute('href'), app.url).pathname, '/coding/photon-design');
     assert.ok(app.state.requests.some(request => request.path === '/api/get_topic_preview' && request.body.sceneID === 102));
+    const geometry = await card.locator('.th-model').first().evaluate(model => ({
+        ratio: model.querySelector('.th-model-bar').getBoundingClientRect().height / model.querySelector('.th-model-plot').getBoundingClientRect().height,
+        mask: getComputedStyle(model.closest('.th-visual').querySelector('.th-treemap')).maskImage
+    }));
+    assert.ok(Math.abs(geometry.ratio - .65) < .01, 'the top bar leaves 35% of the plot visible above it');
+    assert.match(geometry.mask, /32%.*76%/, 'the treemap fade stays fixed');
     await page.screenshot({ path: `${output}/home-search-${browserType.name()}-${width}.png` });
+    await page.locator('#topic-scenes-close').click();
+    if (!await page.locator('#topic-search').isVisible()) await page.locator('#topic-search-toggle').click();
     await page.locator('#topic-search').fill('Coding');
-    assert.equal(await disclosure.getAttribute('aria-expanded'), 'false', 'changing the query resets parent expansion');
+    assert.doesNotMatch(await disclosure.textContent(), /Includes scenes/);
     assert.equal(await page.locator('.th-card[data-scene-id]:visible').count(), 0);
     assert.equal(await page.locator('.th-card[data-topic-id="1"]:not([data-scene-id]) .th-topic-name')
         .evaluate(node => node.scrollWidth <= node.clientWidth), true, 'disclosure does not squeeze the short topic name');
     assert.equal(await page.locator('body').evaluate(node => node.scrollWidth <= innerWidth), true);
+});
+
+test('long scene dialogs scroll independently and load only visible scene previews', async t => {
+    const app = await startTopicsPreview(), browser = await chromium.launch({ headless: true, env: localBrowserEnv });
+    app.state.topics[0].scenes = Array.from({ length: 184 }, (_, index) => ({ ID: 2000 + index, name: `Scene ${index + 1}`,
+        description: '', isDefault: index === 0 }));
+    const page = await browser.newPage({ viewport: { width: 320, height: 740 }, reducedMotion: 'reduce' });
+    const errors = []; page.on('pageerror', error => errors.push(error.message));
+    t.after(async () => { await browser.close(); await app.close(); assert.deepEqual(errors, []); });
+    await page.goto(app.url);
+    const trigger = page.locator('.th-card[data-topic-id="1"]:not([data-scene-id]) .th-scene-toggle');
+    await trigger.click();
+    await page.locator('#topic-scenes-grid .th-card').first().locator('.th-model').first().waitFor();
+    assert.equal(await page.locator('#topic-scenes-grid .th-card').count(), 184);
+    const reads = () => app.state.requests.filter(request => request.path === '/api/get_topic_preview' && request.body.sceneID != null);
+    assert.ok(reads().length <= 6, 'opening does not load the entire scene catalogue');
+    await page.locator('#topic-scenes-grid').evaluate(node => { node.scrollTop = node.scrollHeight; });
+    await page.locator('#topic-scenes-grid .th-card').last().locator('.th-model').first().waitFor();
+    assert.ok(reads().some(request => request.body.sceneID === 2183));
+    assert.equal(await page.locator('#topic-scenes-dialog').evaluate(node => node.getBoundingClientRect().width <= innerWidth), true);
+    await page.locator('#topic-scenes-close').click();
+    assert.equal(await trigger.evaluate(node => node === document.activeElement), true);
 });
 
 test('public scene proposals select a parent explicitly and preserve it during edits', async t => {
@@ -433,43 +496,39 @@ test('public scene proposals select a parent explicitly and preserve it during e
     await page.screenshot({ path: `${output}/scene-proposal-390.png` });
 });
 
-for (const width of [390, 1440]) test(`sidebar scene search groups parent matches and navigates to an explicit scene at ${width}`, async t => {
+for (const width of [390, 1440]) test(`sidebar scene search returns parent topics with matching scene summaries at ${width}`, async t => {
     const app = await startConfigSidebarPreview(), browser = await chromium.launch({ headless: true });
     const page = await browser.newPage({ viewport: { width, height: 900 }, reducedMotion: 'reduce' });
     const errors = []; page.on('pageerror', error => errors.push(error.message));
     t.after(async () => { await browser.close(); await app.close(); assert.deepEqual(errors, []); });
-    const fixture = await mountWorkspaceFixture(page, app);
+    await mountWorkspaceFixture(page, app);
     await page.goto(app.url + '/intelligence/general');
     await page.waitForSelector('#scene-tab-5401[aria-selected="true"]');
     await page.locator(width < 760 ? '#taxonomy-toggle' : '#config-sidebar-toggle').click();
     await page.locator('#navigation-search-toggle').click();
     const results = page.locator('#category-search-results');
     await page.locator('#configured-search').fill('Intelligence');
-    const disclosure = results.locator('[data-scene-disclosure="54"]');
-    await disclosure.waitFor();
-    assert.equal(await disclosure.getAttribute('aria-expanded'), 'false');
+    const parent = results.locator('[data-category-id="54"]');
+    await parent.waitFor();
+    assert.equal(await results.locator('.bp-category-search-result').count(), 1);
     assert.equal(await results.locator('[data-scene-id]').count(), 0);
-    await disclosure.focus(); await page.keyboard.press('Space');
-    assert.equal(await disclosure.getAttribute('aria-expanded'), 'true');
-    assert.equal(await results.locator('[data-scene-id]').count(), 7);
-    assert.equal(await results.locator('[data-scene-id]').first().getAttribute('data-scene-id'), '5401');
-    await disclosure.focus(); await page.keyboard.press('Enter');
-    assert.equal(await results.locator('[data-scene-id]').count(), 0);
+    assert.equal(await results.locator('.bp-scene-matches').count(), 0);
     await page.screenshot({ path: `${output}/sidebar-parent-collapsed-${width}.png` });
-    await disclosure.click();
     await page.locator('#configured-search').fill('General');
-    await results.locator('[data-scene-id="5401"]').waitFor();
+    await parent.waitFor();
+    assert.match(await parent.locator('.bp-scene-matches').textContent(), /Includes scenes: \(General\)/);
     assert.equal(await results.locator('[aria-current="page"]').count(), 1);
-    assert.equal(await results.locator('[aria-current="page"]').getAttribute('data-scene-id'), '5401');
+    assert.equal(await results.locator('[aria-current="page"]').getAttribute('data-category-id'), '54');
     await page.locator('#configured-search').fill('Intelligence');
-    assert.equal(await disclosure.getAttribute('aria-expanded'), 'false');
     assert.equal(await results.locator('[data-scene-id]').count(), 0);
     await page.locator('#configured-search').fill('Editable vector output');
-    await results.locator('[data-scene-id="5402"]').waitFor();
-    assert.equal(await results.locator('[data-scene-id]').count(), 2, 'Matching descriptions include public and owned-private scenes');
-    assert.equal(await results.locator('[data-scene-id="5402"]').getAttribute('href'), '/intelligence/vector-images');
-    await results.locator('[data-scene-id="5402"]').click();
-    await page.waitForSelector('#scene-tab-5402[aria-selected="true"]');
-    assert.equal(new URL(page.url()).pathname, '/intelligence/vector-images');
-    assert.equal(fixture.reads.at(-1).contextValues.scene, '5402');
+    await parent.waitFor();
+    assert.equal(await results.locator('.bp-category-search-result').count(), 2, 'Matching scenes reveal public and owned-private parent topics');
+    assert.equal(await results.locator('[data-scene-id]').count(), 0);
+    assert.match(await parent.locator('.bp-scene-matches').textContent(), /Includes scenes: \(Vector images\)/);
+    assert.equal(await parent.getAttribute('href'), '/intelligence/general');
+    await page.screenshot({ path: `${output}/sidebar-scene-matches-${width}.png` });
+    await parent.click();
+    await page.waitForSelector('#scene-tab-5401[aria-selected="true"]');
+    assert.equal(new URL(page.url()).pathname, '/intelligence/general');
 });

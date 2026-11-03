@@ -185,8 +185,8 @@ body.censor-page-body .tab-count { background: var(--bp-fill); color: #fff; }
 .bp-home .bp-welcome-weight-segment.is-teal { background: var(--bp-chart-1-end); }
 .bp-home .bp-welcome-weight-segment.is-yellow { background: var(--bp-chart-3-end); }
 .bp-home .discussion-main { background: var(--bp-surface); }
-.bp-home .discussion-main button { color: var(--bp-purple); }
-.bp-home .discussion-main button:hover { background: var(--bp-hover); }
+.bp-home .discussion-main button:not(.bp-scene-tab) { color: var(--bp-purple); }
+.bp-home .discussion-main button:not(.bp-scene-tab):hover { background: var(--bp-hover); }
 .bp-home .discussion-main .discussion-primary { background: var(--bp-fill); color: var(--bp-fill-ink); }
 .bp-home .discussion-main .discussion-primary:hover { background: var(--bp-fill-hover); }
 .bp-home :is(.discussion-sort button, .discussion-post-actions button)[aria-pressed="true"], .bp-home .mention-suggestions button[aria-selected="true"] { background: var(--bp-selected); color: var(--bp-purple); }
@@ -194,7 +194,7 @@ body.censor-page-body .tab-count { background: var(--bp-fill); color: #fff; }
 .bp-home :is(.discussion-composer, .discussion-filterbar, .discussion-post, .discussion-main select, .discussion-composer textarea, .mention-suggestions) { border-color: var(--bp-line); }
 .bp-home :is(.discussion-post-meta, .discussion-empty, #posting-context, #composer-status, .discussion-heading #category-path, .discussion-post-actions a) { color: var(--bp-muted); }
 .bp-home .discussion-post-meta strong { color: var(--bp-text); }
-.bp-home :is(.discussion-main button, .discussion-main a, .discussion-main textarea):focus-visible { outline-color: var(--bp-purple); }
+.bp-home :is(.discussion-main button:not(.bp-scene-tab), .discussion-main a, .discussion-main textarea):focus-visible { outline-color: var(--bp-purple); }
 .bp-home :is(.bp-model-scores-summary, .bp-model-scores-condition small, .bp-model-score-detail-identity span, .bp-model-score-detail-identity small, .bp-model-score-aggregate small, .bp-model-score-aggregate span, .bp-model-score-sample-index, .bp-model-score-sample-normalized, .bp-model-score-source small, .bp-model-scores-empty) { color: var(--bp-muted); }
 .bp-home :is(.bp-model-scores-condition strong, .bp-model-score-detail-identity strong, .bp-model-score-sample-value) { color: var(--bp-ink); }
 .bp-home :is(.bp-model-score-detail-value, .bp-model-score-source) { color: var(--bp-purple); }

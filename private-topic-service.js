@@ -66,8 +66,12 @@ export async function readPrivateTopicEditor(db, userID, body) {
 
 async function editorResult(connection, row) {
     const catalog = (await loadTopicSceneCatalog(connection, [Number(row.ID)])).get(Number(row.ID));
+    const [collecting] = await connection.execute(`SELECT p.ID FROM topic_proposals p
+        JOIN topic_proposal_snapshots s ON s.proposal_ID = p.ID AND s.revision = p.revision
+        WHERE s.source_topic_ID = ? AND p.user_ID = ? AND p.status = 'open' AND p.withdrawn_at IS NULL
+        AND p.created_at > CURRENT_TIMESTAMP(3) - INTERVAL 14 DAY`, [Number(row.ID), row.owner_user_ID]);
     return { ...serializeTopic(row), ...catalog, hasScenes: catalog.scenes.length > 0,
-        isMine: true, editRevision: privateTopicRevision(row, catalog.scenes) };
+        isMine: true, hasCollectingProposal: collecting.length > 0, editRevision: privateTopicRevision(row, catalog.scenes) };
 }
 
 export async function privateTopicTransaction(db, userID, key, action, payload, operation) {
@@ -150,6 +154,12 @@ export async function deletePrivateTopic(db, userID, body, key) {
         const topic = await privateRow(connection, owner, request.categoryID, true);
         const current = await editorResult(connection, topic);
         if (current.editRevision !== request.expectedRevision) fail(409, 'private_topic_changed');
+        // Proposal support/review transitions share the graph lock. Only the current,
+        // still-collecting snapshot follows deletion; review snapshots stay independent.
+        await connection.execute(`DELETE p FROM topic_proposals p
+            JOIN topic_proposal_snapshots s ON s.proposal_ID = p.ID AND s.revision = p.revision
+            WHERE s.source_topic_ID = ? AND p.user_ID = ? AND p.status = 'open' AND p.withdrawn_at IS NULL
+            AND p.created_at > CURRENT_TIMESTAMP(3) - INTERVAL 14 DAY`, [request.categoryID, owner]);
         await connection.execute(`DELETE p FROM personal_pies p JOIN ranking_contexts rc ON rc.ID = p.context_ID
             WHERE rc.category_ID = ?`, [request.categoryID]);
         await connection.execute('DELETE FROM topic_scenes WHERE category_ID = ?', [request.categoryID]);

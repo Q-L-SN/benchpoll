@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex, follow">
-    <title>Try a Topic proposal - BenchPoll</title>
+    <title>Topic proposal - BenchPoll</title>
     <link rel="icon" href="/favicon.ico" sizes="any">
     <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
     <link rel="stylesheet" href="/css/ui/tokens.css">
@@ -17,19 +17,28 @@
 <body class="pp-page">
     <header class="bp-site-header"><div class="bp-site-header-inner"><a class="bp-site-brand" href="/"><img src="/assets/benchpoll-logo.svg" alt="BenchPoll" width="155" height="32"></a><nav><a href="/topic-proposals">Proposal hall</a><a href="/how-it-works">How it works</a></nav></div></header>
     <main class="pp-main">
-        <header class="pp-heading"><p id="proposal-version">Proposal preview</p><h1 id="proposal-title">Proposal preview</h1><p id="proposal-summary"></p><p class="pp-note">Explore the proposer’s configuration and try your own weights. Trials do not count as support or change public weights.</p><a id="proposal-support-link" href="/topic-proposals">Review and support in the proposal hall</a></header>
+        <header class="pp-heading"><p id="proposal-version">Proposal preview</p><h1 id="proposal-title">Proposal preview</h1><p id="proposal-summary"></p><p class="pp-note">Explore the proposer’s configuration and discuss it below. While support is being collected, only the proposer can adjust weights.</p><a id="proposal-support-link" href="/topic-proposals">Review and support in the proposal hall</a></header>
         <p id="proposal-preview-status" role="status"><span class="bp-loading-indicator" role="status"><span class="bp-spinner" aria-hidden="true"></span><span class="bp-loading-label">Loading proposal</span></span></p>
         <nav id="proposal-preview-scenes" aria-label="Proposal scenes"></nav>
         <div id="proposal-preview-content" class="pp-grid" hidden>
             <section aria-labelledby="trial-weights-title"><header class="pp-section-heading"><h2 id="trial-weights-title">Evaluation weights</h2><button id="proposal-reset" type="button">Reset</button></header>
-                <p class="pp-note">Change percentages, then calculate. The total must be 100%. Set an item to 0 to leave it out of your trial.</p>
+                <p id="proposal-trial-guidance" class="pp-note">Change percentages, then calculate. The total must be 100%. Set an item to 0 to leave it out of your trial.</p>
                 <form id="proposal-trial-form"><div id="proposal-trial-weights"></div><footer class="pp-trial-footer"><output id="proposal-trial-total">100%</output><button id="proposal-calculate" class="pp-primary" type="submit">Calculate</button></footer></form>
 
             </section>
             <section aria-labelledby="trial-ranking-title"><header class="pp-section-heading"><h2 id="trial-ranking-title">Model rankings</h2><label class="pp-score-mode">Scores<select id="proposal-preview-mode"><option value="available">Estimated score</option><option value="range">Score range</option></select></label></header><p id="proposal-ranking-label" class="pp-note">Proposer’s configuration · 1 contributor</p><p id="proposal-ranking-status" role="status"></p><div id="proposal-preview-ranking"></div></section>
             <form id="proposal-copy-form"><h3>Keep your own version</h3><label for="proposal-copy-name">Private Topic name</label><input id="proposal-copy-name" required maxlength="128" autocomplete="off"><p class="pp-note">Copies every scene, including your trial changes. You can edit it further in your private workspace.</p><button id="proposal-copy" type="submit">Save private copy</button><p id="proposal-copy-status" role="status"></p></form>
         </div>
-        <noscript><p>Enable JavaScript to preview a proposal and try its weights.</p></noscript>
+        <section id="discussion" class="pp-discussion" aria-labelledby="proposal-discussion-title">
+            <header class="pp-section-heading"><h2 id="proposal-discussion-title">Discuss this proposal</h2><select id="proposal-discussion-sort" aria-label="Sort discussions"><option value="hot">Hot</option><option value="new">Newest</option></select></header>
+            <p class="pp-note">Discuss the proposed topic, scenes and weights. Comments do not count as support votes.</p>
+            <a id="proposal-discussion-back" href="#discussion" hidden>← All discussions</a>
+            <div id="proposal-discussion-feed" aria-live="polite"></div>
+            <p id="proposal-discussion-status" role="status"></p>
+            <button id="proposal-discussion-more" type="button" hidden>Load more</button>
+            <form id="proposal-discussion-form"><label id="proposal-discussion-label" for="proposal-discussion-text">Write a message</label><textarea id="proposal-discussion-text" required minlength="2" maxlength="4000" rows="3" placeholder="Share your perspective on this proposal"></textarea><button id="proposal-discussion-submit" class="pp-primary" type="submit">Post message</button></form>
+        </section>
+        <noscript><p>Enable JavaScript to preview and discuss a proposal.</p></noscript>
     </main>
 </body>
 </html>

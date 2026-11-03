@@ -15,6 +15,7 @@ import { readWriteIdentity } from '../../write-idempotency.js';
 import { scenePath } from '../../public/js/shared/topics.js';
 import { selectSearchScene } from '../../search-presentation.js';
 import { ensureTopicRootContext } from '../../topic-scenes-service.js';
+import { listDiscussion, createDiscussionPost, voteDiscussion, deleteDiscussionPost } from '../../discussion-service.js';
 
 export async function startLifecyclePreview() {
     const database = await createLifecycleDatabase();
@@ -44,10 +45,13 @@ export async function startLifecyclePreview() {
             get_private_topic_editor: () => readPrivateTopicEditor(db, state.userID, body),
             get_topic_proposals: () => proposals.list(state.userID, body),
             get_topic_proposal_snapshot: () => previews.read(state.userID, body),
-            preview_topic_proposal: () => previews.preview(state.userID, body)
+            preview_topic_proposal: () => previews.preview(state.userID, body),
+            get_discussion: () => listDiscussion(db, state.userID, body)
         };
         if (readonly[action]) return res.json(await readonly[action]());
         assertAccountWriteOwner(state.userID, body.expectedUserID); delete body.expectedUserID;
+        const discussionWrites = { create_discussion_post: createDiscussionPost, vote_discussion: voteDiscussion, delete_discussion_post: deleteDiscussionPost };
+        if (discussionWrites[action]) return res.json(await discussionWrites[action](db, state.userID, body));
         if (body.csrfToken !== csrfToken) throw { status: 403, body: { error: 'privacy_form_expired' } };
         delete body.csrfToken;
         const key = readWriteIdentity(req);

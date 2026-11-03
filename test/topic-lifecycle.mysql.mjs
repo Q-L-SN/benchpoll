@@ -103,7 +103,13 @@ test('private topics, immutable proposals, trial rankings and publication in iso
         const preview = await previews.preview(null, { proposalID: published.proposalID, revision: 2 });
         assert.equal(preview.models.length, 3); assert.equal(preview.models[0].modelName, 'Model 1');
         assert.deepEqual(await counts(), before);
-        await assert.rejects(previews.preview(null, { proposalID: published.proposalID, entries: [{ conditionID: 3, weightBasisPoints: 10000 }] }), rejects('invalid_proposal_trial_entries'));
+        for (const userID of [null, '43']) await assert.rejects(previews.preview(userID,
+            { proposalID: published.proposalID, entries: [{ conditionID: 1, weightBasisPoints: 10000 }] }), rejects('proposal_weights_owner_only'));
+        await assert.rejects(previews.preview('42', { proposalID: published.proposalID, entries: [{ conditionID: 3, weightBasisPoints: 10000 }] }), rejects('invalid_proposal_trial_entries'));
+        assert.equal((await previews.preview('42', { proposalID: published.proposalID,
+            entries: [{ conditionID: 1, weightBasisPoints: 10000 }] })).isTrial, true);
+        await assert.rejects(previews.copy('43', { proposalID: published.proposalID, revision: 2, name: 'Not allowed',
+            sceneDrafts: [{ key: 'default', entries: [] }] }, randomUUID()), rejects('proposal_weights_owner_only'));
         const key = randomUUID(), request = { proposalID: published.proposalID, revision: 2, name: 'My copy' };
         const copy = await previews.copy('43', request, key);
         assert.deepEqual(await previews.copy('43', request, key), copy);
@@ -114,13 +120,15 @@ test('private topics, immutable proposals, trial rankings and publication in iso
         assert.equal((await readProposal(pool, published.proposalID, '43')).supported, false);
     });
 
-    await t.test('deleted originals leave snapshots usable and release names, while removed scene references stay unavailable', async () => {
+    await t.test('thirty supporters enter review; deletion then preserves its independent snapshot', async () => {
         const target = await create('Removable target');
         const removed = target.scenes[1].ID;
         const request = { ...edit(target), scenes: [edit(target).scenes[0]] };
         await savePrivateTopic(pool, '42', request, randomUUID());
         assert.equal((await loadTopicReferenceTargets(pool, '42')).some(item => item.contextID === removed), false);
         assert.equal((await pool.execute('SELECT ID FROM ranking_contexts WHERE ID = ?', [removed]))[0].length, 1);
+        for (let i = 0; i < 30; i++) published = await proposals.support(String(1000 + i), { proposalID: published.proposalID, revision: 2 }, randomUUID());
+        assert.equal(published.status, 'pending');
         const deleting = { categoryID: source.ID, expectedRevision: source.editRevision }, key = randomUUID();
         await deletePrivateTopic(pool, '42', deleting, key);
         assert.deepEqual(await deletePrivateTopic(pool, '42', deleting, key), { categoryID: source.ID, deleted: true });
@@ -143,8 +151,7 @@ test('private topics, immutable proposals, trial rankings and publication in iso
         await assert.rejects(captureTopicSnapshot(pool, '43', referencing.ID), rejects('proposal_private_or_unavailable_reference'));
     });
 
-    await t.test('thirty other supporters enter review and the actual approval handler imports the frozen scenes with one contributor', async () => {
-        for (let i = 0; i < 30; i++) published = await proposals.support(String(1000 + i), { proposalID: published.proposalID, revision: 2 }, randomUUID());
+    await t.test('the actual approval handler imports the frozen scenes with one contributor after source deletion', async () => {
         assert.equal(published.status, 'pending');
         const sourceText = await readFile(new URL('../server.js', import.meta.url), 'utf8');
         const context = vm.createContext({ crypto, mysql, TOPIC_SCENE_SQL_PREVIEW, canonicalAccountID, assertPublicTopicAvailable,

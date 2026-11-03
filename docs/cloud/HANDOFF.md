@@ -20,6 +20,17 @@ mobile discussion page. See [`../community-versions-20261103.md`](../community-v
 for the electorate rules, additive schema requirement and narrow release
 exporter. Version and fallback controls live in the contribution dialog.
 
+The subsequent homepage update opens scenes in a dialog. Homepage/sidebar
+search returns parent topics with matching scene names; it no longer expands
+scene cards into the result list. Homepage bars use 65% of the plot, retaining
+the previous treemap fade. See [`../scene-directory-20261103.md`](../scene-directory-20261103.md).
+
+That follow-up also adds proposal discussions, collecting/review deletion rules,
+all-scene discussion browsing, emphasized feedback tips and instant sidebar
+positioning. Read [`../scene-community-20261103.md`](../scene-community-20261103.md)
+for the new discussion schema prerequisite and the combined narrow exporter.
+Neither this follow-up nor `935f2b6` is confirmed deployed by this cloud session.
+
 ## Repositories And Starting Point
 
 - Source: <https://github.com/Q-L-SN/benchpoll>, branch `codex/cloud-handoff-20261101`.
@@ -85,8 +96,8 @@ Do not copy production `.env` or the production TLS private key into cloud setup
 
 - The homepage is a flat topic directory, with optional ONE-level scenes.
   A topic with scenes has exactly one default scene, first in the list.
-- Topic-only search matches keep child scenes collapsed; direct scene matches
-  appear immediately. References must select a specific scene when one exists.
+- Homepage and sidebar search show parent topics with matching scene names.
+  Homepage scenes open in a dialog. References must select a specific scene when one exists.
 - Topic references expand dynamically before ranking. Public indices use public
   target weights; personal indices prefer the viewer's saved target weights.
   Private targets cannot enter public compositions. Cycles are rejected and

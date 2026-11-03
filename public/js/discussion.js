@@ -11,7 +11,7 @@ import { createBenchmarkScoresView } from './workspace/benchmark-scores.js?v=mod
 import { pageAccountWriteScope, isAccountWriteError } from './shared/account-identity.js';
 import { setDiscussionEntryView, readDiscussionEntryContext } from './workspace/discussion-entry.js';
 import { createDiscussionAutoLoader } from './shared/discussion-auto-load.js';
-import { createAction, mountDisclosureChevron } from './shared/ui-components.js';
+import { createAction, mountDisclosureChevron, mountSegmentedControl } from './shared/ui-components.js';
 import { profileAvatarURL } from './shared/profile-editor.js';
 import { publicGitHubURL } from './shared/topic-identity.js';
 import { hasAADisplayRestriction, AA_DISPLAY_MESSAGE } from './shared/aa-ranking-policy.js';
@@ -23,7 +23,7 @@ const state = { categoryID: params.has('categoryID') ? Number(params.get('catego
     benchmarkID: params.has('benchmarkID') ? Number(params.get('benchmarkID')) : null,
     conditionID: params.has('conditionID') ? Number(params.get('conditionID')) : null,
     threadID: params.has('threadID') ? Number(params.get('threadID')) : null,
-    contextID: null, sort: 'hot', allCategories: false, offset: 0, mentions: [], authenticated: false };
+    contextID: null, sort: 'hot', allCategories: false, allScenes: false, offset: 0, mentions: [], authenticated: false };
 let loadSequence = 0;
 let viewSequence = 0;
 let profileSequence = 0;
@@ -40,6 +40,32 @@ let retryAppend = null;
 let feedLoaded = false;
 let showingScores = false;
 let discussionScenes = [];
+const sceneTabs = $('discussion-context');
+const sceneSegments = mountSegmentedControl(sceneTabs, { presentation: false });
+let sceneTabScope = null;
+function refreshSceneTabs(reveal = false) {
+    sceneSegments.refresh();
+    const selected = sceneTabs.querySelector('[aria-selected="true"]');
+    if (reveal && selected && sceneTabs.clientWidth) {
+        const left = selected.offsetLeft - 16, right = selected.offsetLeft + selected.offsetWidth + 16;
+        sceneTabs.scrollTo({ left: Math.max(0, left < sceneTabs.scrollLeft ? left : right > sceneTabs.scrollLeft + sceneTabs.clientWidth
+            ? right - sceneTabs.clientWidth : sceneTabs.scrollLeft), behavior: 'instant' });
+    }
+    const end = sceneTabs.scrollWidth - sceneTabs.clientWidth;
+    sceneTabs.classList.toggle('has-overflow-start', sceneTabs.scrollLeft > 1);
+    sceneTabs.classList.toggle('has-overflow-end', end > 1 && sceneTabs.scrollLeft < end - 1);
+}
+sceneTabs.addEventListener('scroll', () => refreshSceneTabs(), { passive: true });
+new ResizeObserver(() => refreshSceneTabs(true)).observe(sceneTabs);
+function renderSceneScope() {
+    const all = $('discussion-all-scenes');
+    all.setAttribute('aria-pressed', String(state.allScenes));
+    all.setAttribute('aria-label', state.allScenes ? 'Return to selected scene' : 'Show all scenes');
+    all.dataset.tooltip = state.allScenes ? 'Showing all scenes · click to return to the selected scene' : 'Show all scenes';
+    sceneTabs.classList.toggle('is-all-scenes', state.allScenes);
+    sceneTabs.setAttribute('aria-disabled', String(state.allScenes));
+    sceneTabs.querySelectorAll('button').forEach(button => { button.disabled = state.allScenes; });
+}
 const text = $('discussion-text');
 const panel = $('discussion-panel');
 mountDisclosureMotion(panel, '#benchmark-information-differences');
@@ -186,6 +212,7 @@ async function openDiscussion(url, trigger = null, { allCategories = false, navi
     state.threadID = query.has('threadID') ? Number(query.get('threadID')) : null;
     panel.dataset.view = state.threadID ? 'thread' : 'feed';
     state.contextID = null; state.allCategories = Boolean(state.benchmarkID && !state.threadID && allCategories);
+    state.allScenes = query.get('allScenes') === '1';
     renderDiscussionScope();
     restoreDraft();
     setComposerExpanded(Boolean(state.threadID || text.value || state.mentions.length));
@@ -392,6 +419,7 @@ function discussionURL(extra = {}) {
     const scene = discussionScenes.find(item => String(item.ID) === state.contextValues.scene);
     if (scene) url.pathname = scenePath(url.pathname, scene);
     url.searchParams.set('discussion', '1');
+    if (state.allScenes) url.searchParams.set('allScenes', '1');
     if (state.categoryID) url.searchParams.set('categoryID', state.categoryID);
     Object.entries(state.contextValues).forEach(([key, value]) => { if (key !== 'scene') url.searchParams.set(`context_${key}`, value); });
     Object.entries(extra).forEach(([key, value]) => { if (value != null) url.searchParams.set(key, value); });
@@ -549,22 +577,36 @@ function renderContext(data, requestedContextValues) {
     const filter = $('discussion-context');
     const focusedScene = filter.contains(document.activeElement) ? document.activeElement.dataset.sceneId : null;
     const scrollLeft = filter.scrollLeft;
-    filter.replaceChildren(...discussionScenes.map(scene => {
-        const button = node('button', 'bp-scene-tab', scene.name); button.type = 'button';
+    const oldTabs = new Map([...filter.children].map(button => [button.dataset.sceneId, button]));
+    if (sceneTabScope !== state.categoryID) { delete filter.dataset.uiReady; delete filter.dataset.sceneAnimated; }
+    sceneTabScope = state.categoryID;
+    const tabs = discussionScenes.map(scene => {
+        let button = oldTabs.get(String(scene.ID));
+        if (!button) {
+            button = node('button', 'bp-scene-tab'); button.type = 'button';
+            button.append(node('span', '', scene.name));
+            button.addEventListener('click', () => {
+                if (state.allScenes || String(scene.ID) === state.contextValues.scene) return;
+                saveDraft(); viewSequence++; state.contextID = null; state.contextValues = { scene: String(scene.ID) };
+                filter.dataset.sceneAnimated = 'true';
+                for (const tab of filter.children) tab.setAttribute('aria-selected', String(tab === button));
+                refreshSceneTabs(true);
+                restoreDraft(); setComposerExpanded(Boolean(text.value || state.mentions.length)); void load();
+            });
+        }
+        button.firstChild.textContent = scene.name;
         button.dataset.sceneId = String(scene.ID); button.setAttribute('role', 'tab');
         button.setAttribute('aria-controls', 'discussion-feed');
         button.setAttribute('aria-selected', String(Number(state.contextValues.scene) === Number(scene.ID)));
         button.tabIndex = String(scene.ID) === (focusedScene ?? state.contextValues.scene) ? 0 : -1;
-        button.addEventListener('click', () => {
-            if (String(scene.ID) === state.contextValues.scene) return;
-            saveDraft(); viewSequence++; state.contextID = null; state.contextValues = { scene: String(scene.ID) };
-            restoreDraft(); setComposerExpanded(Boolean(text.value || state.mentions.length)); void load();
-        });
         return button;
-    }));
+    });
+    for (const button of oldTabs.values()) if (!tabs.includes(button)) button.remove();
+    tabs.forEach((button, index) => { if (filter.children[index] !== button) filter.insertBefore(button, filter.children[index] ?? null); });
     filter.scrollLeft = scrollLeft;
     if (focusedScene) filter.querySelector(`[data-scene-id="${focusedScene}"]`)?.focus({ preventScroll: true });
     $('context-filter-label').hidden = Boolean(state.threadID || state.allCategories || !discussionScenes.length);
+    renderSceneScope(); refreshSceneTabs(true);
     document.querySelector('.discussion-sort').hidden = Boolean(state.threadID);
     renderDiscussionScope();
     $('all-threads').hidden = !state.threadID;
@@ -612,7 +654,7 @@ async function load(append = false) {
     try {
         const data = await postJSON('/api/get_discussion', { categoryID: state.categoryID, contextValues: state.contextValues,
             threadID: state.threadID, benchmarkID: state.benchmarkID, conditionID: state.conditionID, contextID: state.contextID, sort: state.sort,
-            allCategories: state.allCategories, offset: append ? state.offset : 0 }, { timeoutMs: 60000, signal: controller.signal });
+            allCategories: state.allCategories, allScenes: state.allScenes, offset: append ? state.offset : 0 }, { timeoutMs: 60000, signal: controller.signal });
         if (sequence !== loadSequence || !canReadDiscussion()) return;
         pageAccountWriteScope.bind(data.authenticated ? data.userID : null);
         state.authenticated = data.authenticated;
@@ -776,6 +818,7 @@ document.querySelectorAll('[data-sort]').forEach(button => button.addEventListen
     load();
 }));
 $('discussion-context').addEventListener('keydown', event => {
+    if (state.allScenes) return;
     const tabs = [...event.currentTarget.querySelectorAll('[role="tab"]')], index = tabs.indexOf(event.target);
     if (index < 0) return;
     const next = event.key === 'ArrowRight' ? (index + 1) % tabs.length : event.key === 'ArrowLeft'
@@ -783,6 +826,17 @@ $('discussion-context').addEventListener('keydown', event => {
     if (next === null) return;
     event.preventDefault(); tabs.forEach((tab, i) => { tab.tabIndex = i === next ? 0 : -1; });
     tabs[next].focus({ preventScroll: true }); tabs[next].scrollIntoView({ block: 'nearest', inline: 'nearest' });
+});
+$('discussion-all-scenes').addEventListener('click', () => {
+    if (state.threadID || !discussionScenes.length) return;
+    state.allScenes = !state.allScenes; state.contextID = null; viewSequence++;
+    renderSceneScope();
+    if (new URL(location.href).searchParams.has('discussion')) {
+        const url = new URL(location.href);
+        if (state.allScenes) url.searchParams.set('allScenes', '1'); else url.searchParams.delete('allScenes');
+        history.replaceState(history.state, '', url);
+    }
+    void load();
 });
 $('discussion-scope-toggle').addEventListener('click', () => {
     if (!state.benchmarkID || state.threadID) return;

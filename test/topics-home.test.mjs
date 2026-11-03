@@ -214,12 +214,12 @@ test('measured parameter slots reduce whole-column count, capped by available wi
     assert.deepEqual(columnLayout(330, 25, 37, -1), columnLayout(330, 25, 37));
 });
 
-test('both range and known bar endpoints stay below 75%, sharing a finite baseline', () => {
-    assert.equal(MAX_BAR_RATIO, .75);
+test('both range and known bar endpoints stay below 65%, sharing a finite baseline', () => {
+    assert.equal(MAX_BAR_RATIO, .65);
     for (const height of [142, 182]) for (const score of [-10, 0, 3, 50, 100, 120]) {
         const geometry = barGeometry({ lower: score, upper: score + 25 }, { min: 0, max: 100 }, height);
-        assert.ok(geometry.known >= 0 && geometry.known <= height * .75);
-        assert.ok(geometry.upper >= geometry.known && geometry.upper <= height * .75);
+        assert.ok(geometry.known >= 0 && geometry.known <= height * .65);
+        assert.ok(geometry.upper >= geometry.known && geometry.upper <= height * .65);
     }
     assert.equal(barGeometry({ lower: 20, upper: 50, comparable: false }, null, 100).upper, 0);
     assert.ok(Number.isFinite(barGeometry({ lower: 20, upper: 50 }, { min: NaN, max: NaN }, 100).known));
@@ -237,22 +237,22 @@ test('pagination preserves absent metadata, deduplicates models and keeps model 
     assert.throws(() => mergePreview(previous, {}, true));
 });
 
-test('available bars use the leader as 100% of the 75% chart envelope, without changing scores', () => {
+test('available bars use the leader as 100% of the 65% chart envelope, without changing scores', () => {
     for (const leader of [71, 40, .001, Number.MIN_VALUE, Number.MAX_VALUE]) {
         const models = [leader, leader / 2, 0].map((lower, index) => ({ modelID: index + 1, lower, upper: lower }));
         const preview = { models, scoreScale: { min: -10, max: 200 } };
         const original = structuredClone(models);
         const scale = modelBarScale(preview, 'available');
         assert.deepEqual(scale, { min: 0, max: leader });
-        assert.equal(barGeometry(models[0], scale, 200).known, 150);
-        if (leader / 2 > 0) assert.equal(barGeometry(models[1], scale, 200).known, 75);
+        assert.equal(barGeometry(models[0], scale, 200).known, 130);
+        if (leader / 2 > 0) assert.equal(barGeometry(models[1], scale, 200).known, 65);
         assert.equal(barGeometry(models[2], scale, 200).known, 0);
         assert.deepEqual(models, original, 'display scaling must not change actual model scores');
         assert.equal(modelBarScale(preview, 'range'), preview.scoreScale, 'range keeps its absolute scale');
     }
     const model = { lower: 71, upper: 85 };
     assert.deepEqual(barGeometry(model, modelBarScale({ models: [model], scoreScale: { min: 0, max: 100 } }, 'range'), 200),
-        { known: 106.5, upper: 127.5, comparable: true });
+        { known: 92.3, upper: 110.5, comparable: true });
 });
 
 test('relative bar scaling handles absent, invalid, zero and nonpositive leaders without inventing scores', () => {
@@ -263,16 +263,16 @@ test('relative bar scaling handles absent, invalid, zero and nonpositive leaders
         for (const model of models) assert.equal(barGeometry(model, scale, 200).known, 0);
     }
     const models = [...unavailable, { lower: 40, upper: 40 }];
-    assert.equal(barGeometry(models.at(-1), modelBarScale({ models }, 'available'), 200).known, 150);
+    assert.equal(barGeometry(models.at(-1), modelBarScale({ models }, 'available'), 200).known, 130);
 });
 
 test('relative bar scaling stays anchored to the ranking leader across paging and resets with a fresh snapshot', () => {
     const previous = { topicID: 54, models: [{ modelID: 1, lower: 40, upper: 40 }], scoreScale: { min: 0, max: 100 } };
     const merged = mergePreview(previous, { topicID: 54, models: [{ modelID: 2, lower: 20, upper: 20 }] }, true);
     assert.deepEqual(modelBarScale(merged, 'available'), modelBarScale(previous, 'available'));
-    assert.equal(barGeometry(merged.models[1], modelBarScale(merged, 'available'), 200).known, 75);
+    assert.equal(barGeometry(merged.models[1], modelBarScale(merged, 'available'), 200).known, 65);
     const fresh = mergePreview(merged, { topicID: 54, models: [{ modelID: 2, lower: 20, upper: 20 }] });
-    assert.equal(barGeometry(fresh.models[0], modelBarScale(fresh, 'available'), 200).known, 150);
+    assert.equal(barGeometry(fresh.models[0], modelBarScale(fresh, 'available'), 200).known, 130);
 });
 
 test('selectable tile theme, top exposure/fade and full unmasked weights are explicit', async () => {

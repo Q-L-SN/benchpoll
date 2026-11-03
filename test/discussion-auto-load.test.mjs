@@ -100,6 +100,12 @@ class Element {
         };
     }
     set textContent(value) { this._text = String(value); this.children = []; }
+    get firstChild() { return this.children[0] ?? null; }
+    insertBefore(child, anchor) {
+        child.remove?.(); child.parentElement = this;
+        const index = this.children.indexOf(anchor);
+        if (index < 0) this.children.push(child); else this.children.splice(index, 0, child);
+    }
     get textContent() { return this._text + this.children.map(child => child.textContent).join(''); }
     setAttribute(name, value) { this.attributes.set(name, String(value)); }
     getAttribute(name) { return this.attributes.get(name) ?? null; }
@@ -187,6 +193,7 @@ function discussionHarness(request = (body => pageData(body, Array.from({ length
         },
         buildContributionURL: () => '/contribute/report', relativeDateAge: () => '', loginWithGitHub() {},
         animateContent() {}, mountDisclosureMotion() {}, setDisclosureOpen() {}, mountDisclosureChevron() {}, setDiscussionEntryView() {},
+        mountSegmentedControl: () => ({ refresh() {} }), ResizeObserver: class { observe() {} },
         setVisible(element, visible) { element.hidden = !visible; }
     });
     const code = source.replace(/^import[^\r\n]+\r?\n/gm, '')

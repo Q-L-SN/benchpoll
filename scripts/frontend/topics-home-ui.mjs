@@ -248,7 +248,7 @@ function checkGeometry(result, mode) {
             assert.ok(Math.abs(model.plot.bottom - 1 - card.tree.bottom) <= .2, `baseline mismatch ${card.id}`);
             for (const bar of model.bars) {
                 assert.ok(bar.width >= 28 && bar.width <= 36, 'model bars must be thicker with bounded gaps');
-                assert.ok(bar.y >= card.tree.y + card.tree.height * .25 - 1, `bar exceeds 75% in ${card.id}`);
+                assert.ok(bar.y >= card.tree.y + card.tree.height * .35 - 1, `bar exceeds 65% in ${card.id}`);
                 assert.ok(Math.abs(bar.bottom - card.tree.bottom) <= .2, `bar bottom ${card.id}`);
                 assert.ok(bar.x >= model.x && bar.right <= model.right + .6);
             }
@@ -536,7 +536,7 @@ async function expiredSnapshotRun(browser, engine) {
         const slot = await card.locator('.th-model').first().evaluate(node => node.getBoundingClientRect().width);
         assert.ok(Math.abs(await scroll().evaluate(node => node.scrollLeft) - anchorIndex * slot) < 1, 'refresh lost available model anchor');
         const barRatio = await card.locator('.th-model-bar').first().evaluate(node => node.getBoundingClientRect().height / node.closest('.th-model-plot').getBoundingClientRect().height);
-        assert.ok(Math.abs(barRatio - .75) < .005, 'fresh Available results leader must fill the relative envelope');
+        assert.ok(Math.abs(barRatio - .65) < .005, 'fresh Available results leader must fill the relative envelope');
         assert.match(await card.locator('.th-card-notice').textContent(), /Preview refreshed/);
         checkGeometry(await page.evaluate(geometryInPage), 'default');
         await card.screenshot({ path: join(output, `${engine}-1280-snapshot-refreshed.png`), animations: 'disabled' });
@@ -582,9 +582,9 @@ async function relativeBarsRun(browser, engine, width) {
             }))
         }));
         const checkRelative = snapshot => {
-            assert.ok(Math.abs(snapshot.bars[0].height / snapshot.plotHeight - .75) < .001, 'leader is not 75% of the treemap');
+            assert.ok(Math.abs(snapshot.bars[0].height / snapshot.plotHeight - .65) < .001, 'leader is not 65% of the treemap');
             for (const [index, bar] of snapshot.bars.entries()) {
-                const expected = models[index].lower / models[0].lower * .75;
+                const expected = models[index].lower / models[0].lower * .65;
                 assert.ok(Math.abs(bar.height / snapshot.plotHeight - expected) < .001, `absolute or page-local height at model ${index}`);
                 assert.equal(bar.text, String(Math.round(models[index].lower)), 'normalization changed the actual score label');
             }
@@ -607,7 +607,7 @@ async function relativeBarsRun(browser, engine, width) {
         await card.locator('.th-model-range').first().waitFor({ state: 'attached' });
         await waitLoaded(page);
         const range = await readBars();
-        assert.ok(Math.abs(range.bars[0].height / range.plotHeight - .71 * .75) < .001, 'range lost its absolute scale');
+        assert.ok(Math.abs(range.bars[0].height / range.plotHeight - .71 * .65) < .001, 'range lost its absolute scale');
         assert.equal(range.bars[0].text, '71');
         await page.getByRole('button', { name: 'Available results', exact: true }).click();
         await page.waitForFunction(() => !document.querySelector('[data-topic-id="54"] .th-model-range'));

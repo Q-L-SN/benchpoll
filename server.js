@@ -560,7 +560,7 @@ API.post('/rename_comparison_profile', discussionSameOrigin, requireAuthForAPI, 
     res.json(await renameComparisonProfile(db, req.user.ID, req.body?.name, req.body?.newName));
 });
 API.post('/get_reported_discussion', requireReviewerAuthForAPI, requireAccountWriteOwner, async (req, res) => {
-    const [rows] = await db.execute('SELECT ID, category_ID, context_ID, author_ID, parent_ID, body, created_at, hidden_at FROM discussion_posts WHERE ID = ?', [discussionID(req.body.postID)]);
+    const [rows] = await db.execute('SELECT ID, category_ID, context_ID, proposal_ID, author_ID, parent_ID, body, created_at, hidden_at FROM discussion_posts WHERE ID = ?', [discussionID(req.body.postID)]);
     if (!rows.length) throw { status: 404, body: { error: 'discussion_post_unavailable' } };
     res.json(rows[0]);
 });
@@ -673,7 +673,7 @@ API.post('/copy_topic_proposal', discussionSameOrigin, requireAuthForAPI, requir
 });
 page.get('/topic-proposals/:proposalID/preview', async (req, res) => {
     if (!/^[1-9]\d*$/.test(req.params.proposalID)) throw { status: 404 };
-    await proposalPreview.read(await activeSessionUserID(req), { proposalID: Number(req.params.proposalID) });
+    await readProposal(db, Number(req.params.proposalID), await activeSessionUserID(req));
     res.set('Cache-Control', 'private, no-store'); res.set('X-Robots-Tag', 'noindex, follow');
     res.sendFile(currentDir + '/private/topic-proposal-preview.html');
 });

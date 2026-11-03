@@ -4,7 +4,7 @@ import * as hierarchyModule from '../vendor/d3-hierarchy-3.1.2.js';
 const { hierarchy, treemap, treemapSlice, treemapDice, treemapSquarify } = hierarchyModule.hierarchy ? hierarchyModule : hierarchyModule.default ?? globalThis.d3;
 export const FEATURED_TOPIC_ID = 54;
 export const OTHER_THRESHOLD = .01;
-export const MAX_BAR_RATIO = .75;
+export const MAX_BAR_RATIO = .65;
 export const TREEMAP_FADE = Object.freeze({ start: .32, end: .76 });
 export const WEIGHT_LABEL_METRICS = Object.freeze({
     name: Object.freeze({ fontSize: 14, lineHeight: 18, fontWeight: 600 }),

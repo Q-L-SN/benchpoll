@@ -177,7 +177,7 @@ for (const engine of [chromium, webkit]) test(`${engine.name()}: disclosure icon
     } finally { await browser.close(); await app.close(); }
 });
 
-test('home scene expansion retains the focused trigger and plays the shared transition', async () => {
+test('home scene dialog returns focus to its trigger when dismissed', async () => {
     const app = await startTopicsPreview(), browser = await chromium.launch(launch);
     try {
         app.state.topics[0].scenes = [{ ID: 101, name: 'General', description: 'General programming', isDefault: true },
@@ -192,20 +192,14 @@ test('home scene expansion retains the focused trigger and plays the shared tran
             await page.locator('#topic-search').fill('Coding');
             const selector = '.th-card[data-topic-id="1"]:not([data-scene-id]) .th-scene-toggle';
             const toggle = page.locator(selector);
-            await orientation(page, selector, 0);
-            await toggle.evaluate(node => {
-                window.homeTrigger = node;
-                window.homeTransitions = 0;
-                node.querySelector('i').addEventListener('transitionrun', event => {
-                    if (event.propertyName === 'transform') window.homeTransitions++;
-                });
-            });
+            assert.equal(await toggle.getAttribute('aria-haspopup'), 'dialog');
+            await toggle.evaluate(node => { window.homeTrigger = node; });
             await toggle.focus(); await page.keyboard.press('Enter');
-            await orientation(page, selector, 90);
+            await page.locator('#topic-scenes-dialog[open]').waitFor();
+            assert.equal(await page.locator('#topic-scenes-dialog').evaluate(node => node.contains(document.activeElement)), true);
+            await page.keyboard.press('Escape');
+            await page.locator('#topic-scenes-dialog').waitFor({ state: 'hidden' });
             assert.equal(await toggle.evaluate(node => node === window.homeTrigger && node === document.activeElement), true);
-            assert.equal(await page.evaluate(() => window.homeTransitions), 1);
-            await page.keyboard.press('Space'); await orientation(page, selector, 0);
-            assert.equal(await page.evaluate(() => window.homeTransitions), 2);
             assert.equal(await page.locator('.th-card[data-scene-id]:visible').count(), 0);
             await page.close();
         }
