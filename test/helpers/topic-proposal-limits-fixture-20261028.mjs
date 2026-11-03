@@ -13,12 +13,13 @@ import { createTopicProposalService, lockTopicProposalForReview, finishTopicProp
     normalizeTopicProposalRequest, approveTopicSceneProposal } from '../../topic-proposal-service.js';
 import { lockTopicReferences } from '../../topic-reference-service.js';
 import { TOPIC_SCENE_SQL_PREVIEW } from '../../topic-scenes-service.js';
+import { loadTopicProposalSnapshot, saveTopicProposalSnapshot } from '../../topic-snapshot-service.js';
 import { assertPrivacyCSRF } from '../../privacy-controls.js';
 
 const source = (await readFile(new URL('../../server.js', import.meta.url), 'utf8')).replaceAll('\r\n', '\n');
 const contributor = '9007199254740993', reviewer = '9007199254740992', senior = '99';
 const request = { name: 'Clinical reasoning', description: 'Reasoning about clinical tasks.', isPrivate: false };
-const proposalRequest = { name: request.name, description: request.description };
+const proposalRequest = { sourceTopicID: 501, name: request.name, description: request.description };
 const supporters = Array.from({ length: 32 }, (_, index) => String(1000 + index));
 const clone = value => structuredClone(value);
 const deferred = () => { let resolve; const promise = new Promise(done => { resolve = done; }); return { promise, resolve }; };
@@ -35,7 +36,7 @@ function harness({ email = 'verified@example.test', verified = true, failure = n
         email_verified_at: verified ? new Date() : null, deleted_at: null, banned_at: null, banned_until: null,
         isReviewer: ID !== contributor, isSenior: ID === senior }]));
     const state = { logs: new Map(), categories: new Map(), contexts: new Map(), writes: new Map(), outbox: new Map(),
-        proposals: new Map(), votes: new Map(), audits: [] };
+        proposals: new Map(), votes: new Map(), snapshots: new Map(), audits: [] };
     const events = [], handlers = new Map(), locks = new Map(), aliases = new Set();
     let nextID = 100, borrowed = 0, clock = now, beforeSQL = null;
     const currentTime = () => new Date(clock);
@@ -47,14 +48,15 @@ function harness({ email = 'verified@example.test', verified = true, failure = n
         .filter(vote => vote.user_ID === actor && collecting(rows('proposals').get(vote.proposal_ID))).length,
     active_proposal_ID: [...rows('proposals').values()]
         .filter(proposal => proposal.user_ID === actor && collecting(proposal)).sort((a, b) => b.ID - a.ID)[0]?.ID ?? null });
-    const tables = ['logs', 'categories', 'contexts', 'writes', 'outbox', 'proposals', 'votes'];
+    const tables = ['logs', 'categories', 'contexts', 'writes', 'outbox', 'proposals', 'votes', 'snapshots'];
     const projected = (proposal, rows, actor) => {
         const votes = [...rows('votes').values()].filter(vote => vote.proposal_ID === proposal.ID);
         const topic = rows('categories').get(proposal.topic_ID);
         return { ...clone(proposal), effective_status: effectiveStatus(proposal),
             expires_at_ms: new Date(proposal.created_at).getTime() + 14 * 86400000,
             support_count: votes.length, supported: votes.some(vote => vote.user_ID === actor) ? 1 : 0,
-            published_name: topic?.name, published_slug: topic?.slug };
+            published_name: topic?.name, published_slug: topic?.slug,
+            source_topic_ID: rows('snapshots').get(proposal.ID + ':' + proposal.revision)?.source_topic_ID };
     };
     const sceneCatalog = (rows, parameters) => [...rows('contexts').values()]
         .filter(row => parameters.slice(0, -1).includes(row.categoryID))
@@ -97,11 +99,20 @@ function harness({ email = 'verified@example.test', verified = true, failure = n
                 }
                 if (statement === 'SET TRANSACTION READ ONLY') { readOnly = true; return [{}]; }
                 if (readOnly) assert.match(statement, /^SELECT\b/, 'Preview never executes mutations');
-                if (statement === 'SELECT ID FROM topic_reference_lock WHERE ID = 1 FOR UPDATE') {
-                    await lock('topic-reference-graph');
+                if (statement.startsWith('SELECT ID FROM topic_reference_lock WHERE ID = 1')) {
+                    if (statement.endsWith('FOR UPDATE')) await lock('topic-reference-graph');
                     return [[{ ID: 1 }]];
                 }
-                if (statement.includes('LEFT JOIN topic_scenes')) return [sceneCatalog(rows, parameters)];
+                if (statement.includes('LEFT JOIN topic_scenes') && statement.includes('FROM ranking_contexts')) return [sceneCatalog(rows, parameters)];
+                if (statement.startsWith('INSERT INTO topic_proposal_snapshots')) {
+                    const [ID, revision, source_topic_ID, content, content_hash] = parameters;
+                    journal.snapshots.set(ID + ':' + revision, { source_topic_ID, content, content_hash });
+                    return [{ affectedRows: 1 }];
+                }
+                if (statement.includes('FROM topic_proposal_snapshots')) {
+                    const row = rows('snapshots').get(parameters.join(':'));
+                    return [row ? [clone(row)] : []];
+                }
                 if (statement.startsWith('INSERT INTO write_requests')) {
                     const [actor, key, action, payload_hash, owner_token] = parameters, rowKey = `${actor}:${key}`;
                     await lock(`write:${rowKey}`);
@@ -331,7 +342,7 @@ function harness({ email = 'verified@example.test', verified = true, failure = n
     const db = { getConnection: async () => makeConnection(), async execute(sql, parameters) {
         assert.match(sql, /^SELECT\b/, 'Pool is only used for post-commit private-topic reads');
         events.push({ kind: 'pool-sql', sql: sql.replace(/\s+/g, ' ').trim(), parameters: clone(parameters) });
-        if (sql.includes('LEFT JOIN topic_scenes')) return [sceneCatalog(table => state[table], parameters)];
+        if (sql.includes('LEFT JOIN topic_scenes') && sql.includes('FROM ranking_contexts')) return [sceneCatalog(table => state[table], parameters)];
         if (sql.includes('AS active_supports')) {
             assert.deepEqual(parameters, [parameters[0], parameters[0]], 'Page quotas belong to the same exact actor');
             return [[quota(table => state[table], parameters[0])]];
@@ -351,7 +362,9 @@ function harness({ email = 'verified@example.test', verified = true, failure = n
         canonicalAccountID, requireAccountWriteOwner, normalizeTopicRequest, assertPublicTopicAvailable, createTopic,
         moderationRecipientEmail, readWriteIdentity, claimWriteIntent, completeWriteIntent, db,
         lockTopicProposalForReview, finishTopicProposalReview, normalizeTopicProposalRequest,
-        approveTopicSceneProposal, lockTopicReferences, TOPIC_SCENE_SQL_PREVIEW,
+        approveTopicSceneProposal, lockTopicReferences, TOPIC_SCENE_SQL_PREVIEW, loadTopicProposalSnapshot,
+        seedSnapshotTopic: async () => {}, // Ranking imports are exercised against real MySQL in topic-lifecycle.mysql.mjs.
+
         createModerationAuditRecorder, insertModerationAuditLog, moderationAuditSnapshot,
         sessionSecret: 'synthetic-preview-secret', privacyControls: { hasAccepted: async () => true },
         publicOrigin: 'https://example.test',
@@ -375,7 +388,14 @@ function harness({ email = 'verified@example.test', verified = true, failure = n
     evaluate(context, 'function normalizeString(', 'async function buildExecutedModerationSQLPreview(');
     evaluate(context, 'async function buildExecutedModerationSQLPreview(', "API.post('/submit_contribution'");
     evaluate(context, 'function directMutationAuditError(', "API.post('/send_admin_message'");
-    context.topicProposals = createTopicProposalService({ pool: db, queueForReview: context.queueTopicProposalForReview });
+    context.topicProposals = createTopicProposalService({ pool: db, queueForReview: context.queueTopicProposalForReview,
+        // This harness isolates quota, review, mail and transaction behavior from the ranking catalogue.
+        captureSnapshot: async (_connection, _owner, sourceID, metadata) => {
+            assert.equal(sourceID, 501);
+            return { version: 1, name: metadata.name, description: metadata.description, hasScenes: false,
+                scenes: [{ key: 'scene-0', name: null, description: '', isDefault: true,
+                    entries: [{ conditionID: 1, weightBasisPoints: 10000 }], fallbackRules: [] }] };
+        }, saveSnapshot: saveTopicProposalSnapshot, loadSnapshot: loadTopicProposalSnapshot });
     for (const route of ['create_topic', 'propose_topic', 'vote_topic_proposal', 'cancel_topic_proposal_support',
         'edit_topic_proposal', 'withdraw_topic_proposal', 'get_topic_proposals', 'submit_contribution',
         'review_moderation_log', 'apply_moderation_log', 'preview_moderation_sql']) {

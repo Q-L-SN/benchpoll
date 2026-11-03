@@ -5,10 +5,14 @@ import { chromium, webkit } from 'playwright';
 import { startConfigSidebarPreview } from './helpers/config-sidebar-fixture-20261022.mjs';
 import { startTopicsPreview } from '../scripts/frontend/topics-home-fixtures.mjs';
 import { workspace, weightedEntries } from '../scripts/frontend/fixtures.mjs';
+import { topicSlug } from '../public/js/shared/topics.js';
 import { entryFromContext } from '../public/js/navigation/model.js';
 import { startProposalFixture } from './fixtures/topic-proposals-server.mjs';
+import { buildBenchmarkList } from '../ranking-service.js';
+import { createRankingPager } from '../ranking-pagination.js';
+import { referenceCondition } from '../topic-reference-service.js';
 
-const output = 'D:/Codex-artifacts/website1/topic-scenes-references-20261031';
+const output = 'artifacts/workspace-ui-20261101/scene-references';
 const localBrowserEnv = { ...process.env, HTTP_PROXY: '', HTTPS_PROXY: '', ALL_PROXY: '', http_proxy: '', https_proxy: '', all_proxy: '',
     NO_PROXY: '127.0.0.1,localhost', no_proxy: '127.0.0.1,localhost' };
 const sceneList = categoryID => [
@@ -20,9 +24,9 @@ const sceneList = categoryID => [
 ];
 const targets = [
     { contextID: 16701, categoryID: 167, sceneID: 16701, name: 'Research / General', topicName: 'Research', sceneName: 'General',
-        description: 'Research tasks', isPrivate: false, hasWeights: true, url: '/research?scene=16701' },
+        description: 'Research tasks', isPrivate: false, hasWeights: true, url: '/research/general' },
     { contextID: 16702, categoryID: 167, sceneID: 16702, name: 'Research / Photon experiments', topicName: 'Research', sceneName: 'Photon experiments',
-        description: 'Laser and photonics', isPrivate: false, hasWeights: true, url: '/research?scene=16702' },
+        description: 'Laser and photonics', isPrivate: false, hasWeights: true, url: '/research/photon-experiments' },
     { contextID: 19001, categoryID: 190, sceneID: null, name: 'Coding', topicName: 'Coding', sceneName: null,
         description: 'Programming tasks', isPrivate: false, hasWeights: true, url: '/coding' },
     { contextID: 99901, categoryID: 999, sceneID: null, name: 'Private plans', topicName: 'Private plans', sceneName: null,
@@ -30,6 +34,7 @@ const targets = [
 ];
 
 async function mountWorkspaceFixture(page, app) {
+    const pager = createRankingPager();
     const sceneCatalog = new Map([[54, sceneList(54)], [998, sceneList(998)]]), saved = new Map(), saves = [], reads = [], writes = [], summaries = [], discussions = [];
     let issues = [];
     function metadata(categoryID) {
@@ -60,7 +65,7 @@ async function mountWorkspaceFixture(page, app) {
         const contextID = sceneID ?? meta.rootContextID;
         const desired = body.previewPersonalPie?.entries ?? (app.state.authenticated ? entriesFor(contextID) : []);
         const base = workspace({ ...app.state, personalEntries: weightedEntries([{ conditionID: 1, weightBasisPoints: 10000 }]), fallbackRules: [] },
-            { ...body, previewPersonalPie: undefined, categoryID: 1, contextValues: {} });
+            { ...body, previewPersonalPie: undefined, categoryID: 1, contextValues: {} }, { paginate: false });
         base.context = { ...base.context, ...meta, ID: contextID, categoryPath: meta.url.slice(1), sceneID,
             contextValues: sceneID ? { scene: String(sceneID) } : {}, dimensions: [] };
         base.personalPie.entries = decorate(desired);
@@ -72,11 +77,15 @@ async function mountWorkspaceFixture(page, app) {
         }));
         base.personalPie.referenceIssues = desired.some(entry => entry.conditionID < 0) ? issues : [];
         base.personalPie.effectiveEntries = weightedEntries([{ conditionID: 1, weightBasisPoints: 6000 }, { conditionID: 2, weightBasisPoints: 4000 }]);
-        for (const mode of ['personal', 'public']) {
-            base.modelLeaderboards[mode] = []; base.rankingPagination[mode] = { total: 0, nextOffset: 0, hasMore: false };
-        }
-        return route.fulfill({ json: base });
+        base.benchmarks = buildBenchmarkList([...base.benchmarks,
+            ...targets.filter(target => meta.isPrivate || !target.isPrivate).map(referenceCondition)], base.publicPie.entries, base.personalPie.entries);
+        for (const mode of ['personal', 'public']) base.modelLeaderboards[mode] = [];
+        return route.fulfill({ json: pager.create(base, { userID: app.state.authenticated ? app.state.userID : null,
+            initialMode: body.initialMode ?? 'public', query: body.benchmarkQuery ?? '', pinPersonal: body.pinPersonal ?? false }) });
     });
+    await page.route('**/api/get_ranking_page', route => route.fulfill({ json: pager.getPage({ ...route.request().postDataJSON(),
+        userID: app.state.authenticated ? app.state.userID : null }) }));
+    await page.route('**/api/get_topic_preview', route => route.fulfill({ json: { totalCoverageIndex: 1.5 } }));
     await page.route('**/api/get_topic_reference_targets', route => route.fulfill({ json: { targets } }));
     await page.route('**/api/save_personal_pie', route => {
         const body = route.request().postDataJSON(); saves.push(body);
@@ -89,13 +98,13 @@ async function mountWorkspaceFixture(page, app) {
     });
     await page.route('**/api/create_topic_scene', route => {
         const body = route.request().postDataJSON(); writes.push(body);
-        const scenes = sceneCatalog.get(body.categoryID), scene = { ID: body.categoryID * 100 + 99, name: body.name, description: body.description, slug: 'new-scene', isDefault: false };
+        const scenes = sceneCatalog.get(body.categoryID), scene = { ID: body.categoryID * 100 + 99, name: body.name, description: body.description, slug: topicSlug(body.name), isDefault: false };
         scenes.push(scene); return route.fulfill({ json: { scene } });
     });
     await page.route('**/api/update_topic_scene', route => {
         const body = route.request().postDataJSON(); writes.push(body);
         const scene = sceneCatalog.get(body.categoryID).find(scene => scene.ID === body.sceneID);
-        Object.assign(scene, { name: body.name, description: body.description });
+        Object.assign(scene, { name: body.name, slug: topicSlug(body.name), description: body.description });
         return route.fulfill({ json: { scene } });
     });
     await page.route('**/api/get_discussion_summary', route => {
@@ -123,7 +132,7 @@ for (const width of [390, 1440]) test(`scenes and references: keyboard, search, 
     const errors = []; page.on('pageerror', error => errors.push(error.message)); page.setDefaultTimeout(15000);
     t.after(async () => { await browser.close(); await app.close(); assert.deepEqual(errors, []); });
     const fixture = await mountWorkspaceFixture(page, app);
-    await page.goto(app.url + '/intelligence?scene=5402');
+    await page.goto(app.url + '/intelligence/vector-images');
     await page.waitForSelector('#scene-tab-5402[aria-selected="true"]');
     assert.equal(await page.getByRole('link', { name: 'Propose a scene', exact: true }).count(), 0);
     assert.equal(await page.locator('.bp-scene-actions').isVisible(), false);
@@ -134,36 +143,22 @@ for (const width of [390, 1440]) test(`scenes and references: keyboard, search, 
     assert.equal(await page.locator('.bp-scene-default').count(), 0);
     assert.equal(await page.locator('.bp-template-picker').count(), 0);
     await page.locator('#scene-tab-5402').focus(); await page.keyboard.press('Home'); await page.keyboard.press('Enter');
-    await page.waitForURL('**/intelligence?scene=5401');
+    await page.waitForURL('**/intelligence/general');
     await page.locator('#scene-tab-5401').focus(); await page.keyboard.press('End');
     assert.equal(await page.evaluate(() => document.activeElement.dataset.sceneId), '5407');
     if (width < 760) assert.ok(await page.getByRole('tablist', { name: 'Scenes', exact: true }).evaluate(node => node.scrollLeft > 0));
     assert.equal(await page.getByRole('tablist', { name: 'Scenes', exact: true }).evaluate(node => [...node.children].every(tab => tab.offsetTop === node.children[0].offsetTop)), true);
     await page.locator('#pie-mode-personal').click();
     await page.locator('#benchmark-search').fill('Research');
-    const inlineTopics = page.locator('.bp-benchmark-topic-results');
-    const researchDisclosure = inlineTopics.getByRole('button', { name: 'Research', exact: true });
-    const inlineAddActions = inlineTopics.getByRole('button', { name: 'Add', exact: true });
-    await researchDisclosure.waitFor();
-    assert.equal(await researchDisclosure.getAttribute('aria-expanded'), 'false');
-    assert.equal(await inlineAddActions.count(), 0, 'Collapsed scenes expose no Add actions');
-    for (const id of ['16701', '16702']) {
-        assert.equal(await inlineTopics.locator(`[data-context-id="${id}"]`).isVisible(), false, 'Retained scene nodes stay visually hidden');
-    }
-    await researchDisclosure.click();
-    assert.equal(await researchDisclosure.getAttribute('aria-expanded'), 'true');
-    assert.equal(await inlineAddActions.count(), 2);
-    assert.equal(await inlineTopics.getByRole('link', { name: 'Research / General', exact: true }).getAttribute('href'), '/research?scene=16701');
-    assert.equal(await inlineTopics.getByRole('link', { name: 'Research / Photon experiments', exact: true }).getAttribute('href'), '/research?scene=16702');
-    await researchDisclosure.press('Space');
-    assert.equal(await researchDisclosure.getAttribute('aria-expanded'), 'false');
-    assert.equal(await inlineAddActions.count(), 0, 'Keyboard collapse removes scene actions from the accessibility tree');
-    await researchDisclosure.press('Enter');
-    assert.equal(await researchDisclosure.getAttribute('aria-expanded'), 'true');
-    assert.equal(await inlineAddActions.count(), 2);
-    assert.equal(fixture.saves.length, 0, 'Disclosure changes do not add references');
+    const inlineTopics = page.locator('.bp-benchmark-row[data-context-id]');
+    await page.waitForFunction(() => document.querySelectorAll('.bp-benchmark-row[data-context-id]').length === 2);
+    assert.equal(await inlineTopics.locator('.bp-benchmark-add').count(), 2, 'Scene references use the ordinary Add action');
+    assert.equal(await page.locator('.bp-benchmark-topic-results').count(), 0, 'No separate topic group');
+    assert.equal(await inlineTopics.getByRole('link', { name: 'Open Research / General', exact: true }).getAttribute('href'), '/research/general');
+    assert.equal(await inlineTopics.getByRole('link', { name: 'Open Research / Photon experiments', exact: true }).getAttribute('href'), '/research/photon-experiments');
+    assert.equal(fixture.saves.length, 0, 'Searching does not add references');
     await page.locator('#benchmark-search').fill('Photon');
-    await inlineTopics.locator('[data-context-id="16702"]').waitFor();
+    await page.waitForFunction(() => document.querySelectorAll('.bp-benchmark-row[data-context-id]').length === 1);
     assert.equal(await inlineTopics.locator('.fa-layer-group').count(), 1);
     assert.equal(await inlineTopics.locator('.fa-angle-right').count(), 1);
     await page.locator('#benchmark-search').fill('');
@@ -209,7 +204,7 @@ for (const width of [390, 1440]) test(`scenes and references: keyboard, search, 
     await page.locator('#workspace-refresh').click();
     await page.waitForSelector('.bp-reference-warnings');
     assert.match(await page.locator('.bp-reference-warnings').textContent(), /No weights/);
-    const contextID = Number(new URL(page.url()).searchParams.get('scene'));
+    const contextID = Number(await page.locator('.bp-scene-tab[aria-selected="true"]').getAttribute('data-scene-id'));
     fixture.saved.set(contextID, { revision: fixture.saved.get(contextID).revision,
         entries: [{ conditionID: 1, weightBasisPoints: 4000 }, { conditionID: -16702, weightBasisPoints: 6000 }] });
     await page.locator('#workspace-refresh').click();
@@ -239,18 +234,20 @@ test('benchmark search adds a concrete topic reference without opening the separ
     const errors = []; page.on('pageerror', error => errors.push(error.message));
     t.after(async () => { await browser.close(); await app.close(); assert.deepEqual(errors, []); });
     const fixture = await mountWorkspaceFixture(page, app);
-    await page.goto(app.url + '/intelligence?scene=5401');
+    await page.goto(app.url + '/intelligence/general');
+    await page.waitForSelector('#scene-tab-5401[aria-selected="true"]:not(:disabled)');
     await page.locator('#pie-mode-personal').click();
     await page.locator('#benchmark-search').fill('Photon');
-    const row = page.locator('.bp-benchmark-topic-results [data-context-id="16702"]');
-    await row.getByRole('button', { name: 'Add', exact: true }).click();
+    const row = page.locator('.bp-benchmark-row[data-context-id="16702"]');
+    const saved = page.waitForResponse(response => response.url().endsWith('/api/save_personal_pie'));
+    await row.locator('.bp-benchmark-add').click();
     await page.waitForSelector('[data-reference-id="16702"]');
-    await page.waitForResponse(response => response.url().endsWith('/api/save_personal_pie'));
+    await saved;
     assert.ok(fixture.saves.at(-1).entries.some(entry => entry.conditionID === -16702));
     assert.equal(await page.locator('#topic-reference-dialog').isVisible(), false);
-    assert.equal(await row.getByRole('button', { name: 'Added', exact: true }).isDisabled(), true);
+    assert.equal(await row.locator('.bp-benchmark-add').count(), 0, 'An added reference cannot be added twice');
     await page.locator('#benchmark-search').fill('Private');
-    assert.equal(await page.locator('.bp-benchmark-topic-results [data-context-id]').count(), 0);
+    assert.equal(await page.locator('.bp-benchmark-row[data-context-id]').count(), 0);
 });
 
 test('private owner creates scenes and changes the default without changing the active scene identity', async t => {
@@ -258,23 +255,23 @@ test('private owner creates scenes and changes the default without changing the 
     const page = await browser.newPage({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' });
     t.after(async () => { await browser.close(); await app.close(); });
     const fixture = await mountWorkspaceFixture(page, app);
-    await page.goto(app.url + '/personal/998?scene=99802');
+    await page.goto(app.url + '/personal/998/vector-images');
     await page.waitForSelector('#scene-tab-99802[aria-selected="true"]');
     await page.getByRole('button', { name: 'Set as default', exact: true }).click();
     await page.waitForFunction(() => document.querySelector('.bp-scene-tab')?.dataset.sceneId === '99802');
-    assert.equal(new URL(page.url()).searchParams.get('scene'), '99802');
+    assert.equal(new URL(page.url()).pathname, '/personal/998/vector-images');
     await page.getByRole('button', { name: 'Add scene', exact: true }).click();
     await page.locator('#scene-editor').getByLabel('Name', { exact: true }).fill('Photon design');
     await page.locator('#scene-editor').getByLabel('One-sentence summary', { exact: true }).fill('Design precise optical diagrams.');
     await page.getByRole('button', { name: 'Create scene', exact: true }).click();
     await page.waitForSelector('#scene-tab-99899[aria-selected="true"]');
-    assert.equal(new URL(page.url()).searchParams.get('scene'), '99899');
+    assert.equal(new URL(page.url()).pathname, '/personal/998/photon-design');
     assert.equal(fixture.writes.at(-1).expectedUserID, '1');
     await page.getByRole('button', { name: 'Edit scene', exact: true }).click();
     await page.locator('#scene-name').fill('Optical design');
     await page.getByRole('button', { name: 'Save scene', exact: true }).click();
     await page.waitForFunction(() => document.getElementById('scene-tab-99899')?.textContent === 'Optical design');
-    assert.equal(new URL(page.url()).searchParams.get('scene'), '99899', 'renaming never changes reference identity');
+    assert.equal(new URL(page.url()).pathname, '/personal/998/optical-design', 'renaming changes the path while preserving reference identity');
     assert.equal(fixture.writes.at(-1).sceneID, 99899);
     await page.locator('#weight-add-topic').click();
     await page.locator('#topic-reference-dialog').getByRole('searchbox').fill('Private plans');
@@ -289,7 +286,7 @@ test('guest references use read-only previews and retain independent scene draft
     page.on('request', request => { if (/get_benchmark_information|fallback/.test(request.url()) && request.url().includes('/api/')) details.push(request.url()); });
     t.after(async () => { await browser.close(); await app.close(); assert.deepEqual(errors, []); });
     const fixture = await mountWorkspaceFixture(page, app);
-    await page.goto(app.url + '/intelligence?scene=5402');
+    await page.goto(app.url + '/intelligence/vector-images');
     await page.waitForSelector('#scene-tab-5402[aria-selected="true"]');
     await page.locator('#personal-pie-create').click();
     const picker = page.locator('#topic-reference-dialog');
@@ -328,7 +325,7 @@ test('discussion deep links, summaries and drafts are isolated by scene', async 
     const errors = []; page.on('pageerror', error => errors.push(error.message));
     t.after(async () => { await browser.close(); await app.close(); assert.deepEqual(errors, []); });
     const fixture = await mountWorkspaceFixture(page, app);
-    await page.goto(app.url + '/intelligence?scene=5402&discussion=1&categoryID=54');
+    await page.goto(app.url + '/intelligence/vector-images?discussion=1&categoryID=54');
     await page.waitForSelector('#discussion-context [data-scene-id="5402"][aria-selected="true"]');
     assert.ok(fixture.discussions.every(body => body.contextValues.scene === '5402'));
     assert.equal(await page.locator('#posting-context').textContent(), 'Vector images');
@@ -346,7 +343,7 @@ test('discussion deep links, summaries and drafts are isolated by scene', async 
     await page.waitForFunction(() => document.getElementById('discussion-entry')?.dataset.discussionCount === '1');
     assert.ok(fixture.summaries.some(body => body.contextValues.scene === '5401'));
     assert.ok(fixture.summaries.some(body => body.contextValues.scene === '5402'));
-    assert.match(await page.locator('#discussion-entry').getAttribute('href'), /scene=5401/);
+    assert.match(await page.locator('#discussion-entry').getAttribute('href'), /intelligence\/general/);
 });
 
 for (const browserType of [chromium, webkit]) for (const width of [390, 1440]) test(`${browserType.name()} home scene search previews and links share the selected scene at ${width}`, async t => {
@@ -393,8 +390,8 @@ for (const browserType of [chromium, webkit]) for (const width of [390, 1440]) t
     const card = page.locator('.th-card[data-scene-id="102"]');
     await card.locator('.th-model').first().waitFor();
     assert.equal(await page.locator('.th-card:visible').count(), 1);
-    assert.equal(new URL(await card.locator('.th-topic-link').getAttribute('href'), app.url).searchParams.get('scene'), '102');
-    assert.equal(new URL(await card.locator('.th-model').first().getAttribute('href'), app.url).searchParams.get('scene'), '102');
+    assert.equal(new URL(await card.locator('.th-topic-link').getAttribute('href'), app.url).pathname, '/coding/photon-design');
+    assert.equal(new URL(await card.locator('.th-model').first().getAttribute('href'), app.url).pathname, '/coding/photon-design');
     assert.ok(app.state.requests.some(request => request.path === '/api/get_topic_preview' && request.body.sceneID === 102));
     await page.screenshot({ path: `${output}/home-search-${browserType.name()}-${width}.png` });
     await page.locator('#topic-search').fill('Coding');
@@ -442,7 +439,7 @@ for (const width of [390, 1440]) test(`sidebar scene search groups parent matche
     const errors = []; page.on('pageerror', error => errors.push(error.message));
     t.after(async () => { await browser.close(); await app.close(); assert.deepEqual(errors, []); });
     const fixture = await mountWorkspaceFixture(page, app);
-    await page.goto(app.url + '/intelligence?scene=5401');
+    await page.goto(app.url + '/intelligence/general');
     await page.waitForSelector('#scene-tab-5401[aria-selected="true"]');
     await page.locator(width < 760 ? '#taxonomy-toggle' : '#config-sidebar-toggle').click();
     await page.locator('#navigation-search-toggle').click();
@@ -470,9 +467,9 @@ for (const width of [390, 1440]) test(`sidebar scene search groups parent matche
     await page.locator('#configured-search').fill('Editable vector output');
     await results.locator('[data-scene-id="5402"]').waitFor();
     assert.equal(await results.locator('[data-scene-id]').count(), 2, 'Matching descriptions include public and owned-private scenes');
-    assert.equal(await results.locator('[data-scene-id="5402"]').getAttribute('href'), '/intelligence?scene=5402');
+    assert.equal(await results.locator('[data-scene-id="5402"]').getAttribute('href'), '/intelligence/vector-images');
     await results.locator('[data-scene-id="5402"]').click();
     await page.waitForSelector('#scene-tab-5402[aria-selected="true"]');
-    assert.equal(new URL(page.url()).searchParams.get('scene'), '5402');
+    assert.equal(new URL(page.url()).pathname, '/intelligence/vector-images');
     assert.equal(fixture.reads.at(-1).contextValues.scene, '5402');
 });

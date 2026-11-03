@@ -1,3 +1,4 @@
+import { setLoading } from './shared/loading.js';
 import { postJSON } from './shared/http.js';
 import { canonicalAccountID, pageAccountWriteScope } from './shared/account-identity.js';
 import { createOrganizationMark } from './shared/organization-logos.js?v=organization-logos-20261006';
@@ -13,7 +14,8 @@ import { mountFittedHeadline } from './shared/fitted-headline.js';
 import { createModelSearch } from './shared/model-search.js';
 import { createFloatingSearchLayer } from './shared/floating-search-layer.js';
 import { normalizeModelFocusTarget } from './workspace/model-focus-target.js';
-import { topicURL, normalizeTopicSummary } from './shared/topics.js';
+import { topicURL, sceneSummary } from './shared/topics.js';
+import { createPrivateTopicEditor } from './shared/private-topic-editor.js';
 import { createIdentityAvatar as avatar, createTopicCreator } from './shared/topic-identity.js';
 import { AVAILABLE_INFERENCE_VERSION } from './shared/available-score.js';
 import { buildContributionURL } from './shared/contribution-navigation.js?v=taxonomy-20260929';
@@ -39,8 +41,8 @@ const sceneRequest = topic => topic.sceneID == null ? {} : { sceneID: Number(top
 function topicsWithScenes(topics) {
     return topics.flatMap(topic => [topic, ...orderedScenes(topic.scenes).map(scene => ({ ...topic,
         sceneID: Number(scene.ID), sceneName: scene.name, topicName: topic.name,
-        name: `${topic.name} / ${scene.name}`, description: scene.description || topic.description,
-        url: scene.url || sceneURL(canonicalTopicURL(topic), scene.ID), scenes: [], isDefaultScene: scene.isDefault === true
+        name: `${topic.name} / ${scene.name}`, description: sceneSummary(topic, scene),
+        url: scene.url || sceneURL(canonicalTopicURL(topic), scene), scenes: [], isDefaultScene: scene.isDefault === true
     }))]);
 }
 const jobs = [];
@@ -181,6 +183,11 @@ function createCard(topic) {
     sceneToggle.hidden = true;
     delete sceneToggle.dataset.tooltip;
     heading.append(identity, summary, creator);
+    if (topic.isPrivate && topic.sceneID == null) {
+        const edit = button('Edit private topic', 'pen-to-square', 'th-quiet th-topic-edit');
+        edit.addEventListener('click', event => { event.stopPropagation(); void privateTopicEditor.open(topic.ID, edit); });
+        heading.append(edit);
+    }
     const visual = element('div', 'th-visual'); visual.dataset.view = view;
     visual.setAttribute('aria-label', `${topic.name} preview`);
     const meta = element('span', 'th-card-notice th-sr-only'); meta.setAttribute('role', 'status');
@@ -274,9 +281,12 @@ function renderCardState(state) {
     if (state.status === 'loaded') { renderChart(state); return; }
     const container = element('div', 'th-preview-state');
     container.setAttribute('role', 'status');
-    container.append(icon(state.status === 'error' ? 'cloud-arrow-down' : state.status === 'loading' ? 'spinner' : 'chart-simple'));
-    container.append(element('span', '', state.status === 'error' ? state.refreshAnchor ? 'Could not refresh this preview.' : 'Could not load this preview.'
-        : state.status === 'loading' ? state.snapshotNotice || 'Loading preview...' : 'Preview loads when in view'));
+    if (state.status === 'loading') setLoading(container, state.snapshotNotice || 'Loading preview');
+    else {
+        container.append(icon(state.status === 'error' ? 'cloud-arrow-down' : 'chart-simple'));
+        container.append(element('span', '', state.status === 'error' ? state.refreshAnchor ? 'Could not refresh this preview.' : 'Could not load this preview.'
+            : 'Preview loads when in view'));
+    }
     if (state.status === 'error') {
         const retry = button('Retry preview', 'rotate-right', 'th-state-action');
         retry.append(element('span', '', 'Retry')); retry.addEventListener('click', () => enqueue(state, false, true));
@@ -829,7 +839,8 @@ function filterTopics() {
                 : 'Sign in to see your topics.'
                 : directoryView === 'recent' ? 'No recent topics yet.'
                     : directoryView === 'configured' ? 'No topics in Mine yet.' : 'No topics yet.';
-            listStatus.replaceChildren(element('span', '', message));
+            if (!query && accountOnly && profileLoading) setLoading(listStatus, 'Loading your account');
+            else listStatus.replaceChildren(element('span', '', message));
             if (accountOnly && !profileLoading) { const link = element('a', 'th-quiet', 'Sign in'); link.href = '/login'; listStatus.append(link); }
             if (query) {
                 const clear = button('Clear search', 'xmark', 'th-state-action'); clear.append(element('span', '', 'Clear search'));
@@ -1007,7 +1018,7 @@ function loadTopics() {
 async function readTopics() {
     topicsLoading = true; grid.setAttribute('aria-busy', 'true'); listStatus.hidden = false;
     topicsReadFailed = false;
-    listStatus.textContent = 'Loading topics...';
+    setLoading(listStatus, 'Loading topics');
     const requestAccount = accountEpoch;
     try {
         const data = await postJSON('/api/get_topics', {}, { timeoutMs: 20000, requireJSON: true });
@@ -1134,87 +1145,19 @@ $('#topics-account').addEventListener('click', async event => {
     }
 });
 
-const dialog = $('#create-topic-dialog');
-const form = $('#create-topic-form');
-const submit = $('#create-topic-submit');
-const formStatus = $('#create-topic-status');
-let creating = false;
-function renderCreateSubmit() {
-    submit.replaceChildren(icon(creating ? 'spinner' : 'plus'), element('span', '', creating ? 'Creating...' : 'Create private topic'));
-}
-
-function formMessage(message, href, label) {
-    formStatus.hidden = false; formStatus.replaceChildren(element('span', '', message));
-    if (href) { const link = element('a', '', label); link.href = href; formStatus.append(document.createTextNode(' '), link); }
-}
-
-async function openCreateTopic() {
-    if (creating) return;
-    formStatus.hidden = true;
-    formStatus.replaceChildren();
-    renderCreateSubmit();
-    dialog.showModal();
-    await profileReady;
-    if (profileReadFailed) await loadProfile();
-    if (!profile) formMessage(profileReadFailed ? 'Could not confirm your account. Sign in before creating a topic.'
-        : 'Sign in to create a topic. Your draft stays on this page.', '/login', 'Sign in');
-}
-$('#new-private-topic').addEventListener('click', () => openCreateTopic());
-for (const close of document.querySelectorAll('[data-close-create]')) close.addEventListener('click', () => { if (!creating) dialog.close(); });
-dialog.addEventListener('cancel', event => { if (creating) event.preventDefault(); });
-dialog.addEventListener('click', event => {
-    if (event.target !== dialog || creating) return;
-    const rect = dialog.getBoundingClientRect();
-    if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) dialog.close();
+const privateTopicEditor = createPrivateTopicEditor({
+    async beforeOpen() { await profileReady; if (profileReadFailed) await loadProfile(); return true; },
+    async onSaved(topic) {
+        $('#topic-search').value = '';
+        await loadTopics(); resetFilters();
+        const card = cards.get(String(topic.ID))?.card;
+        card?.scrollIntoView({ block: 'center', behavior: 'auto' });
+        card?.querySelector('.th-topic-link')?.focus({ preventScroll: true });
+        announcement.textContent = `${topic.name} saved.`;
+    },
+    async onDeleted() { await loadTopics(); announcement.textContent = 'Private topic deleted.'; }
 });
-
-form.addEventListener('submit', async event => {
-    event.preventDefault();
-    if (creating) return;
-    await profileReady;
-    if (creating) return;
-    if (!profile) { formMessage('Sign in to create a topic. Your draft is kept.', '/login', 'Sign in'); return; }
-    const name = $('#new-topic-name').value.trim().normalize('NFC');
-    if (!name) { $('#new-topic-name').focus(); return; }
-    let description;
-    try { description = normalizeTopicSummary($('#new-topic-description').value); }
-    catch { formMessage('Write one sentence of up to 180 characters.'); $('#new-topic-description').focus(); return; }
-    creating = true; submit.disabled = true; formStatus.hidden = true;
-    renderCreateSubmit();
-    try {
-        const result = await pageAccountWriteScope.write(postJSON, '/api/create_topic', {
-            name, description, isPrivate: true
-        });
-        const topic = result?.topic ?? result;
-        if (!topic?.ID || !canonicalTopicURL(topic)) throw new TypeError('The new topic could not be confirmed.');
-        let state = cards.get(cardKey(topic));
-        if (!state) {
-            state = createCard(topic);
-            grid.append(state.card);
-            resize.observe(state.visual); if (visibility) visibility.observe(state.card); else enqueue(state);
-        }
-        $('#topic-search').value = ''; filterTopics(); form.reset(); dialog.close();
-        await loadTopics();
-        state.card.scrollIntoView({ block: 'center', behavior: 'auto' });
-        state.card.querySelector('.th-card-title a')?.focus({ preventScroll: true });
-        announcement.textContent = `${topic.name} created.`;
-    } catch (error) {
-        const code = error.payload?.error;
-        if (code === 'legal_acceptance_required') formMessage('Review the updated Terms, then try again. Your draft is kept.', '/account/privacy', 'Privacy & account choices');
-        else if (error.status === 401 || code === 'authentication_required') formMessage('Sign in again before creating this topic. Your draft is kept.', '/login', 'Sign in');
-        else if (['account_changed', 'account_identity_required'].includes(code)) formMessage('Your account changed. Refresh before creating a topic. Your draft has not been submitted.');
-        else if (code === 'reserved_topic_name') { formMessage('This topic name is reserved. Choose another name. Your draft is kept.'); $('#new-topic-name').focus(); }
-        else if (code === 'topic_name_exists') { formMessage('A topic with this name already exists. Choose another name. Your draft is kept.'); $('#new-topic-name').focus(); }
-        else if (code === 'invalid_topic_name') { formMessage('Use 1 to 128 characters without control characters for the topic name.'); $('#new-topic-name').focus(); }
-        else if (code === 'invalid_topic_description') { formMessage('Write one sentence of up to 180 characters.'); $('#new-topic-description').focus(); }
-        else if (error.status === 429) formMessage('You have reached the daily topic creation limit. Your draft is kept; try again later.');
-        else formMessage(error.status === 409 ? 'A topic with this name already exists. Choose another name.'
-            : 'Could not confirm topic creation. Your draft is kept; check your connection and try again.');
-    } finally {
-        creating = false; submit.disabled = false;
-        renderCreateSubmit();
-    }
-});
+$('#new-private-topic').addEventListener('click', event => void privateTopicEditor.open(null, event.currentTarget));
 
 $('#topics-score-toggle').addEventListener('click', event => {
     filters.scoreMode = filters.scoreMode === 'available' ? 'range' : 'available';

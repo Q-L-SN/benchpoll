@@ -1,3 +1,4 @@
+import { setLoading } from './loading.js';
 import { createFloatingSearchLayer } from './floating-search-layer.js';
 
 export function createModelSearch({ container, search, onSelect, label = 'Search models' }) {
@@ -74,7 +75,7 @@ export function createModelSearch({ container, search, onSelect, label = 'Search
         const value = input.value.trim();
         if (!value) { status.textContent = ''; return; }
         const current = sequence;
-        status.textContent = 'Searching...';
+        setLoading(status, 'Searching...');
         timer = setTimeout(async () => {
             controller = new globalThis.AbortController();
             try {

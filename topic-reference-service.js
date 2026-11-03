@@ -1,4 +1,4 @@
-import { topicURL } from './public/js/shared/topics.js';
+import { topicURL, sceneSummary, scenePath } from './public/js/shared/topics.js';
 
 const fail = (status, error, details = {}) => { throw { status, body: { error, ...details } }; };
 export const MAX_REFERENCE_DEPTH = 16;
@@ -12,7 +12,6 @@ export async function loadTopicReferenceTargets(db, userID = null) {
         EXISTS(SELECT 1 FROM personal_pies p JOIN users u ON u.ID = p.user_ID
             WHERE p.context_ID = rc.ID AND u.deleted_at IS NULL
             AND (u.banned_at IS NULL OR (u.banned_until IS NOT NULL AND u.banned_until <= NOW()))
-            AND (c.owner_user_ID IS NOT NULL OR p.user_ID = ? OR p.updated_at >= NOW() - INTERVAL 14 DAY)
             AND (EXISTS(SELECT 1 FROM personal_pie_weights w WHERE w.pie_ID = p.ID)
                 OR EXISTS(SELECT 1 FROM personal_pie_topic_weights w WHERE w.pie_ID = p.ID))) AS has_weights
         FROM ranking_contexts rc JOIN categories c ON c.ID = rc.category_ID
@@ -20,7 +19,7 @@ export async function loadTopicReferenceTargets(db, userID = null) {
         WHERE c.is_active = 1 AND (c.owner_user_ID IS NULL OR c.owner_user_ID = ?)
         AND (s.context_ID IS NOT NULL OR (rc.context_values = JSON_OBJECT()
             AND NOT EXISTS(SELECT 1 FROM topic_scenes other WHERE other.category_ID = c.ID AND other.is_active = 1)))
-        ORDER BY c.position, c.ID, COALESCE(s.is_default, 0) DESC, s.position, s.context_ID`, [userID, userID]);
+        ORDER BY c.position, c.ID, COALESCE(s.is_default, 0) DESC, s.position, s.context_ID`, [userID]);
     return rows.map(row => {
         const contextID = Number(row.context_ID), categoryID = Number(row.category_ID);
         const sceneID = row.scene_ID == null ? null : Number(row.scene_ID);
@@ -29,21 +28,22 @@ export async function loadTopicReferenceTargets(db, userID = null) {
         return { contextID, categoryID, sceneID, topicName: row.topic_name,
             sceneName: row.scene_name ?? null,
             name: sceneID === null ? row.topic_name : `${row.topic_name} / ${row.scene_name}`,
-            description: row.scene_description || row.topic_description || '',
+            description: sceneSummary({ name: row.topic_name, description: row.topic_description },
+                { name: row.scene_name, description: row.scene_description }),
             isDefault: Boolean(Number(row.is_default)), isPrivate, hasWeights: Boolean(Number(row.has_weights)),
-            url: sceneID === null ? base : `${base}?scene=${sceneID}` };
+            url: sceneID === null ? base : scenePath(base, { name: row.scene_name }) };
     });
 }
 
 export function referenceCondition(target) {
-    return { conditionID: -target.contextID, referenceContextID: target.contextID, type: 'topic',
-        ...target, benchmarkID: null, conditionName: '', conditionKey: `topic:${target.contextID}`,
+    return { ...target, ID: -target.contextID, conditionID: -target.contextID, referenceContextID: target.contextID, type: 'topic',
+        benchmarkID: null, conditionName: '', conditionKey: `topic:${target.contextID}`,
         isDefaultCondition: true, isPrimaryCondition: true, lowCoverage: false,
         excludedFromRanking: false, scoredModelCount: 0, scoreCount: 0 };
 }
 
 export function missingReferenceCondition(contextID) {
-    return { conditionID: -contextID, referenceContextID: contextID, type: 'topic',
+    return { ID: -contextID, conditionID: -contextID, referenceContextID: contextID, type: 'topic',
         name: 'Unavailable topic', benchmarkID: null, conditionName: '',
         conditionKey: `topic:${contextID}`, unavailable: true, isDefaultCondition: true,
         isPrimaryCondition: true, lowCoverage: false, excludedFromRanking: false,

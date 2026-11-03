@@ -7,15 +7,16 @@ export function createRankingNotice({ status, rows }) {
     const text = document.createElement('span'); content.append(icon, text); status.replaceChildren(content);
     const mobile = window.matchMedia('(max-width: 760px)');
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
-    const mobilePanels = document.querySelector('.bp-mobile-panels');
+    const mobilePage = rows.closest('.bp-right-workspace');
     let height = 0, frame = 0, lastIdentity = '', destroyed = false;
     let lastScroll = null, scrollRemainder = 0, lastMobile = mobile.matches;
 
     function setHeight(value) {
         const delta = value - height;
-        const mobileTop = 60 + (mobilePanels?.getBoundingClientRect().height ?? 0);
-        viewport.style.setProperty('--ranking-notice-top', `${mobileTop}px`);
-        const scrollTop = mobile.matches ? document.scrollingElement.scrollTop : rows.scrollTop;
+        const scrollRoot = mobile.matches ? mobilePage : rows;
+        const mobileTop = mobilePage.getBoundingClientRect().top;
+        viewport.style.setProperty('--ranking-notice-top', '0px');
+        const scrollTop = scrollRoot.scrollTop;
         const anchor = rows.getClientRects().length > 0
             && (mobile.matches ? rows.getBoundingClientRect().top + height < mobileTop : scrollTop > .5);
         if (lastMobile !== mobile.matches || lastScroll === null || Math.abs(lastScroll - scrollTop) > .01) scrollRemainder = 0;
@@ -26,9 +27,8 @@ export function createRankingNotice({ status, rows }) {
         if (anchor && spacer.isConnected) {
             spacer.getBoundingClientRect();
             const target = Math.max(0, scrollTop + delta + scrollRemainder);
-            if (mobile.matches) window.scrollTo({ top: target, behavior: 'instant' });
-            else rows.scrollTo({ top: target, behavior: 'instant' });
-            lastScroll = mobile.matches ? document.scrollingElement.scrollTop : rows.scrollTop;
+            scrollRoot.scrollTo({ top: target, behavior: 'instant' });
+            lastScroll = scrollRoot.scrollTop;
             // Preserve fractional pixels across frames on browsers that round scroll offsets.
             scrollRemainder = target - lastScroll;
         } else { lastScroll = null; scrollRemainder = 0; }
@@ -74,7 +74,7 @@ export function createRankingNotice({ status, rows }) {
         if (!status.hidden && status.dataset.motion !== 'closing') animateTo(Math.max(44, content.scrollHeight));
     });
     observer.observe(content);
-    if (mobilePanels) observer.observe(mobilePanels);
+    observer.observe(mobilePage);
     const destroy = () => {
         destroyed = true; window.cancelAnimationFrame(frame); observer.disconnect();
     };

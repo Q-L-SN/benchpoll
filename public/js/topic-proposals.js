@@ -1,3 +1,4 @@
+import { setLoading, setButtonLoading } from './shared/loading.js';
 import { postJSON, postWriteJSON } from './shared/http.js';
 import { pageAccountWriteScope, canonicalAccountID, accountWriteError, isAccountWriteError } from './shared/account-identity.js';
 import { openSignIn, installSignInLinks, listenAccountChange } from './shared/sign-in.js';
@@ -43,9 +44,8 @@ function approvedSceneURL(value, proposal) {
     if (typeof value !== 'string' || !value.startsWith('/') || value.startsWith('//') || value.includes('\\')) return null;
     try {
         const url = new URL(value, 'https://benchpoll.invalid');
-        return url.origin === 'https://benchpoll.invalid' && !url.hash && [...url.searchParams].length === 1
-            && url.searchParams.get('scene') === String(proposal.sceneID)
-            && url.pathname === `/${topicSlug(proposal.parentTopicName)}` ? value : null;
+        return url.origin === 'https://benchpoll.invalid' && !url.hash && !url.search
+            && url.pathname === `/${topicSlug(proposal.parentTopicName)}/${proposal.sceneSlug || topicSlug(proposal.name)}` ? value : null;
     } catch { return null; }
 }
 
@@ -75,7 +75,10 @@ export function parseProposal(value) {
         supportCount: value.supportCount, threshold: value.threshold, status: value.status,
         supported: value.supported, canSupport: value.canSupport, submissionID: value.submissionID,
         topicID: value.topicID, url: value.url, revision: value.revision, expiresAt: value.expiresAt,
-        ...(scene ? { kind: 'scene', parentTopicID: value.parentTopicID, parentTopicName: value.parentTopicName, sceneID: value.sceneID } : {}),
+        hasSnapshot: value.hasSnapshot === true,
+        previewURL: value.hasSnapshot === true && value.previewURL === `/topic-proposals/${value.proposalID}/preview` ? value.previewURL : null,
+        ...(value.isMine && positiveID(value.sourceTopicID) ? { sourceTopicID: value.sourceTopicID } : {}),
+        ...(scene ? { kind: 'scene', parentTopicID: value.parentTopicID, parentTopicName: value.parentTopicName, sceneID: value.sceneID, sceneSlug: value.sceneSlug } : {}),
         isMine: value.isMine, canEdit: value.canEdit, canWithdraw: value.canWithdraw, canCancelSupport: value.canCancelSupport };
 }
 
@@ -132,7 +135,8 @@ export function validateEditedProposal(value, previous, body) {
     const proposal = parseProposal(value);
     if (proposal.proposalID !== previous.proposalID || !proposal.isMine) throw invalidResponse();
     const unchanged = body.name === previous.name && body.description === previous.description;
-    if (proposal.revision !== previous.revision + (unchanged ? 0 : 1) || proposal.name !== body.name || proposal.description !== body.description
+    const revisions = body.sourceTopicID && unchanged ? [previous.revision, previous.revision + 1] : [previous.revision + (unchanged ? 0 : 1)];
+    if (!revisions.includes(proposal.revision) || proposal.name !== body.name || proposal.description !== body.description
         || proposal.expiresAt !== previous.expiresAt || (proposal.parentTopicID ?? null) !== (previous.parentTopicID ?? null)) throw refreshRequired();
     return proposal;
 }
@@ -156,6 +160,8 @@ function glyph(name) {
 }
 
 function actionLabel(button, label, icon) {
+    if (icon === 'spinner') { setButtonLoading(button, true, label); return; }
+    setButtonLoading(button, false);
     button.replaceChildren(glyph(icon), element('span', 'bp-ui-action-label', label));
 }
 
@@ -201,6 +207,11 @@ export function proposalErrorInfo(error, operation = 'publish') {
         topic_proposal_not_owner: ['Only the author can edit or withdraw this proposal. Refresh the hall.', 'hall'],
         topic_proposal_expired: ['The 14-day collection period has ended. This proposal can no longer be changed or supported.', 'hall'],
         topic_creation_limit: ['You have reached the proposal limit. Please try again later.'],
+        private_topic_source_required: ['Choose a saved private Topic to publish.'],
+        private_topic_not_found: ['That private Topic is unavailable. Choose another Topic or refresh your list.'],
+        proposal_topic_empty: ['Save evaluation weights in the private Topic’s default scene before proposing it.'],
+        proposal_private_or_unavailable_reference: ['Remove private or unavailable Topic references before publishing. Your original Topic stays private.'],
+        proposal_evaluation_unavailable: ['An evaluation item is no longer available. Update your private Topic, then try again.'],
         write_identity_required: ['The request identity could not be confirmed. Please try again.'],
         write_identity_reused: ['The request identity could not be confirmed. Please try again.']
     };
@@ -216,7 +227,8 @@ export function mountProposalHall() {
     const dialog = $('#proposal-dialog'), form = $('#proposal-form'), submit = $('#proposal-submit');
     const fields = { name: $('#proposal-name'), description: $('#proposal-description') };
     const target = $('#proposal-target'), targetStatus = $('#proposal-target-status');
-    let parentTopicID = null, publicTopics = [], targetsLoaded = false, targetsLoading = false;
+    const source = $('#proposal-source');
+    let parentTopicID = null, sourceTopicID = null, publicTopics = [], privateTopics = [], targetsLoaded = false, targetsLoading = false;
     const list = $('#proposals-list'), listStatus = $('#proposals-list-status'), more = $('#proposals-load-more');
     const proposals = new Map(), rowErrors = new Map(), supporting = new Set(), operations = new Map();
     const drafts = new Map();
@@ -258,7 +270,7 @@ export function mountProposalHall() {
     };
     const formMessage = info => setMessage($('#proposal-form-status'), info?.message, info?.recovery);
     const draftValues = () => ({ ...Object.fromEntries(Object.entries(fields).map(([key, input]) => [key, input.value])),
-        ...(parentTopicID !== null ? { parentTopicID } : {}) });
+        ...(parentTopicID !== null ? { parentTopicID } : {}), ...(sourceTopicID !== null ? { sourceTopicID } : {}) });
     const editDraftKey = proposal => `${DRAFT_KEY}:edit:${boundOwner}:${proposal.proposalID}`;
     const saveDraft = () => {
         const key = editing ? editDraftKey(editing) : DRAFT_KEY;
@@ -271,32 +283,45 @@ export function mountProposalHall() {
         if (!drafts.has(key)) try { draft = JSON.parse(sessionStorage.getItem(key)) ?? fallback; } catch { /* Storage is optional. */ }
         for (const key of Object.keys(fields)) fields[key].value = typeof draft[key] === 'string' && draft[key].length <= 16384 ? draft[key] : '';
         parentTopicID = positiveID(draft.parentTopicID) ? draft.parentTopicID : null;
+        sourceTopicID = positiveID(draft.sourceTopicID) ? draft.sourceTopicID : null;
         renderTargets();
         return draft;
     }
     restoreDraft(DRAFT_KEY);
     const requestedParent = Number(new URLSearchParams(location.search).get('parentTopicID'));
     if (positiveID(requestedParent)) { parentTopicID = requestedParent; renderTargets(); }
+    const requestedSource = Number(new URLSearchParams(location.search).get('sourceTopicID'));
+    if (positiveID(requestedSource)) { sourceTopicID = requestedSource; parentTopicID = null; }
 
     function renderTargets() {
         const options = [new window.Option('New topic', '')];
         for (const topic of publicTopics) options.push(new window.Option(`Scene in ${topic.name}`, String(topic.ID)));
         if (parentTopicID !== null && !publicTopics.some(topic => topic.ID === parentTopicID)) {
             const unavailable = new window.Option(editing?.parentTopicName ? `Scene in ${editing.parentTopicName}`
-                : targetsLoaded ? 'Topic unavailable' : 'Loading topic...', String(parentTopicID));
+                : targetsLoaded ? 'Topic unavailable' : 'Selected topic', String(parentTopicID));
             unavailable.disabled = true; options.push(unavailable);
         }
         target.replaceChildren(...options); target.value = parentTopicID === null ? '' : String(parentTopicID);
+        source.replaceChildren(new window.Option('Choose a saved private Topic', ''), ...privateTopics.map(topic => new window.Option(topic.name, String(topic.ID))));
+        if (sourceTopicID !== null && !privateTopics.some(topic => topic.ID === sourceTopicID)) {
+            const unavailable = new window.Option(targetsLoaded ? 'Private Topic unavailable' : 'Selected private Topic', String(sourceTopicID));
+            unavailable.disabled = true; source.append(unavailable);
+        }
+        source.value = sourceTopicID === null ? '' : String(sourceTopicID);
+        const link = $('#proposal-source-link'); link.hidden = !privateTopics.some(topic => topic.ID === sourceTopicID);
+        if (!link.hidden) link.href = '/personal/' + sourceTopicID;
     }
     async function loadTargets() {
         if (targetsLoaded || targetsLoading) return;
-        targetsLoading = true; targetStatus.hidden = true;
+        targetsLoading = true; targetStatus.hidden = false; setLoading(targetStatus, 'Loading topics');
         try {
             const data = await postJSON('/api/get_topics', {}, READ_OPTIONS);
             if (!Array.isArray(data?.topics)) throw invalidResponse();
             publicTopics = data.topics.filter(topic => topic.isPrivate !== true && positiveID(topic.ID) && typeof topic.name === 'string');
+            privateTopics = data.topics.filter(topic => topic.isPrivate === true && positiveID(topic.ID) && typeof topic.name === 'string');
             publicTopics.sort((a, b) => a.name.localeCompare(b.name));
-            targetsLoaded = true; renderTargets();
+            targetsLoaded = true; targetStatus.hidden = true; targetStatus.replaceChildren(); renderTargets();
+            if (!editing && sourceTopicID !== null && !fields.name.value) fillSource();
         } catch {
             targetStatus.replaceChildren(element('span', '', 'Could not load public Topics. '));
             const retry = createAction({ label: 'Retry', icon: 'fa-solid fa-rotate-right', variant: 'quiet' });
@@ -308,6 +333,15 @@ export function mountProposalHall() {
         parentTopicID = target.value ? Number(target.value) : null;
         formMessage(null); syncFields(); saveDraft();
     });
+    function fillSource() {
+        const topic = privateTopics.find(topic => topic.ID === sourceTopicID);
+        if (topic) { fields.name.value = topic.name; fields.description.value = topic.description; }
+    }
+    source.addEventListener('change', () => {
+        sourceTopicID = source.value ? Number(source.value) : null;
+        fillSource(); renderTargets(); syncFields(); saveDraft();
+    });
+    $('#proposal-source-refresh').addEventListener('click', () => { targetsLoaded = false; void loadTargets(); });
 
     const actorReady = () => accountState === 'ready' && listAuthenticated === true && quotaFresh;
     const proposalByID = id => activeProposal?.proposalID === id ? activeProposal : proposals.get(id);
@@ -330,6 +364,7 @@ export function mountProposalHall() {
             : ready ? `${quota.activeSupports} / 3 active supports; ${proposalFull() ? 1 : 0} / 1 collecting proposal`
                 : accountState === 'blocked' ? 'Limits unavailable until your account is confirmed.'
                     : listLoading ? 'Checking your limits...' : 'Limits could not be confirmed. Refresh the hall before making changes.';
+        if (accountState !== 'guest' && !ready && accountState !== 'blocked' && listLoading) setLoading($('#proposals-quota'), 'Checking your limits');
         const notes = [];
         if (ready && supportFull()) notes.push('Cancel a collecting support to support another proposal.');
         if (ready && proposalFull()) notes.push('Edit or withdraw your collecting proposal before proposing another.');
@@ -341,6 +376,14 @@ export function mountProposalHall() {
 
     function syncFields() {
         const draft = validateProposalDraft(draftValues());
+        const needsSource = parentTopicID === null && (!editing || editing.hasSnapshot);
+        $('#proposal-source-field').hidden = parentTopicID !== null;
+        source.disabled = creating;
+        const sourceError = needsSource && (!sourceTopicID || targetsLoaded && !privateTopics.some(topic => topic.ID === sourceTopicID))
+            ? 'Choose one of your saved private Topics. Configure its default scene before proposing it.' : '';
+        if (sourceError) draft.errors.sourceTopicID = sourceError;
+        $('#proposal-source-error').textContent = attempted ? sourceError : '';
+        $('#proposal-source-error').hidden = !attempted || !sourceError;
         if (!editing && parentTopicID !== null && (!targetsLoaded || !publicTopics.some(topic => topic.ID === parentTopicID))) {
             draft.errors.parentTopicID = targetsLoaded ? 'This public Topic is unavailable. Choose another Topic.' : 'Load the public Topics before proposing a scene.';
         }
@@ -380,6 +423,7 @@ export function mountProposalHall() {
             : accountState === 'loading' ? 'Checking your account...'
                 : accountState === 'blocked' ? 'Your account changed. Refresh this page before continuing. Your draft is kept.'
                     : accountState === 'failed' ? 'Could not confirm your account. Retry the account check in the hall. Your draft is kept.' : '';
+        if (accountState === 'loading') setLoading(note, 'Checking your account');
         if (!editing && actorReady() && proposalFull() && !creating) formMessage(proposalErrorInfo({ payload: { error: 'active_topic_proposal_limit' } }));
         if (editing && proposalStatus(proposalByID(editing.proposalID) ?? editing) !== 'open' && !creating) {
             formMessage({ message: 'Collection is closed. This proposal cannot be edited or withdrawn. Your draft is kept.' });
@@ -545,6 +589,8 @@ export function mountProposalHall() {
         content.append(title, element('p', 'tp-row-description', proposal.description), status, deadline);
         if (proposal.parentTopicID != null) title.before(element('p', 'tp-deadline', `Scene in ${proposal.parentTopicName ?? 'unavailable Topic'}`));
         if (proposal.isMine) content.append(element('span', 'tp-own-label', 'Your proposal'));
+        if (proposal.previewURL) content.append(createAction({ label: 'Preview & try weights', href: proposal.previewURL,
+            icon: 'fa-solid fa-chart-column', className: 'tp-row-link' }));
         if (proposal.status === 'approved' && proposal.url) content.append(createAction({ label: proposal.parentTopicID != null ? 'View scene' : 'View Topic',
             href: proposal.url, icon: 'fa-solid fa-arrow-right', className: 'tp-row-link' }));
         const actions = element('div', 'tp-row-actions');
@@ -595,8 +641,11 @@ export function mountProposalHall() {
     function renderListState() {
         listStatus.hidden = proposals.size > 0;
         if (!proposals.size) {
-            listStatus.replaceChildren(glyph(listLoading ? 'spinner' : listFailure ? 'triangle-exclamation' : 'comments'));
-            listStatus.append(element('strong', '', listLoading ? 'Loading proposals...' : listFailure ? 'Could not load proposals.' : listView === 'review' ? 'No proposals are in review yet.' : 'No Topic proposals yet.'));
+            if (listLoading) setLoading(listStatus, 'Loading proposals');
+            else {
+                listStatus.replaceChildren(glyph(listFailure ? 'triangle-exclamation' : 'comments'));
+                listStatus.append(element('strong', '', listFailure ? 'Could not load proposals.' : listView === 'review' ? 'No proposals are in review yet.' : 'No Topic proposals yet.'));
+            }
             if (!listLoading && listFailure) {
                 const retry = createAction({ label: 'Retry proposals', icon: 'fa-solid fa-rotate-right', variant: 'secondary' });
                 retry.addEventListener('click', () => { void loadPage(); });
@@ -871,6 +920,7 @@ export function mountProposalHall() {
             const csrfToken = await csrfFor(owner, epoch);
             assertActor(owner, epoch);
             const body = { name: draft.name, description: draft.description, csrfToken,
+                ...(parentTopicID === null && sourceTopicID !== null ? { sourceTopicID } : {}),
                 ...(!previous && parentTopicID !== null ? { parentTopicID } : {}),
                 ...(previous ? { proposalID: previous.proposalID, revision: previous.revision } : {}) };
             const validate = result => previous ? validateEditedProposal(result, previous, body) : validatePublishedProposal(result, body);
@@ -954,8 +1004,12 @@ export function mountProposalHall() {
     });
     window.addEventListener('pagehide', () => clearTimeout(deadlineTimer));
     syncFields();
-    void loadProfile();
-    void loadPage();
+    void Promise.all([loadProfile(), loadPage()]).then(() => {
+        if (positiveID(requestedSource) && accountState === 'ready' && !proposalFull()) {
+            editing = null; sourceTopicID = requestedSource; parentTopicID = null;
+            fields.name.value = ''; fields.description.value = ''; showEditor($('#open-proposal'));
+        }
+    });
 }
 
 if (typeof document !== 'undefined' && document.getElementById('proposal-hall')) mountProposalHall();

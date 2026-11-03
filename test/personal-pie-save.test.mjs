@@ -1,3 +1,4 @@
+import { estimationRequest, normalizeEstimationAlgorithm } from '../public/js/shared/estimation-algorithms.js';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createHash, randomUUID } from 'node:crypto';
@@ -308,7 +309,7 @@ function browserHarness(t, { gesture = null } = {}) {
             fallbackRules: state.personalFallbackRules.map(rule => ({ primaryConditionID: rule.primaryConditionID, mode: 'ordered', entries: rule.entries.map(portableFamilyEntry) })) }) });
     const writer = createRetryableWrite(postJSON, { storage,
         digest: async value => createHash('sha256').update(value).digest('hex') });
-    const globals = { state, Number, Map, Set, guestDrafts, pieRecovery, structuredClone,
+    const globals = { estimationRequest, normalizeEstimationAlgorithm, state, Number, Map, Set, guestDrafts, pieRecovery, structuredClone,
         window: { setTimeout, clearTimeout }, postJSON, postWriteJSON: writer, validatePersonalPieSave,
         validateWorkspacePayload, cloneEntries, cloneFallbackRules, portableFamilyEntry,
         accountWriteError, isAccountWriteError, topicReferenceError, FALLBACK_CONFIGURATION_VERSION, FALLBACK_RULE_MODE: 'ordered',

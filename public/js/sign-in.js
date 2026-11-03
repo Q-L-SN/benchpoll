@@ -1,3 +1,4 @@
+import { setLoading } from './shared/loading.js';
 import { postJSON } from './shared/http.js';
 import { normalizePrivacyStatus, safeGitHubAuthorizationURL } from './account-privacy.js';
 import { enhanceUI } from './shared/ui-components.js';
@@ -11,8 +12,9 @@ export function createSignInUI({ root = document, request = postJSON,
     const status = root.getElementById('sign-in-status');
     const retry = root.getElementById('sign-in-retry');
     let privacy = null, loading = false, pending = false;
-    function message(text, error = false) {
-        status.textContent = text;
+    function message(text, error = false, busy = false) {
+        if (busy) setLoading(status, text);
+        else status.textContent = text;
         status.dataset.error = String(error);
         status.setAttribute('aria-live', error ? 'assertive' : 'polite');
     }
@@ -24,7 +26,7 @@ export function createSignInUI({ root = document, request = postJSON,
     async function refreshStatus() {
         if (loading || pending) return;
         loading = true; privacy = null; retry.hidden = true;
-        message('Getting sign-in ready...'); render();
+        message('Getting sign-in ready', false, true); render();
         try {
             privacy = normalizePrivacyStatus(await request('/api/get_privacy_status', {}, OPTIONS));
             message('');
@@ -36,7 +38,7 @@ export function createSignInUI({ root = document, request = postJSON,
     form.addEventListener('submit', async event => {
         event.preventDefault();
         if (!privacy || loading || pending) return;
-        pending = true; retry.hidden = true; message('Opening GitHub...'); render();
+        pending = true; retry.hidden = true; message('Opening GitHub', false, true); render();
         try {
             const result = await request('/api/prepare_github_login', {
                 csrfToken: privacy.csrfToken, termsVersion: privacy.versions.terms,

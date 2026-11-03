@@ -1,6 +1,6 @@
 // Review changed inline code before updating these pins; never hash injected response HTML.
 export const REVIEWED_INLINE_SCRIPT_HASHES = Object.freeze({
-    'private/home-built.html': 'sha256-zSiEQmbqsMJ3hZy19yrV/0f6vkXAZuzTz35grU6xUWI=',
+    'private/home-built.html': 'sha256-14YuFiiAIE2ePonel8LQ29POodAPnIP+sbsA04WM6r8=',
     'public/assets/color-studies-20260909/index.html': 'sha256-B0jVaV6qxBJ0imok6w4LyDDPnOr2rAJlZAZ/MgW7yFc='
 });
 

@@ -58,7 +58,7 @@ test('proposal publication has normalized idempotency, including concurrent retr
     const h = harness(), key = crypto.randomUUID();
     const [first, retry] = await Promise.all([h.invoke('propose_topic', proposalRequest, { key }), h.invoke('propose_topic', proposalRequest, { key })]);
     assert.deepEqual(first, retry);
-    const normalized = await h.invoke('propose_topic', { name: ` ${request.name} `, description: request.description }, { key });
+    const normalized = await h.invoke('propose_topic', { ...proposalRequest, name: ` ${request.name} `, description: request.description }, { key });
     assert.deepEqual(normalized, first); assert.equal(h.state.proposals.size, 1); assert.equal(h.state.writes.size, 1);
     await assert.rejects(h.invoke('propose_topic', { ...proposalRequest, description: 'Different summary.' }, { key }),
         error => error.body?.error === 'write_identity_reused');
@@ -157,7 +157,7 @@ test('review cannot approve a missing/mismatched proposal or one with fewer than
 test('edited moderation cannot change proposal identity', async () => {
     const h = harness(), { body: { submissionID: ID, proposalID } } = await promote(h);
     await assert.rejects(h.invoke('preview_moderation_sql', { ID, content: {
-        schemaVersion: 1, type: 'new_topic', proposalID: proposalID + 1, ...proposalRequest
+        schemaVersion: 1, type: 'new_topic', proposalID: proposalID + 1, name: proposalRequest.name, description: proposalRequest.description
     } }, { actor: reviewer }), error => error.body?.error === 'moderation_proposal_identity_immutable');
     assert.equal(h.state.categories.size, 0);
 });
@@ -214,7 +214,7 @@ for (const status of ['approved', 'rejected']) test(`${status}: decision, audit,
     assert.equal(outbox.parameters[3], status); assert.equal(outbox.parameters[4], 'new_topic');
     assert.equal(outbox.parameters[5], 'pending');
     const graphLocks = h.events.filter(event => event.kind === 'lock' && event.key === 'topic-reference-graph');
-    assert.equal(graphLocks.length, 2, 'Both the decision and exact-key retry take the graph lock');
+    assert.equal(graphLocks.length, 33, 'Publication, thirty votes, decision and retry all use the graph lock');
     for (const graph of graphLocks) {
         const locks = h.events.filter(event => event.kind === 'lock' && event.connectionID === graph.connectionID);
         assert.equal(locks[0].key, 'topic-reference-graph', 'Moderation uses the same graph-first order as Pie and scene writes');
@@ -225,8 +225,9 @@ for (const status of ['approved', 'rejected']) test(`${status}: decision, audit,
     assert.equal(h.state.outbox.size, 1);
 });
 
-test('SQL preview is read-only; edit-and-approve retains the original author and canonical summary', async () => {
+test('legacy text-only SQL preview is read-only; edit-and-approve retains the original author and canonical summary', async () => {
     const h = harness(), { body: { submissionID: ID, proposalID } } = await promote(h);
+    h.state.snapshots.clear(); // Pre-snapshot proposals remain reviewable.
     const content = { schemaVersion: 1, type: 'new_topic', proposalID, name: 'Clinical diagnosis', description: 'A reviewed summary.' };
     const preview = await h.invoke('preview_moderation_sql', { ID, content }, { actor: reviewer });
     assert.match(preview.body.sql, /INSERT INTO categories/); assert.match(preview.body.sql, /INSERT INTO ranking_contexts/);

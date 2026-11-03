@@ -1,3 +1,4 @@
+import { estimationRequest, normalizeEstimationAlgorithm } from '../public/js/shared/estimation-algorithms.js';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
@@ -79,7 +80,7 @@ function createHarness(t, { reconcile = false, realHTTP = false } = {}) {
     const location = { search: reconcile ? '?context_budget=extended' : '',
         href: 'https://offline.invalid/Language-models', pathname: '/Language-models', origin: 'https://offline.invalid' };
     const payload = body => validateWorkspacePayload(workspace(fixture, body), { initialMode: body.initialMode });
-    const globals = {
+    const globals = { estimationRequest, normalizeEstimationAlgorithm,
         ...constants, state, structuredClone, URL, URLSearchParams, Map, Set, Date, Number, guestDrafts, pieRecovery,
         workspaceLoadFailed: false, comparisonProfileFailure: null, comparisonProfileLoadError: '',
         comparisonProfilesReady: Promise.resolve(true), pendingFallbackSave: false,

@@ -172,7 +172,7 @@ test('workspace validation requires an accurate separate deduction and pre-deduc
     }
 });
 
-test('current help describes the factor while old calculation details can still explain a version-3 deduction', () => {
+test('current help describes the factor while calculation details keep before and after scores', () => {
     const read = path => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
     assert.match(read('private/home.html'), /adjusts the whole index for measured coverage/);
     const guide = read('private/how-it-works.html');
@@ -182,5 +182,8 @@ test('current help describes the factor while old calculation details can still 
     assert.match(guide, /Estimates do not increase coverage/);
     assert.match(guide, /Unresolved gaps are left out of Estimated score/);
     assert.match(guide, /Not a confidence interval/);
-    assert.match(read('public/js/workspace/model-scores.js'), /Low coverage deduction:/);
+    const details = read('public/js/workspace/model-scores.js');
+    assert.match(details, /Before adjustment:/);
+    assert.match(details, /After adjustment:/);
+    assert.doesNotMatch(details, /Low coverage deduction:/);
 });

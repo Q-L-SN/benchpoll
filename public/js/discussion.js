@@ -1,13 +1,15 @@
+import { setLoading } from './shared/loading.js';
 import { postJSON } from './shared/http.js';
 import { loginWithGitHub } from './global.js';
 import { buildContributionURL } from './shared/contribution-navigation.js?v=clean-20260908';
 import { animateContent, setVisible, mountDisclosureMotion, setDisclosureOpen } from './shared/motion.js?v=workspace-ui-20261008';
 import { readRankingContext } from './shared/ranking-url.js';
 import { orderedScenes } from './navigation/scenes.js';
+import { scenePath, topicSlug } from './shared/topics.js';
 import { relativeDateAge } from './shared/relative-date.js';
 import { createBenchmarkScoresView } from './workspace/benchmark-scores.js?v=model-name-translation-20261006';
 import { pageAccountWriteScope, isAccountWriteError } from './shared/account-identity.js';
-import { setDiscussionEntryView } from './workspace/discussion-entry.js';
+import { setDiscussionEntryView, readDiscussionEntryContext } from './workspace/discussion-entry.js';
 import { createDiscussionAutoLoader } from './shared/discussion-auto-load.js';
 import { createAction, mountDisclosureChevron } from './shared/ui-components.js';
 import { profileAvatarURL } from './shared/profile-editor.js';
@@ -160,7 +162,11 @@ async function openDiscussion(url, trigger = null, { allCategories = false } = {
     const query = url.searchParams;
     informationOnly = workspaceContext?.isPrivate === true;
     state.categoryID = query.has('categoryID') ? Number(query.get('categoryID')) : workspaceContext?.categoryID ?? null;
-    state.contextValues = contextValues;
+    const namedScene = [...discussionScenes, ...(workspaceContext?.scenes ?? [])]
+        .find(scene => (scene.slug || topicSlug(scene.name)) === url.pathname.split('/').filter(Boolean).at(-1));
+    state.contextValues = namedScene ? { scene: String(namedScene.ID) } : url.pathname === location.pathname && workspaceContext
+        && Number(state.categoryID) === Number(workspaceContext.categoryID)
+        ? { ...contextValues, ...workspaceContext.contextValues } : contextValues;
     state.benchmarkID = query.has('benchmarkID') ? Number(query.get('benchmarkID')) : null;
     state.conditionID = query.has('conditionID') ? Number(query.get('conditionID')) : null;
     state.threadID = query.has('threadID') ? Number(query.get('threadID')) : null;
@@ -191,8 +197,14 @@ document.addEventListener('click', event => {
     event.preventDefault();
     openDiscussion(url, link);
 });
-window.addEventListener('benchpoll:discussion-context', event => {
+function updateWorkspaceContext(event) {
     const next = event.detail;
+    const firstContext = workspaceContext === null;
+    if (firstContext && params.get('discussion') === '1') {
+        workspaceContext = next;
+        void openDiscussion(new URL(location.href));
+        return;
+    }
     if (next.isPrivate) { workspaceContext = next; if (isOpen) closeDiscussion(); return; }
     const changed = workspaceContext && JSON.stringify(workspaceContext) !== JSON.stringify(next);
     const initialContext = !workspaceContext && isOpen && !state.threadID
@@ -201,12 +213,13 @@ window.addEventListener('benchpoll:discussion-context', event => {
     if ((changed || initialContext) && isOpen) {
         const url = new URL(location.href);
         url.search = new URLSearchParams({ discussion: '1', categoryID: String(next.categoryID),
-            ...Object.fromEntries(Object.entries(next.contextValues).map(([key, value]) => [key === 'scene' ? key : `context_${key}`, value])) });
+            ...Object.fromEntries(Object.entries(next.contextValues).filter(([key]) => key !== 'scene').map(([key, value]) => [`context_${key}`, value])) });
         if (state.benchmarkID !== null) url.searchParams.set('benchmarkID', state.benchmarkID);
         if (state.conditionID !== null) url.searchParams.set('conditionID', state.conditionID);
         openDiscussion(url, null, { allCategories: state.allCategories });
     }
-});
+}
+window.addEventListener('benchpoll:discussion-context', updateWorkspaceContext);
 window.addEventListener('benchpoll:context-weights', event => {
     contextWeights = event.detail;
     renderInformationWeights();
@@ -279,7 +292,7 @@ async function loadBenchmarkInformation() {
     host.querySelector('.benchmark-information-meta').hidden = true;
     if (host.hidden) return;
     host.setAttribute('aria-busy', 'true');
-    $('benchmark-information-status').textContent = 'Loading benchmark information...';
+    setLoading($('benchmark-information-status'), 'Loading benchmark information');
     try {
         const info = await postJSON('/api/get_benchmark_information', { conditionID: state.conditionID }, { timeoutMs: 60000 });
         if (sequence !== informationSequence || !isOpen) return;
@@ -335,9 +348,11 @@ function contextLabel(values) {
 }
 function discussionURL(extra = {}) {
     const url = new URL(location.pathname, location.origin);
+    const scene = discussionScenes.find(item => String(item.ID) === state.contextValues.scene);
+    if (scene) url.pathname = scenePath(url.pathname, scene);
     url.searchParams.set('discussion', '1');
     if (state.categoryID) url.searchParams.set('categoryID', state.categoryID);
-    Object.entries(state.contextValues).forEach(([key, value]) => url.searchParams.set(key === 'scene' ? key : `context_${key}`, value));
+    Object.entries(state.contextValues).forEach(([key, value]) => { if (key !== 'scene') url.searchParams.set(`context_${key}`, value); });
     Object.entries(extra).forEach(([key, value]) => { if (value != null) url.searchParams.set(key, value); });
     return url.pathname + url.search;
 }
@@ -552,7 +567,7 @@ async function load(append = false) {
     $('discussion-feed').setAttribute('aria-busy', 'true');
     $('discussion-more').disabled = true;
     $('discussion-more').hidden = false;
-    $('discussion-more').textContent = state.threadID ? 'Loading replies...' : 'Loading discussions...';
+    setLoading($('discussion-more'), state.threadID ? 'Loading replies' : 'Loading discussions');
     $('discussion-error').hidden = true;
     try {
         const data = await postJSON('/api/get_discussion', { categoryID: state.categoryID, contextValues: state.contextValues,
@@ -773,4 +788,5 @@ async function profile() {
 window.addEventListener('focus', profile);
 window.addEventListener('storage', profile);
 updatePanelAccess();
-if (params.get('discussion') === '1') await openDiscussion(new URL(location.href));
+const initialDiscussionContext = readDiscussionEntryContext();
+if (initialDiscussionContext) updateWorkspaceContext({ detail: initialDiscussionContext });

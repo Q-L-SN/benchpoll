@@ -1,0 +1,53 @@
+* { box-sizing: border-box; }
+body { margin: 0; background: #f6f7f9; color: #28313c; font-family: Manrope, sans-serif; }
+button, input, select { font: inherit; }
+button, a, select { min-height: 44px; }
+a { color: inherit; text-decoration: none; }
+a:hover { color: #151e28; }
+a:focus-visible, button:focus-visible { outline: 2px solid #52657b; outline-offset: 3px; }
+.bp-site-header nav { display: flex; gap: 20px; font-size: 13px; }
+.pp-main { max-width: 1200px; margin: 28px auto; padding: 0 20px; }
+.pp-heading h1 { margin: 8px 0 12px; font-size: clamp(26px, 4vw, 38px); }
+.pp-heading > p { max-width: 760px; line-height: 1.6; }
+#proposal-version { font-size: 12px; color: #647080; }
+.pp-heading > a { display: inline-flex; align-items: center; font-size: 13px; }
+.pp-note { color: #647080; font-size: 12px; line-height: 1.6; }
+.pp-grid { display: grid; grid-template-columns: minmax(280px, .85fr) minmax(360px, 1.4fr); gap: 20px; align-items: start; }
+.pp-grid[hidden] { display: none; }
+.pp-grid > section, .pp-grid > form { min-width: 0; padding: 20px; background: #fff; border: 1px solid #dce1e6; border-radius: 10px; }
+.pp-section-heading { display: flex; gap: 12px; justify-content: space-between; align-items: center; }
+.pp-section-heading h2 { font-size: 17px; margin: 0; }
+.pp-page button { border: 0; border-radius: 6px; padding: 10px 14px; background: #edf0f4; color: #28313c; cursor: pointer; font-size: 13px; }
+.pp-page button:disabled { cursor: default; opacity: .5; }
+.pp-page button.pp-primary { background: #28313c; color: #fff; }
+.pp-page input, .pp-page select { border: 1px solid #ccd3dc; border-radius: 5px; padding: 9px; min-width: 0; background: white; color: inherit; }
+#proposal-preview-scenes { display: flex; gap: 6px; overflow-x: auto; margin: 18px 0; padding-bottom: 4px; }
+#proposal-preview-scenes[hidden] { display: none; }
+#proposal-preview-scenes button { flex: 0 0 auto; background: transparent; }
+#proposal-preview-scenes button[aria-current="true"] { background: #e2e7ed; font-weight: 700; }
+.pp-weight-row { display: flex; align-items: center; gap: 8px; margin-block: 14px; font-size: 13px; }
+.pp-weight-row > span:first-child { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.pp-weight-row small { display: block; color: #6a7684; margin-top: 3px; }
+.pp-weight-row input { width: 72px; flex-shrink: 0; }
+.pp-trial-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.is-invalid { color: #a3432e; }
+#proposal-copy-form { grid-column: 1; font-size: 13px; }
+.pp-grid > section[aria-labelledby="trial-ranking-title"] { grid-column: 2; grid-row: 1 / span 2; }
+#proposal-reset { background: transparent; }
+#proposal-copy-form label, #proposal-copy-form input { display: block; width: 100%; margin: 8px 0; }
+#proposal-copy-form h3 { margin: 0 0 12px; font-size: 15px; }
+.pp-score-mode { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.pp-score-mode select { max-width: 160px; }
+.pp-ranking { border-collapse: collapse; width: 100%; table-layout: fixed; font-size: 12px; }
+.pp-ranking th, .pp-ranking td { text-align: left; padding: 12px 8px; border-bottom: 1px solid #e6e9ee; overflow-wrap: anywhere; }
+.pp-ranking th:first-child { width: 46%; }
+.pp-ranking th:last-child { width: 22%; }
+.pp-ranking thead { color: #687583; }
+.pp-ranking tbody th { font-weight: 500; }
+.pp-score-cell { position: relative; isolation: isolate; font-variant-numeric: tabular-nums; }
+.pp-score-bar { position: absolute; z-index: -1; left: 0; height: 60%; top: 20%; border-radius: 3px; opacity: .18; }
+.pp-score-number { font-weight: 700; }
+#proposal-ranking-status, #proposal-copy-status, #proposal-preview-status { font-size: 13px; line-height: 1.5; }
+@media (max-width: 760px) { .pp-main { padding-inline: 12px; } .pp-grid { grid-template-columns: minmax(0, 1fr); } .pp-grid > section, .pp-grid > form { padding: 16px; } .pp-section-heading { flex-wrap: wrap; } .bp-site-header nav { gap: 12px; } }
+
+@media (max-width: 760px) { .pp-grid > section[aria-labelledby="trial-ranking-title"] { grid-column: 1; grid-row: 2; } #proposal-copy-form { grid-row: 3; } }

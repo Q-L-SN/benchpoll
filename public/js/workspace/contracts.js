@@ -4,6 +4,7 @@ import { FALLBACK_CONFIGURATION_PAGE_SIZE, FEATURED_FALLBACK_LIMIT, FEATURED_FAL
 import { BENCHMARK_GROUPS, benchmarkConditionGroup } from '../shared/benchmark-condition-groups.js?v=fallback-discovery-20261005';
 import { storedAvailableResultInference, PAIRWISE_INFERENCE_METHOD, PAIRWISE_COVERAGE_METHOD, PAIRWISE_COVERAGE_FACTOR_METHOD, PAIRWISE_RATIONAL_COVERAGE_FACTOR_METHOD } from '../shared/available-score.js?v=coverage-factor-20261019';
 import { canonicalAccountID } from '../shared/account-identity.js';
+import { isMissingInferenceMethod, normalizeEstimationAlgorithm } from '../shared/estimation-algorithms.js';
 import { normalizeRankingResume, RANKING_PAGE_SIZE } from '../shared/ranking-resume.js';
 
 function invalidWorkspaceResponse(path, message) {
@@ -77,7 +78,11 @@ function validateReferenceStatus(pie, path) {
 }
 
 function requireBenchmarkRow(value, path) {
-    const row = requireWorkspaceConditionIdentity(value, path);
+    const row = value?.type === 'topic' ? requireWeightEntry({ ...value, weightBasisPoints: 0 }, path)
+        : requireWorkspaceConditionIdentity(value, path);
+    if (row.type === 'topic' && row.ID !== row.conditionID) {
+        throw invalidWorkspaceResponse(path, 'must use the reference condition as its row identity');
+    }
     if (!Number.isSafeInteger(row.scoreCount) || row.scoreCount < 0
         || !Number.isSafeInteger(row.scoredModelCount) || row.scoredModelCount < 0
         || typeof row.lowCoverage !== 'boolean') {
@@ -159,7 +164,8 @@ function requireRankedModel(value, path, scoreMode) {
     let traceScore = model.lower;
     if (scoreMode === 'available' && scores.length) {
         const inference = requireWorkspaceObject(model.availableInference, `${path}.availableInference`);
-        const pairwise = [PAIRWISE_INFERENCE_METHOD, PAIRWISE_COVERAGE_METHOD, PAIRWISE_COVERAGE_FACTOR_METHOD, PAIRWISE_RATIONAL_COVERAGE_FACTOR_METHOD].includes(inference.method);
+        const missingOnly = isMissingInferenceMethod(inference.method);
+        const pairwise = missingOnly || [PAIRWISE_INFERENCE_METHOD, PAIRWISE_COVERAGE_METHOD, PAIRWISE_COVERAGE_FACTOR_METHOD, PAIRWISE_RATIONAL_COVERAGE_FACTOR_METHOD].includes(inference.method);
         inferredScores.forEach((score, index) => {
             if (!Number.isSafeInteger(score.conditionID) || score.conditionID < 1
                 || !Number.isFinite(score.normalizedScore)
@@ -185,7 +191,7 @@ function requireRankedModel(value, path, scoreMode) {
                 throw invalidWorkspaceResponse(`${path}.availableInference.${key}`, 'must match the missing-score estimate');
             }
         }
-        const denominator = inference.coverageFraction + inference.inferredFraction;
+        const denominator = missingOnly ? 1 : inference.coverageFraction + inference.inferredFraction;
         if (Math.abs(inference.coverageFraction * 100 - model.coverage) > 0.011
             || Math.abs(inference.totalScore - model.lower) > 0.011 || model.lower !== model.upper
             || Math.abs(scores.reduce((sum, score) => sum + score.contribution, 0) - inference.observedContribution) > .000001
@@ -193,8 +199,9 @@ function requireRankedModel(value, path, scoreMode) {
             || inferredScores.some(score => Math.abs(score.effectiveWeight - score.originalWeight / denominator) > .000001)) {
             throw invalidWorkspaceResponse(path, 'has an inconsistent inferred total');
         }
-        traceScore = [PAIRWISE_COVERAGE_METHOD, PAIRWISE_COVERAGE_FACTOR_METHOD, PAIRWISE_RATIONAL_COVERAGE_FACTOR_METHOD].includes(inference.method)
-            ? inference.unpenalizedScore : inference.totalScore;
+        traceScore = missingOnly ? inference.observedContribution + inference.inferredContribution
+            : [PAIRWISE_COVERAGE_METHOD, PAIRWISE_COVERAGE_FACTOR_METHOD, PAIRWISE_RATIONAL_COVERAGE_FACTOR_METHOD].includes(inference.method)
+                ? inference.unpenalizedScore : inference.totalScore;
     } else if (model.availableInference !== null || inferredScores.length) {
         throw invalidWorkspaceResponse(path, 'must not infer a score range or an empty ranking');
     }
@@ -293,6 +300,8 @@ function validateFamilyComposition(value, pieEntries, compositionPath) {
 function validateWorkspacePayload(payload, { resume = null, initialMode = 'public' } = {}) {
     const progress = normalizeRankingResume(resume);
     const response = requireWorkspaceObject(payload, 'response');
+    try { normalizeEstimationAlgorithm(response.estimationAlgorithm); }
+    catch { throw invalidWorkspaceResponse('estimationAlgorithm', 'must identify a supported scoring method'); }
     if (typeof response.authenticated !== 'boolean'
         || (response.authenticated ? typeof response.userID !== 'string' || canonicalAccountID(response.userID) !== response.userID
             : response.userID !== null)) {

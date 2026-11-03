@@ -76,7 +76,10 @@ export function locationURL(entry) {
     const path = entry.url || topicURL(entry.categoryID, name, entry.isPrivate, entry.slug);
     const url = new URL(path, 'https://navigation.invalid');
     if (!path.startsWith('/') || url.origin !== 'https://navigation.invalid') throw new TypeError('Invalid topic URL');
-    if (entry.contextValues?.scene) return sceneURL(path, entry.contextValues.scene);
+    const scene = entry.contextValues?.scene ? entry.scenes?.find(item => String(item.ID) === String(entry.contextValues.scene))
+        ?? (entry.sceneName ? { name: entry.sceneName } : null) : entry.scenes?.find(item => item.isDefault);
+    if (scene) return sceneURL(path, scene);
+    if (entry.contextValues?.scene) throw new TypeError('Missing scene name');
     Object.keys(entry.contextValues ?? {}).sort().forEach(key => url.searchParams.set(`context_${key}`, entry.contextValues[key]));
     return `${url.pathname}${url.search}`;
 }

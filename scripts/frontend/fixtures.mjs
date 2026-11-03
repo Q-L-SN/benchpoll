@@ -2,6 +2,7 @@ import { comparisonOptions } from '../../model-comparison.js';
 import { scoreComparison } from '../../ranking-service.js';
 import { createRankingPager } from '../../ranking-pagination.js';
 import { availableResultInference, AVAILABLE_INFERENCE_VERSION } from '../../public/js/shared/available-score.js';
+import { normalizeEstimationAlgorithm } from '../../public/js/shared/estimation-algorithms.js';
 import { familyKey } from '../../public/js/shared/benchmark-families.js';
 // Synthetic records for the isolated frontend harness; never imported by the app.
 const fixtureRankingPager = createRankingPager();
@@ -60,6 +61,7 @@ export function createFixtureState(options = {}) {
 }
 export function workspace(state, body, { paginate = true } = {}) {
     const scoreMode = body.scoreMode ?? 'range';
+    const estimationAlgorithm = normalizeEstimationAlgorithm(body.estimationAlgorithm);
     if (!['range', 'available'].includes(scoreMode)) {
         throw { status: 400, body: { error: 'invalid_score_mode' } };
     }
@@ -91,6 +93,7 @@ export function workspace(state, body, { paginate = true } = {}) {
     })) : [];
     const data = {
         scoreMode,
+        estimationAlgorithm,
         authenticated: state.authenticated,
         userID: state.authenticated ? state.userID : null,
         context: { ...(state.isPrivate ? { isPrivate: true } : {}), categoryID: category.ID, categoryPath: category.path, categoryName: category.name,
@@ -133,10 +136,10 @@ export function workspace(state, body, { paginate = true } = {}) {
     });
     data.modelLeaderboards = options ? {
         public: scoreComparison(state.comparisonModels, publicWeights, 10000, {
-            scoreMode, availableInferenceVersion: body.availableInferenceVersion ?? AVAILABLE_INFERENCE_VERSION, fallbackScope: 'public', familyComposition: data.publicPie.familyComposition
+            scoreMode, estimationAlgorithm, availableInferenceVersion: body.availableInferenceVersion ?? AVAILABLE_INFERENCE_VERSION, fallbackScope: 'public', familyComposition: data.publicPie.familyComposition
         }, options),
         personal: scoreComparison(state.comparisonModels, personalEntries, 10000, { fallbackRules: personalFallbackRules,
-            familyComposition: data.personalPie.communityFallbackComposition, scoreMode,
+            familyComposition: data.personalPie.communityFallbackComposition, scoreMode, estimationAlgorithm,
             availableInferenceVersion: body.availableInferenceVersion ?? AVAILABLE_INFERENCE_VERSION }, options)
     } : {
         public: publicEmpty ? [] : [...models, ...extraModels].map(item => scoreMode === 'available' ? { ...item, upper: item.lower } : item),
@@ -161,7 +164,7 @@ export function workspace(state, body, { paginate = true } = {}) {
             const entries = mode === 'personal' ? personalEntries : weightedEntries(publicWeights);
             data.modelLeaderboards[mode] = data.modelLeaderboards[mode].map(model => {
                 const observedScore = model.lower * 100 / model.coverage;
-                const availableInference = scoreMode === 'available' ? availableResultInference(observedScore, model.coverage / 100, []) : null;
+                const availableInference = scoreMode === 'available' ? availableResultInference(observedScore, model.coverage / 100, [], null, 0, estimationAlgorithm) : null;
                 return { ...model, availableInference, inferredScores: [],
                 lower: availableInference ? Number(availableInference.totalScore.toFixed(2)) : model.lower,
                 upper: availableInference ? Number(availableInference.totalScore.toFixed(2)) : model.upper,
@@ -169,8 +172,8 @@ export function workspace(state, body, { paginate = true } = {}) {
                 calculationScores: entries.map(entry => ({ conditionID: entry.conditionID,
                     normalizedScore: observedScore,
                     weightBasisPoints: entry.weightBasisPoints * model.coverage / 100,
-                    effectiveWeight: entry.weightBasisPoints / 100 * (scoreMode === 'available' ? 1 : model.coverage / 100),
-                    contribution: (scoreMode === 'available' ? observedScore : model.lower) * entry.weightBasisPoints / 10000,
+                    effectiveWeight: entry.weightBasisPoints / 100 * (scoreMode === 'available' && estimationAlgorithm === 'current' ? 1 : model.coverage / 100),
+                    contribution: (scoreMode === 'available' && estimationAlgorithm === 'current' ? observedScore : model.lower) * entry.weightBasisPoints / 10000,
                     fallbackFor: null, memberIDs: [model.ID], memberWeights: [{ ID: model.ID, weight: 1 }],
                     memberEvidence: [{ ID: model.ID, hash: 'f'.repeat(64) }], matchedCount: null }))
             }; });

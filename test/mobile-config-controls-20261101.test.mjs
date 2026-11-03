@@ -1,19 +1,15 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { configSidebarSwipeIntent } from '../public/js/shared/config-sidebar.js';
+import { drawerReleaseOpen } from '../public/js/shared/drawer-drag.js';
 
-test('configuration swipe requires a deliberate, short, rightward gesture', () => {
-    for (const [dx, dy, elapsed] of [[72, 0, 650], [120, 25, 300], [100, -32, 200]]) {
-        assert.equal(configSidebarSwipeIntent(dx, dy, elapsed), 'open');
-    }
-    for (const [dx, dy, elapsed] of [[0, 0, 0], [71, 0, 200], [8, 8, 80], [0, -9, 80]]) {
-        assert.equal(configSidebarSwipeIntent(dx, dy, elapsed), 'pending');
-    }
+test('a freely dragged drawer settles according to its revealed fraction', () => {
+    for (const value of [0, .1, .49]) assert.equal(drawerReleaseOpen(value), false);
+    for (const value of [.5, .8, 1]) assert.equal(drawerReleaseOpen(value), true);
 });
 
-test('vertical intent, reversals and slow drags abandon the sidebar gesture', () => {
-    for (const [dx, dy, elapsed] of [[90, 0, 651], [-11, 0, 100], [14, 11, 100],
-        [14, -11, 100], [100, 33, 100], [100, -33, 100], [-90, 0, 100]]) {
-        assert.equal(configSidebarSwipeIntent(dx, dy, elapsed), 'cancel');
-    }
+test('a deliberate release velocity can open or close the drawer from either side of halfway', () => {
+    assert.equal(drawerReleaseOpen(.2, .7), true);
+    assert.equal(drawerReleaseOpen(.8, -.7), false);
+    assert.equal(drawerReleaseOpen(.2, .1), false);
+    assert.equal(drawerReleaseOpen(.8, -.1), true);
 });

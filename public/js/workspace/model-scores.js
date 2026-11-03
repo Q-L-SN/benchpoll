@@ -1,4 +1,6 @@
+import { setLoading } from '../shared/loading.js';
 import { postJSON } from '../shared/http.js';
+import { isMissingInferenceMethod } from '../shared/estimation-algorithms.js';
 import { validateApprovedModelResultsPayload, invalidModelScoresResponse } from './contracts.js?v=review-evidence-20261008';
 import { buildModelEditURL, buildResultEditURL } from './links.js?v=model-change-panel-20261006';
 import { animateContent, isDisclosureOpen, mountDisclosureMotion, setDisclosureOpen, setVisible } from '../shared/motion.js';
@@ -289,7 +291,7 @@ export function createModelScoresView({ state, modelScoresDialog, modelScoresTit
             const record = { group, row, samples, loaded: false };
             records.push(record);
             if (onSourcesOpen) {
-                samples.textContent = 'Loading approved scores…';
+                setLoading(samples, 'Loading approved scores…');
                 samples.dataset.sourceState = 'loading';
                 row.addEventListener('toggle', () => onSourcesOpen(record));
             } else renderApprovedScoreSamples(group, samples);
@@ -418,38 +420,32 @@ export function createModelScoresView({ state, modelScoresDialog, modelScoresTit
             modelScoresSummary.append(detail);
         }
         const inference = model.availableInference;
+        const missingOnly = isMissingInferenceMethod(inference?.method);
         const usesCoverageFactor = inference && [inference.coverageFactor, inference.appliedFactor,
             inference.unpenalizedScore].every(Number.isFinite);
-        const coverageFormula = inference?.method === 'pairwise-anchored-rational-coverage-factor'
-            ? 'Coverage formula: 5c/(1+4c)' : '';
-        if (inference && (model.missingWeight > 0 || usesCoverageFactor)) {
+        if (inference && (model.missingWeight > 0 || usesCoverageFactor || missingOnly)) {
             const detail = document.createElement('p');
             detail.className = 'bp-model-inference-summary';
             detail.textContent = model.missingWeight <= 0 ? '' : inference.inferredFraction > 0
                 ? `${(inference.inferredFraction * 100).toFixed(2)}% of the weight uses estimated results from comparisons on shared tests, not measurements.`
                 : 'The available comparisons cannot estimate the missing results.';
-            if (inference.unresolvedFraction > 0) detail.textContent += ` ${(inference.unresolvedFraction * 100).toFixed(2)}% of the weight has no measurement or estimate and is left out of the average.`;
-            if (usesCoverageFactor) {
-                detail.textContent += inference.coverageFactor < 1
-                    ? ' The coverage adjustment applies to the whole index, including its measured contribution; it does not change the recorded benchmark scores.'
-                    : ' All weighted results are measured. No coverage adjustment is applied.';
+            if (inference.unresolvedFraction > 0) detail.textContent += missingOnly
+                ? ` ${(inference.unresolvedFraction * 100).toFixed(2)}% of the weight has no measurement or prediction and starts at 50 in this trial.`
+                : ` ${(inference.unresolvedFraction * 100).toFixed(2)}% of the weight has no measurement or estimate and is left out of the average.`;
+            if (usesCoverageFactor || missingOnly) {
                 modelScoresSummary.append(detail);
-                const calculation = document.createElement('details');
+                const calculation = document.createElement('div');
                 calculation.className = 'bp-model-calculation-details';
-                const heading = document.createElement('summary');
-                heading.textContent = 'How this score is calculated';
-                const formula = document.createElement('p');
-                formula.textContent = `Coverage factor: x${inference.coverageFactor.toFixed(4)} (${inference.unpenalizedScore.toFixed(2)} before adjustment).`;
-                if (coverageFormula) formula.textContent += ` ${coverageFormula}, where c is measured coverage (0 to 1).`;
-                if (inference.unpenalizedScore < 0 && inference.appliedFactor > 1) {
-                    const explanation = inference.appliedFactor === 2 - inference.coverageFactor
-                        ? ' (2 minus the coverage factor)' : '';
-                    formula.textContent += ` Negative scores use x${inference.appliedFactor.toFixed(4)}${explanation} so missing coverage cannot improve them.`;
-                }
-                calculation.append(heading, formula);
+                const before = document.createElement('p');
+                before.textContent = `Before adjustment: ${rankingNumber(inference.unpenalizedScore)}`;
+                const after = document.createElement('p');
+                after.textContent = `After adjustment: ${rankingNumber(inference.totalScore)}`;
+                const help = document.createElement('a');
+                help.href = '/how-it-works#rankings'; help.textContent = 'How it works';
+                calculation.append(before, after, help);
                 modelScoresSummary.append(calculation);
             } else {
-                if (inference.coveragePenalty > 0) detail.textContent += ` Low coverage deduction: ${inference.coveragePenalty.toFixed(2)} points (${inference.unpenalizedScore.toFixed(2)} before deduction).`;
+                if (inference.coveragePenalty > 0) detail.textContent += ` Before adjustment: ${rankingNumber(inference.unpenalizedScore)}. After adjustment: ${rankingNumber(inference.totalScore)}.`;
                 modelScoresSummary.append(detail);
             }
         }
@@ -544,7 +540,7 @@ export function createModelScoresView({ state, modelScoresDialog, modelScoresTit
                 sourceHeading.dataset.tooltip = 'View this configuration’s approved source scores';
                 const samples = document.createElement('div');
                 samples.className = 'bp-model-score-samples';
-                samples.textContent = 'Loading approved scores…';
+                setLoading(samples, 'Loading approved scores…');
                 samples.dataset.sourceState = 'loading';
                 const entry = { member, row, heading, source, sourceHeading, samples,
                     conditionID: score.conditionID, hash: score.memberEvidence.find(item => item.ID === ID).hash,
@@ -651,7 +647,7 @@ export function createModelScoresView({ state, modelScoresDialog, modelScoresTit
         }
         if (entry.pending || entry.error) return;
         entry.pending = true;
-        entry.samples.textContent = 'Loading approved scores…';
+        setLoading(entry.samples, 'Loading approved scores…');
         entry.samples.dataset.sourceState = 'loading';
         entry.samples.setAttribute('aria-busy', 'true');
         void loadRankingSource(view, entry);
@@ -734,7 +730,7 @@ export function createModelScoresView({ state, modelScoresDialog, modelScoresTit
         allScoresView = view;
         renderComparisonName(modelScoresTitle, model, state.comparison);
         modelScoresList.replaceChildren();
-        modelScoresSummary.textContent = 'Loading all recorded configurations…';
+        setLoading(modelScoresSummary, 'Loading all recorded configurations…');
         try {
             const modelIDs = [...new Set((model.members ?? [model]).map(member => member.modelID))];
             const batches = [];
@@ -793,7 +789,9 @@ export function createModelScoresView({ state, modelScoresDialog, modelScoresTit
             const name = document.createElement('span');
             renderComparisonName(name, member, { ...state.comparison, keys: ['model', ...member.condition.scoreFields.map(item => `field:${item.fieldID}`)] });
             if (!member.condition.scoreFields.length) {
-                const label = document.createElement('small'); label.textContent = 'No fields recorded'; name.append(label);
+                const label = document.createElement('span');
+                label.className = 'bp-model-display-parameter bp-model-empty-fields';
+                label.textContent = 'No fields recorded'; name.append(label);
             }
             const count = document.createElement('small'); count.textContent = `${member.scoreCount} scores`;
             heading.append(name, count);
@@ -968,7 +966,7 @@ export function createModelScoresView({ state, modelScoresDialog, modelScoresTit
             entry.pending = true;
             view.active++;
             for (const record of entry.versions.values()) if (isDisclosureOpen(record.row)) {
-                record.samples.textContent = 'Loading approved scores…';
+                setLoading(record.samples, 'Loading approved scores…');
                 record.samples.dataset.sourceState = 'loading';
                 record.samples.setAttribute('aria-busy', 'true');
             }

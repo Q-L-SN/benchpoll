@@ -7,6 +7,8 @@ import vm from 'node:vm';
 import { postJSON } from '../public/js/shared/http.js';
 import { hasAADisplayRestriction, AA_DISPLAY_MESSAGE, AA_DISPLAY_RESTRICTION } from '../public/js/shared/aa-ranking-policy.js';
 
+const loadingSource = (await readFile(new URL('../public/js/shared/loading.js', import.meta.url), 'utf8')).replace(/^export /gm, '');
+
 const root = process.env.PANEL_READ_BASELINE ?? fileURLToPath(new URL('../', import.meta.url));
 const discussion = await readFile(resolve(root, 'public/js/discussion.js'), 'utf8');
 const scores = await readFile(resolve(root, 'public/js/workspace/benchmark-scores.js'), 'utf8');
@@ -48,7 +50,7 @@ function harness(kind) {
         text: { value: '' }, informationSequence: 0, loadSequence: 0, benchmarkInformation: null, loading: false });
     if (kind === 'scores') {
         const code = scores.replace(/^import[\s\S]*?from [^;]+;\r?\n/gm, '').replace('export function', 'function');
-        vm.runInContext(`${code}\nthis.view = createBenchmarkScoresView({ onViewChange(show) {
+        vm.runInContext(`${loadingSource}\n${code}\nthis.view = createBenchmarkScoresView({ onViewChange(show) {
             $('benchmark-scores-view').hidden = !show;
         } });`, context);
     } else {
@@ -56,7 +58,7 @@ function harness(kind) {
         const start = discussion.indexOf(`async function ${name}(`);
         const end = discussion.indexOf(kind === 'information' ? '\nfunction contextLabel(' : '\nfunction renderMentions(', start);
         assert.ok(start >= 0 && end > start, 'Extract the actual current loader');
-        vm.runInContext(`${discussion.slice(start, end)}\nthis.start = ${name};`, context);
+        vm.runInContext(`${loadingSource}\n${discussion.slice(start, end)}\nthis.start = ${name};`, context);
     }
     return { $, errors, requests,
         start: () => kind === 'scores' ? context.view.open({ benchmarkID: 101, conditionID: 1, conditionName: 'Overall' }) : context.start(),

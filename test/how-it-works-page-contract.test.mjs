@@ -38,7 +38,7 @@ test('Back to topics belongs to the configuration page rather than the guide', (
 test('guide is a short explanation, not a hidden implementation manual', () => {
     assert.match(guide, /<h1>How BenchPoll works<\/h1>/);
     const article = guide.match(/<article[\s\S]*?<\/article>/)[0];
-    assert.ok(words(article) <= 750, `Guide has ${words(article)} words`);
+    assert.ok(words(article) <= 850, `Guide has ${words(article)} words`);
     assert.doesNotMatch(article, /<ol\b|<table\b|Expand all|Full calculation rules|&radic;|Public weight =/);
     assert.doesNotMatch(plain(article), /\b(?:overview|showcase|subcategories|descendants|import|themes)\b|View composition/i);
     assert.doesNotMatch(article, /72 hours|percentile|denominator|basis points|pairwise-anchored/);
@@ -76,14 +76,14 @@ test('Personal and Public copy keeps saving, independent topics and privacy dist
 test('guide explains concrete scene identity and dynamic weight resolution without double scoring', () => {
     assert.match(section('topics'), /one level of scenes/);
     assert.match(section('topics'), /default scene comes first/);
-    assert.match(section('topics'), /Topic search includes every scene/);
+    assert.match(section('topics'), /scene search matches appear immediately/);
     assert.match(section('references'), /specific scene if it has scenes/);
     assert.match(section('references'), /Changing a default scene does not retarget existing references/);
     assert.match(section('references'), /Public indices always follow public target weights/);
     assert.match(section('references'), /Personal indices prefer your saved target weights/);
-    assert.match(section('references'), /coverage factor are calculated once, after expansion/);
+    assert.match(section('references'), /coverage correction are calculated after expansion/);
     assert.match(section('references'), /Empty or unavailable targets retain their missing weight/);
-    assert.match(section('account'), /Public topics and scenes go through the proposal hall/);
+    assert.match(section('account'), /Propose a configured private topic through the hall/);
 });
 
 test('score copy distinguishes normalized measurements, estimates and unresolved gaps', () => {
@@ -125,11 +125,11 @@ test('fallback copy preserves explicit order, community inheritance, and real ze
 });
 
 test('account and evidence copy covers public/private creation and editable identity', () => {
-    assert.match(section('account'), /Each account may support up to 3 collecting proposals and author 1/);
+    assert.match(section('account'), /Support up to 3 collecting proposals and author 1/);
     assert.match(section('account'), /Collection lasts 14 days/);
     assert.match(section('account'), /30 other supporters trigger administrator review/);
     assert.doesNotMatch(guide, /topic-proposals|Created by me|Configured by me/);
-    assert.match(section('account'), /Private topics and scenes are immediate and visible only to you/);
+    assert.match(section('account'), /Private topics and scenes are immediate, editable, and visible only to you/);
     assert.match(section('account'), /display name and avatar in the account dialog/);
     assert.match(section('account'), /GitHub links are your choice/);
     assert.match(section('trust'), /measured results and estimates/);

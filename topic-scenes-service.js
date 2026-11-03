@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { canonicalAccountID } from './public/js/shared/account-identity.js';
-import { topicSlug, topicURL, normalizeTopicSummary } from './public/js/shared/topics.js';
+import { topicSlug, topicURL, normalizeTopicSummary, scenePath } from './public/js/shared/topics.js';
 import { claimWriteIntent, completeWriteIntent } from './write-idempotency.js';
 import { startTransactionConnection, commitTransactionConnection, rollbackTransactionConnection,
     releaseTransactionConnection } from './db-transaction.js';
@@ -30,11 +30,13 @@ function valuesRecord(value) {
     return Object.fromEntries(Object.keys(value).sort().map(key => [key, value[key]]));
 }
 
-export function topicSceneURL(topic, contextID) {
+export function topicSceneURL(topic, scene) {
     const ID = sceneIdentity(Number(topic.categoryID ?? topic.ID));
     const base = topicURL(ID, topic.categoryName ?? topic.name, topic.isPrivate === true || topic.owner_user_ID != null,
         topic.slug || topicSlug(topic.categoryName ?? topic.name));
-    return `${base}?scene=${sceneIdentity(contextID)}`;
+    const path = scenePath(base, scene);
+    if (!path) fail(400, 'invalid_scene_path');
+    return path;
 }
 
 export function serializeTopicScene(row, topic = null) {
@@ -45,7 +47,7 @@ export function serializeTopicScene(row, topic = null) {
         description: row.description ?? '', position: Number(row.position ?? 0),
         isDefault: Boolean(Number(row.is_default)), isActive: row.is_active == null || Boolean(Number(row.is_active)),
         ...sceneContext(ID), legacyContextValues: legacy };
-    if (topic) scene.url = topicSceneURL(topic, ID);
+    if (topic) scene.url = topicSceneURL(topic, scene);
     return scene;
 }
 
@@ -185,7 +187,7 @@ export async function assertPublicSceneAvailable(connection, categoryID, name, {
     return { topic: topics[0], slug };
 }
 
-async function insertScene(connection, categoryID, request, { contextID = null, legacyValues = null, position = 10 } = {}) {
+export async function insertTopicScene(connection, categoryID, request, { contextID = null, legacyValues = null, position = 10 } = {}) {
     if (contextID === null) {
         const pending = JSON.stringify({ pendingScene: randomUUID() });
         const [inserted] = await connection.execute(`INSERT INTO ranking_contexts (category_ID, context_values, context_hash)
@@ -213,16 +215,16 @@ export async function addTopicSceneInTransaction(connection, topic, request) {
     if (!scenes.length) {
         const rootID = await ensureTopicRootContext(connection, categoryID);
         if (topicSlug(request.name) === 'general') {
-            await insertScene(connection, categoryID, { ...request, isDefault: true },
+            await insertTopicScene(connection, categoryID, { ...request, isDefault: true },
                 { contextID: rootID, legacyValues: {}, position: 0 });
             return { contextID: rootID, sceneID: rootID, categoryID };
         }
-        await insertScene(connection, categoryID, { name: 'General', description: topic.description,
+        await insertTopicScene(connection, categoryID, { name: 'General', description: topic.description,
             isDefault: true }, { contextID: rootID, legacyValues: {}, position: 0 });
         scenes = [{ ID: rootID, position: 0, isDefault: true }];
     }
     if (request.isDefault) await connection.execute('UPDATE topic_scenes SET is_default = 0 WHERE category_ID = ? AND is_default = 1', [categoryID]);
-    const contextID = await insertScene(connection, categoryID, request,
+    const contextID = await insertTopicScene(connection, categoryID, request,
         { position: Math.max(0, ...scenes.map(scene => scene.position)) + 10 });
     return { contextID, sceneID: contextID, categoryID };
 }

@@ -1,14 +1,15 @@
+import { setLoading } from '../shared/loading.js';
 import { navigationChannel } from '../shared/navigation-channel.js';
 import { configuredRows, contextKey, entryFromContext, locationURL, popularTopics, validateNavigationPayload } from './model.js?v=comparison-experiment-20261007';
 import { readSidebarPreferences, writeSidebarPreferences, readRecentTopics, writeRecentTopics, addRecentTopic, RECENT_TOPICS_PREFIX } from './preferences.js';
 import { postJSON } from '../shared/http.js';
 import { isAccountWriteError, accountWriteError, pageAccountWriteScope } from '../shared/account-identity.js';
 import { animateContent, setVisible } from '../shared/motion.js';
-import { normalizeTopicSummary } from '../shared/topics.js';
+import { normalizeTopicSummary, sceneSummary } from '../shared/topics.js';
 import { createAction, mountDisclosureChevron } from '../shared/ui-components.js';
 import { orderedScenes, sceneNavigationEntries, sceneURL, searchTopicGroups } from './scenes.js';
 
-export function createSidebarNavigation({ onNavigate, onLogin, onSessionChange }) {
+export function createSidebarNavigation({ onNavigate, onLogin, onSessionChange, onCreatePrivate }) {
     const tree = document.getElementById('tree-content');
     const list = document.getElementById('configured-content');
     const viewport = document.querySelector('.bp-taxonomy');
@@ -58,7 +59,7 @@ export function createSidebarNavigation({ onNavigate, onLogin, onSessionChange }
                 ?? scene?.name
                 ?? Object.entries(record.contextValues).map(([name, value]) => `${name}: ${value}`).join(' / ');
             return [{ ...topic, contextValues: record.contextValues, contextLabel: label,
-                ...(scene ? { url: scene.url || sceneURL(topic.url, scene.ID), description: scene.description || topic.description } : {}) }];
+                ...(scene ? { url: scene.url || sceneURL(topic.url, scene), description: sceneSummary(topic, scene) } : {}) }];
         });
     }
 
@@ -164,10 +165,11 @@ export function createSidebarNavigation({ onNavigate, onLogin, onSessionChange }
         return link;
     }
 
-    function topicStatus(host, message) {
+    function topicStatus(host, message, loading = false) {
         const status = document.createElement('p');
         status.className = 'bp-navigation-search-status'; status.setAttribute('role', 'status');
-        status.textContent = message;
+        if (loading) setLoading(status, message);
+        else status.textContent = message;
         host.append(status);
         if (categoryError) {
             const retrySearch = document.createElement('button');
@@ -190,7 +192,8 @@ export function createSidebarNavigation({ onNavigate, onLogin, onSessionChange }
         }
         if (!entries.length) topicStatus(tree, preferences.view === 'recent'
             ? !accountKnown || categoryLoading ? 'Loading recent topics...' : 'No recently viewed topics.'
-            : categoryLoading ? 'Loading topics...' : categoryError ? 'Could not load topics.' : 'No topics yet.');
+            : categoryLoading ? 'Loading topics...' : categoryError ? 'Could not load topics.' : 'No topics yet.',
+            categoryLoading || preferences.view === 'recent' && !accountKnown);
         updateTreeMarkers();
         if (categoriesLoaded && !scrollReady[preferences.view] && ['popular', 'recent'].includes(preferences.view)) {
             scrollReady[preferences.view] = true;
@@ -210,7 +213,8 @@ export function createSidebarNavigation({ onNavigate, onLogin, onSessionChange }
         const matches = searchTopicGroups(visibleTopics(), search.value);
         if (catalogLoading || catalogError || !matches.length) {
             const status = document.createElement('p'); status.className = 'bp-navigation-search-status'; status.setAttribute('role', 'status');
-            status.textContent = catalogLoading ? 'Searching topics...' : catalogError ? 'Could not load topics.' : 'No matching topics.';
+            if (catalogLoading) setLoading(status, 'Searching topics');
+            else status.textContent = catalogError ? 'Could not load topics.' : 'No matching topics.';
             searchResults.append(status);
             if (catalogError) appendCatalogRetry(searchResults);
             return;
@@ -433,7 +437,8 @@ export function createSidebarNavigation({ onNavigate, onLogin, onSessionChange }
         list.setAttribute('aria-label', `Mine: ${rows.length}`);
         const mineFailed = failed || catalogError;
         empty.hidden = !mineFailed && rows.length > 0;
-        empty.textContent = mineFailed ? 'Could not load all your topics.' : !accountKnown ? 'Loading your topics...'
+        if (!mineFailed && (!accountKnown || account !== null && (!loaded || !catalogLoaded))) setLoading(empty, 'Loading your topics');
+        else empty.textContent = mineFailed ? 'Could not load all your topics.' : !accountKnown ? 'Loading your topics...'
             : account === null ? 'Sign in to see your topics.' : !loaded || !catalogLoaded ? 'Loading your topics...'
                 : search.value ? 'No matching topics in Mine.' : 'No topics in Mine yet.';
         login.hidden = account !== null;
@@ -593,6 +598,7 @@ export function createSidebarNavigation({ onNavigate, onLogin, onSessionChange }
     login.addEventListener('click', onLogin);
     createButtons.forEach(button => button.addEventListener('click', () => {
         if (!account) { onLogin(); return; }
+        if (onCreatePrivate) { void onCreatePrivate(button); return; }
         if (creating) return;
         createForm.elements.visibility.value = 'private';
         document.getElementById('topic-create-title').textContent = 'New private topic';
@@ -622,7 +628,7 @@ export function createSidebarNavigation({ onNavigate, onLogin, onSessionChange }
         catch { createError.textContent = 'Write one sentence of up to 180 characters.'; createDescription.focus(); return; }
         creating = true;
         createForm.setAttribute('aria-busy', 'true');
-        submit.querySelector('i').className = 'fa-solid fa-spinner fa-spin';
+        submit.querySelector('i').className = 'bp-spinner';
         submit.disabled = true; createName.disabled = true; createError.textContent = '';
         const isPrivate = true;
         [...createForm.elements].forEach(control => { control.disabled = true; });

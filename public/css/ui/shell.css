@@ -430,3 +430,30 @@ body.bp-home  {
         animation: bp-drawer-content-drop 280ms ease both;
     }
 }
+
+@media (max-width: 760px) {
+    .taxonomy-tracked.taxonomy-open .bp-shell { padding-top: 60px; }
+    .taxonomy-tracked.taxonomy-open .bp-sidebar {
+        animation: none;
+        transform: translateX(calc(var(--bp-drawer-progress, 1) * 100% - 100%));
+        transition: transform 280ms cubic-bezier(.22, 1, .36, 1);
+    }
+    .taxonomy-tracked.taxonomy-open .bp-taxonomy-scrim {
+        animation: none; opacity: var(--bp-drawer-progress, 1); transition: opacity 280ms ease;
+    }
+    .taxonomy-tracked.taxonomy-open :is(.bp-workspace, .contribution-workspace, .bp-how-main, .bp-legal-main) {
+        animation: none; transform: none;
+    }
+    .taxonomy-tracked.taxonomy-dragging :is(.bp-sidebar, .bp-taxonomy-scrim) { transition: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .taxonomy-tracked.taxonomy-open :is(.bp-sidebar, .bp-taxonomy-scrim) { transition: none; }
+}
+/* An explicit per-tab experiment, separate from the horizontally scrolling ranking toolbar. */
+.bp-estimation-test { display: flex; align-items: center; gap: 8px; padding: 8px 10px 12px; color: var(--bp-muted); font-size: 12px; }
+.bp-estimation-test[hidden] { display: none; }
+.bp-estimation-test label { flex: 0 0 auto; }
+.bp-estimation-test select { min-width: 0; max-width: 270px; flex: 1 1 auto; min-height: 36px; font: inherit; color: var(--bp-ink); }
+.bp-estimation-test .bp-ui-select { min-width: 0; max-width: 270px; flex: 1 1 auto; }
+.bp-estimation-test .bp-help-trigger { flex: 0 0 auto; border: 0; background: transparent; }
+@media print { .bp-estimation-test { display: none; } }

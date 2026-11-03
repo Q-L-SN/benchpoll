@@ -6,7 +6,7 @@ import crypto from 'node:crypto';
 import { claimWriteIntent, completeWriteIntent } from './write-idempotency.js';
 import { ownsCategory } from './private-category-service.js';
 import { topicCreator } from './topic-service.js';
-import { FEATURED_TOPIC_ID, topicURL } from './public/js/shared/topics.js';
+import { FEATURED_TOPIC_ID, topicURL, sceneSummary } from './public/js/shared/topics.js';
 import { currentScoreSQL } from './score-aggregation.js';
 import { scoreEvidenceHash } from './score-evidence.js';
 import { FALLBACK_RULE_MODE, familyKey, resolvedFamilyConditionIDs } from './public/js/shared/benchmark-families.js';
@@ -15,6 +15,7 @@ import { loadBenchmarkFamilies, ensureBenchmarkFamily, parseFamilyRows, pruneUnu
 import { availableResultInference, normalizeAvailableInferenceVersion,
     AVAILABLE_INFERENCE_VERSION } from './public/js/shared/available-score.js';
 import { createPairwiseReference } from './pairwise-score.js';
+import { DEFAULT_ESTIMATION_ALGORITHM, normalizeEstimationAlgorithm } from './public/js/shared/estimation-algorithms.js';
 import { benchmarkVersionTieOrder } from './public/js/shared/benchmark-version-order.js';
 import { isAACondition, AA_DISPLAY_RESTRICTION } from './public/js/shared/aa-ranking-policy.js';
 import { aaResultReason } from './aa-archive-policy.js';
@@ -31,7 +32,7 @@ export const MAX_PIE_ITEMS = PIE_TOTAL_BASIS_POINTS / PIE_MIN_ITEM_BASIS_POINTS;
 export { FALLBACK_RULE_MODE };
 export const MIN_COMPARABLE_MODELS = 3;
 export const PUBLIC_PIE_SAMPLE_HOURS = 72;
-export const PUBLIC_CONTEXT_ACTIVITY_DAYS = 14;
+export const PUBLIC_FALLBACK_ACTIVITY_DAYS = 14;
 export const PUBLIC_PIE_MIN_SAMPLES = 10;
 export const RANKING_READ_TIMEOUT_MS = 45000;
 
@@ -479,7 +480,7 @@ export async function loadPublicPie(connection, context, conditionsByID) {
     const [rows] = await connection.execute(`
         SELECT personal_pies.ID AS pie_ID, personal_pies.context_ID,
                personal_pies.updated_at >= NOW() - INTERVAL ${PUBLIC_PIE_SAMPLE_HOURS} HOUR AS is_recent,
-               personal_pies.updated_at >= NOW() - INTERVAL ${PUBLIC_CONTEXT_ACTIVITY_DAYS} DAY AS is_influence_recent,
+               personal_pies.updated_at >= NOW() - INTERVAL ${PUBLIC_FALLBACK_ACTIVITY_DAYS} DAY AS is_fallback_recent,
                personal_pie_weights.benchmark_condition_ID,
                personal_pie_weights.weight_basis_points
         FROM personal_pies
@@ -498,16 +499,16 @@ export async function loadPublicPie(connection, context, conditionsByID) {
     for (const row of rows) {
         const pieID = Number(row.pie_ID);
         const recent = Number(row.is_recent);
-        const influential = Number(row.is_influence_recent);
-        if ((recent !== 0 && recent !== 1) || (influential !== 0 && influential !== 1)
-            || (recent === 1 && influential !== 1)) {
+        const fallbackRecent = Number(row.is_fallback_recent);
+        if ((recent !== 0 && recent !== 1) || (fallbackRecent !== 0 && fallbackRecent !== 1)
+            || (recent === 1 && fallbackRecent !== 1)) {
             throw requestError(409, 'personal_pie_recency_invalid', { pieID });
         }
         if (!pies.has(pieID)) {
             pies.set(pieID, {
                 contextID: Number(row.context_ID),
                 isRecent: recent === 1,
-                isInfluential: influential === 1,
+                isFallbackRecent: fallbackRecent === 1,
                 entries: [],
                 conditionIDs: new Set(),
                 total: 0
@@ -567,21 +568,15 @@ export async function loadPublicPie(connection, context, conditionsByID) {
         group.push([pieID, pie]);
     }
     const selectedPies = new Map();
-    const influenceCountByContext = new Map();
-    for (const [contextID, group] of piesByContext) {
+    for (const group of piesByContext.values()) {
         const recent = group.filter(([, pie]) => pie.isRecent);
-        const influenceCount = group.filter(([, pie]) => pie.isInfluential).length;
-        influenceCountByContext.set(contextID, influenceCount);
-        if (influenceCount === 0) continue;
+        // Rows are newest first: sparse contexts use ten total, with no age cutoff.
         const sample = recent.length >= PUBLIC_PIE_MIN_SAMPLES ? recent : group.slice(0, PUBLIC_PIE_MIN_SAMPLES);
         for (const [pieID, pie] of sample) {
-            selectedPies.set(pieID, { ...pie, sampleWeight: influenceCount / sample.length });
+            selectedPies.set(pieID, pie);
         }
     }
-    const participantCount = Array.from(influenceCountByContext.values()).reduce((sum, count) => sum + count, 0);
-    if (participantCount === 0) {
-        return { entries: [], familyComposition: [], participantCount: 0, isFallback: false, scoringEntries: [], contextIDs };
-    }
+    const participantCount = selectedPies.size;
 
     const aggregateWeights = new Map();
     const scoringWeights = new Map();
@@ -589,19 +584,19 @@ export async function loadPublicPie(connection, context, conditionsByID) {
         for (const entry of pie.entries) {
             aggregateWeights.set(
                 entry.conditionID,
-                (aggregateWeights.get(entry.conditionID) ?? 0) + entry.weightBasisPoints * pie.sampleWeight
+                (aggregateWeights.get(entry.conditionID) ?? 0) + entry.weightBasisPoints
             );
             const scoringKey = `${pie.contextID}:${entry.conditionID}`;
             const current = scoringWeights.get(scoringKey);
             scoringWeights.set(scoringKey, {
                 contextID: pie.contextID,
                 conditionID: entry.conditionID,
-                weightBasisPoints: (current?.weightBasisPoints ?? 0) + entry.weightBasisPoints * pie.sampleWeight
+                weightBasisPoints: (current?.weightBasisPoints ?? 0) + entry.weightBasisPoints
             });
         }
     }
     // Explicit choices have their own electorate; passive recent pies must not crowd them out.
-    const configuringPies = new Map([...validPies].filter(([, pie]) => pie.isInfluential));
+    const configuringPies = new Map([...validPies].filter(([, pie]) => pie.isFallbackRecent));
     const pieIDs = Array.from(configuringPies.keys());
     const fallbackRows = await loadPieFallbackRows(connection, pieIDs);
     const rowsByPie = new Map(pieIDs.map(ID => [ID, []]));
@@ -819,11 +814,14 @@ function decorateFallbackRules(rules, conditionsByID) {
 }
 
 export function buildBenchmarkList(conditions, publicEntries, personalEntries, families = [], familyComposition = [], personalRules = []) {
-    conditions = conditionCoverage(conditions);
+    const measured = new Map(conditionCoverage(conditions.filter(condition => condition.type !== 'topic'))
+        .map(condition => [condition.conditionID, condition]));
+    conditions = conditions.map(condition => condition.type === 'topic' ? condition : measured.get(condition.conditionID));
     const publicWeights = new Map(publicEntries.map(entry => [entry.conditionID, entry.weightBasisPoints]));
     const personalWeights = new Map(personalEntries.map(entry => [entry.conditionID, entry.weightBasisPoints]));
     const conditionsByBenchmark = new Map();
     for (const condition of conditions) {
+        if (condition.type === 'topic') continue;
         const benchmarkID = condition.benchmarkID;
         if (!conditionsByBenchmark.has(benchmarkID)) conditionsByBenchmark.set(benchmarkID, []);
         conditionsByBenchmark.get(benchmarkID).push(condition);
@@ -935,7 +933,8 @@ export async function resolveRankingContext(connection, {
     const scene = await resolveTopicScene(connection, category, contextValues, { create, requireAllDimensions });
     if (scene) return {
         ...scene, categoryID: category.ID, categoryPath: category.path,
-        categoryName: category.lineage.at(-1).name, description: scene.scene?.description || category.description,
+        categoryName: category.lineage.at(-1).name, description: sceneSummary({
+            name: category.lineage.at(-1).name, description: category.description }, scene.scene),
         topicDescription: category.description, creator: category.creator,
         lineage: category.lineage, isPrivate: category.isPrivate, isLeafCategory: true,
         sceneMode: true
@@ -1020,8 +1019,15 @@ function currentInferenceVersion(version) {
     catch { throw requestError(400, 'invalid_available_inference_version'); }
 }
 
-export function scoreModels(models, weightedEntries, totalBasisPoints, { fallbackRules = [], familyComposition = [], fallbackScope = 'personal', scoreMode = 'range', availableInferenceVersion = AVAILABLE_INFERENCE_VERSION, percentileReference = null, comparisonScoreIndexes = null, deferMetadata = false, excludedConditionIDs = new Set() } = {}) {
+function currentEstimationAlgorithm(value) {
+    try { return normalizeEstimationAlgorithm(value); }
+    catch { throw requestError(400, 'invalid_estimation_algorithm'); }
+}
+
+export function scoreModels(models, weightedEntries, totalBasisPoints, { fallbackRules = [], familyComposition = [], fallbackScope = 'personal', scoreMode = 'range', availableInferenceVersion = AVAILABLE_INFERENCE_VERSION, estimationAlgorithm = DEFAULT_ESTIMATION_ALGORITHM, percentileReference = null, comparisonScoreIndexes = null, deferMetadata = false, excludedConditionIDs = new Set() } = {}) {
     currentInferenceVersion(availableInferenceVersion);
+    currentEstimationAlgorithm(estimationAlgorithm);
+    const missingOnly = estimationAlgorithm !== DEFAULT_ESTIMATION_ALGORITHM;
     if (!['range', 'available'].includes(scoreMode)) {
         throw { status: 400, body: { error: 'invalid_score_mode' } };
     }
@@ -1084,7 +1090,8 @@ export function scoreModels(models, weightedEntries, totalBasisPoints, { fallbac
                         const weight = entry.weightBasisPoints * fraction;
                         inferredBasisPoints += weight;
                         inferredScores.push({ conditionID: entry.conditionID, familyID: family.familyID,
-                            ...prediction, weightBasisPoints: weight,
+                            ...prediction, ...(missingOnly ? { normalizedScore: Math.min(100, Math.max(0, prediction.normalizedScore)),
+                                rawNormalizedScore: prediction.normalizedScore } : {}), weightBasisPoints: weight,
                             originalWeight: weight / totalBasisPoints * 100 });
                     }
                 } else {
@@ -1111,9 +1118,9 @@ export function scoreModels(models, weightedEntries, totalBasisPoints, { fallbac
             ? availableResultInference(calculationScores.reduce((sum, score) => sum
                 + score.normalizedScore * (score.weightBasisPoints / coveredBasisPoints), 0), observedFraction,
             inferredScores.map(score => ({ normalizedScore: score.normalizedScore, weightFraction: score.weightBasisPoints / totalBasisPoints })),
-            estimate.percentile, estimate.sourceCount) : null;
+            estimate.percentile, estimate.sourceCount, estimationAlgorithm) : null;
         const availableScore = availableInference ? roundTo(availableInference.totalScore) : null;
-        const scoringBasisPoints = scoreMode === 'available' ? coveredBasisPoints + inferredBasisPoints : totalBasisPoints;
+        const scoringBasisPoints = scoreMode === 'available' && !missingOnly ? coveredBasisPoints + inferredBasisPoints : totalBasisPoints;
         const weightedScore = score => ({ ...score, effectiveWeight: score.weightBasisPoints / scoringBasisPoints * 100,
             contribution: score.normalizedScore * (score.weightBasisPoints / scoringBasisPoints) });
         const response = {
@@ -1158,7 +1165,7 @@ export function scoreComparison(models, entries, total, rules, options, prepared
         referenceOptions.filters.length === (options.filters ?? []).length ? grouped
             : groupComparisonModels(models, referenceOptions, entries, { includeReferenceVersions: true })) : null;
     const scores = scoreModels(grouped, entries, total, { ...(options.mode === 'matched' ? { scoreMode } : rules), percentileReference: reference,
-        availableInferenceVersion,
+        availableInferenceVersion, estimationAlgorithm: rules.estimationAlgorithm,
         excludedConditionIDs: rules.excludedConditionIDs,
         comparisonScoreIndexes: rules.comparisonScoreIndexes, deferMetadata: rules.jsonMemberMetadata === true });
     return scores.map(score => {
@@ -1476,11 +1483,24 @@ export async function getRankingWorkspace(db, options = {}) {
         throw { status: 400, body: { error: 'invalid_score_mode' } };
     }
     const availableInferenceVersion = currentInferenceVersion(options.availableInferenceVersion);
+    const estimationAlgorithm = currentEstimationAlgorithm(options.estimationAlgorithm);
     const previewPersonalPie = options.previewPersonalPie === undefined || options.previewPersonalPie === null
         ? null
         : normalizePreviewPersonalPie(options.previewPersonalPie);
     return readRankingSnapshot(db, connection => buildRankingWorkspace(connection,
-        { ...options, scoreMode, availableInferenceVersion, previewPersonalPie }), options.signal, options.rankingCache);
+        { ...options, scoreMode, availableInferenceVersion, estimationAlgorithm, previewPersonalPie }), options.signal, options.rankingCache);
+}
+
+// Proposal trials have no persisted context or electorate. References resolve only public weights.
+export async function getProposalRankingWorkspace(db, snapshot, options = {}) {
+    const scoreMode = options.scoreMode ?? 'available';
+    if (!['range', 'available'].includes(scoreMode)) throw requestError(400, 'invalid_score_mode');
+    const previewPersonalPie = normalizePreviewPersonalPie({ entries: snapshot.entries, fallbackRules: snapshot.fallbackRules });
+    return readRankingSnapshot(db, connection => buildRankingWorkspace(connection, {
+        proposalName: snapshot.name, userID: null, previewPersonalPie, scoreMode,
+        availableInferenceVersion: currentInferenceVersion(options.availableInferenceVersion),
+        comparison: options.comparison, jsonMemberMetadata: true
+    }), options.signal, options.rankingCache);
 }
 
 async function buildRankingWorkspace(db, {
@@ -1490,10 +1510,13 @@ async function buildRankingWorkspace(db, {
     comparison = null,
     scoreMode = 'range',
     availableInferenceVersion = AVAILABLE_INFERENCE_VERSION,
+    estimationAlgorithm = DEFAULT_ESTIMATION_ALGORITHM,
     previewPersonalPie = null,
-    jsonMemberMetadata = false
+    jsonMemberMetadata = false,
+    proposalName = null
 } = {}) {
-    const context = await resolveRankingContext(db, { categoryID, contextValues, userID, create: false });
+    const context = proposalName === null ? await resolveRankingContext(db, { categoryID, contextValues, userID, create: false })
+        : { ID: null, categoryID: 0, categoryName: proposalName, contextValues: {}, isPrivate: false };
     const previewConditionIDs = previewPersonalPie ? [
         ...previewPersonalPie.entries.map(entry => entry.conditionID),
         ...previewPersonalPie.fallbackRules.flatMap(rule => rule.entries.map(entry => entry.conditionID))
@@ -1509,8 +1532,9 @@ async function buildRankingWorkspace(db, {
     const referenceTargets = await loadTopicReferenceTargets(db, userID);
     const referencesByID = new Map(referenceTargets.map(target => [target.contextID, target]));
     for (const target of referenceTargets) conditionsByID.set(-target.contextID, referenceCondition(target));
-    const publicPie = await loadPublicPie(db, context, conditionsByID);
-    const storedPersonalPie = await loadPersonalPie(db, context.ID, userID);
+    const publicPie = proposalName === null ? await loadPublicPie(db, context, conditionsByID)
+        : { entries: [], scoringEntries: [], familyComposition: [], communityComposition: [], participantCount: 0 };
+    const storedPersonalPie = proposalName === null ? await loadPersonalPie(db, context.ID, userID) : null;
     const rawPersonalEntries = previewPersonalPie?.entries ?? storedPersonalPie?.entries ?? [];
     const rawPersonalFallbackRules = previewPersonalPie?.fallbackRules ?? storedPersonalPie?.fallbackRules ?? [];
     if (previewPersonalPie) {
@@ -1587,7 +1611,9 @@ async function buildRankingWorkspace(db, {
     const publicEffectiveEntries = publicExpanded?.entries ?? publicPie.scoringEntries;
     const personalEffectiveComposition = personalExpanded?.familyComposition ?? personalCommunityComposition;
     const publicEffectiveComposition = publicExpanded?.familyComposition ?? familyComposition;
-    const benchmarkList = buildBenchmarkList(conditions, publicEntries, personalEntries, familyCatalogue,
+    const evaluationConditions = [...conditions, ...referenceTargets.filter(target => target.contextID !== context.ID
+        && (context.isPrivate || !target.isPrivate)).map(referenceCondition)];
+    const benchmarkList = buildBenchmarkList(evaluationConditions, publicEntries, personalEntries, familyCatalogue,
         familyComposition, personalFallbackRules);
     const fields = await loadScoreFieldCatalog(db);
     const scoringConditionIDs = [...new Set([
@@ -1651,20 +1677,21 @@ async function buildRankingWorkspace(db, {
         if (!jsonMemberMetadata || !preparedGroups) return build();
         // Read current pies first. Reuse only the exact scoring input, scoped to its owner and context.
         const key = JSON.stringify([normalizeUserID(userID), context.categoryID, context.contextValues,
-            scope, comparisonKey, scoreMode, availableInferenceVersion, entries, total,
+            scope, comparisonKey, scoreMode, availableInferenceVersion, estimationAlgorithm, entries, total,
             rules.fallbackRules ?? [], rules.familyComposition ?? []]);
         return cachedRankingCalculation(db, key, build);
     };
     const personalRanking = await calculate('personal', personalScoringEntries, PIE_TOTAL_BASIS_POINTS,
         { fallbackRules: personalExpanded ? [] : personalFallbackRules, familyComposition: personalEffectiveComposition,
-            scoreMode, availableInferenceVersion, percentileReference, comparisonScoreIndexes, jsonMemberMetadata, excludedConditionIDs });
+            scoreMode, availableInferenceVersion, estimationAlgorithm, percentileReference, comparisonScoreIndexes, jsonMemberMetadata, excludedConditionIDs });
     const publicRanking = await calculate('public', publicEffectiveEntries,
         publicExpanded ? PIE_TOTAL_BASIS_POINTS : publicPie.participantCount * PIE_TOTAL_BASIS_POINTS,
-        { familyComposition: publicEffectiveComposition, fallbackScope: 'public', scoreMode, availableInferenceVersion,
+        { familyComposition: publicEffectiveComposition, fallbackScope: 'public', scoreMode, availableInferenceVersion, estimationAlgorithm,
             percentileReference, comparisonScoreIndexes, jsonMemberMetadata, excludedConditionIDs });
 
     return {
         scoreMode,
+        estimationAlgorithm,
         authenticated: Boolean(userID),
         userID: normalizeUserID(userID),
         context,
@@ -1796,7 +1823,7 @@ function validateFallbackRules(fallbackRules, pieEntries) {
     return normalized;
 }
 
-function normalizePreviewPersonalPie(value) {
+export function normalizePreviewPersonalPie(value) {
     if (!hasExactKeys(value, ['entries', 'fallbackRules'])) {
         throw requestError(400, 'invalid_personal_pie_preview');
     }

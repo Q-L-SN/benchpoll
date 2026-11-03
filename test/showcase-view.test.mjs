@@ -8,8 +8,8 @@ const read = path => readFile(new URL('../' + path, import.meta.url), 'utf8');
 
 test('the actual root introduces the directory directly, without the retired presentation entry', async () => {
     const html = await read('private/index.html');
-    assert.match(html, /<h1 id="home-title"><span class="th-headline-phrase">We believe in benchmarks\.<\/span> <span class="th-headline-phrase th-headline-accent">Not a narrow selection\.<\/span><\/h1>/);
-    assert.match(html, /<title>BenchPoll - We believe in benchmarks\. Not a narrow selection\.<\/title>/);
+    assert.match(html, /<h1 id="home-title"><span class="th-headline-phrase">Define Super Intelligence,<\/span> <span class="th-headline-phrase th-headline-accent">democratically\.<\/span><\/h1>/);
+    assert.match(html, /<title>BenchPoll - Define Super Intelligence, democratically<\/title>/);
     assert.match(html, /<p class="th-intro-copy">Choose what matters\. Shape the weights together\.<\/p>/);
     assert.doesNotMatch(html, /Create a topic\. Choose the benchmarks\./);
     assert.match(html, /src="\/assets\/benchpoll-logo\.svg"[^>]*width="330"/);

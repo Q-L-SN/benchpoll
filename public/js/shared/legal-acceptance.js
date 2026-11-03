@@ -1,3 +1,4 @@
+import { setLoading } from './loading.js';
 import { postJSON } from './http.js';
 import { canonicalAccountID, pageAccountWriteScope, createAccountWriteScope, accountWriteError, isAccountWriteError } from './account-identity.js';
 
@@ -89,8 +90,9 @@ export function createLegalAcceptanceUI({ root = document, request = postJSON, s
         title.textContent = phase === 'success' ? 'You are up to date' : 'Updated Terms & Privacy Policy';
         documents.hidden = !ready;
         notice.hidden = !ready;
-        message.textContent = text;
-        message.hidden = !text;
+        if (phase === 'loading' || phase === 'saving') setLoading(message, text || 'Saving your choices');
+        else message.textContent = text;
+        message.hidden = !text && phase !== 'loading' && phase !== 'saving';
         message.dataset.error = String(phase === 'error' || phase === 'session');
         accept.hidden = !ready;
         accept.disabled = phase !== 'ready';

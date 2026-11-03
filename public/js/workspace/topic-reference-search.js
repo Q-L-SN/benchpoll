@@ -1,3 +1,4 @@
+import { setLoading } from '../shared/loading.js';
 import { createAction, mountDisclosureChevron } from '../shared/ui-components.js';
 import { setVisible } from '../shared/motion.js';
 import { referenceGroups, validateReferenceTargets } from './topic-references.js';
@@ -34,7 +35,8 @@ export function createTopicReferenceSearch({ request, getScope, getCurrentContex
         if (host.hidden) return;
         host.className = 'bp-benchmark-topic-results';
         if (targets === null) {
-            const status = node('p', 'bp-reference-status', error || 'Loading topics...'); status.setAttribute('role', 'status');
+            const status = node('p', 'bp-reference-status', error); status.setAttribute('role', 'status');
+            if (!error) setLoading(status, 'Loading topics');
             host.append(status);
             if (error) {
                 const retry = createAction({ label: 'Retry topics', icon: 'fa-solid fa-rotate-right', variant: 'quiet' });
@@ -69,7 +71,7 @@ export function createTopicReferenceSearch({ request, getScope, getCurrentContex
                 const row = node('div', 'bp-reference-option'); row.dataset.contextId = target.contextID;
                 const copy = node('div', 'bp-reference-option-copy');
                 const link = node('a', 'bp-reference-result-name');
-                link.href = sceneURL(target.url, target.sceneID); link.setAttribute('aria-label', referenceLabel(target));
+                link.href = sceneURL(target.url); link.setAttribute('aria-label', referenceLabel(target));
                 renderTopicLabel(link, topicLabelText(target)); copy.append(link);
                 if (target.description) copy.append(node('small', '', target.description));
                 row.append(copy);

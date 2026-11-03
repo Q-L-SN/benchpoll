@@ -26,7 +26,7 @@ function database(weights, rules) {
             assert.deepEqual(params, [10]);
             assert.match(sql, /users.deleted_at IS NULL/);
             assert.match(sql, /users.banned_at IS NULL/);
-            return [weights.map(row => ({ ...row, is_recent: 1, is_influence_recent: 1 })), []];
+            return [weights.map(row => ({ ...row, is_recent: 1, is_fallback_recent: 1 })), []];
         }
         if (sql.includes('FROM personal_pie_score_rules')) {
             assert.deepEqual(params, [...new Set(weights.filter(row => row.benchmark_condition_ID !== null).map(row => row.pie_ID))]);
@@ -133,12 +133,12 @@ test('family composition uses entrance weight; absent entrance and empty pies ar
     assert.ok(Math.abs(families[0].overallWeightBasisPoints - 8000 / 3) < 1e-6);
 });
 
-test('families use fourteen-day influence across matching contexts within one topic', async () => {
+test('explicit fallback choices use their own fourteen-day window across matching contexts within one topic', async () => {
     const rows = [
-        { ...weight(3, 1, 10000), is_recent: 1, is_influence_recent: 1 },
-        { ...weight(2, 1, 10000), is_recent: 1, is_influence_recent: 1 },
-        { ...weight(1, 1, 10000), is_recent: 0, is_influence_recent: 1 },
-        ...[4, 5, 6, 7].map(pie => ({ ...weight(pie, 1, 10000), context_ID: 11, is_recent: 1, is_influence_recent: 1 }))
+        { ...weight(3, 1, 10000), is_recent: 1, is_fallback_recent: 1 },
+        { ...weight(2, 1, 10000), is_recent: 1, is_fallback_recent: 1 },
+        { ...weight(1, 1, 10000), is_recent: 0, is_fallback_recent: 1 },
+        ...[4, 5, 6, 7].map(pie => ({ ...weight(pie, 1, 10000), context_ID: 11, is_recent: 1, is_fallback_recent: 1 }))
     ];
     const connection = { async execute(sql, params) {
         if (sql.includes('FROM ranking_contexts rc')) {

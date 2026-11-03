@@ -608,7 +608,7 @@ test('benchmark condition invariants reject custom rows without both normalizati
     );
 });
 
-const recentRows = rows => rows.map(row => ({ ...row, is_recent: 1, is_influence_recent: 1 }));
+const recentRows = rows => rows.map(row => ({ ...row, is_recent: 1, is_fallback_recent: 1 }));
 
 function topicContextRows(sql, params, rows) {
     assert.match(sql, /WHERE rc.category_ID = \? AND c.is_active = 1 AND c.owner_user_ID IS NULL/);

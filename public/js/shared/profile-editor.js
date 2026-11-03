@@ -1,3 +1,4 @@
+import { setButtonLoading } from './loading.js';
 import { postJSON } from './http.js';
 import { pageAccountWriteScope, isAccountWriteError } from './account-identity.js';
 import { createAction } from './ui-components.js';
@@ -239,7 +240,7 @@ export async function openProfileEditor({ profile, onSaved } = {}) {
         reset.disabled = saving || (!processing && avatar === null)
             || (!processing && !avatarChanged && !profile.hasCustomAvatar);
         form.setAttribute('aria-busy', String(saving || processing));
-        save.querySelector('.bp-ui-action-label').textContent = saving ? 'Saving...' : 'Save';
+        setButtonLoading(save, saving || processing, processing ? 'Processing profile picture' : 'Saving profile');
         initial.textContent = [...name.value.trim()][0]?.toLocaleUpperCase() || '?';
     };
     const finish = value => {

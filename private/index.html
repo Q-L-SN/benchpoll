@@ -3,12 +3,26 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <!--bp:metadata--><title>BenchPoll - We believe in benchmarks. Not a narrow selection.</title>
-    <meta name="description" content="Choose what matters. Shape the weights together. Compare AI on what matters to you."><!--/bp:metadata-->
+    <!--bp:metadata-->
+<title>BenchPoll - Define Super Intelligence, democratically</title>
+<meta name="description" content="Define Super Intelligence, democratically. Compare AI models with community-weighted benchmarks, explore public rankings, and build your own AI index.">
+<link rel="canonical" href="https://benchpoll.com/">
+<meta name="robots" content="index, follow, max-image-preview:large">
+<meta property="og:type" content="website"><meta property="og:site_name" content="BenchPoll">
+<meta property="og:title" content="BenchPoll - Define Super Intelligence, democratically"><meta property="og:description" content="Define Super Intelligence, democratically. Compare AI models with community-weighted benchmarks, explore public rankings, and build your own AI index.">
+<meta property="og:url" content="https://benchpoll.com/"><meta property="og:image" content="https://benchpoll.com/assets/benchpoll-social-si-20261102.png">
+<meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="BenchPoll - Define Super Intelligence, democratically.">
+<meta name="twitter:card" content="summary_large_image"><meta name="twitter:site" content="@BenchPoll">
+<meta name="twitter:title" content="BenchPoll - Define Super Intelligence, democratically"><meta name="twitter:description" content="Define Super Intelligence, democratically. Compare AI models with community-weighted benchmarks, explore public rankings, and build your own AI index."><meta name="twitter:image" content="https://benchpoll.com/assets/benchpoll-social-si-20261102.png">
+<meta name="twitter:image:alt" content="BenchPoll - Define Super Intelligence, democratically.">
+<!--/bp:metadata-->
     <link rel="icon" href="/favicon.ico" sizes="any">
     <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
+    <link rel="stylesheet" href="/css/ui/private-topic-editor.css">
     <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
     <link rel="stylesheet" href="/css/ui/tokens.css">
+    <link rel="stylesheet" href="/css/ui/loading.css">
     <link rel="stylesheet" href="/css/ui/tooltip.css">
     <link rel="stylesheet" href="/css/site-palette.css">
     <link rel="stylesheet" href="/css/typography.css">
@@ -51,13 +65,13 @@
     <p id="account-status" class="th-account-status th-container" role="status" hidden></p>
     <main class="th-container">
         <section id="home-hero" class="th-intro" aria-labelledby="home-title">
-            <h1 id="home-title"><span class="th-headline-phrase">We believe in benchmarks.</span> <span class="th-headline-phrase th-headline-accent">Not a narrow selection.</span></h1>
+            <h1 id="home-title"><span class="th-headline-phrase">Define Super Intelligence,</span> <span class="th-headline-phrase th-headline-accent">democratically.</span></h1>
             <p class="th-intro-copy">Choose what matters. Shape the weights together.</p>
             <a id="beta-feedback-link" class="th-quiet th-beta-feedback" href="/contribute/feedback"><i class="fa-regular fa-comment-dots" aria-hidden="true"></i><span>BenchPoll is in beta. Tell us what to improve.</span></a>
         </section>
         <section id="topics" class="th-topics" aria-label="Topic previews">
             <div id="mine-actions" class="th-directory-actions" hidden><button id="new-private-topic" class="th-private-action" type="button" aria-label="New private topic" data-tooltip="New private topic"><i class="fa-solid fa-plus" aria-hidden="true"></i><span>New private topic</span><i class="fa-solid fa-lock" aria-hidden="true"></i></button></div>
-            <div id="topics-status" class="th-list-status" role="status">Loading topics...</div>
+            <div id="topics-status" class="th-list-status" role="status"><span class="bp-loading-indicator" role="status"><span class="bp-spinner" aria-hidden="true"></span><span class="bp-loading-label">Loading topics...</span></span></div>
             <div id="topics-grid" class="th-grid" role="tabpanel" aria-labelledby="topics-popular" aria-busy="false"><!--bp:directory--><!--/bp:directory--></div>
             <p id="topics-announcement" class="th-sr-only" role="status" aria-live="polite"></p>
         </section>

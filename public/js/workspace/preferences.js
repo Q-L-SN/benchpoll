@@ -1,5 +1,22 @@
+import { normalizeEstimationAlgorithm, DEFAULT_ESTIMATION_ALGORITHM } from '../shared/estimation-algorithms.js';
+
 const STORAGE_KEY = 'benchpoll-workspace-preferences-v1';
+const ESTIMATION_STORAGE_KEY = 'benchpoll-estimation-test-v1';
 const DISPLAY_STORAGE_KEY = 'benchpoll-workspace-display-v1';
+
+export function readEstimationPreference(storage) {
+    try {
+        const value = (storage === undefined ? globalThis.sessionStorage : storage).getItem(ESTIMATION_STORAGE_KEY);
+        return normalizeEstimationAlgorithm(value ?? undefined);
+    } catch { return DEFAULT_ESTIMATION_ALGORITHM; }
+}
+
+export function writeEstimationPreference(value, storage) {
+    try {
+        (storage === undefined ? globalThis.sessionStorage : storage).setItem(ESTIMATION_STORAGE_KEY, normalizeEstimationAlgorithm(value));
+        return true;
+    } catch { return false; }
+}
 
 export function readWorkspaceDisplay(storage) {
     try {

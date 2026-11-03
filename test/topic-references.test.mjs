@@ -5,7 +5,7 @@ import { scoreModels } from '../ranking-service.js';
 
 const entry = (conditionID, weightBasisPoints = 10000) => ({ conditionID, weightBasisPoints });
 
-test('reference discovery includes saved personal weights outside the public activity window without leaking private targets', async () => {
+test('reference discovery keeps older public and personal weights available without leaking private targets', async () => {
     const calls = [];
     const db = { execute: async (sql, args) => {
         calls.push({ sql, args });
@@ -13,10 +13,10 @@ test('reference discovery includes saved personal weights outside the public act
             slug: 'images', scene_name: 'Vectors', is_default: '0', has_weights: '1', owner_user_ID: null }]];
     } };
     const targets = await loadTopicReferenceTargets(db, '123');
-    assert.deepEqual(calls[0].args, ['123', '123']);
-    assert.match(calls[0].sql, /p.user_ID = \? OR p.updated_at >= NOW\(\) - INTERVAL 14 DAY/);
+    assert.deepEqual(calls[0].args, ['123']);
+    assert.doesNotMatch(calls[0].sql, /p\.updated_at|INTERVAL 14 DAY/);
     assert.match(calls[0].sql, /c.owner_user_ID IS NULL OR c.owner_user_ID = \?/);
-    assert.equal(targets[0].url, '/images?scene=10');
+    assert.equal(targets[0].url, '/images/vectors');
     assert.equal(targets[0].isDefault, false);
     assert.equal(targets[0].hasWeights, true);
 });

@@ -52,7 +52,8 @@ test('the public action links to the proposal hall while the root modal can only
     assert.match(read('public/js/shared/site-header.js'), /<a id="new-topic"[^>]*href="\/topic-proposals"/);
     assert.match(home, /<h2 id="create-topic-title">New private topic<\/h2>/);
     assert.match(home, /id="create-topic-submit"[^>]*>[\s\S]*?<span>Create private topic<\/span>/);
-    assert.match(topics, /name, description, isPrivate: true/);
+    assert.match(topics, /createPrivateTopicEditor/);
+    assert.match(read('public/js/shared/private-topic-editor.js'), /\/api\/save_private_topic/);
     assert.doesNotMatch(topics, /\$\('#new-topic'\)\.addEventListener|openCreateTopic\(false\)|result\.submissionID|createTopicIsPrivate/);
     const modal = home.slice(home.indexOf('<dialog id="create-topic-dialog"'));
     const sidebarForm = configuration.match(/<form id="topic-create-form"[\s\S]*?<\/form>/)?.[0];

@@ -86,7 +86,7 @@
 
         <section id="sync-view" class="workspace-view" role="tabpanel" aria-labelledby="sync-tab" hidden>
             <div class="workspace-toolbar">
-                <div><h2>Official source changes</h2><p id="sync-summary" aria-live="polite">Loading source conflicts...</p></div>
+                <div><h2>Official source changes</h2><p id="sync-summary" aria-live="polite"><span class="bp-loading-indicator" role="status"><span class="bp-spinner" aria-hidden="true"></span><span class="bp-loading-label">Loading source conflicts...</span></span></p></div>
                 <button id="sync-refresh" class="toolbar-button" type="button"><i class="fa-solid fa-arrows-rotate" aria-hidden="true"></i><span>Refresh</span></button>
             </div>
             <section id="sync-list" class="log-list" aria-live="polite"></section>
@@ -125,7 +125,7 @@
                 </form>
             </div>
             <div class="table-meta">
-                <span id="explorer-summary">Loading records...</span>
+                <span id="explorer-summary"><span class="bp-loading-indicator" role="status"><span class="bp-spinner" aria-hidden="true"></span><span class="bp-loading-label">Loading records...</span></span></span>
                 <span id="explorer-access-label">Read only</span>
             </div>
             <div class="admin-table-shell">
@@ -186,7 +186,7 @@
                 </form>
             </div>
             <div class="table-meta">
-                <span id="audit-summary">Loading audit records...</span>
+                <span id="audit-summary"><span class="bp-loading-indicator" role="status"><span class="bp-spinner" aria-hidden="true"></span><span class="bp-loading-label">Loading audit records...</span></span></span>
                 <span>Newest first</span>
             </div>
             <div class="admin-table-shell">

@@ -3,12 +3,15 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import vm from 'node:vm';
 import { categoryDiscussionURL, createDiscussionEntry, setDiscussionEntryView } from '../public/js/workspace/discussion-entry.js';
+import { scenePath, topicSlug } from '../public/js/shared/topics.js';
 import { readRankingContext } from '../public/js/shared/ranking-url.js';
 import { orderedScenes } from '../public/js/navigation/scenes.js';
 import { createDiscussionAutoLoader } from '../public/js/shared/discussion-auto-load.js';
 import { profileAvatarURL } from '../public/js/shared/profile-editor.js';
 import { createAccountWriteScope, isAccountWriteError } from '../public/js/shared/account-identity.js';
 import { hasAADisplayRestriction, AA_DISPLAY_MESSAGE } from '../public/js/shared/aa-ranking-policy.js';
+
+const loadingSource = (await readFile(new URL('../public/js/shared/loading.js', import.meta.url), 'utf8')).replace(/^export /gm, '');
 
 const read = path => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 const source = await read('public/js/discussion.js');
@@ -80,8 +83,8 @@ function harness({ mobile = false, resolveRequest, sceneOptions = scenes } = {})
         window: { matchMedia: () => media, scrollY: 0, scrollTo() {},
             Option: class extends Element { constructor(text, value) { super(); this.textContent = text; this.value = value; } },
             addEventListener(name, callback) { listeners.set(name, callback); } },
-        location: new URL('http://localhost/?categoryID=7'), URL, URLSearchParams, structuredClone, console, AbortController,
-        setDiscussionEntryView, readRankingContext, orderedScenes, createDiscussionAutoLoader, profileAvatarURL,
+        location: new URL('http://localhost/reasoning/general?categoryID=7'), URL, URLSearchParams, structuredClone, console, AbortController,
+        setDiscussionEntryView, readDiscussionEntryContext: () => null, readRankingContext, orderedScenes, scenePath, topicSlug, createDiscussionAutoLoader, profileAvatarURL,
         hasAADisplayRestriction, AA_DISPLAY_MESSAGE,
         createAction({ label, href, className = '', iconOnly }) {
             const element = new Element(); element.className = className;
@@ -114,9 +117,10 @@ function harness({ mobile = false, resolveRequest, sceneOptions = scenes } = {})
     });
     const code = source.replace(/^import[^\r\n]+\r?\n/gm, '')
         .replace("if (params.get('discussion') === '1') await openDiscussion(new URL(location.href));", '');
-    vm.runInContext(`${code}\nthis.ui = { state, openDiscussion, closeDiscussion, renderDiscussionScope };`, context);
+    vm.runInContext(`${loadingSource}\n${code}\nthis.ui = { state, openDiscussion, closeDiscussion, renderDiscussionScope };`, context);
+    listeners.get('benchpoll:discussion-context')({ detail: { categoryID: 7, contextValues: { scene: '70' }, scenes: sceneOptions } });
     const open = async (extra = '') => {
-        await context.ui.openDiscussion(new URL(`http://localhost/?discussion=1&categoryID=7&scene=70&benchmarkID=101&conditionID=901${extra}`));
+        await context.ui.openDiscussion(new URL(`http://localhost/reasoning/general?discussion=1&categoryID=7&benchmarkID=101&conditionID=901${extra}`));
         assert.equal($('discussion-error').hidden, true, errors.at(-1)?.stack ?? $('discussion-error').textContent);
     };
     return { $, requests, media, listeners, scope, ...context.ui, open,
@@ -142,7 +146,7 @@ for (const { label, categoryPath, metadata, expected } of [
                 contextValues: body.contextValues, dimensions: [], scenes }, contexts: [], root: null,
             authenticated: true, userID: '1', posts: [], total: 0, hasMore: false };
         } });
-        await h.openDiscussion(new URL('http://localhost/?discussion=1&categoryID=7&scene=70'));
+        await h.openDiscussion(new URL('http://localhost/reasoning/general?discussion=1&categoryID=7'));
         assert.equal(h.$('discussion-error').hidden, true);
         assert.equal(h.$('category-path').hidden, false);
         assert.equal(h.$('category-path').textContent, expected);
@@ -225,7 +229,7 @@ test('desktop category entry stays in the workspace while the benchmark panel is
 
 test('benchmark and ordinary discussion drafts stay separate and survive switching', async () => {
     const h = harness(); await h.open(); h.$('discussion-text').value = 'Benchmark draft';
-    const categoryURL = new URL('http://localhost/?discussion=1&categoryID=7&scene=70');
+    const categoryURL = new URL('http://localhost/reasoning/general?discussion=1&categoryID=7');
     await h.openDiscussion(categoryURL); assert.equal(h.$('discussion-text').value, '');
     h.$('discussion-text').value = 'Category draft';
     await h.open(); assert.equal(h.$('discussion-text').value, 'Benchmark draft');

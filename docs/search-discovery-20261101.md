@@ -1,11 +1,12 @@
 # Search Discovery: SEO and GEO
 
-Updated: 2026-11-01. This document describes implemented discovery behavior, not a promise of search ranking or AI citations.
+Updated: 2026-11-02. This document describes implemented discovery behavior, not a promise of search ranking or AI citations.
 
 ## Public Pages
 
+- The homepage tagline is **Define Super Intelligence, democratically.** Its title, description, social previews, Organization slogan and `/llms.txt` share this positioning. Descriptions retain AI model comparison, benchmark evidence and community weights; the guide explains that participants define evaluation priorities. Topic-specific AI Index titles remain descriptive. The social card is generated locally by `node scripts/build-social-card.mjs` using the repository logo and fonts.
 - The homepage includes public topic names, summaries and ordinary topic/scene links in the initial HTML. Scene lists use native expandable details. JavaScript replaces these cards with the existing interactive previews rather than duplicating them.
-- A public topic has its own title, description, canonical URL, Open Graph and Twitter preview metadata. Nondefault scenes use `?scene=ID`; the default scene canonicalizes to the topic URL. Tracking, model-focus and comparison parameters do not create separate indexed pages.
+- A public topic has its own title, description, canonical URL, Open Graph and Twitter preview metadata. All scenes, including defaults, use `/<topic-slug>/<scene-slug>`. Topic roots with scenes redirect temporarily to the current default. Old `?scene=ID` and `?context_scene=ID` links return 404; they are not aliases. Tracking, model-focus and comparison parameters do not create separate indexed pages.
 - Where public weights exist and the ranking service responds in time, the initial topic HTML includes the first page of public model scores, measured coverage and evaluation weights. These use the same public preview service, eligibility rules and AA exclusions as the homepage. No private or session-personal ranking is rendered for discovery.
 - Snapshot scores are explicitly described as **Estimated score**, not raw measurements. Coverage is already expressed in percentage units by the ranking API. Weight basis points are divided by 100. Ineligible/non-finite model rows are omitted.
 - JSON-LD describes BenchPoll, the website, the current page, breadcrumbs and visible item lists. It does not invent reviews, ratings, laboratory results or a special AI schema. Once the interactive topic UI takes over, the snapshot ItemList is removed so later filters/personal weights cannot leave stale structured rankings behind.
@@ -16,7 +17,7 @@ Updated: 2026-11-01. This document describes implemented discovery behavior, not
 | Endpoint | Contract |
 | --- | --- |
 | `/robots.txt` | Permits public crawling and assets; excludes account, private, API, login, contribution, moderation, proposal and dialog routes. Declares the sitemap. |
-| `/sitemap.xml` | Public documents, active public topics and nondefault scenes. Private topics never enter the catalogue. No fabricated topic modification timestamps. |
+| `/sitemap.xml` | Public documents, active public topics without scenes, and every named scene. Topic roots that redirect are omitted. Private topics never enter the catalogue. No fabricated topic modification timestamps. |
 | `/llms.txt` | Optional human-readable and machine-readable navigation with methodology, public topics/scenes and policy links. Not a requirement for AI search and not an instruction to favor the site. |
 
 These routes run before session middleware, support GET/HEAD, and cache for 60 seconds. The catalogue is single-flight, retries failed loads and is invalidated on relevant application writes. Public ranking snapshots wait at most 1.5 seconds, share concurrent requests for the same scene, and permit at most two crawler-triggered preview jobs. An unavailable ranking does not prevent the topic identity and links from rendering.

@@ -127,8 +127,8 @@ export async function startConfigSidebarPreview({ port = 0 } = {}) {
                 response.writeHead(302, { location: metadata(selected).url + url.search });
                 response.end(); return;
             }
-            const configuration = /^\/personal\/\d+\/?$/.test(url.pathname)
-                || topics.some(topic => metadata(topic).url === url.pathname);
+            const configuration = /^\/personal\/\d+(?:\/[a-z0-9-]+)?\/?$/.test(url.pathname)
+                || topics.some(topic => metadata(topic).url === url.pathname || !topic.isPrivate && url.pathname.startsWith(metadata(topic).url + '/'));
             const file = configuration ? resolve(root, 'private/home.html') : resolve(publicRoot, '.' + decodeURIComponent(url.pathname));
             if (!configuration && (!file.startsWith(publicRoot + sep) || url.pathname.split('/').some(part => part.startsWith('.')))) return send(403, {});
             const data = await readFile(file);

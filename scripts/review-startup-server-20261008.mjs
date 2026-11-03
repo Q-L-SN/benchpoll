@@ -283,7 +283,7 @@ function sqlFixture(data, { delayMs = 0, noPies = false, fail = null } = {}) {
             const pies = noPies ? [] : data.pies.filter(pie => params.includes(pie.contextID))
                 .sort((left, right) => left.contextID - right.contextID || right.updatedAt - left.updatedAt || right.ID - left.ID);
             return ['public.weights', pies.flatMap(pie => (pie.entries.length ? pie.entries : [{ conditionID: null, weightBasisPoints: null }]).map(entry => ({
-                pie_ID: pie.ID, context_ID: pie.contextID, is_recent: Number(pie.isRecent), is_influence_recent: Number(pie.isInfluential),
+                pie_ID: pie.ID, context_ID: pie.contextID, is_recent: Number(pie.isRecent), is_fallback_recent: Number(pie.isInfluential),
                 benchmark_condition_ID: entry.conditionID, weight_basis_points: entry.weightBasisPoints })))];
         }
         if (sql.includes('FROM personal_pies WHERE user_ID')) return ['personal.identity', (noPies ? [] : data.pies).filter(pie => pie.userID === params[0]

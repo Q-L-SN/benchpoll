@@ -1,3 +1,4 @@
+import { setLoading } from '../shared/loading.js';
 import { createAction } from '../shared/ui-components.js';
 import { orderedScenes, sceneURL, searchTopicGroups } from '../navigation/scenes.js';
 import { isTopicReference, referenceLabel, topicLabelText, renderTopicLabel } from '../shared/topic-label.js';
@@ -48,7 +49,7 @@ export function validateReferenceTargets(payload) {
             || (item.sceneID != null && item.sceneID !== item.contextID)
             || typeof item.name !== 'string' || !item.name.trim()
             || typeof item.topicName !== 'string' || typeof item.isPrivate !== 'boolean'
-            || typeof item.hasWeights !== 'boolean' || !sceneURL(item.url, item.sceneID)
+            || typeof item.hasWeights !== 'boolean' || !sceneURL(item.url)
             || ids.has(item.contextID)) throw new TypeError('Invalid topic reference target');
         ids.add(item.contextID);
     }
@@ -144,7 +145,7 @@ export function createTopicReferencePicker({ request, getScope, getCurrentContex
             controller?.abort(); controller = new globalThis.AbortController();
             const current = ++sequence; scope = getScope(); targets = []; selectedCategory = null; adding = false;
             returnFocus = trigger; search.value = ''; list.replaceChildren(); back.hidden = true;
-            title.textContent = 'Add a topic'; status.textContent = 'Loading topics...'; dialog.showModal(); search.focus();
+            title.textContent = 'Add a topic'; setLoading(status, 'Loading topics...'); dialog.showModal(); search.focus();
             try {
                 const result = await request({}, { signal: controller.signal });
                 if (current !== sequence || !valid()) return;
@@ -176,7 +177,7 @@ export function renderTopicReferences(host, { entries, issues = [], effectiveEnt
         select.addEventListener('click', () => onSelect({ ...entry, ID: Number(entry.conditionID) }));
         const weight = node('strong', 'bp-reference-weight-value', `${Number((entry.weightBasisPoints / 100).toFixed(2))}%`);
         row.append(select, weight);
-        const href = sceneURL(entry.url, entry.sceneID);
+        const href = sceneURL(entry.url);
         if (href) {
             const visit = createAction({ label: `Open ${referenceLabel(entry)}`, icon: 'fa-solid fa-arrow-up-right-from-square',
                 href, iconOnly: true, variant: 'quiet' });

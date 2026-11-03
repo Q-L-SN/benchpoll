@@ -287,9 +287,9 @@ test('selectable tile theme, top exposure/fade and full unmasked weights are exp
     assert.doesNotMatch(css, /border-(?:left|right|top):[^;]*(?:accent|fill|purple)/);
     const html = await readFile(new URL('../private/index.html', import.meta.url), 'utf8');
     assert.doesNotMatch(html, /sidebar|home-workspace\.js|src="\/js\/home\.js/);
-    assert.match(html, /<span class="th-headline-phrase">We believe in benchmarks\.<\/span> <span class="th-headline-phrase th-headline-accent">Not a narrow selection\.<\/span>/);
+    assert.match(html, /<span class="th-headline-phrase">Define Super Intelligence,<\/span> <span class="th-headline-phrase th-headline-accent">democratically\.<\/span>/);
     assert.match(html, /<p class="th-intro-copy">Choose what matters\. Shape the weights together\.<\/p>/);
-    assert.match(html, /<meta name="description" content="Choose what matters\. Shape the weights together\. Compare AI on what matters to you\.">/);
+    assert.match(html, /<meta name="description" content="Define Super Intelligence, democratically\. Compare AI models with community-weighted benchmarks, explore public rankings, and build your own AI index\.">/);
     assert.match(html, /<script src="\/js\/topics-home\.js" type="module"><\/script>/);
     assert.match(html, /id="new-topic-name"[^>]*maxlength="128"/);
     assert.match(html, /id="new-topic-description"[^>]*required maxlength="180"/);
@@ -311,7 +311,7 @@ test('the integrated header has four collections, Mine private creation and a pr
     assert.match(source, /\$\('#mine-actions'\)\.hidden = next !== 'configured'/);
     assert.match(html, /<button id="new-private-topic"[^>]*aria-label="New private topic"/);
     assert.doesNotMatch(source, /\$\('#new-topic'\)\.addEventListener/);
-    assert.match(source, /name, description, isPrivate: true/);
+    assert.match(source, /createPrivateTopicEditor/);
     assert.doesNotMatch(source, /th-pagination-status|th-card-meta|benchmarks \/|\$\{total\} model/);
     assert.ok(html.indexOf('class="th-brand"') < html.indexOf('<main'));
 });
@@ -430,7 +430,8 @@ test('home integrates the shared account center and handles canonical-name error
     assert.match(source, /import\('\.\/shared\/account-center\.js'\)/);
     assert.match(source, /openAccountCenter\(\{ profile, onProfileSaved:/);
     assert.match(source, /onSignedOut: accountSignedOut/);
-    assert.match(source, /reserved_topic_name/); assert.match(source, /topic_name_exists/);
+    const editor = await readFile(new URL('../public/js/shared/private-topic-editor.js', import.meta.url), 'utf8');
+    assert.match(editor, /reserved_topic_name/); assert.match(editor, /topic_name_exists/);
     assert.match(source, /readRecentTopics\(profile\?\.userID \?\? null\)/);
     assert.doesNotMatch(source, /openProfileEditor|bar\.known < 25/);
     const html = await readFile(new URL('../private/index.html', import.meta.url), 'utf8');

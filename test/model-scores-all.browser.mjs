@@ -79,7 +79,7 @@ document.getElementById('workspace-refresh').addEventListener('click', () => win
 view.openApprovedModelResults(models[0]);
 </script></html>`;
 
-async function serveHarness() {
+export async function serveHarness() {
     const publicRoot = resolve(root, 'public');
     const server = createServer(async (request, response) => {
         try {

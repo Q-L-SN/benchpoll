@@ -1,4 +1,6 @@
 import { coverageMultiplier } from './coverage-penalty.js';
+import { DEFAULT_ESTIMATION_ALGORITHM, normalizeEstimationAlgorithm, missingOnlyInference,
+    isMissingInferenceMethod } from './estimation-algorithms.js';
 
 const finite = value => {
     if (!Number.isFinite(value)) throw new TypeError('Percentile scoring requires finite values');
@@ -84,7 +86,13 @@ export function createPercentileReference(models) {
     };
 }
 
-export function availableResultInference(observedScore, coverageFraction, estimates, percentile = null, sourceCount = 0) {
+export function availableResultInference(observedScore, coverageFraction, estimates, percentile = null, sourceCount = 0,
+    algorithm = DEFAULT_ESTIMATION_ALGORITHM) {
+    normalizeEstimationAlgorithm(algorithm);
+    if (algorithm !== DEFAULT_ESTIMATION_ALGORITHM) {
+        if (percentile !== null) throw new TypeError('Missing-only inference requires pairwise estimates');
+        return missingOnlyInference(observedScore, coverageFraction, estimates, sourceCount, algorithm);
+    }
     return storedAvailableResultInference(observedScore, coverageFraction, estimates, percentile, sourceCount,
         { method: PAIRWISE_RATIONAL_COVERAGE_FACTOR_METHOD });
 }
@@ -92,6 +100,10 @@ export function availableResultInference(observedScore, coverageFraction, estima
 // Historical evidence must be checked against the formula recorded in its trace.
 export function storedAvailableResultInference(observedScore, coverageFraction, estimates, percentile = null, sourceCount = 0,
     { method } = {}) {
+    if (isMissingInferenceMethod(method)) {
+        if (percentile !== null) throw new TypeError('Missing-only inference requires pairwise estimates');
+        return missingOnlyInference(observedScore, coverageFraction, estimates, sourceCount, method.slice('pairwise-'.length));
+    }
     finite(observedScore);
     if (!Number.isFinite(coverageFraction) || coverageFraction <= 0 || coverageFraction > 1 + 1e-9
         || !Number.isSafeInteger(sourceCount) || sourceCount < 0

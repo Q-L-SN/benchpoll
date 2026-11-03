@@ -1,8 +1,10 @@
 # benchpoll
 
+**Define Super Intelligence, democratically.** BenchPoll compares AI models using benchmark evidence and community-chosen weights. Participants shape evaluation priorities, explore public rankings, and build personal AI indices.
+
 benchpoll is a Node.js/Express web app for browsing and weighting ranked evaluation items, including benchmarks, arenas, and other evaluation methods. The app serves private HTML pages, public CSS/JS assets, GitHub OAuth login, session-backed user accounts, role-based review access, and ranking pages backed by a MySQL database.
 
-Users can create private topics and propose independent public topics in the proposal hall. A public proposal needs 30 supporters before administrator review. Benchmark, model, score and feedback contributions use the standard contribution forms. Reviewers use the same GitHub-backed accounts; authorization comes from `users.role`. A `senior` submission uses the same endpoint and payload as any other submission, but is validated, approved, applied, audited, and queued for an email decision within one server transaction.
+Users can create, edit and delete private topics, including their scenes and default scene. New public-topic proposals publish a frozen snapshot of an existing private topic’s saved configuration. Anyone can preview rankings and try weights; saving a private copy is explicit. Replacing a snapshot resets supports. A public proposal needs 30 other supporters before administrator review, which imports the snapshot as one contribution from its author. Benchmark, model, score and feedback contributions use the standard contribution forms. Reviewers use the same GitHub-backed accounts; authorization comes from `users.role`. A `senior` submission uses the same endpoint and payload as any other submission, but is validated, approved, applied, audited, and queued for an email decision within one server transaction.
 
 Topics optionally contain one level of scenes, with exactly one default shown first. Search includes scenes: a parent-only match keeps its scenes collapsed until expanded, while directly matched scenes appear immediately. References target a concrete scene when present. References dynamically expand into benchmark weights before scoring: public indices use public target weights, while personal indices prefer the viewer's saved target weights. Private targets never enter public-topic configurations. Cycles are rejected; empty or unavailable targets retain missing weight. See [the implementation and migration notes](docs/topic-scenes-references-20261031.md).
 
@@ -126,6 +128,8 @@ Main table groups used by the code include:
 
 Ranking contexts identify a standalone topic or one concrete scene. Scene tabs replace combinable context dimensions; legacy dimension data remains for migration history only. Scores are global evidence, with per-score fields rather than model-owned test conditions. Current contribution forms offer approved effort and harness values; the ranking interface provides basic effort and harness comparison switches. The previous advanced comparison UI is not currently exposed, although compatibility APIs and historical data remain. See [per-score field contracts and migration](docs/score-fields.md). Back up the database and stop the app before `npm run migrate:score-fields`.
 
+The pending [ARC harness correction](docs/harness-conditions-20261103.md) separates official direct/Standard evaluations from Provider Adapter, custom systems/tools and unverified configurations. It preserves the existing default condition IDs and saved weights. An official leaderboard listing alone does not establish a common solving harness; this reviewed data correction is not yet deployed.
+
 ## Install
 
 ```powershell
@@ -151,8 +155,8 @@ Make sure local DNS/hosts and certificate setup match the domain you use in the 
 ## Main Pages
 
 - `/` (topic directory, with public ranking previews and benchmark-weight treemaps)
-- `/:topic-slug` (independent public topic workspace; old numbered and taxonomy URLs redirect)
-- `/personal/:ID` (owner-only private topic)
+- `/:topic-slug` or `/:topic-slug/:scene-slug` (public workspace; a topic root redirects to its named default scene)
+- `/personal/:ID` or `/personal/:ID/:scene-slug` (owner-only; the root redirects to its default scene)
 - `/login`
 - `/github_callback`
 - `/topic-proposals`
@@ -160,6 +164,8 @@ Make sure local DNS/hosts and certificate setup match the domain you use in the 
 - `/contribute`
 - `/censor`
 - `/dialogPage`
+
+Scene links use readable name slugs, including the default scene. Old `?scene=ID` and `?context_scene=ID` links return 404; there are no compatibility redirects. See [topic lifecycle and release notes](docs/topic-lifecycle-20261102.md).
 
 ## Search Discovery
 
@@ -179,9 +185,11 @@ the Privacy Policy version remains `2026-10-30`.
 - `POST /api/get_topic`
 - `POST /api/get_topic_preview`
 - `POST /api/create_topic`
+- `POST /api/get_private_topic_editor`, `/api/save_private_topic`, `/api/delete_private_topic`
 - `POST /api/create_topic_scene`, `/api/update_topic_scene`, `/api/set_default_topic_scene` (private-topic owner)
 - `POST /api/get_topic_reference_targets`
 - `POST /api/get_topic_proposals`, `/api/propose_topic`, `/api/vote_topic_proposal`
+- `POST /api/get_topic_proposal_snapshot`, `/api/preview_topic_proposal`, `/api/copy_topic_proposal`
 - `POST /api/get_weighted_workspace`, `/api/get_ranking_page`, `/api/save_personal_pie`
 - `POST /api/locate_ranking_model`
 - `POST /api/get_comparison_profiles`, `/api/save_comparison_profile` (compatibility endpoints)
@@ -201,10 +209,11 @@ the Privacy Policy version remains `2026-10-30`.
 
 Each concrete topic/scene averages non-empty personal pies changed in the
 past 72 hours. If fewer than 10 qualify, use its latest up-to-10 non-empty pies
-without an age cutoff. If 10 or more qualify, use all qualifying pies. At least
-one non-empty pie must have changed within 14 days for a public composition to
-remain active. A scene with 14-day activity but no 72-hour pies still uses the
-top-up sample. Sibling scenes are never automatically blended; a topic with
+without an age cutoff, including when none changed within 72 hours. This is 10
+pies total, not 10 additional pies; if fewer exist, use all of them. If 10 or more
+qualify within 72 hours, use all qualifying pies. Selected pies contribute equally,
+and the participant count is the number selected. Public weights and reference
+availability do not expire after 14 days. Sibling scenes are never automatically blended; a topic with
 scenes opens its default scene. Fallback shares use a separate electorate of explicit choices in
 eligible non-empty pies updated within 14 days, weighted by each pie's allocation
 to the entrance benchmark. An absent rule follows the community without voting;
@@ -251,6 +260,14 @@ isolated group of extreme reference scores without changing actual results. This
 heuristic is not a confidence interval; estimates may be inaccurate and gaps with
 insufficient connected evidence remain unresolved. The separate rational coverage
 factor uses measured coverage only.
+
+The workspace also has a per-tab **Test algorithm** selector. The current formula
+remains the default. Five alternatives keep measured contributions fixed and
+adjust only missing weight: unadjusted, rational attenuation, linear attenuation,
+square-root attenuation, and shrinkage toward 50. These tests bound predictions to 0–100 and start unresolved
+gaps at 50; that midpoint is an explicit trial assumption, not a population prior.
+Selections are session-local, do not alter public weights, and leave Score range
+unchanged. See [the experiment contract](docs/estimation-lab-20261103.md).
 
 Shared tooltips use `data-tooltip` (hover, keyboard focus or touch long-press);
 help-only controls use `data-help-text`/`data-help-content` and can be pinned by a tap.
@@ -328,9 +345,11 @@ commit; run `npm ci` afterward to match the restored lockfile. See
 
 # benchpoll 中文说明
 
+**用民主的方式，定义 Super Intelligence。** BenchPoll 结合基准测试证据与社区选择的权重比较 AI 模型。用户共同决定评价重点，浏览公众排行榜，并构建个人 AI 指数。首页使用英文宣传语 “Define Super Intelligence, democratically.”。
+
 benchpoll 是一个基于 Node.js/Express 的网页应用，用于浏览、设置权重和展示评测项排行；评测项可以是 benchmark、arena 或其他评测方法。项目包含私有 HTML 页面、公开 CSS/JS 静态资源、GitHub OAuth 登录、基于 session 的用户账号、基于角色的审核权限，以及由 MySQL 数据库驱动的排行页面。
 
-用户可以创建私有主题，并在提案大厅提出独立的公开主题；公开提案达到 30 个支持后进入管理员审核。基准测试、模型、分数和反馈通过统一的贡献表单提交。审核员继续使用普通的 GitHub 账号登录，权限由 `users.role` 决定。`senior` 提交时仍使用与普通用户完全相同的端点和数据结构，但服务器会在同一个事务内完成校验、批准、应用、审计和审核结果邮件入队。
+用户可以创建、修改和删除私有主题，并设置场景列表及默认场景。新公开主题提案从现有私有主题的已保存配置生成冻结快照；任何人都可以预览排行和试调权重，只有明确保存时才创建私有副本。替换快照会清空支持票。提案达到 30 位其他用户支持后进入管理员审核，通过时按作者的一份贡献导入配置。基准测试、模型、分数和反馈通过统一的贡献表单提交。审核员继续使用普通的 GitHub 账号登录，权限由 `users.role` 决定。`senior` 提交时仍使用与普通用户完全相同的端点和数据结构，但服务器会在同一个事务内完成校验、批准、应用、审计和审核结果邮件入队。
 
 主题可以没有场景，也可以包含一层场景；有场景时必须有且只有一个默认场景，并排在最前。搜索包含场景：仅匹配一级主题时，其场景默认折叠，点击后展开；直接匹配的场景立即展示。引用有场景的主题时必须指定具体场景。引用在计分前动态展开成基准权重：公众指数取目标的公众权重，个人指数优先取当前用户保存的目标权重。公开主题的配置不能引用私有主题。系统拒绝循环引用；空目标或不可访问目标保留为缺失权重。详见[实现与迁移说明](docs/topic-scenes-references-20261031.md)。
 
@@ -452,6 +471,8 @@ npm run migrate:literal-default-conditions
 
 排行榜上下文标识无场景主题或一个具体场景。场景 Tab 替代可组合的上下文维度；旧维度数据仅保留为迁移历史。分数是全局证据，可附加独立字段，不再绑定模型测试条件。当前贡献表单提供已批准的 effort 和 harness 选项；排行榜界面提供基础的 effort 和 harness 区分开关。旧高级比较界面目前没有开放，但兼容接口和历史数据仍保留。详见[分数字段契约和迁移说明](docs/score-fields.md)。运行 `npm run migrate:score-fields` 前必须备份数据库并停止应用。
 
+待上线的 [ARC harness 整理](docs/harness-conditions-20261103.md)将官方直接评测/Standard、Provider Adapter、自定义系统或工具、配置未核实的结果分为独立条件，保留原默认条件 ID 和已保存权重。被官方榜单收录不代表采用统一解题框架；这次经逐条核对的数据整理尚未部署。
+
 ## 安装
 
 ```powershell
@@ -477,8 +498,8 @@ https://benchpoll.com:1337
 ## 主要页面
 
 - `/`（主题目录，展示公众排行榜预览和基准权重矩形树图）
-- `/:topic-slug`（独立公开主题配置页；旧编号及分类树网址会重定向）
-- `/personal/:ID`（仅所有者可访问的私有主题）
+- `/:topic-slug` 或 `/:topic-slug/:scene-slug`（公开配置页；主题根路径自动跳转到名称形式的默认场景）
+- `/personal/:ID` 或 `/personal/:ID/:scene-slug`（仅所有者可访问；根路径自动跳转到默认场景）
 - `/login`
 - `/github_callback`
 - `/topic-proposals`
@@ -486,6 +507,8 @@ https://benchpoll.com:1337
 - `/contribute`
 - `/censor`
 - `/dialogPage`
+
+场景链接统一采用名称 slug，包括默认场景。旧的 `?scene=ID` 和 `?context_scene=ID` 链接返回 404，不保留兼容跳转。详见[主题生命周期与发布说明](docs/topic-lifecycle-20261102.md)。
 
 ## 搜索发现
 
@@ -504,9 +527,12 @@ https://benchpoll.com:1337
 - `POST /api/get_topic`
 - `POST /api/get_topic_preview`
 - `POST /api/create_topic`
+- `POST /api/get_private_topic_editor`, `/api/save_private_topic`, `/api/delete_private_topic`
 - `POST /api/create_topic_scene`、`/api/update_topic_scene`、`/api/set_default_topic_scene`（私有主题所有者）
 - `POST /api/get_topic_reference_targets`
 - `POST /api/get_topic_proposals`、`/api/propose_topic`、`/api/vote_topic_proposal`
+- `POST /api/get_private_topic_editor`、`/api/save_private_topic`、`/api/delete_private_topic`
+- `POST /api/get_topic_proposal_snapshot`、`/api/preview_topic_proposal`、`/api/copy_topic_proposal`
 - `POST /api/get_weighted_workspace`、`/api/get_ranking_page`、`/api/save_personal_pie`
 - `POST /api/locate_ranking_model`
 - `POST /api/get_comparison_profiles`、`/api/save_comparison_profile`（兼容接口）
@@ -525,10 +551,11 @@ https://benchpoll.com:1337
 ## 公众权重计算
 
 每个具体主题/场景先平均最近 72 小时内创建或修改的非空个人 Pie。
-不足 10 个时，使用该场景最新的至多 10 个非空 Pie 补足，不限制补足样本的时间；
-达到或超过 10 个时，平均全部符合 72 小时窗口的 Pie。公众构成至少需要一个
-最近 14 天内有更新的非空 Pie 才保持有效。14 天内有更新但 72 小时内没有更新
-的场景仍采用补足样本。同级场景不会自动混合；有场景的主题默认打开其默认场景。
+不足 10 个时，使用该场景最新的至多 10 个非空 Pie 补足，不限制样本时间，
+即使最近 72 小时内没有更新也照常取样。这里是合计补足至 10 个，不是再补 10 个；
+全部记录不足 10 个时使用全部。达到或超过 10 个时，平均全部符合 72 小时窗口的 Pie。
+选中样本等权参与，参与数量为实际选入的 Pie 数量。公众权重及其引用可用性不再因
+超过 14 天而失效。同级场景不会自动混合；有场景的主题默认打开其默认场景。
 Fallback 比例独立统计最近 14 天有效非空 Pie 中的明确选择，
 按各 Pie 给原基准分配的权重汇总。没有配置记录表示跟随社区但不投票；有记录且
 顺序链为空表示明确选择不使用 fallback，数据库以 family_ID 为 NULL 的配置记录保存。
@@ -563,6 +590,12 @@ Estimated score 优先使用实测和后备成绩，再尝试两两比较估计�
 限制少数孤立的极端参照分数的影响，但不会改动真实成绩。这种启发式方法不是
 置信区间，估计仍可能不准确；关联证据不足的部分保持缺失。另行计算的有理覆盖率
 系数只使用真实覆盖率。
+
+工作区新增仅对当前标签页生效的 **Test algorithm** 切换器，默认仍使用当前公式。
+另外五种试验方法固定实测贡献，只处理缺失权重：不修正、有理衰减、线性衰减、
+平方根衰减、向 50 分中点收缩。这些方法将预测限制在 0–100，无法预测的缺失部分以 50 起算；
+该中点是明确的试验假设，不是总体分布先验。选择保存在会话中，不改变公共权重，
+也不影响 Score range。详见[试验约定](docs/estimation-lab-20261103.md)。
 
 全站共用 `data-tooltip` 提示（悬浮、键盘聚焦或触屏长按）；纯说明按钮使用
 `data-help-text`/`data-help-content`，可点按固定展开。气泡按可视区域自动上下翻转，

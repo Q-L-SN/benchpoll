@@ -237,6 +237,9 @@ test('ordinary first loads never treat two absent snapshot IDs as a recovery req
 });
 
 test('same-scope recovery keeps the benchmark DOM and scroll anchor while the replacement is pending', async () => {
+    const loadingSource = (await readFile(new URL('../public/js/shared/loading.js', import.meta.url), 'utf8')).replace(/^export /gm, '');
+    const createElement = () => ({ children: [], setAttribute() {}, append(...nodes) { this.children.push(...nodes); },
+        replaceChildren(...nodes) { this.children = nodes; } });
     const source = await readFile(new URL('../public/js/home-workspace.js', import.meta.url), 'utf8');
     const start = source.indexOf('function renderBenchmarks() {');
     const end = source.indexOf('    if (state.benchmarks.length === 0 && state.rankingPageLoading.benchmarks)', start);
@@ -246,13 +249,13 @@ test('same-scope recovery keeps the benchmark DOM and scroll anchor while the re
         append(value) { this.children.push(value); } };
     const element = { hidden: false, disabled: false, dataset: {}, classList: { toggle() {} }, setAttribute() {} };
     const body = {};
-    vm.runInNewContext(`${source.slice(start, end)}\n}\nrenderBenchmarks();`, {
+    vm.runInNewContext(`${loadingSource}\n${source.slice(start, end)}\n}\nrenderBenchmarks();`, {
         state: { loading: true, mode: 'public', personalEntries: [], pinPersonalBenchmarks: false,
             rankingPagination: { snapshotID: 'old' } },
         rankingRecovery: { snapshotID: 'old', scope: 'current', mode: 'public' }, rankingRecoveryScope: () => 'current',
         benchmarkRows, pendingBenchmarkFocus: null, benchmarkRowFocus: { captureFocus: () => null },
-        referenceSearch: { render() {} }, benchmarkSearch: { value: '' },
-        document: { activeElement: body, body, createElement: () => ({}) }, benchmarkVersionGrouping: element,
+        referenceCoverage: { begin() {} }, benchmarkSearch: { value: '' },
+        document: { activeElement: body, body, createElement }, benchmarkVersionGrouping: element,
         benchmarkCard: element, benchmarkPersonalPin: element, stylePreviews: { setPersonal() {} },
         isInlineFallbackTargetActive: () => false, selectedInlineFallbackPrimary: () => null, fallbackRuleFor: () => null
     });
@@ -267,15 +270,15 @@ test('same-scope recovery keeps the benchmark DOM and scroll anchor while the re
         { loading: false }
     ]) {
         const rows = { ...benchmarkRows, scrollTop: 420, children: [...originalRows] };
-        vm.runInNewContext(`${source.slice(start, end)}\n}\nrenderBenchmarks();`, {
+        vm.runInNewContext(`${loadingSource}\n${source.slice(start, end)}\n}\nrenderBenchmarks();`, {
             state: { loading: change.loading ?? true, mode: 'public', personalEntries: [], pinPersonalBenchmarks: false,
                 rankingPagination: { snapshotID: 'old' } },
             rankingRecovery: Object.hasOwn(change, 'recovery') ? change.recovery
                 : { snapshotID: 'old', scope: 'current', mode: 'public' },
             rankingRecoveryScope: () => 'current', benchmarkRows: rows,
-            referenceSearch: { render() {} }, benchmarkSearch: { value: '' },
+            referenceCoverage: { begin() {} }, benchmarkSearch: { value: '' },
             pendingBenchmarkFocus: null, benchmarkRowFocus: { captureFocus: () => null },
-            document: { activeElement: body, body, createElement: () => ({}) }, benchmarkVersionGrouping: element,
+            document: { activeElement: body, body, createElement }, benchmarkVersionGrouping: element,
             benchmarkCard: element, benchmarkPersonalPin: element, stylePreviews: { setPersonal() {} },
             isInlineFallbackTargetActive: () => false, selectedInlineFallbackPrimary: () => null, fallbackRuleFor: () => null
         });

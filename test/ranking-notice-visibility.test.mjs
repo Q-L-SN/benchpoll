@@ -16,9 +16,12 @@ function fixture(t, { mobile, hidden, rounded = false }) {
     const node = () => ({ isConnected: false, scrollHeight: 44, append() {}, setAttribute() {},
         replaceChildren() {}, getBoundingClientRect: () => ({ top: 0, height: 44 }) });
     const scrollingElement = { scrollTop: 1100 };
+    const mobilePage = { ...node(), scrollTop: 1100,
+        getBoundingClientRect: () => ({ top: 250, height: 500 }),
+        scrollTo({ top }) { scrollCalls.push({ target: 'page', top }); this.scrollTop = rounded ? Math.round(top) : top; } };
     const rows = { ...node(), scrollTop: 250, clientHeight: hidden ? 0 : 360,
         getClientRects: () => hidden ? [] : [{ top: 0, height: 360 }],
-        closest: () => ({ setAttribute() {} }),
+        closest: selector => selector === '.bp-right-workspace' ? mobilePage : { setAttribute() {} },
         replaceChildren(spacer) { spacer.isConnected = true; },
         scrollTo({ top }) { scrollCalls.push({ target: 'rows', top }); this.scrollTop = rounded ? Math.round(top) : top; } };
     const viewport = { style: { setProperty: (key, value) => properties.set(key, value) } };
@@ -38,7 +41,7 @@ function fixture(t, { mobile, hidden, rounded = false }) {
         const batch = [...frames.values()]; frames.clear();
         batch.forEach(callback => callback(time));
     };
-    return { notice, status, rows, scrollingElement, scrollCalls, properties, advance };
+    return { notice, status, rows, mobilePage, scrollingElement, scrollCalls, properties, advance };
 }
 
 for (const mobile of [true, false]) {
@@ -52,6 +55,7 @@ for (const mobile of [true, false]) {
         view.notice.hide(); view.advance(400); view.advance(710); view.advance(1020);
         assert.equal(view.status.dataset.motion, 'closed');
         assert.equal(view.scrollingElement.scrollTop, 1100);
+        assert.equal(view.mobilePage.scrollTop, 1100);
         assert.equal(view.rows.scrollTop, 250);
         assert.deepEqual(view.scrollCalls, []);
     });
@@ -61,10 +65,11 @@ for (const mobile of [true, false]) {
         view.notice.update({ pending: false, version: 1, scope: 'same' });
         view.notice.update({ pending: false, error: 'Could not update the ranking.', version: 1, scope: 'same' });
         view.advance(0); view.advance(105); view.advance(210); view.advance(320);
-        assert.equal(mobile ? view.scrollingElement.scrollTop : view.rows.scrollTop, (mobile ? 1100 : 250) + 44);
-        assert.ok(view.scrollCalls.every(call => call.target === (mobile ? 'document' : 'rows')));
+        assert.equal(mobile ? view.mobilePage.scrollTop : view.rows.scrollTop, (mobile ? 1100 : 250) + 44);
+        assert.ok(view.scrollCalls.every(call => call.target === (mobile ? 'page' : 'rows')));
+        assert.equal(view.scrollingElement.scrollTop, 1100, 'the shared header never scrolls');
         view.notice.hide(); view.advance(400); view.advance(605); view.advance(810); view.advance(1020);
-        assert.equal(mobile ? view.scrollingElement.scrollTop : view.rows.scrollTop, mobile ? 1100 : 250);
+        assert.equal(mobile ? view.mobilePage.scrollTop : view.rows.scrollTop, mobile ? 1100 : 250);
     });
 }
 

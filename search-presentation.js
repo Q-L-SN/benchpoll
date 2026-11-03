@@ -1,8 +1,8 @@
-import { SITE_DESCRIPTION, topicSearchMetadata } from './public/js/shared/search-metadata.js';
-import { FEATURED_TOPIC_ID } from './public/js/shared/topics.js';
+import { SITE_TITLE, SITE_TAGLINE, SITE_DESCRIPTION, SITE_SOCIAL_IMAGE, topicSearchMetadata } from './public/js/shared/search-metadata.js';
+import { FEATURED_TOPIC_ID, sceneSummary, topicSlug } from './public/js/shared/topics.js';
 
 export const PUBLIC_DOCUMENTS = Object.freeze([
-    { path: '/', title: 'BenchPoll - Community-weighted AI indices', description: SITE_DESCRIPTION, type: 'CollectionPage' },
+    { path: '/', title: SITE_TITLE, description: SITE_DESCRIPTION, type: 'CollectionPage' },
     { path: '/how-it-works', title: 'How BenchPoll Works - Weights, Scores and Fallback', description: 'Understand BenchPoll public and personal AI indices, topic references, measured coverage, missing-score estimation and community fallback.' },
     { path: '/terms', title: 'Terms of Use | BenchPoll', description: 'Terms for BenchPoll accounts, evaluation contributions, public and private topics, AI indices and discussions.', modified: '2026-11-01' },
     { path: '/privacy', title: 'Privacy Policy | BenchPoll', description: 'How BenchPoll handles account information, private topics, contributions and privacy requests.', modified: '2026-10-30' },
@@ -27,14 +27,14 @@ export function replaceSearchSlot(html, name, value) {
 }
 
 export function searchHead(metadata, origin, { items = [], breadcrumbs = [] } = {}) {
-    const url = absolute(metadata.path, origin), image = origin + '/assets/benchpoll-social.png';
+    const url = absolute(metadata.path, origin), image = origin + SITE_SOCIAL_IMAGE;
     const page = { '@type': metadata.type || 'WebPage', '@id': url + '#page', url,
         name: metadata.title, description: metadata.description, inLanguage: 'en',
         isPartOf: { '@id': origin + '/#website' }, publisher: { '@id': origin + '/#publisher' },
         ...(metadata.modified ? { dateModified: metadata.modified } : {}) };
     const graph = [
         { '@type': 'Organization', '@id': origin + '/#publisher', name: 'BenchPoll', url: origin + '/',
-            logo: origin + '/assets/benchpoll-logo.svg', sameAs: ['https://x.com/BenchPoll'] },
+            slogan: SITE_TAGLINE, logo: origin + '/assets/benchpoll-logo.svg', sameAs: ['https://x.com/BenchPoll'] },
         { '@type': 'WebSite', '@id': origin + '/#website', name: 'BenchPoll', url: origin + '/',
             description: SITE_DESCRIPTION, inLanguage: 'en', publisher: { '@id': origin + '/#publisher' } }, page
     ];
@@ -58,17 +58,17 @@ ${meta('og:type', 'website', 'property')}${meta('og:site_name', 'BenchPoll', 'pr
 ${meta('og:title', metadata.title, 'property')}${meta('og:description', metadata.description, 'property')}
 ${meta('og:url', url, 'property')}${meta('og:image', image, 'property')}
 ${meta('og:image:width', '1200', 'property')}${meta('og:image:height', '630', 'property')}
-${meta('og:image:alt', 'BenchPoll - community-weighted AI indices', 'property')}
+${meta('og:image:alt', `BenchPoll - ${SITE_TAGLINE}`, 'property')}
 ${meta('twitter:card', 'summary_large_image')}${meta('twitter:site', '@BenchPoll')}
 ${meta('twitter:title', metadata.title)}${meta('twitter:description', metadata.description)}${meta('twitter:image', image)}
+${meta('twitter:image:alt', `BenchPoll - ${SITE_TAGLINE}`)}
 <script id="bp-search-structured-data" type="application/ld+json">${jsonData({ '@context': 'https://schema.org', '@graph': graph })}</script>\n`;
 }
 
-export function selectSearchScene(topic, params) {
-    if (!params.has('scene')) return topic.scenes?.find(scene => scene.isDefault) ?? null;
-    const values = params.getAll('scene'), value = values[0];
-    if (values.length !== 1 || !/^[1-9]\d*$/.test(value) || !Number.isSafeInteger(Number(value))) throw error(404, 'topic_scene_not_found');
-    const scene = topic.scenes?.find(scene => Number(scene.ID) === Number(value));
+export function selectSearchScene(topic, params, slug = null) {
+    if (params.has('scene') || params.has('context_scene')) throw error(404, 'topic_scene_not_found');
+    if (slug === null) return topic.scenes?.find(scene => scene.isDefault) ?? null;
+    const scene = topic.scenes?.find(scene => (scene.slug || topicSlug(scene.name)) === slug);
     if (!scene) throw error(404, 'topic_scene_not_found');
     return scene;
 }
@@ -96,9 +96,9 @@ export function renderPublicTopic(html, topic, scene, snapshot, origin) {
     const metadata = topicSearchMetadata(topic, scene?.ID), content = renderPublicSnapshot(snapshot);
     html = replaceSearchSlot(html, 'metadata', searchHead(metadata, origin, { breadcrumbs: [
         { name: 'BenchPoll', path: '/' }, { name: topic.name, path: topic.url },
-        ...(scene && !scene.isDefault ? [{ name: scene.name, path: metadata.path }] : [])
+        ...(scene ? [{ name: scene.name, path: metadata.path }] : [])
     ], items: comparableModels(snapshot).map(item => ({ name: item.modelName || item.name })) }));
-    html = replaceSearchSlot(html, 'topic-identity', `<nav id="bp-breadcrumb" class="bp-breadcrumb" aria-label="Breadcrumb"><span class="bp-breadcrumb-current">${escapeHTML(metadata.name)}</span></nav><p id="workspace-topic-summary" class="bp-workspace-topic-summary">${escapeHTML(scene?.description || topic.description)}</p>`);
+    html = replaceSearchSlot(html, 'topic-identity', `<nav id="bp-breadcrumb" class="bp-breadcrumb" aria-label="Breadcrumb"><span class="bp-breadcrumb-current">${escapeHTML(metadata.name)}</span></nav><p id="workspace-topic-summary" class="bp-workspace-topic-summary">${escapeHTML(sceneSummary(topic, scene))}</p>`);
     html = replaceSearchSlot(html, 'scenes', `<section id="bp-template-strip" class="bp-scene-strip" aria-label="Topic scenes"${topic.scenes.length ? '' : ' hidden'}><nav class="bp-scene-tabs" aria-label="Scenes">${topic.scenes.map(item => `<a class="bp-scene-tab" href="${escapeHTML(topicSearchMetadata(topic, item.ID).path)}"${item.ID === scene?.ID ? ' aria-current="page"' : ''}>${escapeHTML(item.name)}</a>`).join('')}</nav></section>`);
     html = replaceSearchSlot(html, 'model-rows', content.models);
     return replaceSearchSlot(html, 'evaluation-rows', content.weights);
@@ -125,9 +125,8 @@ Sitemap: ${origin}/sitemap.xml
 }
 
 export function discoverySitemap(topics, origin) {
-    const entries = [...PUBLIC_DOCUMENTS, ...publicTopics(topics).flatMap(topic => [
-        { path: topic.url }, ...(topic.scenes ?? []).filter(scene => !scene.isDefault).map(scene => ({ path: topicSearchMetadata(topic, scene.ID).path }))
-    ])];
+    const entries = [...PUBLIC_DOCUMENTS, ...publicTopics(topics).flatMap(topic => topic.scenes?.length
+        ? topic.scenes.map(scene => ({ path: topicSearchMetadata(topic, scene.ID).path })) : [{ path: topic.url }])];
     return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${entries.map(item => `<url><loc>${escapeHTML(absolute(item.path, origin))}</loc>${item.modified ? `<lastmod>${item.modified}</lastmod>` : ''}</url>`).join('')}</urlset>`;
 }
 
@@ -135,7 +134,9 @@ export function discoveryText(topics, origin) {
     const link = (label, path) => `[${String(label).replace(/[\[\]\\]/g, '\\$&')}](${absolute(path, origin)})`;
     return `# BenchPoll
 
-> ${SITE_DESCRIPTION}
+> ${SITE_TAGLINE}
+
+BenchPoll is a community-weighted AI model ranking platform. Participants choose benchmark and topic weights to define what matters in an AI index. The tagline "${SITE_TAGLINE}" describes this shared choice of evaluation priorities. Benchmark evidence supplies measured results; community preferences determine their importance. Explore public rankings by topic and scene, inspect the evidence, or build a personal index.
 
 BenchPoll publishes community-weighted AI indices, not new laboratory measurements. Public and personal indices are distinct. Estimated scores can include inferred results; measured coverage excludes those estimates. Score range is not a confidence interval. Topic references expand weights rather than averaging child index scores. Scores depend on the selected topic, scene, weights and comparison settings.
 

@@ -6,7 +6,7 @@ import { chromium, webkit, devices } from 'playwright';
 import { startConfigSidebarPreview } from './helpers/config-sidebar-fixture-20261022.mjs';
 import { startPreview } from '../scripts/frontend/server.mjs';
 
-const output = resolve('D:/Codex-artifacts/website1/mobile-config-controls-20261101');
+const output = resolve('artifacts/workspace-ui-20261101/mobile-controls');
 const browsers = new Map();
 before(async () => {
     await mkdir(join(output, 'tmp'), { recursive: true });
@@ -57,7 +57,8 @@ async function gesture(page, selector = '#swipe-surface', { x = 80, points = [[2
             const event = new Event(type, { bubbles: true, composed: true, cancelable: true });
             Object.defineProperties(event, { touches: { value: touches }, changedTouches: { value: changedTouches },
                 timeStamp: { value: time } });
-            prevented ||= !node.dispatchEvent(event);
+            const allowed = node.dispatchEvent(event);
+            prevented ||= !allowed;
         };
         const start = point(0, 0);
         send('touchstart', [start], [start], 1000);
@@ -143,8 +144,9 @@ for (const engine of ['chromium', 'webkit']) {
                 assert.ok(geometry.documentWidth <= geometry.width + 1 && geometry.scrollX === 0, report);
             }
         }
+        const originalTop = (await page.locator('.bp-context-row').boundingBox()).y;
         await page.locator('#model-index-tab').click();
-        await page.evaluate(() => scrollTo(0, 400));
+        await page.locator('.bp-right-workspace').evaluate(node => { node.scrollTop = 400; });
         await settled(page);
         const sticky = await page.evaluate(() => {
             const row = document.querySelector('.bp-context-row').getBoundingClientRect();
@@ -153,27 +155,33 @@ for (const engine of ['chromium', 'webkit']) {
                 observed: parseFloat(document.querySelector('.bp-workspace').style.getPropertyValue('--bp-mobile-topic-height')),
                 backdrop: getComputedStyle(document.getElementById('config-sidebar')).backdropFilter };
         });
-        assert.equal(sticky.row, 60, JSON.stringify(sticky));
+        assert.equal(sticky.row, originalTop, JSON.stringify(sticky));
         assert.ok(sticky.tabs >= sticky.bottom - 1, JSON.stringify(sticky));
         assert.ok(Math.abs(sticky.observed - sticky.height) < 1, JSON.stringify(sticky));
         assert.match(sticky.backdrop, /blur/, JSON.stringify(sticky));
         await page.screenshot({ path: join(output, `${engine}-${width}-sticky.png`) });
     });
 
-    test(`${engine}: swipe opens the existing drawer without changing desktop preference or preventing native events`, async t => {
+    test(`${engine}: continuous drag settles the drawer without changing desktop preference`, async t => {
         const { page } = await open(t, engine);
         await installSurface(page);
-        assert.deepEqual(await gesture(page), { prevented: false, open: true });
+        assert.deepEqual(await gesture(page), { prevented: true, open: true });
         assert.equal(await page.locator('#taxonomy-toggle').getAttribute('aria-expanded'), 'true');
         assert.equal(await page.locator('[data-taxonomy-trigger]').getAttribute('aria-expanded'), 'true');
         assert.equal(await page.evaluate(() => localStorage.getItem('benchpoll:config-sidebar-collapsed')), 'true');
         await page.keyboard.press('Escape');
         await page.waitForFunction(() => !document.body.classList.contains('taxonomy-open'));
         for (const options of [{ x: 12 }, { x: 380 }, { points: [[5, 25], [110, 25]] },
-            { points: [[-20, 0], [110, 0]] }, { points: [[25, 0]] }, { points: [[110, 40]] },
-            { duration: 800 }, { cancel: true }, { multiple: true }, { scroll: true }]) {
+            { points: [[-20, 0], [110, 0]] }, { points: [[40, 110]] }, { multiple: true }, { scroll: true }]) {
             assert.deepEqual(await gesture(page, '#swipe-surface', options), { prevented: false, open: false }, JSON.stringify(options));
         }
+        for (const options of [{ points: [[25, 0]] }, { duration: 800 }, { cancel: true }]) {
+            assert.deepEqual(await gesture(page, '#swipe-surface', options), { prevented: true, open: false }, JSON.stringify(options));
+        }
+        assert.deepEqual(await gesture(page, '#swipe-surface', { points: [[50, 0], [110, 0], [230, 0]], duration: 1200 }),
+            { prevented: true, open: true }, 'slow drags can still open the drawer by distance');
+        await page.keyboard.press('Escape');
+        await page.waitForFunction(() => !document.body.classList.contains('taxonomy-open'));
         await page.setViewportSize({ width: 1200, height: 852 });
         await settled(page);
         assert.deepEqual(await gesture(page), { prevented: false, open: false });
@@ -218,7 +226,7 @@ for (const engine of ['chromium', 'webkit']) {
         assert.deepEqual(await gesture(page), { prevented: false, open: false });
         await page.evaluate(() => { document.getElementById('logout-dialog').hidden = true; });
         await installSurface(page);
-        assert.deepEqual(await gesture(page), { prevented: false, open: true });
+        assert.deepEqual(await gesture(page), { prevented: true, open: true });
     });
 
     test(`${engine}: real mobile refresh, discussion, undo and redo execute on the first tap`, async t => {
@@ -317,7 +325,7 @@ test('chromium real touch gestures open the sidebar but leave horizontal scroll 
         await settled(page);
     };
     await installSurface(page);
-    await drag(80, 120);
+    await drag(80, 220);
     assert.equal(await page.locator('body').evaluate(node => node.classList.contains('taxonomy-open')), true);
     await page.keyboard.press('Escape');
     await page.waitForFunction(() => !document.body.classList.contains('taxonomy-open'));

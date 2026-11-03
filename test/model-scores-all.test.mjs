@@ -4,6 +4,7 @@ import test from 'node:test';
 import vm from 'node:vm';
 import { searchItems } from '../public/js/shared/search.js';
 import { rankingNumber } from '../public/js/shared/ranking-number.js';
+import { isMissingInferenceMethod } from '../public/js/shared/estimation-algorithms.js';
 
 const source = readFileSync(new URL('../public/js/workspace/model-scores.js', import.meta.url), 'utf8');
 const validateIndex = vm.runInNewContext(source.slice(source.indexOf('export function validateModelScoreConfigurationIndex('),
@@ -120,39 +121,41 @@ function calculationSummary(inference, coverage = 50) {
     const end = source.indexOf('function openApprovedModelResults(', start);
     const render = vm.runInNewContext(`${source.slice(start, end)}\nrenderCalculationResults`, {
         modelScoresSummary, modelScoresList: { append() {} }, document: { createElement: () => ({ textContent: '', append(...nodes) { this.textContent += nodes.map(node => node.textContent).join(' '); } }) },
-        rankingNumber, syncExpand() {}, filterScores() {}, expansionNoun: ''
+        rankingNumber, isMissingInferenceMethod, syncExpand() {}, filterScores() {}, expansionNoun: ''
     });
     render({ lower: inference.totalScore, coverage, missingWeight: 100 - coverage,
         availableInference: inference, calculationScores: [] });
     return [modelScoresSummary.textContent, ...details].join(' ');
 }
 
-test('coverage summaries use reported factors without gating supported data by version or method', () => {
+test('coverage summaries use reported before and after scores across supported methods', () => {
     for (const [version, method] of [[4, 'pairwise-anchored-coverage-factor'],
         [5, 'pairwise-anchored-rational-coverage-factor'], [6, 'future-coverage-adjustment']]) {
         const text = calculationSummary({ version, method, inferredFraction: .5, unresolvedFraction: 0,
             unpenalizedScore: 80, coverageFactor: .5, appliedFactor: .5, totalScore: 40 });
         assert.match(text, /Index score 40; measured results cover 50% of the weight/);
-        assert.match(text, /Coverage factor: x0\.5000 \(80\.00 before adjustment\)/);
-        assert.doesNotMatch(text, /deduction|2 minus/);
+        assert.match(text, /Before adjustment: 80/);
+        assert.match(text, /After adjustment: 40/);
+        assert.doesNotMatch(text, /Coverage factor:|deduction|2 minus/);
     }
     const start = source.indexOf('function renderCalculationResults(');
     const end = source.indexOf('function openApprovedModelResults(', start);
     assert.doesNotMatch(source.slice(start, end), /inference\.version/);
 });
 
-test('current coverage summaries identify only the rational formula without recomputing factors', () => {
+test('coverage summaries leave algorithm details in the guide without recomputing totals', () => {
     for (const [version, method] of [[4, 'pairwise-anchored-coverage-factor'],
         [5, 'pairwise-anchored-rational-coverage-factor']]) {
         const text = calculationSummary({ version, method, inferredFraction: 0, unresolvedFraction: .5,
             coverageFactor: .75, appliedFactor: .75, unpenalizedScore: 80, totalScore: 60 });
-        assert.equal(text.includes('Coverage formula: 5c/(1+4c)'), version === 5);
-        assert.doesNotMatch(text, /Power coverage formula|c\^0\.35/);
-        if (version === 5) assert.match(text, /where c is measured coverage \(0 to 1\)/);
-        assert.match(text, /Coverage factor: x0\.7500 \(80\.00 before adjustment\)/);
+        assert.doesNotMatch(text, /Coverage formula:|Coverage factor:|Power coverage formula|c\^0\.35/);
+        assert.match(text, /Before adjustment: 80/);
+        assert.match(text, /After adjustment: 60/);
+        assert.match(text, /How it works/);
         const negative = calculationSummary({ version, method, inferredFraction: 0, unresolvedFraction: .5,
             coverageFactor: .75, appliedFactor: 1.25, unpenalizedScore: -20, totalScore: -25 });
-        assert.match(negative, /Negative scores use x1\.2500 \(2 minus the coverage factor\) so missing coverage cannot improve them/);
+        assert.match(negative, /Before adjustment: -20/);
+        assert.match(negative, /After adjustment: -25/);
     }
     const unknown = calculationSummary({ version: 6, method: 'future-coverage-adjustment',
         inferredFraction: 0, unresolvedFraction: .5, coverageFactor: .75, appliedFactor: .75,
@@ -160,17 +163,19 @@ test('current coverage summaries identify only the rational formula without reco
     assert.doesNotMatch(unknown, /Rational coverage formula|Power coverage formula/);
 });
 
-test('rational coverage details do not assume the previous negative-score formula', () => {
+test('before and after scores respect reported negative totals and full coverage', () => {
     // Deliberately distinct reported factors verify display behavior, not the backend formula.
     const text = calculationSummary({ version: 5, method: 'pairwise-anchored-rational-coverage-factor',
         inferredFraction: 0, unresolvedFraction: .5, unpenalizedScore: -20,
         coverageFactor: .5, appliedFactor: 2, totalScore: -40 });
     assert.match(text, /Index score -40/);
-    assert.match(text, /Negative scores use x2\.0000 so missing coverage cannot improve them/);
+    assert.match(text, /Before adjustment: -20/);
+    assert.match(text, /After adjustment: -40/);
     assert.doesNotMatch(text, /2 minus/);
     const full = calculationSummary({ version: 5, method: 'pairwise-anchored-rational-coverage-factor',
         inferredFraction: 0, unresolvedFraction: 0, unpenalizedScore: 80,
         coverageFactor: 1, appliedFactor: 1, totalScore: 80 }, 100);
-    assert.match(full, /Coverage factor: x1\.0000/);
+    assert.match(full, /Before adjustment: 80/);
+    assert.match(full, /After adjustment: 80/);
     assert.doesNotMatch(full, /not measured|Negative scores|deduction/);
 });

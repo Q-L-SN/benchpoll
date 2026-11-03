@@ -7,6 +7,7 @@ import { moderationRecipientEmail } from './moderation-email.js';
 import { claimWriteIntent, completeWriteIntent } from './write-idempotency.js';
 import { startTransactionConnection, commitTransactionConnection, rollbackTransactionConnection,
     releaseTransactionConnection, runDatabaseOperation } from './db-transaction.js';
+import { captureTopicSnapshot, saveTopicProposalSnapshot, loadTopicProposalSnapshot, snapshotHash } from './topic-snapshot-service.js';
 
 export const TOPIC_PROPOSAL_THRESHOLD = 30;
 export const TOPIC_PROPOSAL_SUPPORT_LIMIT = 3;
@@ -41,8 +42,11 @@ const projection = `SELECT p.*,
     UNIX_TIMESTAMP(p.created_at + INTERVAL 14 DAY) * 1000 AS expires_at_ms,
     (SELECT COUNT(*) FROM topic_proposal_votes v WHERE v.proposal_ID = p.ID) AS support_count,
     EXISTS(SELECT 1 FROM topic_proposal_votes own WHERE own.proposal_ID = p.ID AND own.user_ID = ?) AS supported,
-    c.name AS published_name, c.slug AS published_slug
-    FROM topic_proposals p LEFT JOIN categories c ON c.ID = COALESCE(p.topic_ID, p.parent_topic_ID) AND c.is_active = 1`;
+    c.name AS published_name, c.slug AS published_slug, published_scene.slug AS published_scene_slug,
+    snapshot.source_topic_ID AS source_topic_ID
+    FROM topic_proposals p LEFT JOIN categories c ON c.ID = COALESCE(p.topic_ID, p.parent_topic_ID) AND c.is_active = 1
+    LEFT JOIN topic_scenes published_scene ON published_scene.context_ID = p.scene_context_ID AND published_scene.is_active = 1
+    LEFT JOIN topic_proposal_snapshots snapshot ON snapshot.proposal_ID = p.ID AND snapshot.revision = p.revision`;
 
 export function normalizeTopicProposalRequest(body) {
     record(body, ['name', 'description', 'parentTopicID']);
@@ -72,8 +76,13 @@ export function serializeTopicProposal(row, userID = null, quota = null) {
         canEdit: isMine && status === 'open', canWithdraw: isMine && status === 'open',
         canCancelSupport: Boolean(userID && supported && status === 'open'),
         submissionID: row.moderation_log_ID == null ? null : topicProposalID(Number(row.moderation_log_ID)),
-        topicID, ...(parentTopicID === null ? {} : { kind: 'scene', parentTopicID, parentTopicName: row.published_name ?? null, sceneID }),
-        url: sceneID && row.published_slug ? topicSceneURL({ ID: parentTopicID, name: row.published_name, slug: row.published_slug }, sceneID)
+        topicID, hasSnapshot: row.source_topic_ID != null,
+        previewURL: row.source_topic_ID == null ? null : `/topic-proposals/${proposalID}/preview`,
+        ...(isMine && row.source_topic_ID != null ? { sourceTopicID: Number(row.source_topic_ID) } : {}),
+        ...(parentTopicID === null ? {} : { kind: 'scene', parentTopicID, parentTopicName: row.published_name ?? null, sceneID,
+            sceneSlug: row.published_scene_slug ?? null }),
+        url: sceneID && row.published_slug ? topicSceneURL({ ID: parentTopicID, name: row.published_name, slug: row.published_slug },
+            { name: row.name, slug: row.published_scene_slug })
             : topicID && row.published_slug ? topicURL(topicID, row.published_name, false, row.published_slug) : null };
 }
 
@@ -95,7 +104,7 @@ async function releaseExpiredReservations(connection, slug, name) {
           AND (reservation_slug = ? OR reservation_name = ?)`, [slug, name]);
 }
 
-async function readProposal(connection, ID, userID) {
+export async function readProposal(connection, ID, userID) {
     const [rows] = await connection.execute(`${projection} WHERE p.ID = ?`, [userID, ID]);
     if (rows.length !== 1) fail(404, 'topic_proposal_not_found');
     return serializeTopicProposal(rows[0], userID, await accountQuota(connection, userID));
@@ -206,13 +215,15 @@ async function releaseExpiredSceneReservations(connection, parentTopicID, slug, 
         AND (scene_reservation_slug = ? OR scene_reservation_name = ?)`, [parentTopicID, slug, name]);
 }
 
-export function createTopicProposalService({ pool, queueForReview }) {
+export function createTopicProposalService({ pool, queueForReview, captureSnapshot = captureTopicSnapshot,
+    saveSnapshot = saveTopicProposalSnapshot, loadSnapshot = loadTopicProposalSnapshot }) {
     async function write(userID, key, action, payload, operation) {
         const connection = await pool.getConnection();
         try {
             await runDatabaseOperation(connection, 'TOPIC PROPOSAL',
                 () => connection.query('SET TRANSACTION ISOLATION LEVEL READ COMMITTED'));
             await startTransactionConnection(connection, 'TOPIC PROPOSAL');
+            await lockTopicReferenceGraph(connection);
             const deleting = action === 'withdraw_topic_proposal';
             const accounts = await lockAccounts(connection, userID, deleting ? null : payload.proposalID);
             const intent = await claimWriteIntent(connection, { userID, key, action, payload });
@@ -229,8 +240,14 @@ export function createTopicProposalService({ pool, queueForReview }) {
 
     async function propose(userID, body, key) {
         userID = account(userID);
-        const normalized = normalizeTopicProposalRequest(body);
-        const { name, description, parentTopicID } = normalized;
+        record(body, ['sourceTopicID', 'name', 'description', 'parentTopicID']);
+        if (body.sourceTopicID === undefined && body.parentTopicID === undefined) fail(400, 'private_topic_source_required');
+        if (body.sourceTopicID !== undefined && body.parentTopicID !== undefined) fail(400, 'invalid_topic_proposal_request');
+        const normalized = body.sourceTopicID === undefined ? normalizeTopicProposalRequest(body)
+            : { sourceTopicID: topicProposalID(body.sourceTopicID), ...(body.name === undefined && body.description === undefined ? {}
+                : normalizeTopicProposalRequest({ name: body.name, description: body.description })) };
+        let { name, description } = normalized;
+        const { parentTopicID, sourceTopicID } = normalized;
         return write(userID, key, 'propose_topic', normalized, async (connection, { actor }) => {
             if (!actor.email_verified_at || !moderationRecipientEmail(actor.email)) {
                 fail(409, 'verified_email_required', { action: 'reauthorize_github' });
@@ -242,6 +259,8 @@ export function createTopicProposalService({ pool, queueForReview }) {
                 (SELECT COUNT(*) FROM write_requests WHERE actor_user_ID = ? AND action = 'propose_topic'
                     AND response_status = 200 AND created_at >= NOW() - INTERVAL 1 DAY)) AS count`, [userID, userID]);
             if (Number(count.count) >= 20) fail(429, 'topic_creation_limit');
+            const snapshot = sourceTopicID === undefined ? null : await captureSnapshot(connection, userID, sourceTopicID, { name, description });
+            if (snapshot) ({ name, description } = snapshot);
             if (parentTopicID !== undefined) {
                 const { slug } = await assertPublicSceneAvailable(connection, parentTopicID, name, { lock: true });
                 await releaseExpiredSceneReservations(connection, parentTopicID, slug, name);
@@ -282,6 +301,7 @@ export function createTopicProposalService({ pool, queueForReview }) {
                 const duplicate = await findExisting(' FOR SHARE');
                 fail(409, 'topic_proposal_exists', { proposalID: duplicate ? Number(duplicate.ID) : null });
             }
+            if (snapshot) await saveSnapshot(connection, Number(inserted.insertId), 1, sourceTopicID, snapshot);
             return readProposal(connection, topicProposalID(Number(inserted.insertId)), userID);
         });
     }
@@ -341,14 +361,24 @@ export function createTopicProposalService({ pool, queueForReview }) {
     }
 
     async function edit(userID, body, key) {
-        userID = account(userID); record(body, ['proposalID', 'revision', 'name', 'description']);
+        userID = account(userID); record(body, ['proposalID', 'revision', 'name', 'description', 'sourceTopicID']);
         const ID = topicProposalID(body.proposalID), expectedRevision = revision(body.revision);
         // Validate shared text before borrowing a connection; the stored parent decides namespace validation below.
-        const { name, description } = normalizeTopicSceneRequest({ categoryID: 1, name: body.name, description: body.description });
-        return write(userID, key, 'edit_topic_proposal', { proposalID: ID, revision: expectedRevision, name, description }, async connection => {
+        const metadata = body.name === undefined && body.description === undefined && body.sourceTopicID !== undefined ? {}
+            : normalizeTopicSceneRequest({ categoryID: 1, name: body.name, description: body.description });
+        let { name, description } = metadata;
+        const sourceTopicID = body.sourceTopicID === undefined ? null : topicProposalID(body.sourceTopicID);
+        return write(userID, key, 'edit_topic_proposal', { proposalID: ID, revision: expectedRevision,
+            ...(name === undefined ? {} : { name, description }), ...(sourceTopicID === null ? {} : { sourceTopicID }) }, async connection => {
             const proposal = await collectingProposal(connection, ID, expectedRevision);
             if (String(proposal.user_ID) !== userID) fail(403, 'topic_proposal_not_owner');
-            if (name === proposal.name && description === proposal.description) return readProposal(connection, ID, userID);
+            if (sourceTopicID !== null && proposal.parent_topic_ID != null) fail(400, 'invalid_topic_proposal_request');
+            const saved = proposal.parent_topic_ID == null ? await loadSnapshot(connection, ID, expectedRevision) : null;
+            const snapshot = sourceTopicID !== null ? await captureSnapshot(connection, userID, sourceTopicID, { name, description })
+                : saved ? { ...saved.snapshot, name, description } : null;
+            if (snapshot) ({ name, description } = snapshot);
+            if (name === proposal.name && description === proposal.description
+                && (!snapshot || saved && snapshotHash(saved.snapshot) === snapshotHash(snapshot))) return readProposal(connection, ID, userID);
             if (proposal.parent_topic_ID != null) {
                 const parentTopicID = Number(proposal.parent_topic_ID);
                 const { slug } = await assertPublicSceneAvailable(connection, parentTopicID, name);
@@ -379,6 +409,7 @@ export function createTopicProposalService({ pool, queueForReview }) {
                 if (error.code === 'ER_DUP_ENTRY') fail(409, 'topic_proposal_exists');
                 throw error;
             }
+            if (snapshot) await saveSnapshot(connection, ID, expectedRevision + 1, sourceTopicID ?? saved.sourceTopicID, snapshot);
             await connection.execute('DELETE FROM topic_proposal_votes WHERE proposal_ID = ?', [ID]);
             return readProposal(connection, ID, userID);
         });

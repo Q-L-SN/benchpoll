@@ -4,10 +4,13 @@ import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 import { createDiscussionAutoLoader, isDiscussionSentinelNear } from '../public/js/shared/discussion-auto-load.js';
 import { createAccountWriteScope, isAccountWriteError } from '../public/js/shared/account-identity.js';
+import { scenePath, topicSlug } from '../public/js/shared/topics.js';
 import { readRankingContext } from '../public/js/shared/ranking-url.js';
 import { orderedScenes } from '../public/js/navigation/scenes.js';
 import { profileAvatarURL } from '../public/js/shared/profile-editor.js';
 import { hasAADisplayRestriction, AA_DISPLAY_MESSAGE } from '../public/js/shared/aa-ranking-policy.js';
+
+const loadingSource = (await readFile(new URL('../public/js/shared/loading.js', import.meta.url), 'utf8')).replace(/^export /gm, '');
 
 const source = await readFile(new URL('../public/js/discussion.js', import.meta.url), 'utf8');
 const actions = await readFile(new URL('../public/js/shared/ui-components.js', import.meta.url), 'utf8');
@@ -166,7 +169,7 @@ function discussionHarness(request = (body => pageData(body, Array.from({ length
             addEventListener(name, callback) { listeners.set(name, callback); }, dispatchEvent() {} },
         CustomEvent: class { constructor(type) { this.type = type; } },
         location: new URL('http://localhost/?categoryID=1'), URL, URLSearchParams, structuredClone, console, AbortController,
-        readRankingContext, orderedScenes, pageAccountWriteScope: scope, isAccountWriteError, profileAvatarURL,
+        readDiscussionEntryContext: () => null, readRankingContext, orderedScenes, scenePath, topicSlug, pageAccountWriteScope: scope, isAccountWriteError, profileAvatarURL,
         hasAADisplayRestriction, AA_DISPLAY_MESSAGE,
         createDiscussionAutoLoader(options) { autoOptions = options; return auto; },
         createBenchmarkScoresView({ onViewChange }) {
@@ -188,7 +191,7 @@ function discussionHarness(request = (body => pageData(body, Array.from({ length
     });
     const code = source.replace(/^import[^\r\n]+\r?\n/gm, '')
         .replace("if (params.get('discussion') === '1') await openDiscussion(new URL(location.href));", '');
-    vm.runInContext(`${actionSource}\n${code}\nthis.ui = { state, load, openDiscussion, closeDiscussion, renderPost,
+    vm.runInContext(`${loadingSource}\n${actionSource}\n${code}\nthis.ui = { state, load, openDiscussion, closeDiscussion, renderPost,
         paging: () => ({ loading, hasMore, retryAppend, feedLoaded }) };`, sandbox);
     return { $, reads, writes, auto, scope, sort, listeners, ...sandbox.ui,
         open(extra = '') { return sandbox.ui.openDiscussion(new URL(`http://localhost/?discussion=1&categoryID=1${extra}`)); },
@@ -209,7 +212,8 @@ test('feed and reply appends are single-flight, use raw offsets, deduplicate and
     const postingSelector = h.$('posting-context').children[0];
     const filterOption = h.$('discussion-context').children[0];
     const append = h.load(true); const duplicate = h.load(true);
-    assert.equal(h.reads.length, 2); assert.equal(h.$('discussion-more').textContent, 'Loading discussions...');
+    assert.equal(h.reads.length, 2); assert.equal(h.$('discussion-more').textContent, 'Loading discussions');
+    assert.equal(h.$('discussion-more').children[0].children[0].className, 'bp-spinner');
     work.resolve(pageData(h.reads[1].body, [makePost(820), makePost(821)]));
     await Promise.all([append, duplicate]);
     assert.equal(h.ids().length, 21); assert.equal(h.state.offset, 22);

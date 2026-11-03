@@ -1,68 +1,9 @@
 import { mountDisclosureChevron } from './disclosure-chevron.js';
+import { bindDrawerDrag } from './drawer-drag.js';
 
 const STORAGE_KEY = 'benchpoll:config-sidebar-collapsed';
 const SIDEBAR_MS = 300;
 const FADE_MS = 110;
-const swipeExcluded = 'a, button, input, select, textarea, label, form, summary, dialog, global-dialog, '
-    + '[contenteditable]:not([contenteditable="false"]), [role="button"], [role="link"], [role="slider"], '
-    + '[role="textbox"], [role="dialog"], [role="menu"], [role="listbox"], [data-sidebar-swipe="ignore"], '
-    + '.discussion-rail, .bp-scene-strip, .bp-scene-tabs, .bp-model-name, .bp-model-parameters, '
-    + '.bp-pie-stage, .bp-overlay-scrollbar, canvas, svg';
-
-export function configSidebarSwipeIntent(dx, dy, elapsed) {
-    if (elapsed > 650 || dx < -10 || Math.abs(dy) > 32
-        || Math.abs(dy) > 10 && Math.abs(dy) * 1.5 > Math.abs(dx)) return 'cancel';
-    return dx >= 72 && dx > Math.abs(dy) * 2.5 ? 'open' : 'pending';
-}
-
-function bindConfigSidebarSwipe(workspace, mobile, open) {
-    if (!workspace) return;
-    let swipe = null;
-    const cancel = () => { swipe = null; };
-    const available = () => mobile.matches && !document.body.matches('.taxonomy-open, .discussion-open')
-        && !(window.visualViewport?.scale > 1.01)
-        && !document.activeElement?.matches('input, select, textarea, [contenteditable]:not([contenteditable="false"]), [role="textbox"]')
-        && ![...document.querySelectorAll('dialog[open], global-dialog:not([hidden]), [role="dialog"], [aria-modal="true"]')]
-            .some(node => node.getClientRects().length && getComputedStyle(node).visibility !== 'hidden');
-
-    workspace.addEventListener('touchstart', event => {
-        cancel();
-        if (event.touches.length !== 1 || !available()) return;
-        const point = event.touches[0];
-        const viewport = window.visualViewport;
-        const left = viewport?.offsetLeft ?? 0, width = viewport?.width ?? window.innerWidth;
-        // Leave both browser-navigation edges and every horizontal scroller native.
-        if (point.clientX <= left + 24 || point.clientX >= left + width - 24) return;
-        for (const node of event.composedPath()) {
-            if (!(node instanceof Element)) continue;
-            if (node.matches(swipeExcluded)) return;
-            const style = getComputedStyle(node);
-            if (/(auto|scroll)/.test(style.overflowX) && node.scrollWidth > node.clientWidth + 1) return;
-            if (node === workspace) break;
-        }
-        swipe = { id: point.identifier, x: point.clientX, y: point.clientY, time: event.timeStamp };
-    }, { passive: true });
-    document.addEventListener('touchstart', event => { if (event.touches.length !== 1) cancel(); }, { passive: true });
-    document.addEventListener('touchmove', event => {
-        if (!swipe) return;
-        const point = [...event.touches].find(point => point.identifier === swipe.id);
-        if (event.touches.length !== 1 || !point
-            || configSidebarSwipeIntent(point.clientX - swipe.x, point.clientY - swipe.y, event.timeStamp - swipe.time) === 'cancel') cancel();
-    }, { passive: true });
-    document.addEventListener('touchend', event => {
-        const start = swipe;
-        cancel();
-        if (!start || event.touches.length || !available()) return;
-        const point = [...event.changedTouches].find(point => point.identifier === start.id);
-        if (point && configSidebarSwipeIntent(point.clientX - start.x, point.clientY - start.y, event.timeStamp - start.time) === 'open') open();
-    }, { passive: true });
-    document.addEventListener('touchcancel', cancel, { passive: true });
-    document.addEventListener('scroll', cancel, { passive: true, capture: true });
-    window.addEventListener('blur', cancel);
-    window.addEventListener('resize', cancel);
-    mobile.addEventListener('change', cancel);
-}
-
 export function readConfigSidebarCollapsed() {
     try { return globalThis.localStorage.getItem(STORAGE_KEY) !== 'false'; }
     catch { return true; }
@@ -178,8 +119,7 @@ export function createConfigSidebar() {
         collapsed = readConfigSidebarCollapsed();
         settle();
     });
-    bindConfigSidebarSwipe(body.classList.contains('bp-home') ? body.querySelector('.bp-workspace') : null,
-        mobile, () => document.getElementById('taxonomy-toggle')?.click());
+    bindDrawerDrag(body.classList.contains('bp-home') ? body.querySelector('.bp-workspace') : null, mobile);
     settle();
     return { setCollapsed, get collapsed() { return collapsed; } };
 }

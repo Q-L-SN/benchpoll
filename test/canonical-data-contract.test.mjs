@@ -369,7 +369,7 @@ test('public weights average local configurations without combining independent 
         { pie_ID: 2, context_ID: 11, benchmark_condition_ID: 21, weight_basis_points: 2000 },
         { pie_ID: 2, context_ID: 11, benchmark_condition_ID: 22, weight_basis_points: 8000 },
         { pie_ID: 3, context_ID: 12, benchmark_condition_ID: 22, weight_basis_points: 10000 }
-    ].map(row => ({ ...row, is_recent: 1, is_influence_recent: 1 }));
+    ].map(row => ({ ...row, is_recent: 1, is_fallback_recent: 1 }));
     const requestedContexts = [];
     const connection = {
         async execute(sql, params) {

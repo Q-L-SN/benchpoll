@@ -23,7 +23,7 @@
 .bp-pie-mode-label { transition: opacity 160ms ease; }
 .bp-mode-option[aria-busy="true"] .bp-pie-mode-label { opacity: 0; }
 .bp-pie-mode-loading { position: absolute; left: 50%; top: 50%; width: 16px; height: 16px; transform: translate(-50%, -50%); display: grid; place-items: center; line-height: 1; }
-.bp-pie-mode-loading > i { display: block; width: 16px; height: 16px; font-size: 16px; line-height: 1; text-align: center; transform-origin: center; animation: bp-ranking-spin .8s linear infinite; }
+.bp-pie-mode-loading > i { font-size: 16px; }
 .bp-pie-mode-loading[hidden] { display: none; }
 .bp-model-inference-summary { flex-basis: 100%; margin: 8px 0 0; color: var(--bp-text); }
 .bp-model-inferred-heading { margin: 20px 0 10px; color: var(--bp-ink); font-size: 14px; }
@@ -31,10 +31,8 @@
 .bp-model-inferred-row > :is(strong, small, span) { min-width: 0; overflow-wrap: anywhere; }
 .bp-model-inferred-row > :is(small, span) { color: var(--bp-muted); font-size: 11px; }
 .bp-model-inferred-row > :nth-child(even) { text-align: right; font-variant-numeric: tabular-nums; }
-@keyframes bp-ranking-spin { to { transform: rotate(360deg); } }
 @media (max-width: 760px) {
     .bp-home .bp-model-card { overflow: clip; }
     .bp-model-viewport { display: block; }
     .bp-model-ranking-layer { position: sticky; top: var(--ranking-notice-top, 120px); }
 }
-@media (prefers-reduced-motion: reduce) { .bp-model-ranking-status[data-phase="updating"] i, .bp-pie-mode-loading > i { animation: none; } }

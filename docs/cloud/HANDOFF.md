@@ -3,6 +3,13 @@
 This is the operational entry point for the 2026-11-01 handoff. Read it before
 making changes. It describes the current project, not the old `main` branch.
 
+The pending 2026-11-03 presentation update unifies all loading indicators and
+fixes the All scores empty-parameter label. See
+[`../unified-loading-20261103.md`](../unified-loading-20261103.md) for checks,
+the combined release exporter and the observed intermittent 502. Deployment is
+authorized but remains blocked by missing production VPN/TCP access; no live
+release or data migration has been performed from this environment.
+
 ## Repositories And Starting Point
 
 - Source: <https://github.com/Q-L-SN/benchpoll>, branch `codex/cloud-handoff-20261101`.
@@ -41,6 +48,13 @@ environment has already been created, published or successfully tested.
 
 ## Development Without Production
 
+The owner subsequently authorized the ARC harness condition correction. See
+[`docs/harness-conditions-20261103.md`](../harness-conditions-20261103.md) for its
+611-record public review, 71 condition moves, retained primary IDs and guarded
+one-time transactional script. It is locally rehearsed, not installed in
+production; the VPN/TCP boundary below still applies. Never replay the older
+condition-normalization migrations as part of this release.
+
 The frontend fixtures use synthetic evidence and do not contact the production
 database. They cover the homepage, workspaces and interaction tests. They are
 not a production data replica or a real OAuth login service.
@@ -69,7 +83,9 @@ Do not copy production `.env` or the production TLS private key into cloud setup
   unavailable referenced weight stays missing rather than being renormalized away.
 - Estimated scores and score ranges are distinct. Missing-score estimation must
   not be driven by a handful of outliers. Coverage correction uses the selected
-  rational function with `a=5`; do not restore the removed algorithm selector.
+  rational function with `a=5` by default. The owner's 2026-11-03 request adds a
+  per-tab test selector for bounded alternatives that adjust only missing weight;
+  this explicit request supersedes the earlier no-selector restriction.
 - No explicit fallback choice means Follow community. An explicit No fallback
   is a real choice. If the community has no choices, calculate without fallback.
   All Other Versions has been removed. Preserve custom/selected/unsaved state.

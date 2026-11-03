@@ -14,7 +14,10 @@ import { loadTopicReferenceTargets, lockTopicReferences } from './topic-referenc
 import { createPrivateTopicScene, updatePrivateTopicScene, setPrivateTopicDefaultScene,
     assertPublicSceneAvailable, TOPIC_SCENE_SQL_PREVIEW } from './topic-scenes-service.js';
 import { createTopicProposalService, lockTopicProposalForReview, finishTopicProposalReview,
-    normalizeTopicProposalRequest, approveTopicSceneProposal } from './topic-proposal-service.js';
+    normalizeTopicProposalRequest, approveTopicSceneProposal, readProposal } from './topic-proposal-service.js';
+import { readPrivateTopicEditor, savePrivateTopic, deletePrivateTopic } from './private-topic-service.js';
+import { createProposalPreviewService, loadTopicProposalSnapshot, seedSnapshotTopic } from './topic-snapshot-service.js';
+import { scenePath } from './public/js/shared/topics.js';
 import { loadUserProfile, saveUserProfile, recordGitHubProfile } from './user-profile-service.js';
 import { loadScoreFieldCatalog, normalizeFieldContribution, normalizeScoreFieldRequests, normalizeContributionScoreFields, resolveScoreFields, applyFieldContribution } from './score-field-service.js';
 import { fieldDisplayValue, normalizeScoreFields } from './public/js/shared/score-fields.js';
@@ -146,6 +149,7 @@ const searchPresentation = createSearchPresentation({ origin: publicOrigin,
     loadTopics: () => listTopics(db, null), loadPreview: body => topicHome.preview(null, body) });
 const pageErrorHTML = fs.readFileSync(currentDir + '/private/dialogPage.html', 'utf8');
 const topicProposals = createTopicProposalService({ pool: db, queueForReview: queueTopicProposalForReview });
+const proposalPreview = createProposalPreviewService({ db, rankingCache, readProposal });
 let rankingWarmup = null;
 function warmRankingEvidence() {
     if (!rankingWarmup) rankingWarmup = getRankingWorkspace(db, { rankingCache, scoreMode: 'available', jsonMemberMetadata: true })
@@ -623,6 +627,19 @@ API.post('/create_topic', discussionSameOrigin, requireAuthForAPI, requireAccoun
     const topic = normalizeTopicRequest(req.body);
     res.status(201).json(await createTopic(db, req.user.ID, topic));
 });
+API.post('/get_private_topic_editor', discussionSameOrigin, requireAuthForAPI, async (req, res) => {
+    res.set('Cache-Control', 'private, no-store');
+    res.json(await readPrivateTopicEditor(db, req.user.ID, req.body));
+});
+for (const [route, operation] of [['/save_private_topic', savePrivateTopic], ['/delete_private_topic', deletePrivateTopic]]) {
+    API.post(route, discussionSameOrigin, requireAuthForAPI, requireAccountWriteOwner, requireCurrentTermsForAPI, privacyForm, async (req, res) => {
+        res.set('Cache-Control', 'private, no-store');
+        const body = { ...req.body }; delete body.csrfToken;
+        const result = await operation(db, req.user.ID, body, readWriteIdentity(req));
+        topicHome.invalidate(); searchPresentation.invalidate();
+        res.json(result);
+    });
+}
 for (const [route, operation] of [
     ['/create_topic_scene', createPrivateTopicScene],
     ['/update_topic_scene', updatePrivateTopicScene],
@@ -638,6 +655,27 @@ for (const [route, operation] of [
 API.post('/get_topic_proposals', discussionSameOrigin, async (req, res) => {
     res.set('Cache-Control', 'private, no-store');
     res.json(await topicProposals.list(await activeSessionUserID(req), req.body));
+});
+API.post('/get_topic_proposal_snapshot', discussionSameOrigin, async (req, res) => {
+    res.set('Cache-Control', 'private, no-store');
+    res.json(await proposalPreview.read(await activeSessionUserID(req), req.body));
+});
+API.post('/preview_topic_proposal', discussionSameOrigin, async (req, res) => {
+    res.set('Cache-Control', 'private, no-store');
+    res.json(await proposalPreview.preview(await activeSessionUserID(req), req.body));
+});
+API.post('/copy_topic_proposal', discussionSameOrigin, requireAuthForAPI, requireAccountWriteOwner, requireCurrentTermsForAPI, privacyForm, async (req, res) => {
+    res.set('Cache-Control', 'private, no-store');
+    const body = { ...req.body }; delete body.csrfToken;
+    const result = await proposalPreview.copy(req.user.ID, body, readWriteIdentity(req));
+    topicHome.invalidate();
+    res.json(result);
+});
+page.get('/topic-proposals/:proposalID/preview', async (req, res) => {
+    if (!/^[1-9]\d*$/.test(req.params.proposalID)) throw { status: 404 };
+    await proposalPreview.read(await activeSessionUserID(req), { proposalID: Number(req.params.proposalID) });
+    res.set('Cache-Control', 'private, no-store'); res.set('X-Robots-Tag', 'noindex, follow');
+    res.sendFile(currentDir + '/private/topic-proposal-preview.html');
 });
 API.post('/propose_topic', discussionSameOrigin, requireAuthForAPI, requireAccountWriteOwner, requireCurrentTermsForAPI, privacyForm, async (req, res) => {
     res.set('Cache-Control', 'private, no-store');
@@ -677,17 +715,20 @@ API.post('/get_page{/*path}', async (req, res, next) => {
     }
     const userID = await activeSessionUserID(req);
     const parts = req.params.path ?? [];
-    let topic = null;
+    let topic = null, sceneSlug = null;
     if (parts[0] === 'topics' && /^[1-9]\d*$/.test(parts[1] ?? '') && parts.length <= 3) {
         topic = await getTopic(db, userID, Number(parts[1]));
     } else if (parts.length) {
-        topic = parts.length === 1 ? await findTopicBySlug(db, parts[0]) : null;
+        topic = parts.length <= 2 ? await findTopicBySlug(db, parts[0]) : null;
+        if (topic) sceneSlug = parts[1] ?? null;
         topic ??= await resolveLegacyTopic(db, parts.map(encodeURIComponent).join('/'), userID);
         if (!topic) return next({ status: 404 });
     }
     const { topics } = await listTopics(db, userID);
+    const scene = topic ? selectSearchScene(topic, new URLSearchParams(), sceneSlug) : null;
     res.json({ categoryTree: topics.map(row => ({ ...row, hasChildren: false })),
-        currentCategoryID: topic?.ID ?? null, topic, flat: true });
+        currentCategoryID: topic?.ID ?? null, topic, flat: true,
+        contextValues: scene ? { scene: String(scene.ID) } : {} });
 });
 
 API.post('/load_benchmarks_and_subcategories', async (req, res, next) => {
@@ -713,16 +754,25 @@ API.post('/get_private_category', requireAuthForAPI, async (req, res) => {
     res.set('Cache-Control', 'private, no-store');
     res.json(await getPrivateCategory(db, req.user.ID, req.body.categoryID));
 });
-page.get('/personal/:categoryID', async (req, res) => {
-    await getPrivateCategory(db, await activeSessionUserID(req), req.params.categoryID);
+page.get(['/personal/:categoryID', '/personal/:categoryID/:sceneSlug'], async (req, res) => {
+    if (!/^[1-9]\d*$/.test(req.params.categoryID)) throw { status: 404 };
+    const userID = await activeSessionUserID(req);
+    const topic = await getTopic(db, userID, Number(req.params.categoryID));
+    if (!topic.isPrivate) throw { status: 404 };
+    const url = new URL(req.originalUrl, publicOrigin);
+    const scene = selectSearchScene(topic, url.searchParams, req.params.sceneSlug ?? null);
+    const path = scene ? scenePath(topic.url, scene) : topic.url;
     res.set('Cache-Control', 'private, no-store');
-    await renderHome(res);
+    res.set('X-Robots-Tag', 'noindex, nofollow, nosnippet');
+    if (url.pathname !== path) return res.redirect(302, path + url.search);
+    await renderHome(res, { categoryID: topic.ID, guest: !userID });
 });
 
 page.get(['/topics/:categoryID', '/topics/:categoryID/:slug'], async (req, res) => {
     if (!/^[1-9]\d*$/.test(req.params.categoryID)) throw { status: 404 };
     const topic = await getTopic(db, await activeSessionUserID(req), Number(req.params.categoryID));
     const url = new URL(req.originalUrl, publicOrigin);
+    selectSearchScene(topic, url.searchParams);
     if (url.searchParams.has('view')) {
         url.searchParams.delete('view');
         return res.redirect(302, topic.url + url.search);
@@ -749,6 +799,7 @@ API.post('/get_weighted_workspace', async (req, res) => {
             comparison,
             scoreMode: req.body.scoreMode,
             availableInferenceVersion: req.body.availableInferenceVersion,
+            estimationAlgorithm: req.body.estimationAlgorithm,
             previewPersonalPie: req.body.previewPersonalPie,
             signal: controller.signal,
             rankingCache,
@@ -3940,9 +3991,9 @@ async function createPublicTopicFromSubmission(connection, content, metadata) {
         const [inserted] = await connection.execute(`INSERT INTO categories
             (name, slug, description, owner_user_ID, created_by_user_ID, position)
             VALUES (?, ?, ?, NULL, ?, 0)`, [content.name, slug, content.description, creator]);
-        await connection.execute(`INSERT INTO ranking_contexts (category_ID, context_values, context_hash)
+        const [context] = await connection.execute(`INSERT INTO ranking_contexts (category_ID, context_values, context_hash)
             VALUES (?, '{}', ?)`, [Number(inserted.insertId), crypto.createHash('sha256').update('{}').digest('hex')]);
-        return Number(inserted.insertId);
+        return { topicID: Number(inserted.insertId), rootContextID: Number(context.insertId) };
     } catch (error) {
         if (error.code === 'ER_DUP_ENTRY') throw { status: 409, body: { error: 'topic_name_exists' } };
         throw error;
@@ -3959,8 +4010,15 @@ async function applyModerationContent(connection, content, metadata = {}) {
             await approveTopicSceneProposal(connection, normalized, metadata);
             return;
         }
+        await lockTopicReferences(connection);
         const proposal = await lockTopicProposalForReview(connection, normalized, metadata);
-        const topicID = await createPublicTopicFromSubmission(connection, normalized, metadata);
+        const saved = await loadTopicProposalSnapshot(connection, Number(proposal.ID), Number(proposal.revision));
+        if (saved && (normalized.name !== saved.snapshot.name || normalized.description !== saved.snapshot.description)) {
+            throw { status: 409, body: { error: 'topic_proposal_snapshot_immutable' } };
+        }
+        const { topicID, rootContextID } = await createPublicTopicFromSubmission(connection, normalized, metadata);
+        if (saved) await seedSnapshotTopic(connection, { ID: topicID, name: normalized.name, description: normalized.description },
+            canonicalAccountID(metadata.submittedBy), saved.snapshot, { rootContextID });
         await finishTopicProposalReview(connection, proposal, 'approved', topicID);
         return;
     }
@@ -5299,18 +5357,22 @@ page.get('/*any_path', async (req, res, next) => {
     const url = new URL(req.originalUrl, publicOrigin);
     const parts = url.pathname.split('/').filter(Boolean);
     let slug;
-    try { slug = parts.length === 1 ? decodeURIComponent(parts[0]).toLowerCase() : null; }
+    try { slug = parts.length <= 2 ? decodeURIComponent(parts[0]).toLowerCase() : null; }
     catch { return next({ status: 404 }); }
     const canonical = slug ? await findTopicBySlug(db, slug) : null;
     const topic = canonical ?? await resolveLegacyTopic(db, url.pathname, await activeSessionUserID(req));
     if (!topic) return next({ status: 404 });
+    let sceneSlug = null;
+    try { sceneSlug = canonical && parts.length === 2 ? decodeURIComponent(parts[1]) : null; }
+    catch { return next({ status: 404 }); }
+    const scene = selectSearchScene(topic, url.searchParams, sceneSlug);
+    const path = scene ? scenePath(topic.url, scene) : topic.url;
     if (url.searchParams.get('view') === 'showcase') return res.redirect(302, '/');
     if (url.searchParams.has('view')) {
         url.searchParams.delete('view');
-        return res.redirect(302, topic.url + url.search);
+        return res.redirect(302, path + url.search);
     }
-    if (url.pathname !== topic.url) return res.redirect(308, topic.url + url.search);
-    const scene = selectSearchScene(topic, url.searchParams);
+    if (url.pathname !== path) return res.redirect(scene && canonical && parts.length === 1 ? 302 : 308, path + url.search);
     const snapshot = topic.isPrivate ? null : await searchPresentation.snapshot(topic, scene);
     if (topic.isPrivate) res.set('X-Robots-Tag', 'noindex, nofollow, nosnippet');
     await renderHome(res, { categoryID: topic.ID, guest: !await activeSessionUserID(req),

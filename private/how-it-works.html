@@ -12,15 +12,16 @@
     <meta property="og:title" content="How BenchPoll Works - Weights, Scores and Fallback">
     <meta property="og:description" content="Understand BenchPoll public and personal AI indices, topic references, measured coverage, missing-score estimation and community fallback.">
     <meta property="og:url" content="https://benchpoll.com/how-it-works">
-    <meta property="og:image" content="https://benchpoll.com/assets/benchpoll-social.png">
+    <meta property="og:image" content="https://benchpoll.com/assets/benchpoll-social-si-20261102.png">
     <meta property="og:image:width" content="1200">
     <meta property="og:image:height" content="630">
-    <meta property="og:image:alt" content="BenchPoll - community-weighted AI indices">
+    <meta property="og:image:alt" content="BenchPoll - Define Super Intelligence, democratically.">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:site" content="@BenchPoll">
     <meta name="twitter:title" content="How BenchPoll Works - Weights, Scores and Fallback">
     <meta name="twitter:description" content="Understand BenchPoll public and personal AI indices, topic references, measured coverage, missing-score estimation and community fallback.">
-    <meta name="twitter:image" content="https://benchpoll.com/assets/benchpoll-social.png">
+    <meta name="twitter:image" content="https://benchpoll.com/assets/benchpoll-social-si-20261102.png">
+    <meta name="twitter:image:alt" content="BenchPoll - Define Super Intelligence, democratically.">
     <link rel="icon" href="/favicon.ico?v=benchpoll-brand-20260919" sizes="any">
     <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png?v=benchpoll-brand-20260919">
     <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
@@ -59,8 +60,8 @@
             <article class="bp-how-content">
                 <header id="overview" class="bp-how-header" data-how-section>
                     <h1>How BenchPoll works</h1>
-                    <p class="bp-how-lede">Decide what matters. See how models compare.</p>
-                    <p>BenchPoll combines benchmark results using community or personal weights to compare AI models by topic or scene.</p>
+                    <p class="bp-how-lede">Define Super Intelligence, democratically.</p>
+                    <p>Compare AI models by topic or scene. Benchmark results supply the evidence; community or personal weights define what matters.</p>
                     <a class="bp-how-primary-link" href="/">Browse Topics <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></a>
                 </header>
                 <section id="topics" class="bp-how-section" data-how-section>
@@ -68,8 +69,7 @@
                     <p>Open a topic for its public index, a model for its results and sources. Personal weights let you build your own index.</p>
                     <p>Filters apply to every card; <strong>Estimated score</strong> is the default. Browse Popular, Recent, or Mine.</p>
                     <p>A topic may have one level of scenes with separate weights and discussions. The default scene comes first.</p>
-                    <p>Topic search includes every scene. Expand a matched topic to see its scenes; directly matched scenes appear immediately.</p>
-                    <p>Scenes are evaluation goals, not filter combinations. The default scene does not average the others.</p>
+                    <p>Expand topics to browse scenes; scene search matches appear immediately. Scenes are evaluation goals. The default does not average the others.</p>
                 </section>
                 <section id="personal" class="bp-how-section" data-how-section>
                     <h2>Make the ranking yours</h2>
@@ -79,13 +79,14 @@
                 <section id="public" class="bp-how-section" data-how-section>
                     <h2>Community priorities</h2>
                     <p id="calculation-details"><strong>Public Weights</strong> combine saved personal weight configurations in this topic, shaped by recent activity. Editing yours updates your contribution, not the number of votes.</p>
+                    <p>Older configurations remain eligible to fill sparse samples up to 10 total.</p>
                     <p>Each topic or scene has its own Public Weights. Another topic contributes only through an explicit reference. Private topics and their weights never contribute to Public Weights.</p>
                 </section>
                 <section id="references" class="bp-how-section" data-how-section>
                     <h2>Build an index from other topics</h2>
                     <p>You can add another topic as a weight item, choosing a specific scene if it has scenes. References follow live weights, not copies. Changing a default scene does not retarget existing references.</p>
                     <p>Public indices always follow public target weights. Personal indices prefer your saved target weights and otherwise follow public weights. Private topics may reference your other private topics; public-topic configurations cannot reference private topics.</p>
-                    <p>Weights multiply along each reference path. Contributions to the same benchmark version are added together, while different fallback choices retain their shares. Scores and the coverage factor are calculated once, after expansion; child index scores are never averaged.</p>
+                    <p>Weights multiply along reference paths and combine for each benchmark version. Different fallback choices retain their shares. Scores and coverage correction are calculated after expansion; child scores are never averaged.</p>
                     <p>References combine capabilities; they do not intersect requirements. Combining real-time image generation and vector generation does not by itself measure real-time vector generation.</p>
                     <p>Circular references are rejected. Empty or unavailable targets retain their missing weight and show a notice, rather than increasing other weights.</p>
                 </section>
@@ -96,8 +97,10 @@
                         <li><strong>Estimated score:</strong> combines measured results with shared-test estimates. Isolated extreme results have less influence on estimates; incomplete measured coverage reduces the total, not just its estimated part.</li>
                         <li><strong>Score range:</strong> missing scores count as 0 at the lower end and 100 at the upper end; measured scores stay fixed. Ranks by the lower end. Not a confidence interval.</li>
                     </ul>
-                    <p><strong>Coverage is the share of weight with measured results</strong>, including successful fallbacks. Estimates do not increase coverage. Unresolved gaps are left out of Estimated score. Without a real result on a weighted test, a model cannot rank.</p>
+                    <p><strong>Coverage is the share of weight with measured results</strong>, including successful fallbacks. Estimates do not increase coverage. Unresolved gaps are left out of Estimated score by default. Without a real result on a weighted test, a model cannot rank.</p>
                     <p><strong>Coverage factor:</strong> f(c)=5c/(1+4c), with measured coverage c. Nonnegative totals use f(c), negatives 2-f(c); full coverage is unchanged.</p>
+                    <p><strong>Test algorithm</strong> applies only to this tab. Missing-only methods keep measured contributions fixed, bound predictions to 0–100, and start unresolved gaps at 50. This midpoint is a trial assumption, not an empirical estimate.</p>
+                    <p><strong>Unadjusted</strong> keeps that missing contribution; <strong>Rational</strong> multiplies it by f(c); <strong>Linear</strong> by c; <strong>Square root</strong> by √c. <strong>Midpoint</strong> blends it toward 50 using c and 1−c, so scores can rise or fall. All five stay within Score range; full coverage is unchanged.</p>
                     <p>Turn on effort or harness to rank settings separately; otherwise use each model's best qualifying score per test. Missing settings stay in an unknown group.</p>
                 </section>
                 <section id="fallback" class="bp-how-section" data-how-section>
@@ -109,7 +112,8 @@
                 </section>
                 <section id="account" class="bp-how-section" data-how-section>
                     <h2>Your account</h2>
-                    <p>Public topics and scenes go through the proposal hall. Each account may support up to 3 collecting proposals and author 1. Collection lasts 14 days; 30 other supporters trigger administrator review. Private topics and scenes are immediate and visible only to you.</p>
+                    <p>Propose a configured private topic through the hall. Its scenes and saved weights become a frozen snapshot. Anyone can preview, try weights, or save a private copy. Replacing the snapshot resets support.</p>
+                    <p>Support up to 3 collecting proposals and author 1. Collection lasts 14 days; 30 other supporters trigger administrator review. Private topics and scenes are immediate, editable, and visible only to you.</p>
                     <p>Edit your display name and avatar in the account dialog. GitHub links are your choice.</p>
                 </section>
                 <section id="trust" class="bp-how-section" data-how-section>

@@ -1,0 +1,80 @@
+.bp-model-calculation-details { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: baseline; margin-top: 8px; }
+.bp-model-calculation-details p { margin: 0; font-variant-numeric: tabular-nums; }
+.bp-model-calculation-details a { color: var(--bp-accent); font-size: 12px; }
+
+@media (max-width: 760px) {
+    body.bp-home:not(.is-showcase) { overflow: hidden; }
+    .bp-home:not(.is-showcase) .bp-workspace {
+        display: flex; flex-direction: column; height: calc(100dvh - 60px); min-height: 0;
+        padding: 12px 12px 0; overflow: hidden;
+    }
+    .bp-home:not(.is-showcase) .bp-workspace > :not(.bp-workspace-grid) { flex-shrink: 0; }
+    .bp-home:not(.is-showcase) .bp-page-heading { min-height: 0; margin-bottom: 6px; }
+    .bp-home:not(.is-showcase) .bp-page-heading h1 { font-size: 22px; line-height: 1.25; }
+    .bp-home:not(.is-showcase) .bp-context-row { position: relative; top: auto; margin-bottom: 6px; }
+    .bp-home:not(.is-showcase) .bp-scene-strip { margin-bottom: 10px; }
+    .bp-home:not(.is-showcase) .bp-workspace-grid {
+        display: flex; flex-direction: row; flex: 1 1 0; align-items: stretch; gap: 0;
+        min-height: 0; width: 100%; overflow-x: auto; overflow-y: hidden;
+        scroll-snap-type: x mandatory; scrollbar-width: none; overscroll-behavior-x: contain;
+    }
+    .bp-home:not(.is-showcase) .bp-workspace-grid::-webkit-scrollbar { display: none; }
+    .bp-home:not(.is-showcase) .bp-workspace-grid > :is(.bp-left-workspace, .bp-right-workspace) {
+        display: block; flex: 0 0 100%; width: 100%; min-width: 0; height: 100%; min-height: 0;
+        overflow-y: auto; overflow-x: hidden; overscroll-behavior-y: contain;
+        scroll-snap-align: start; scroll-snap-stop: always;
+        padding-bottom: calc(82px + env(safe-area-inset-bottom, 0px)); scrollbar-width: none;
+    }
+    .bp-home:not(.is-showcase) .bp-workspace-grid > :is(.bp-left-workspace, .bp-right-workspace)::-webkit-scrollbar { display: none; }
+    .bp-home:not(.is-showcase) .bp-left-workspace > .bp-benchmark-card { margin-top: 16px; }
+    .bp-home:not(.is-showcase) .bp-context-actions > :is(#workspace-refresh, #workspace-undo) {
+        border: 0; background: transparent; box-shadow: none;
+    }
+    .bp-home:not(.is-showcase) .bp-context-actions > #workspace-undo {
+        flex: 0 0 var(--bp-mobile-undo-width, 44px); width: var(--bp-mobile-undo-width, 44px);
+        min-width: 0; padding: 0; overflow: hidden; opacity: var(--bp-mobile-undo-opacity, 1);
+    }
+    .bp-home:not(.is-showcase) #workspace-undo[aria-hidden="true"] { visibility: hidden; pointer-events: none; }
+    .bp-home:not(.is-showcase) .bp-workspace .bp-mobile-panels {
+        position: fixed; inset: auto auto calc(14px + env(safe-area-inset-bottom, 0px)) 50%; z-index: 45;
+        transform: translateX(-50%); display: flex; width: min(300px, calc(100vw - 32px));
+        gap: 0; padding: 4px; margin: 0; isolation: isolate;
+        border: 1px solid #cbd1d9a6; border-radius: 30px; background: #f0f3f6d6;
+        -webkit-backdrop-filter: blur(22px) saturate(1.3); backdrop-filter: blur(22px) saturate(1.3);
+        box-shadow: 0 6px 24px #1b27351c;
+    }
+    .bp-home:not(.is-showcase) .bp-mobile-panels::before {
+        content: ''; position: absolute; z-index: -1; inset: 4px auto 4px 4px;
+        width: calc((100% - 8px) / 2); transform: translateX(var(--bp-page-indicator-x, 0px));
+        border-radius: 24px; background: #ffffffd9; box-shadow: 0 1px 5px #1b273514; pointer-events: none;
+    }
+    .bp-home:not(.is-showcase) .bp-workspace .bp-mobile-panels button {
+        flex: 1 1 50%; min-width: 0; min-height: 44px; padding: 8px 10px;
+        border: 0; border-radius: 24px; background: transparent; color: var(--bp-muted);
+        box-shadow: none; font: inherit; font-size: 12px; font-weight: 600; white-space: nowrap;
+    }
+    .bp-home:not(.is-showcase) .bp-workspace .bp-mobile-panels button[aria-pressed="true"] { background: transparent; color: var(--bp-ink); }
+    .bp-home:not(.is-showcase) .bp-mobile-panels button::before { margin-right: 7px; font-family: 'Font Awesome 6 Free'; font-weight: 900; }
+    .bp-home:not(.is-showcase) .bp-mobile-panels [data-mobile-panel="mix"]::before { content: '\f009'; }
+    .bp-home:not(.is-showcase) .bp-mobile-panels [data-mobile-panel="models"]::before { content: '\f080'; }
+    .bp-home:not(.is-showcase).discussion-open .bp-mobile-panels { display: none; }
+    .bp-home:not(.is-showcase) .bp-model-controls {
+        display: flex; flex-wrap: nowrap; gap: 8px; padding: 8px 10px; min-width: 0; max-width: 100%;
+        overflow-x: auto; overflow-y: hidden; scrollbar-width: none; overscroll-behavior-x: contain;
+    }
+    .bp-home:not(.is-showcase) .bp-model-controls::-webkit-scrollbar { display: none; }
+    .bp-home:not(.is-showcase) .bp-model-controls :is(.bp-model-toolbar, .bp-scoring-toolbar) { display: contents; }
+    .bp-home:not(.is-showcase) .bp-model-controls .bp-scoring-switch { order: 1; flex: 0 0 auto; margin-right: 36px; }
+    body.bp-home:not(.is-showcase) .bp-model-controls .bp-scoring-switch.bp-ui-segmented[data-ui-component="segmented"] > button[aria-pressed] {
+        flex: 0 0 auto; width: auto; min-height: 44px; padding-inline: 9px; font-size: 12px; white-space: nowrap;
+    }
+    .bp-home:not(.is-showcase) .bp-model-controls .bp-scoring-switch [data-score-mode] > span { display: inline; }
+    .bp-home:not(.is-showcase) .bp-model-controls .bp-scoring-switch .bp-score-mode-icon { display: none; }
+    .bp-home:not(.is-showcase) .bp-model-controls .bp-quick-comparison { order: 2; flex: 0 0 auto; }
+    .bp-home:not(.is-showcase) .bp-model-controls .bp-model-search { order: 3; flex: 0 0 auto; }
+    .bp-home:not(.is-showcase) .bp-model-controls #contribute-data-button { order: 4; flex: 0 0 auto; width: auto; padding: 0 10px; white-space: nowrap; }
+    .bp-home:not(.is-showcase) #contribute-data-button > span { display: inline; }
+    .bp-home:not(.is-showcase) .bp-model-controls.has-overflow-end { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 16px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 16px), transparent); }
+    .bp-home:not(.is-showcase) .bp-model-controls.has-overflow-start { -webkit-mask-image: linear-gradient(to right, transparent, #000 16px); mask-image: linear-gradient(to right, transparent, #000 16px); }
+    .bp-home:not(.is-showcase) .bp-model-controls.has-overflow-start.has-overflow-end { -webkit-mask-image: linear-gradient(to right, transparent, #000 16px, #000 calc(100% - 16px), transparent); mask-image: linear-gradient(to right, transparent, #000 16px, #000 calc(100% - 16px), transparent); }
+}

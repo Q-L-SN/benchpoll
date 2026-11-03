@@ -3,23 +3,25 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!--bp:metadata--><title>BenchPoll - Community-weighted AI rankings</title>
-    <meta name="description" content="Which AI benchmarks should count? Choose benchmarks for your task, set their weights, and explore your own AI ranking alongside community priorities. Try it without signing in.">
+    <!--bp:metadata--><title>BenchPoll - Define Super Intelligence, democratically</title>
+    <meta name="description" content="Define Super Intelligence, democratically. Compare AI models with community-weighted benchmarks, explore public rankings, and build your own AI index.">
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="BenchPoll">
-    <meta property="og:title" content="Which AI benchmarks should count?">
-    <meta property="og:description" content="Build a ranking for your task. Choose benchmarks, set their weights, and help shape the community's AI rankings.">
-    <meta property="og:image" content="https://benchpoll.com/assets/benchpoll-social.png">
+    <meta property="og:title" content="BenchPoll - Define Super Intelligence, democratically">
+    <meta property="og:description" content="Define Super Intelligence, democratically. Compare AI models with community-weighted benchmarks, explore public rankings, and build your own AI index.">
+    <meta property="og:image" content="https://benchpoll.com/assets/benchpoll-social-si-20261102.png">
     <meta property="og:image:width" content="1200">
     <meta property="og:image:height" content="630">
-    <meta property="og:image:alt" content="BenchPoll: choose benchmarks, adjust their weights, and compare AI rankings.">
+    <meta property="og:image:alt" content="BenchPoll - Define Super Intelligence, democratically.">
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="Which AI benchmarks should count?">
-    <meta name="twitter:description" content="Choose benchmarks for your task, set their weights, and compare your ranking with the community's. Try BenchPoll without signing in.">
-    <meta name="twitter:image" content="https://benchpoll.com/assets/benchpoll-social.png"><!--/bp:metadata-->
+    <meta name="twitter:title" content="BenchPoll - Define Super Intelligence, democratically">
+    <meta name="twitter:description" content="Define Super Intelligence, democratically. Compare AI models with community-weighted benchmarks, explore public rankings, and build your own AI index.">
+    <meta name="twitter:image" content="https://benchpoll.com/assets/benchpoll-social-si-20261102.png">
+    <meta name="twitter:image:alt" content="BenchPoll - Define Super Intelligence, democratically."><!--/bp:metadata-->
     <link rel="icon" href="/favicon.ico?v=benchpoll-brand-20260919" sizes="any">
     <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png?v=benchpoll-brand-20260919">
     <script type="module" src="/js/home-startup.js?v=home-performance-20261009"></script>
+    <link rel="stylesheet" href="/css/ui/private-topic-editor.css">
     <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
     <link rel="stylesheet" href="/css/global.css?v=help-popovers-20261008">
     <link rel="stylesheet" href="/css/ui/tokens.css?v=fallback-discovery-20261005">
@@ -68,6 +70,7 @@
     <link rel="stylesheet" href="/css/ui/site-header.css">
     <link rel="stylesheet" href="/css/ui/topic-identity.css">
     <link rel="stylesheet" href="/css/ui/topic-scenes.css">
+    <link rel="stylesheet" href="/css/ui/mobile-workspace.css">
     <link rel="stylesheet" href="/css/ui/profile-editor.css?v=profile-20261022" data-bp-profile-editor>
 </head>
 <body class="bp-home bp-no-template-context" data-contribution-layout="heading">
@@ -209,12 +212,13 @@
         <main class="bp-workspace" data-mobile-panel="mix">
             <noscript>
                 <style>
+                    body.bp-home{overflow:auto!important}
                     .bp-home .bp-sidebar,.bp-home .bp-pie-card,.bp-home .bp-page-heading,.bp-home .bp-context-actions,.bp-home .bp-mobile-panels,.bp-home .bp-model-controls,.bp-home .bp-benchmark-toolbar-actions,.bp-home .bp-scoring-toolbar{display:none!important}
                     .bp-home .bp-shell{display:block!important;min-height:0}
-                    .bp-home .bp-workspace{display:block!important;width:100%;height:auto;min-height:0;max-width:1200px;margin-inline:auto;padding:20px 16px;overflow:visible}
-                    .bp-home .bp-context-row{position:static;margin:20px 0 16px;padding:0;transform:none}
-                    .bp-home .bp-workspace-grid{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;gap:20px;overflow:visible}
-                    .bp-home .bp-left-workspace,.bp-home .bp-right-workspace,.bp-home .bp-model-card{display:block!important;height:auto;overflow:visible}
+                    .bp-home .bp-workspace{display:block!important;width:100%;height:auto!important;min-height:0;max-width:1200px;margin-inline:auto;padding:20px 16px!important;overflow:visible!important}
+                    .bp-home .bp-context-row{position:static!important;margin:20px 0 16px;padding:0;transform:none}
+                    .bp-home .bp-workspace-grid{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;gap:20px!important;overflow:visible!important}
+                    .bp-home .bp-left-workspace,.bp-home .bp-right-workspace,.bp-home .bp-model-card{display:block!important;height:auto!important;overflow:visible!important;padding-bottom:0!important}
                     .bp-home .bp-model-rows,.bp-home .bp-benchmark-rows{height:auto;max-height:none!important;overflow:visible}
                     .bp-home .bp-benchmark-card{height:auto;max-height:none;overflow:visible}
                     .bp-home .bp-benchmark-toolbar{position:static}
@@ -270,9 +274,9 @@
                 <p id="last-updated" class="bp-last-updated" aria-live="polite" hidden></p>
                 <!--bp:scenes--><section id="bp-template-strip" class="bp-scene-strip" aria-label="Topic scenes" hidden></section><!--/bp:scenes-->
 
-            <nav class="bp-mobile-panels" aria-label="Workspace panels">
-                <button type="button" data-mobile-panel="mix" aria-pressed="true">Index composition</button>
-                <button id="model-index-tab" type="button" data-mobile-panel="models" aria-pressed="false">Public AI Index</button>
+            <nav class="bp-mobile-panels" aria-label="Swipe between composition and AI Index">
+                <button type="button" data-mobile-panel="mix" aria-pressed="true" aria-controls="workspace-scene-panel">Composition</button>
+                <button id="model-index-tab" type="button" data-mobile-panel="models" aria-pressed="false" aria-controls="workspace-scene-panel">AI Index</button>
             </nav>
             <section id="workspace-scene-panel" class="bp-workspace-grid">
                 <div class="bp-left-workspace">
@@ -280,8 +284,8 @@
                         <section id="pie-card" class="bp-pie-card" aria-labelledby="pie-mode-public">
                             <div class="bp-pie-mode-row">
                                 <div class="bp-mode-switch is-public" role="tablist" aria-label="Weight source" data-ui-component="segmented" data-ui-tone="accent">
-                                    <button id="pie-mode-personal" class="bp-mode-option" type="button" role="tab" aria-selected="false"><span class="bp-pie-mode-label">Personal Weights</span><span class="bp-pie-mode-loading" aria-hidden="true" hidden><i class="fa-solid fa-circle-notch"></i></span></button>
-                                    <button id="pie-mode-public" class="bp-mode-option selected" type="button" role="tab" aria-selected="true"><span class="bp-pie-mode-label">Public Weights</span><span class="bp-pie-mode-loading" aria-hidden="true" hidden><i class="fa-solid fa-circle-notch"></i></span></button>
+                                    <button id="pie-mode-personal" class="bp-mode-option" type="button" role="tab" aria-selected="false"><span class="bp-pie-mode-label">Personal Weights</span><span class="bp-pie-mode-loading" aria-hidden="true" hidden><i class="bp-spinner"></i></span></button>
+                                    <button id="pie-mode-public" class="bp-mode-option selected" type="button" role="tab" aria-selected="true"><span class="bp-pie-mode-label">Public Weights</span><span class="bp-pie-mode-loading" aria-hidden="true" hidden><i class="bp-spinner"></i></span></button>
                                 </div>
                                 <span id="pie-mode-status" class="sr-only" role="status"></span>
                                 <button id="personal-pie-create" class="bp-personal-pie-create" type="button" hidden>
@@ -445,6 +449,11 @@
                         </div>
                         <div id="ranking-model-search" class="bp-model-search"></div>
                     </div>
+                    </div>
+                    <div id="estimation-test-control" class="bp-estimation-test">
+                        <label for="estimation-algorithm">Test algorithm</label>
+                        <select id="estimation-algorithm" aria-label="Test estimation algorithm"></select>
+                        <button type="button" class="bp-help-trigger" aria-label="About the test algorithm" data-help-text="Compare experimental ways to handle missing scores. This setting applies only to this tab; the default algorithm remains unchanged."><i class="fa-regular fa-circle-question" aria-hidden="true"></i></button>
                     </div>
                     <div class="bp-model-head" aria-hidden="true">
                         <span>#</span>

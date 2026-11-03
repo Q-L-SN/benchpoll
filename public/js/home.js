@@ -6,8 +6,9 @@ import { workspaceChannel } from './shared/workspace-channel.js';
 import { createOverlayScrollbar } from './workspace/overlay-scrollbar.js';
 import { buildContributionURL as buildContributeURL } from './shared/contribution-navigation.js?v=taxonomy-20260929';
 import { createTaxonomyDrawer } from './shared/taxonomy-drawer.js?v=20260928';
-import { topicURL } from './shared/topics.js';
+import { topicURL, topicSlug, scenePath } from './shared/topics.js';
 import { createConfigSidebar } from './shared/config-sidebar.js';
+import { openPrivateTopicEditor } from './shared/private-topic-editor.js';
 import { pageAccountWriteScope, isAccountWriteError } from './shared/account-identity.js';
 import { createToast } from './shared/toast.js';
 import * as S from '/js/shared.js';
@@ -45,6 +46,7 @@ const sidebarNavigation = createSidebarNavigation({
         return selectTopic(entry);
     },
     onLogin: () => loginButton.click(),
+    onCreatePrivate: trigger => openPrivateTopicEditor(null, trigger),
     onSessionChange: () => { void loadUserProfile().catch(showNavigationError); }
 });
 navigationChannel.subscribe(() => { lastWorkspaceURL = window.location.href; });
@@ -111,10 +113,11 @@ async function selectTopic(entry) {
     treeContent.setAttribute('aria-busy', 'true');
     try {
         if (!await prepareWorkspaceContextChange()) return false;
-        const metadata = await requestJSON(entry.isPrivate ? '/api/get_private_category' : '/api/get_topic', { categoryID: entry.categoryID });
+        const metadata = await requestJSON('/api/get_topic', { categoryID: entry.categoryID });
         const topic = normalizeTopic({ ...metadata, isPrivate: entry.isPrivate === true });
         if (topic.categoryID !== Number(entry.categoryID)) throw new Error('Topic identity changed');
-        const contextValues = entry.contextValues ?? {};
+        const defaultScene = topic.scenes?.find(scene => scene.isDefault);
+        const contextValues = entry.contextValues?.scene ? entry.contextValues : defaultScene ? { scene: String(defaultScene.ID) } : {};
         setCurrentTopic({ ...topic, contextValues });
         const url = new URL(locationURL({ ...topic, contextValues }), window.location.origin);
         window.history.pushState({}, '', url);
@@ -206,16 +209,17 @@ async function openCurrentAccount(event) {
 }
 
 async function initializeTopic({ fromURL = false } = {}) {
-    const privateMatch = window.location.pathname.match(/^\/personal\/([1-9]\d*)\/?$/);
+    const privateMatch = window.location.pathname.match(/^\/personal\/([1-9]\d*)(?:\/([a-z0-9]+(?:-[a-z0-9]+)*))?\/?$/);
+    const shortMatch = window.location.pathname.match(/^\/([a-z0-9]+(?:-[a-z0-9]+)*)(?:\/([a-z0-9]+(?:-[a-z0-9]+)*))?\/?$/);
     const publicMatch = window.location.pathname.match(/^\/topics\/([1-9]\d*)(?:\/[^/]+)?\/?$/);
     let topic;
     if (privateMatch) {
-        topic = normalizeTopic({ ...await requestJSON('/api/get_private_category', { categoryID: Number(privateMatch[1]) }), isPrivate: true });
+        topic = normalizeTopic({ ...await requestJSON('/api/get_topic', { categoryID: Number(privateMatch[1]) }), isPrivate: true });
     } else if (publicMatch) {
         topic = normalizeTopic(await requestJSON('/api/get_topic', { categoryID: Number(publicMatch[1]) }));
         if (topic.categoryID !== Number(publicMatch[1])) throw new Error('Topic identity changed');
-    } else if (/^\/[a-z0-9]+(?:-[a-z0-9]+)*\/?$/.test(window.location.pathname)) {
-        topic = normalizeTopic(await requestJSON('/api/get_topic', { slug: window.location.pathname.slice(1).replace(/\/$/, '') }));
+    } else if (shortMatch) {
+        topic = normalizeTopic(await requestJSON('/api/get_topic', { slug: shortMatch[1] }));
     } else {
         const payload = await requestJSON(`/api/get_page${window.location.pathname}`, { treeOnly: true });
         if (payload?.jump) { window.location.replace('/'); return; }
@@ -223,12 +227,19 @@ async function initializeTopic({ fromURL = false } = {}) {
         if (!selected) throw new Error('Current topic is missing');
         topic = normalizeTopic(selected);
     }
-    setCurrentTopic(topic);
     const url = new URL(window.location.href);
-    url.pathname = topic.url || topicURL(topic.categoryID, topic.categoryName, topic.isPrivate, topic.slug);
+    if (url.searchParams.has('scene') || url.searchParams.has('context_scene')) throw new Error('Scenes use named URL paths.');
+    const requestedScene = privateMatch?.[2] ?? (publicMatch ? null : shortMatch?.[2]);
+    const scene = requestedScene ? topic.scenes?.find(item => (item.slug || topicSlug(item.name)) === requestedScene)
+        : topic.scenes?.find(item => item.isDefault);
+    if (requestedScene && !scene) throw new Error('This scene is unavailable.');
+    const contextValues = scene ? { scene: String(scene.ID) } : {};
+    setCurrentTopic({ ...topic, contextValues });
+    const base = topic.url || topicURL(topic.categoryID, topic.categoryName, topic.isPrivate, topic.slug);
+    url.pathname = scene ? new URL(scenePath(base, scene), window.location.origin).pathname : base;
     url.searchParams.delete('view');
     window.history.replaceState(window.history.state, '', url);
-    await publishWorkspaceState({ fromURL, isPrivate: topic.isPrivate });
+    await publishWorkspaceState({ fromURL, contextValues, isPrivate: topic.isPrivate });
 }
 
 // Back/forward changes the location, never the selected sidebar or pie mode.

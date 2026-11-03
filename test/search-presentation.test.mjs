@@ -21,15 +21,15 @@ const snapshot = { models: [
     { modelName: 'Invalid', lower: NaN, coverage: 0, comparable: true }
 ], weights: [{ name: 'Test A', conditionName: 'v1', weightBasisPoints: 10000 }] };
 
-test('default scenes canonicalize to the topic, named scenes have distinct canonical metadata', () => {
-    assert.equal(topicSearchMetadata(topic).path, '/intelligence');
-    assert.equal(topicSearchMetadata(topic, 101).path, '/intelligence');
-    assert.equal(topicSearchMetadata(topic, 102).path, '/intelligence?scene=102');
+test('all scenes have named canonical paths, including the default', () => {
+    assert.equal(topicSearchMetadata(topic).path, '/intelligence/overall');
+    assert.equal(topicSearchMetadata(topic, 101).path, '/intelligence/overall');
+    assert.equal(topicSearchMetadata(topic, 102).path, '/intelligence/real-time');
     assert.equal(topicSearchMetadata(topic, 102).title, 'Intelligence: Real-time AI Index | BenchPoll');
     assert.match(topicSearchMetadata(topic, 102).description, /^Real-time capability/);
     assert.equal(selectSearchScene(topic, new URLSearchParams()).ID, 101);
-    assert.equal(selectSearchScene(topic, new URLSearchParams('scene=102')).ID, 102);
-    for (const query of ['scene=', 'scene=0', 'scene=103', 'scene=101&scene=102', 'scene=01', 'scene=-1', 'scene=9007199254740993']) {
+    assert.equal(selectSearchScene(topic, new URLSearchParams(), 'real-time').ID, 102);
+    for (const query of ['scene=102', 'context_scene=101', 'scene=', 'scene=0', 'scene=103', 'scene=101&scene=102', 'scene=01', 'scene=-1', 'scene=9007199254740993']) {
         assert.throws(() => selectSearchScene(topic, new URLSearchParams(query)), error => error.status === 404, query);
     }
 });
@@ -38,7 +38,7 @@ test('public discovery excludes private records and emits only canonical scene a
     for (const render of [discoverySitemap, discoveryText, renderTopicDirectory]) {
         const text = render([topic, privateTopic], origin);
         assert.doesNotMatch(text, /Secret project|personal\/55/);
-        assert.match(text, /intelligence\?scene=102/);
+        assert.match(text, /intelligence\/real-time/);
         assert.doesNotMatch(text, /scene=101/);
     }
     const xml = discoverySitemap([topic], origin);
@@ -69,7 +69,7 @@ test('public snapshot uses percentage units and only eligible comparable rows in
     assert.match(result, /Measured coverage/);
     assert.match(result, />82.5%<\/td>/);
     assert.doesNotMatch(result, /8250%|Unranked|Invalid|NaN/);
-    assert.match(result, /href="https:\/\/benchpoll.com\/intelligence\?scene=102"/);
+    assert.match(result, /href="https:\/\/benchpoll.com\/intelligence\/real-time"/);
     assert.match(result, /Test A<small>v1<\/small>/);
     const graph = JSON.parse(result.match(/type="application\/ld\+json">([\s\S]*?)<\/script>/)[1])['@graph'];
     assert.deepEqual(graph.find(item => item['@type'] === 'ItemList').itemListElement.map(item => item.name), ['Model A']);
@@ -134,11 +134,11 @@ test('metadata follows scene navigation without retaining a stale ranking or bre
     const root = { querySelector: selector => nodes.get(selector) };
     updateTopicSearchMetadata(topic, 102, root);
     assert.equal(root.title, 'Intelligence: Real-time AI Index | BenchPoll');
-    assert.equal(canonical.href, origin + '/intelligence?scene=102');
+    assert.equal(canonical.href, origin + '/intelligence/real-time');
     const graph = JSON.parse(structured.textContent)['@graph'];
     assert.equal(graph.length, 2); assert.equal(graph[0].mainEntity, undefined); assert.equal(graph[0].breadcrumb, undefined);
     updateTopicSearchMetadata(topic, 101, root);
-    assert.equal(canonical.href, origin + '/intelligence');
+    assert.equal(canonical.href, origin + '/intelligence/overall');
 });
 
 test('legal and methodology pages have canonical social metadata without changing their no-script content', async () => {

@@ -1,12 +1,17 @@
-export const SITE_DESCRIPTION = 'Compare AI models with community-weighted benchmarks. Explore public AI indices by topic and scene, inspect the evidence, and build your own index.';
+import { sceneSummary, scenePath } from './topics.js';
+
+export const SITE_TAGLINE = 'Define Super Intelligence, democratically.';
+export const SITE_TITLE = 'BenchPoll - Define Super Intelligence, democratically';
+export const SITE_DESCRIPTION = 'Define Super Intelligence, democratically. Compare AI models with community-weighted benchmarks, explore public rankings, and build your own AI index.';
+export const SITE_SOCIAL_IMAGE = '/assets/benchpoll-social-si-20261102.png';
 
 export function topicSearchMetadata(topic, sceneID = null) {
     const scene = (topic.scenes ?? []).find(item => Number(item.ID) === Number(sceneID))
         ?? (sceneID == null ? topic.scenes?.find(item => item.isDefault) : null);
     const name = scene ? `${topic.name}: ${scene.name}` : topic.name;
-    const path = scene && !scene.isDefault ? `${topic.url}?scene=${scene.ID}` : topic.url;
+    const path = scene ? scenePath(topic.url, scene) : topic.url;
     return { title: `${name} AI Index | BenchPoll`, name,
-        description: `${scene?.description || topic.description} Compare AI models using public evaluation weights, scores and coverage.`,
+        description: `${sceneSummary(topic, scene)} Compare AI models using public evaluation weights, scores and coverage.`,
         path, scene };
 }
 

@@ -1,0 +1,31 @@
+.bp-topic-editor { width: min(700px, calc(100vw - 24px)); max-height: calc(100dvh - 32px); padding: 24px; border: 1px solid #dce1e6; border-radius: 12px; background: #fff; color: #28313c; }
+.bp-topic-editor::backdrop { background: #17212d70; backdrop-filter: blur(4px); }
+.bp-topic-editor form { display: grid; gap: 18px; }
+.bp-topic-editor header, .bp-topic-editor footer, .bp-topic-editor-section-heading { display: flex; align-items: center; gap: 10px; }
+.bp-topic-editor header h2 { margin: 0 auto 0 0; font-size: 21px; }
+.bp-topic-editor-section-heading h3 { margin: 0 auto 0 0; font-size: 16px; }
+.bp-topic-editor label { display: grid; gap: 7px; font-size: 13px; font-weight: 600; }
+.bp-topic-editor input:not([type="radio"]) { width: 100%; min-width: 0; box-sizing: border-box; padding: 10px 12px; border: 1px solid #cfd5de; border-radius: 5px; background: #fff; color: inherit; font: inherit; }
+.bp-topic-editor button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 8px; border: 0; background: transparent; color: inherit; cursor: pointer; font: inherit; font-size: 13px; }
+.bp-topic-editor button:hover, .bp-topic-editor a:hover { color: var(--bp-accent, #c45000); }
+.bp-topic-editor button:disabled { opacity: .5; cursor: default; }
+.bp-topic-editor .bp-topic-editor-primary { padding-inline: 16px; border-radius: 6px; background: #29333e; color: #fff; }
+.bp-topic-editor-hint { margin: 8px 0; color: #637080; font-size: 12px; line-height: 1.6; }
+.bp-topic-scene-row { display: flex; align-items: center; gap: 10px; margin-block: 14px; }
+.bp-topic-scene-fields { display: grid; flex: 1 1 auto; min-width: 0; gap: 6px; }
+.bp-topic-scene-fields input { font-size: 13px; }
+.bp-topic-scene-actions { display: flex; flex: 0 0 auto; }
+.bp-topic-scene-actions button { width: 36px; }
+.bp-topic-editor-spacer { flex: 1; }
+.bp-topic-editor footer { flex-wrap: wrap; }
+.bp-topic-editor footer a { color: inherit; font-size: 13px; text-decoration: none; padding-block: 12px; }
+#topic-editor-delete-confirmation { padding: 12px; border: 1px solid #dce1e6; border-radius: 6px; font-size: 13px; }
+#create-topic-status { font-size: 13px; line-height: 1.6; margin: 0; }
+.th-topic-edit { flex: 0 0 32px; min-width: 32px; min-height: 44px; }
+@media(max-width: 480px) {
+    .bp-topic-editor { padding: 16px; }
+    .bp-topic-scene-actions { flex-direction: column; }
+    .bp-topic-scene-actions button { min-height: 32px; }
+    .bp-topic-editor footer { gap: 4px; }
+    .bp-topic-editor-spacer { display: none; }
+}

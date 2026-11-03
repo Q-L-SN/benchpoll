@@ -14,7 +14,7 @@ export default [{
         globals: Object.fromEntries([
             'window', 'document', 'location', 'navigator', 'history', 'console',
             'HTMLElement', 'HTMLInputElement', 'HTMLTextAreaElement', 'HTMLSelectElement',
-            'Element', 'Node', 'Event', 'CustomEvent', 'MutationObserver', 'customElements',
+            'Element', 'Node', 'Event', 'CustomEvent', 'MutationObserver', 'ResizeObserver', 'customElements',
             'URL', 'URLSearchParams', 'fetch', 'performance', 'requestAnimationFrame',
             'cancelAnimationFrame', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval',
             'getComputedStyle', 'localStorage', 'sessionStorage', 'structuredClone'
@@ -27,4 +27,7 @@ export default [{
         'no-constant-binary-expression': 'error',
         'no-unused-vars': ['error', { args: 'none', caughtErrors: 'none' }]
     }
+}, {
+    files: ['public/js/vendor/d3-hierarchy-3.1.2.js'],
+    languageOptions: { globals: { exports: 'readonly', define: 'readonly', self: 'readonly' } }
 }];

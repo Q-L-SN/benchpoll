@@ -1,3 +1,4 @@
+import { setLoading } from '../shared/loading.js';
 import { createOrganizationMark } from '../shared/organization-logos.js?v=organization-logos-20261006';
 import { renderComparisonName } from '../shared/comparison-display.js?v=launch-layout-20261007';
 import { rankingRowKey, captureRankingRows, animateRankingChanges } from './ranking-motion.js';
@@ -90,7 +91,8 @@ export function createModelListView({ state, modelRows, openApprovedModelResults
             const message = document.createElement('span');
             message.className = 'bp-model-focus-error';
             message.setAttribute('role', 'status');
-            message.textContent = page.loading ? 'Loading models...' : page.error;
+            if (page.loading) setLoading(message, 'Loading models');
+            else message.textContent = page.error;
             navigation.append(message);
         }
         modelRows.append(navigation);
@@ -164,7 +166,7 @@ export function createModelListView({ state, modelRows, openApprovedModelResults
         if (pending && !models.length) {
             const loading = document.createElement('div');
             loading.className = 'bp-loading-state';
-            loading.textContent = 'Calculating model ranking…';
+            setLoading(loading, 'Calculating model ranking');
             modelRows.append(loading);
             return;
         }
@@ -173,7 +175,7 @@ export function createModelListView({ state, modelRows, openApprovedModelResults
             if (state.rankingPageLoading[state.mode] || (page?.hasMore && !state.rankingPageError[state.mode])) {
                 const loading = document.createElement('div');
                 loading.className = 'bp-loading-state';
-                loading.textContent = 'Loading models…';
+                setLoading(loading, 'Loading models');
                 modelRows.append(loading);
                 if (!charts && !state.rankingPageLoading[state.mode]) window.queueMicrotask(onNeedMore);
                 return;
@@ -307,9 +309,8 @@ export function createModelListView({ state, modelRows, openApprovedModelResults
             footer.className = 'bp-ranking-page-footer';
             footer.classList.toggle('is-chart', charts);
             footer.setAttribute('role', 'status');
-            footer.textContent = state.rankingPageLoading[state.mode]
-                ? 'Loading more models…'
-                : state.rankingPageError[state.mode] || '';
+            if (state.rankingPageLoading[state.mode]) setLoading(footer, 'Loading more models');
+            else footer.textContent = state.rankingPageError[state.mode] || '';
             if (state.rankingPageError[state.mode] && !state.rankingPageLoading[state.mode]) {
                 const retry = document.createElement('button');
                 retry.type = 'button';

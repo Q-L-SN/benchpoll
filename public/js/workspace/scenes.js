@@ -17,7 +17,17 @@ export function createSceneControls({ host, getState, onSelect, beforeWrite, wri
     actions.append(makeDefault, edit, create); host.replaceChildren(tabs, actions);
     const segmented = mountSegmentedControl(tabs, { presentation: false });
     const tabNodes = new Map();
-    let tabScope = null, selectedScene = null;
+    let tabScope = null, selectedScene = null, pendingScene = null, revealedScene = null;
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
+    function revealSelected(animate = false) {
+        const selected = tabs.querySelector('[aria-selected="true"]');
+        if (!selected || !tabs.clientWidth) return;
+        const left = selected.offsetLeft - 16, right = selected.offsetLeft + selected.offsetWidth + 16;
+        const offset = left < tabs.scrollLeft ? left : right > tabs.scrollLeft + tabs.clientWidth
+            ? right - tabs.clientWidth : tabs.scrollLeft;
+        tabs.scrollTo({ left: Math.max(0, offset), behavior: animate && !reduced.matches ? 'smooth' : 'instant' });
+        syncOverflow();
+    }
     function syncOverflow() {
         const end = tabs.scrollWidth - tabs.clientWidth;
         tabs.classList.toggle('has-overflow-start', tabs.scrollLeft > 1);
@@ -31,10 +41,10 @@ export function createSceneControls({ host, getState, onSelect, beforeWrite, wri
         segmented.refresh();
         syncOverflow();
     }
-    const tabResize = new ResizeObserver(refreshTabs);
+    const tabResize = new window.ResizeObserver(refreshTabs);
     tabResize.observe(tabs);
     tabs.addEventListener('scroll', syncOverflow, { passive: true });
-    document.fonts?.ready.then(refreshTabs);
+    document.fonts?.ready.then(() => { refreshTabs(); revealSelected(); });
     const dialog = element('dialog', 'bp-scene-dialog'); dialog.id = 'scene-editor';
     dialog.setAttribute('aria-labelledby', 'scene-editor-title');
     const heading = element('header', 'bp-reference-header');
@@ -118,13 +128,15 @@ export function createSceneControls({ host, getState, onSelect, beforeWrite, wri
         if (switching || busy || getState().loading || Number(getState().sceneID) === id) return;
         const category = getState().categoryID;
         switching = true;
+        pendingScene = id;
+        render();
         try {
             await onSelect(id);
             if (getState().categoryID === category) {
                 const active = tabs.querySelector(`[data-scene-id="${getState().sceneID}"]`);
-                active?.focus({ preventScroll: true }); active?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+                active?.focus({ preventScroll: true });
             }
-        } finally { switching = false; }
+        } finally { pendingScene = null; switching = false; render(); }
     }
     tabs.addEventListener('keydown', event => {
         const buttons = [...tabs.querySelectorAll('[role="tab"]')], index = buttons.indexOf(event.target);
@@ -143,7 +155,8 @@ export function createSceneControls({ host, getState, onSelect, beforeWrite, wri
         const focusedTab = scenes.some(scene => String(scene.ID) === focused) ? focused : String(state.sceneID);
         const nextScope = identity();
         const sceneIDs = new Set(scenes.map(scene => String(scene.ID)));
-        const nextSelected = sceneIDs.has(String(state.sceneID)) ? String(state.sceneID) : null;
+        const currentSelection = pendingScene ?? state.sceneID;
+        const nextSelected = sceneIDs.has(String(currentSelection)) ? String(currentSelection) : null;
         if (tabScope !== nextScope || !nextSelected) resetMarker();
         else if (selectedScene && selectedScene !== nextSelected) tabs.dataset.sceneAnimated = 'true';
         tabScope = nextScope; selectedScene = nextSelected;
@@ -161,7 +174,7 @@ export function createSceneControls({ host, getState, onSelect, beforeWrite, wri
                 tabNodes.set(id, tab); tabResize.observe(tab);
             }
             if (tabs.children[index] !== tab) tabs.insertBefore(tab, tabs.children[index] ?? null);
-            tab.setAttribute('aria-selected', String(Number(scene.ID) === Number(state.sceneID)));
+            tab.setAttribute('aria-selected', String(Number(scene.ID) === Number(currentSelection)));
             tab.tabIndex = id === focusedTab ? 0 : -1;
             tab.disabled = state.loading || busy;
             if (tab.firstChild.textContent !== scene.name) tab.firstChild.textContent = scene.name;
@@ -178,7 +191,16 @@ export function createSceneControls({ host, getState, onSelect, beforeWrite, wri
         edit.hidden = !canManage(state) || !state.sceneID; edit.disabled = busy || state.loading;
         makeDefault.hidden = !canManage(state) || !scenes.some(scene => Number(scene.ID) === Number(state.sceneID) && !scene.isDefault);
         makeDefault.disabled = busy || state.loading;
-        if (scenes.length) refreshTabs();
+        if (scenes.length) {
+            refreshTabs();
+            const revealKey = `${nextScope}:${nextSelected}`;
+            if (revealedScene !== revealKey) {
+                const animate = revealedScene?.startsWith(`${nextScope}:`) === true;
+                revealedScene = revealKey;
+                revealSelected(animate);
+                requestAnimationFrame(() => { if (revealedScene === revealKey) revealSelected(animate); });
+            }
+        }
         else syncOverflow();
         document.body.classList.toggle('bp-no-template-context', !scenes.length);
         if (dialog.open && scope !== identity() && !busy) dialog.close();

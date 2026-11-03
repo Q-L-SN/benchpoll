@@ -1,10 +1,13 @@
 import { benchmarkAccessibleName, benchmarkConditionLabel } from './weights.js';
+import { isTopicReference, topicLabelText, renderTopicLabel, referenceLabel } from '../shared/topic-label.js';
 
 export function appendBenchmarkIdentity(element, member) {
     const name = document.createElement('strong');
-    name.className = 'bp-benchmark-link-name'; name.textContent = member.name;
+    name.className = 'bp-benchmark-link-name';
+    if (isTopicReference(member)) renderTopicLabel(name, topicLabelText(member));
+    else name.textContent = member.name;
     element.append(name);
-    const version = benchmarkConditionLabel(member);
+    const version = isTopicReference(member) ? '' : benchmarkConditionLabel(member);
     if (version) {
         const detail = document.createElement('span');
         detail.className = 'bp-benchmark-condition'; detail.textContent = version;
@@ -16,14 +19,15 @@ export function appendBenchmarkIdentity(element, member) {
 export function createBenchmarkInformationLink(member, { getURL, onInspect, label, className = '' }) {
     const link = document.createElement('a');
     link.className = `bp-benchmark-information-link ${className}`.trim();
-    link.href = getURL(member);
+    const reference = isTopicReference(member);
+    link.href = reference ? member.url : getURL(member);
     link.dataset.benchmarkControl = 'information';
-    link.setAttribute('aria-label', `Information and discussion for ${benchmarkAccessibleName(member)}`);
+    link.setAttribute('aria-label', reference ? `Open ${referenceLabel(member)}` : `Information and discussion for ${benchmarkAccessibleName(member)}`);
     if (label !== undefined) link.textContent = label;
     else appendBenchmarkIdentity(link, member);
     link.addEventListener('click', event => {
         if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
-        onInspect?.(event);
+        if (!reference) onInspect?.(event);
     });
     return link;
 }

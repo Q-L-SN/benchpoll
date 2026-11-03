@@ -80,7 +80,7 @@ test('ordinary no-intent startup tolerates a null focus page before any ranking 
     globalThis.window = { matchMedia: () => ({ matches: false }), addEventListener() {}, ResizeObserver: class { observe() {} } };
     try {
         const state = { mode: 'public', rankingPagination: null };
-        const view = createModelListView({ state, modelRows: {}, onNeedMore() {} });
+        const view = createModelListView({ state, modelRows: element(), onNeedMore() {} });
         assert.equal(view.getFocusPage(), null);
         let requests = 0, displayed = 0;
         const win = Object.assign(new Events(), { clearTimeout() {} });

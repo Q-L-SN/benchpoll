@@ -65,7 +65,7 @@ test('thirty supports enqueue one review with parent identity, then approved sce
     assert.equal(created.sceneID, 1095); assert.equal(row.status, 'approved');
     assert.equal(row.scene_context_ID, 1095); assert.equal(row.topic_ID, null);
     const page = await h.service.list('42');
-    assert.equal(page.proposals[0].url, '/image-generation?scene=1095');
+    assert.equal(page.proposals[0].url, '/image-generation/general');
 });
 
 test('editing a scene proposal resets support without changing its parent, and reviewer edits are respected', async () => {

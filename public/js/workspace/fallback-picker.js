@@ -1,3 +1,4 @@
+import { setLoading } from '../shared/loading.js';
 import { familyKey } from '../shared/benchmark-families.js';
 import { COMMUNITY_FALLBACK_EXPLANATION } from '../shared/fallback-choice.js';
 import { createBenchmarkInformationLink } from './benchmark-link.js';
@@ -231,8 +232,8 @@ export function createFallbackPicker({ catalogue, getScope, getPrimary, getCompo
             onInspect: event => { close({ restore: false }); onInspectVersion?.(event); } }));
         const count = getComposition(primary.ID)?.configuredPieCount ?? 0;
         electorate.textContent = count ? `${count} explicit ${count === 1 ? 'choice' : 'choices'}` : 'No community choices yet';
-        status.textContent = applyError || view.error || (view.loading ? 'Loading configurations...' : view.suspended ? 'Refreshing configurations...'
-            : !choices.length && !view.hasMore ? 'No fallback configurations yet.' : '');
+        if (!applyError && (view.loading || view.suspended)) setLoading(status, view.suspended ? 'Refreshing configurations' : 'Loading configurations');
+        else status.textContent = applyError || view.error || (!choices.length && !view.hasMore ? 'No fallback configurations yet.' : '');
         more.hidden = !view.hasMore && !view.error;
         more.disabled = view.loading || view.suspended;
         more.querySelector('span').textContent = view.error && !view.suspended ? 'Retry' : 'More configurations';

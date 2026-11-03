@@ -7,7 +7,7 @@ import { startConfigSidebarPreview } from './helpers/config-sidebar-fixture-2026
 import { renderTopicDirectory, renderPublicTopic, searchHead, replaceSearchSlot, PUBLIC_DOCUMENTS } from '../search-presentation.js';
 import { PRIVACY_CONTENT_SECURITY_POLICY } from '../privacy-headers.js';
 
-const output = 'D:/Codex-artifacts/website1/search-legal-20261101';
+const output = 'artifacts/search-discovery-20261102';
 const browsers = new Map();
 const origin = 'https://benchpoll.com';
 const topic = { ID: 54, name: 'Intelligence', url: '/intelligence', description: 'Reasoning, knowledge, and getting useful work done.',
@@ -47,7 +47,7 @@ for (const engine of ['chromium', 'webkit']) for (const width of [390, 1440]) {
         assert.equal(await page.locator('.th-server-card').count(), 1);
         assert.equal(await page.getByRole('link', { name: 'Intelligence', exact: true }).isVisible(), true);
         await page.getByText('Scenes (2)', { exact: true }).click();
-        assert.equal(await page.getByRole('link', { name: 'Real-time', exact: true }).getAttribute('href'), '/intelligence?scene=102');
+        assert.equal(await page.getByRole('link', { name: 'Real-time', exact: true }).getAttribute('href'), '/intelligence/real-time');
         assert.doesNotMatch(await page.content(), /Hidden private plan/);
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
         await page.screenshot({ path: `${output}/directory-noscript-${engine}-${width}.png` });
@@ -58,12 +58,12 @@ for (const engine of ['chromium', 'webkit']) for (const width of [390, 1440]) {
         const context = await browsers.get(engine).newContext({ javaScriptEnabled: false, viewport: { width, height: 900 } });
         const page = await context.newPage();
         t.after(async () => { await context.close(); await fixture.close(); });
-        await transform(page, '/intelligence', html => renderPublicTopic(html, topic, topic.scenes[1], snapshot, origin));
-        await page.goto(fixture.url + '/intelligence?scene=102');
+        await transform(page, '/intelligence/real-time', html => renderPublicTopic(html, topic, topic.scenes[1], snapshot, origin));
+        await page.goto(fixture.url + '/intelligence/real-time');
         assert.equal(await page.getByRole('cell', { name: '85%' }).isVisible(), true);
         assert.equal(await page.getByText('Example model', { exact: true }).isVisible(), true);
         assert.equal(await page.getByText('Example benchmark', { exact: false }).isVisible(), true);
-        assert.equal(await page.getByRole('link', { name: 'Overall', exact: true }).getAttribute('href'), '/intelligence');
+        assert.equal(await page.getByRole('link', { name: 'Overall', exact: true }).getAttribute('href'), '/intelligence/overall');
         assert.equal(await page.getByRole('link', { name: 'Overall', exact: true }).isVisible(), true);
         assert.equal(await page.locator('.bp-context-row').evaluate(node => getComputedStyle(node).position), 'static');
         assert.equal(await page.getByRole('heading', { name: 'Evaluation items', exact: true }).isVisible(), true);

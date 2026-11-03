@@ -1,3 +1,4 @@
+import { setLoading } from './shared/loading.js';
 import { postJSON } from './shared/http.js';
 import { pageAccountWriteScope, canonicalAccountID, accountWriteError, isAccountWriteError } from './shared/account-identity.js';
 import { enhanceUI } from './shared/ui-components.js';
@@ -103,7 +104,8 @@ export function createAccountPrivacyUI({ root = document, request = postJSON, sc
     const senior = () => state.ready && !state.blocked && state.status?.authenticated && state.status.isSenior;
     const setResult = (id, text = '', tone = '') => {
         const element = get(id);
-        element.textContent = text;
+        if (tone === 'loading') setLoading(element, text);
+        else element.textContent = text;
         element.hidden = !text;
         element.dataset.tone = tone;
         element.setAttribute('aria-live', tone === 'error' ? 'assertive' : 'polite');
@@ -181,7 +183,7 @@ export function createAccountPrivacyUI({ root = document, request = postJSON, sc
     async function refreshStatus() {
         if (state.loading) return false;
         state.loading = true;
-        setResult('privacy-status', 'Loading account status...');
+        setResult('privacy-status', 'Loading account status', 'loading');
         render();
         try {
             recordStatus(normalizePrivacyStatus(await send('/api/get_privacy_status', {})));
@@ -226,7 +228,7 @@ export function createAccountPrivacyUI({ root = document, request = postJSON, sc
     async function run(action, target, task, options = {}) {
         if (!state.ready || state.loading || state.pending || options.account && state.blocked) return;
         state.pending = action;
-        setResult(target, action === 'queue' ? 'Loading requests...' : 'Submitting...');
+        setResult(target, action === 'queue' ? 'Loading requests' : 'Submitting', 'loading');
         render();
         try { await task(); }
         catch (error) { state.pending = null; render(); await showFailure(error, target, options); }
@@ -252,7 +254,7 @@ export function createAccountPrivacyUI({ root = document, request = postJSON, sc
             } else {
                 const result = await send('/api/prepare_github_login', body);
                 const url = safeGitHubAuthorizationURL(result?.url);
-                setResult('consent-result', 'Opening GitHub sign-in...');
+                setResult('consent-result', 'Opening GitHub sign-in', 'loading');
                 navigate(url);
             }
         }, { account: true });

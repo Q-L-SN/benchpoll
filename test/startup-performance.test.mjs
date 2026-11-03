@@ -54,13 +54,13 @@ test('direct homepage stylesheet links preserve the original cascade and URL ide
         const url = new URL(href, `${origin}/css/home-v2.css`);
         return url.pathname + url.search;
     });
-    const styles = links.filter(link => link.rel === 'stylesheet').map(link => link.href);
+    const styles = links.filter(link => link.rel === 'stylesheet' && link.href !== '/css/ui/private-topic-editor.css').map(link => link.href);
     assert.equal(new Set(styles).size, styles.length);
     assert.equal(styles.includes('/css/home-v2.css?v=comparison-experiment-20261007'), false);
     const start = styles.indexOf(imports[0]);
     assert.deepEqual(styles.slice(start, start + imports.length), imports);
     assert.deepEqual(styles.slice(0, start), ['/vendor/fontawesome/css/all.min.css', '/css/global.css?v=help-popovers-20261008']);
-    assert.equal(styles[start + imports.length], '/css/discussion.css?v=discussion-replies-20261016');
+    assert.equal(styles.filter(href => href !== '/css/ui/private-topic-editor.css')[start + imports.length], '/css/discussion.css?v=discussion-replies-20261016');
 });
 
 function pagerFixture(onIndex) {

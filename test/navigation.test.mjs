@@ -244,7 +244,7 @@ test('account index uses a parameter-bound owner in a read-only consistent snaps
     assert.equal(payload.items[0].sceneID, 102);
     assert.equal(payload.items[0].contextLabel, 'General');
     assert.deepEqual(payload.items[0].contextValues, { scene: '102' });
-    assert.equal(payload.items[0].url, '/code?scene=102');
+    assert.equal(payload.items[0].url, '/code/general');
     assert.equal(payload.items[0].available, true);
     assert.ok(db.calls.some(call => call[1]?.includes('READ ONLY')));
     assert.deepEqual(db.calls.slice(-2).map(call => call[0]), ['commit', 'release']);

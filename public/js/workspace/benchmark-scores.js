@@ -1,3 +1,4 @@
+import { setLoading } from '../shared/loading.js';
 import { postJSON } from '../shared/http.js';
 import { buildResultEditURL } from './links.js?v=clean-urls-20260908';
 import { animateContent, mountDisclosureMotion } from '../shared/motion.js';
@@ -79,7 +80,7 @@ export function createBenchmarkScoresView({ onViewChange }) {
         const benchmarkID = information.benchmarkID, conditionID = Number(selector.value), cursor = nextBeforeID;
         if (!append) { list.replaceChildren(); $('benchmark-scores-count').textContent = ''; nextBeforeID = null; }
         more.hidden = retry.hidden = true;
-        list.setAttribute('aria-busy', 'true'); status.textContent = 'Loading scores...';
+        list.setAttribute('aria-busy', 'true'); setLoading(status, 'Loading scores...');
         try {
             const payload = await postJSON('/api/get_benchmark_scores', { benchmarkID, conditionID, ...(append ? { beforeID: cursor } : {}) }, { timeoutMs: 60000 });
             if (current !== sequence || !active) return;

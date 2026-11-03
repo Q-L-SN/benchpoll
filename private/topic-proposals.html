@@ -8,6 +8,7 @@
     <link rel="icon" href="/favicon.ico?v=benchpoll-brand-20260919" sizes="any">
     <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
     <link rel="stylesheet" href="/css/ui/tokens.css">
+    <link rel="stylesheet" href="/css/ui/loading.css">
     <link rel="stylesheet" href="/css/ui/tooltip.css">
     <link rel="stylesheet" href="/css/site-palette.css?v=shared-controls-20261010">
     <link rel="stylesheet" href="/css/typography.css?v=manrope-static-20261007">
@@ -36,10 +37,11 @@
                 <li>Up to <strong>3 active supports</strong> and <strong>1 collecting proposal</strong> per account.</li>
                 <li>Collection lasts <strong>14 days</strong>. Review and closed proposals do not use these limits. Private Topics are unaffected.</li>
                 <li>While collecting, you can cancel support or edit or withdraw your own proposal. Editing resets all supports, not the deadline.</li>
+                <li>New Topics start from your saved private Topic. Everyone can preview its configuration and try personal weights before supporting it.</li>
             </ul>
         </section>
         <section class="tp-quota" aria-label="Your proposal limits">
-            <p id="proposals-quota" aria-live="polite">Checking your limits...</p>
+            <p id="proposals-quota" aria-live="polite"><span class="bp-loading-indicator" role="status"><span class="bp-spinner" aria-hidden="true"></span><span class="bp-loading-label">Checking your limits...</span></span></p>
             <button id="proposals-find-own" class="bp-ui-action" data-ui-variant="quiet" type="button" aria-haspopup="dialog" hidden><i class="fa-solid fa-pen" aria-hidden="true"></i><span>Your proposal</span></button>
             <p id="proposals-quota-note" class="tp-quota-note"></p>
         </section>
@@ -53,7 +55,7 @@
             </div>
             <div id="proposals-list-region" aria-busy="true">
                 <ul id="proposals-list" class="tp-list"></ul>
-                <div id="proposals-list-status" class="tp-list-status" role="status"><i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i><span>Loading proposals...</span></div>
+                <div id="proposals-list-status" class="tp-list-status" role="status"><span class="bp-loading-indicator" role="status"><span class="bp-spinner" aria-hidden="true"></span><span class="bp-loading-label">Loading proposals</span></span></div>
             </div>
             <footer class="tp-pagination">
                 <p id="proposals-page-error" role="alert" hidden></p>
@@ -73,6 +75,15 @@
                 <select id="proposal-target" class="bp-ui-input" aria-describedby="proposal-target-error"><option value="">New topic</option></select>
                 <p id="proposal-target-error" class="tp-field-error" hidden></p>
                 <div id="proposal-target-status" class="tp-form-status" role="status" hidden></div>
+            </div>
+            <div id="proposal-source-field" class="tp-field">
+                <label for="proposal-source">Your private Topic</label>
+                <select id="proposal-source" class="bp-ui-input"><option value="">Choose a saved private Topic</option></select>
+                <p id="proposal-source-error" class="tp-field-error" hidden></p>
+                <p class="tp-review-notice">Publish a snapshot of its scenes, saved weights and fallback choices. Your original stays private. Private references must be removed first.</p>
+                <a id="proposal-source-link" hidden target="_blank" rel="noopener">Open private Topic</a>
+                <button id="proposal-source-refresh" class="bp-ui-action" data-ui-variant="quiet" type="button">Refresh private Topics</button>
+                <a href="/">Create or configure a private Topic</a>
             </div>
             <div class="tp-field">
                 <div class="tp-field-label"><label for="proposal-name">Topic name</label><span id="proposal-name-count" class="tp-count">0 / 128</span></div>

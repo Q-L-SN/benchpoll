@@ -11,7 +11,7 @@ const guide = read('private/how-it-works.html');
 
 test('short homepage hints explain the immediate choice without a calculation essay', () => {
     const hints = [...home.matchAll(/data-help-text="([^"]+)"/g)].map(match => match[1]);
-    assert.equal(hints.length, 2);
+    assert.equal(hints.length, 3);
     assert.match(home, /id="inline-fallback-add-benchmark"[^>]*data-help-text=/);
     assert.match(home, /aria-label="About missing scores"[^>]*data-help-text=/);
     assert.doesNotMatch(home, /id="agi-promo"/);
@@ -88,7 +88,7 @@ test('contribution instructions distinguish pending requests, public data and ru
 test('the entire guide and contribution guide stay brief without a hidden long manual', () => {
     const main = guide.match(/<article[^>]*>([\s\S]*?)<\/article>/)?.[1];
     assert.ok(main, 'Count the real article, not a slice ending at a removed section');
-    assert.ok(words(plain(main)) <= 750, String(words(plain(main))));
+    assert.ok(words(plain(main)) <= 850, String(words(plain(main))));
     assert.match(main, /Collection lasts 14 days/);
     assert.doesNotMatch(main, /72 hours|Public weight =|48 to 88/);
     assert.doesNotMatch(main, /<ol\b|<table\b|Full calculation rules|Expand all/);

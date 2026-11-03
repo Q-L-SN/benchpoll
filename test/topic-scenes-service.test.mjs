@@ -55,7 +55,7 @@ test('private creation preserves root identity, uses canonical URLs and takes gr
     const created = await createPrivateTopicScene(h.pool, '42', { categoryID: 501, name: 'Coding', description: 'Write useful software.' });
     assert.equal(created.defaultContextID, 99);
     assert.deepEqual(created.scenes.map(scene => scene.name), ['General', 'Coding']);
-    assert.equal(created.scenes[0].url, '/personal/501?scene=99');
+    assert.equal(created.scenes[0].url, '/personal/501/general');
     assert.equal(h.state.contexts.find(row => row.ID === 99).context_values, '{"scene":"99"}');
     const graph = h.events.findIndex(event => event.sql.includes('topic_reference_lock'));
     const user = h.events.findIndex(event => event.sql.includes('FROM users'));
@@ -144,7 +144,7 @@ test('scene discovery is batched, includes roots, and search returns exact scene
     const topics = [{ ID: 501, name: 'My work', description: 'My daily work.', ...catalog.get(501) }];
     const matches = searchTopicsAndScenes(topics, 'scalable');
     assert.equal(matches.length, 1); assert.equal(matches[0].searchMatches[0].name, 'Vector graphics');
-    assert.match(matches[0].searchMatches[0].url, /^\/personal\/501\?scene=\d+$/);
+    assert.match(matches[0].searchMatches[0].url, /^\/personal\/501\/vector-graphics$/);
     const parentMatch = searchTopicsAndScenes(topics, 'My work');
     assert.deepEqual(parentMatch[0].searchMatches, [], 'parent matches are not attributed to every child');
     assert.equal(parentMatch[0].scenes.length, topics[0].scenes.length, 'full catalogue remains available for explicit expansion');
@@ -154,6 +154,6 @@ test('scene discovery is batched, includes roots, and search returns exact scene
     const configured = buildPersonalNavigation([{ contextID: 99, categoryID: 501, contextValues: '{"scene":"99"}',
         weightCount: 2, totalBasisPoints: 10000, unavailableConditions: 0, unavailableReferences: 0 }], h.state.categories, [], [], catalog);
     assert.equal(configured[0].contextLabel, 'General'); assert.equal(configured[0].available, true);
-    assert.equal(configured[0].url, '/personal/501?scene=99');
+    assert.equal(configured[0].url, '/personal/501/general');
     assert.equal((await loadTopicScenes(h.pool, 501))[0].ID, 99);
 });

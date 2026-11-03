@@ -1,4 +1,31 @@
 export const FEATURED_TOPIC_ID = 54;
+
+export function scenePath(input, scene = null) {
+    if (typeof input !== 'string' || !input.startsWith('/') || input.startsWith('//') || input.includes('\\')) return null;
+    const url = new URL(input, 'https://benchpoll.invalid');
+    if (url.origin !== 'https://benchpoll.invalid' || url.searchParams.has('scene') || url.searchParams.has('context_scene')) return null;
+    const parts = url.pathname.split('/').filter(Boolean), rootLength = parts[0] === 'personal' ? 2 : 1;
+    if (!parts.length || parts.length > rootLength + 1 || parts.some(part => !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(part))) return null;
+    if (parts[0] === 'personal' && (!/^[1-9]\d*$/.test(parts[1] ?? '') || parts.length < 2)) return null;
+    if (scene !== null) {
+        if (!scene || typeof scene !== 'object' || typeof scene.name !== 'string' || !scene.name.trim()) return null;
+        const slug = scene.slug || topicSlug(scene.name);
+        if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) return null;
+        url.pathname = '/' + [...parts.slice(0, rootLength), slug].join('/');
+    }
+    for (const key of [...url.searchParams.keys()]) if (key.startsWith('context_')) url.searchParams.delete(key);
+    return url.pathname + url.search + url.hash;
+}
+
+export function sceneSummary(topic, scene) {
+    const description = String(scene?.description ?? '').trim();
+    const name = String(scene?.name ?? scene?.sceneName ?? '').trim();
+    const topicName = String(topic?.name ?? topic?.categoryName ?? topic?.topicName ?? '').trim();
+    const normalized = value => value.normalize('NFC').toLocaleLowerCase().replace(/[.。]+$/, '').trim();
+    const placeholder = !description || [name, `${topicName}: ${name}`, `${topicName} / ${name}`]
+        .some(value => normalized(value) === normalized(description));
+    return placeholder ? String(topic?.description ?? topic?.topicDescription ?? '').trim() : description;
+}
 export const TOPIC_SUMMARY_MAX_LENGTH = 180;
 
 export function normalizeTopicSummary(value) {

@@ -1,3 +1,4 @@
+import { setLoading } from './shared/loading.js';
 import * as G from '/js/global.js';
 import { buildContributionURL } from './shared/contribution-navigation.js?v=clean-20260908';
 import { initializeOverlays } from './shared/overlays.js';
@@ -246,7 +247,8 @@ function renderTableMessage(body, columnCount, message, className) {
     const cell = document.createElement('td');
     cell.className = className;
     cell.colSpan = columnCount;
-    cell.textContent = message;
+    if (className === 'table-loading') setLoading(cell, message);
+    else cell.textContent = message;
     row.append(cell);
     body.append(row);
 }
@@ -358,7 +360,7 @@ function appendContentFields(fields, log) {
             ...createField('Approval effect', 'Hide this post. If it starts a thread, its replies also disappear from public views.'));
         const preview = document.createElement('pre');
         preview.className = 'json-value';
-        preview.textContent = 'Loading reported content...';
+        setLoading(preview, 'Loading reported content...');
         fields.append(preview);
         postJSON('/api/get_reported_discussion', { postID: log.content.postID })
             .then(response => response.json()).then(post => { preview.textContent = JSON.stringify(post, null, 2); })
@@ -537,7 +539,7 @@ async function loadLogs() {
     logList.replaceChildren();
     const loading = document.createElement('div');
     loading.className = 'empty-state';
-    loading.textContent = 'Loading contribution queue...';
+    setLoading(loading, 'Loading contribution queue...');
     logList.append(loading);
     statusFilter.disabled = true;
     try {
@@ -626,7 +628,7 @@ async function loadSyncConflicts() {
     const requestID = ++syncRequestID;
     const list = document.getElementById('sync-list');
     const summary = document.getElementById('sync-summary');
-    summary.textContent = 'Loading source conflicts...';
+    setLoading(summary, 'Loading source conflicts...');
     try {
         const data = await postJSON('/api/list_score_sync_conflicts', {});
         if (requestID !== syncRequestID) return;
@@ -873,7 +875,7 @@ async function loadExplorer() {
     const requestID = ++explorerState.requestID;
     explorerAdd.hidden = true;
     renderTableMessage(explorerBody, Math.max(2, explorerHead.querySelectorAll('th').length), 'Loading records...', 'table-loading');
-    explorerSummary.textContent = 'Loading records...';
+    explorerSummary.textContent = '';
     try {
         const data = await postJSON('/api/admin_data_explorer', {
             entity: explorerEntity.value || 'benchmarks',
@@ -985,7 +987,7 @@ async function loadAuditLogs() {
     auditDetailRequestID += 1;
     const requestID = ++auditState.requestID;
     renderTableMessage(auditBody, 7, 'Loading audit records...', 'table-loading');
-    auditSummary.textContent = 'Loading audit records...';
+    auditSummary.textContent = '';
     const rawLogID = auditLogID.value.trim();
     try {
         const data = await postJSON('/api/list_moderation_audit_logs', {
@@ -1066,7 +1068,7 @@ async function loadAdminMessages() {
     messageList.replaceChildren();
     const loading = document.createElement('div');
     loading.className = 'empty-state';
-    loading.textContent = 'Loading senior reviewer messages...';
+    setLoading(loading, 'Loading senior reviewer messages...');
     messageList.append(loading);
     try {
         const data = await postJSON('/api/list_admin_messages', {});

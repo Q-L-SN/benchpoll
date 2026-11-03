@@ -8,6 +8,25 @@ const tick = () => new Promise(resolve => setImmediate(resolve));
 const topicPath = topicURL(FEATURED_TOPIC_ID, 'Language models');
 const body = { categoryID: FEATURED_TOPIC_ID, contextValues: {}, comparison: { mode: 'best', keys: ['model'], filters: [] },
     scoreMode: 'available', initialMode: 'public', benchmarkQuery: '', pinPersonal: false };
+test('named scene startup waits for resolved scene identity instead of speculating on the default', async () => {
+    const requests = [];
+    const target = { location: { pathname: '/intelligence/real-time' }, addEventListener() {},
+        document: { querySelector: () => ({ content: String(FEATURED_TOPIC_ID), dataset: { guest: 'true' } }) } };
+    const reads = startHomeReads(target, { settings: () => ({ basic: body.comparison }),
+        preferences: () => ({ scoreMode: 'available', mode: 'public' }), fetch: async (url, options) => {
+            requests.push({ url, body: options.body && JSON.parse(options.body) });
+            if (url === '/api/get_user_profile') return new Response(null, { status: 204 });
+            return Response.json({ currentCategoryID: FEATURED_TOPIC_ID, contextValues: { scene: '20' } });
+        } });
+    try {
+        await tick(); await tick();
+        const workspaces = requests.filter(item => item.url === '/api/get_weighted_workspace');
+        assert.equal(workspaces.length, 1);
+        assert.deepEqual(workspaces[0].body.contextValues, { scene: '20' });
+        assert.equal(reads.take('/api/get_weighted_workspace', body), null);
+        assert.ok(await reads.take('/api/get_weighted_workspace', { ...body, contextValues: { scene: '20' } }));
+    } finally { reads.stop(); }
+});
 function fixture(extra = {}) {
     const { bootstrap, location, ...options } = extra;
     const calls = [], listeners = new Map();

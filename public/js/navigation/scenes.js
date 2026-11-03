@@ -1,4 +1,5 @@
 import { createSearchIndex, searchText } from '../shared/search.js';
+import { sceneSummary, scenePath } from '../shared/topics.js';
 
 export function orderedScenes(scenes = []) {
     return [...scenes].sort((a, b) => Number(b.isDefault === true) - Number(a.isDefault === true));
@@ -30,14 +31,7 @@ export function searchTopicGroups(topics, query) {
         .filter(group => group.topicMatch || group.scenes.length);
 }
 
-export function sceneURL(input, sceneID) {
-    const url = new URL(input, 'https://navigation.invalid');
-    if (!String(input).startsWith('/') || url.origin !== 'https://navigation.invalid') return null;
-    for (const key of [...url.searchParams.keys()]) if (key.startsWith('context_')) url.searchParams.delete(key);
-    if (sceneID != null) url.searchParams.set('scene', String(sceneID));
-    else url.searchParams.delete('scene');
-    return `${url.pathname}${url.search}${url.hash}`;
-}
+export const sceneURL = scenePath;
 
 export function matchingScenes(topic, query) {
     const text = String(query).trim().toLocaleLowerCase();
@@ -53,8 +47,8 @@ export function sceneNavigationEntries(topics) {
         sceneName: scene.name,
         contextValues: { scene: String(scene.ID) },
         contextLabel: scene.name,
-        description: scene.description || topic.description,
-        url: scene.url || sceneURL(topic.url, scene.ID),
+        description: sceneSummary(topic, scene),
+        url: scene.url || sceneURL(topic.url, scene),
         isScene: true
     }))]);
 }

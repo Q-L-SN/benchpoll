@@ -16,21 +16,21 @@ const scenes = [{ ID: 20, name: 'Vector', description: 'Editable image output', 
     { ID: 10, name: 'General', description: 'General image generation', isDefault: true }];
 const topic = { ID: 54, name: 'Images', categoryID: 54, categoryName: 'Images', url: '/images', scenes, contextValues: {} };
 const targets = [{ contextID: 10, categoryID: 54, sceneID: 10, name: 'Images / General', topicName: 'Images', sceneName: 'General',
-    url: '/images?scene=10', description: 'General images', isPrivate: false, hasWeights: true },
+    url: '/images/general', description: 'General images', isPrivate: false, hasWeights: true },
 { contextID: 20, categoryID: 54, sceneID: 20, name: 'Images / Vector', topicName: 'Images', sceneName: 'Vector',
-    url: '/images?scene=20', description: 'Editable output', isPrivate: false, hasWeights: true },
+    url: '/images/vector', description: 'Editable output', isPrivate: false, hasWeights: true },
 { contextID: 30, categoryID: 55, sceneID: null, name: 'Coding', topicName: 'Coding', sceneName: null,
     url: '/coding', description: 'Software development', isPrivate: false, hasWeights: true }];
 
-test('scene URLs round-trip without dimensions and replace a previous context without losing model focus', () => {
-    assert.deepEqual(readRankingContext('?scene=20&focusModel=91', []), { scene: '20' });
-    const url = rankingContextURL('https://benchpoll.com/images?context_output=vector&scene=10&focusModel=91', [], { scene: '20' });
-    assert.equal(url.search, '?scene=20&focusModel=91');
-    assert.equal(rankingContextURL(url.href, [], {}).search, '?focusModel=91');
-    for (const search of ['?scene=0', '?scene=-10', '?scene=abc', '?scene=9007199254740992', '?scene=10&scene=20', '?scene=10&context_scene=10', '?scene=10&context_output=vector']) {
+test('scene URLs use named paths and preserve focus while old scene queries are rejected', () => {
+    assert.deepEqual(readRankingContext('?focusModel=91', []), {});
+    const url = rankingContextURL('https://benchpoll.com/images/general?focusModel=91', [], { scene: '20' }, scenes);
+    assert.equal(url.pathname, '/images/vector'); assert.equal(url.search, '?focusModel=91');
+    for (const search of ['?scene=20', '?scene=0', '?scene=-10', '?scene=abc', '?scene=9007199254740992', '?scene=10&scene=20', '?context_scene=10']) {
+        assert.throws(() => rankingContextURL('https://benchpoll.com/images' + search, [], { scene: '20' }, scenes));
         assert.throws(() => readRankingContext(search, []), search);
     }
-    assert.deepEqual(readRankingContext('?context_output=vector', []), { output: 'vector' });
+    assert.throws(() => rankingContextURL(url.href, [], { scene: '999' }, scenes));
 });
 
 test('default scene leads stable tabs; scene search uses names and descriptions', () => {
@@ -39,9 +39,9 @@ test('default scene leads stable tabs; scene search uses names and descriptions'
     assert.deepEqual(matchingScenes(topic, 'editable').map(scene => scene.ID), [20]);
     const entries = sceneNavigationEntries([entryFromContext(topic)]);
     assert.equal(entries.length, 3);
-    assert.equal(locationURL(entries[2]), '/images?scene=20');
+    assert.equal(locationURL(entries[2]), '/images/vector');
     assert.equal(entries[2].contextLabel, 'Vector');
-    assert.equal(locationURL(entries[0]), '/images');
+    assert.equal(locationURL(entries[0]), '/images/general');
 });
 
 test('parent-only searches keep all scenes available without treating inherited names or summaries as matches', () => {
@@ -89,7 +89,7 @@ test('private scene navigation remains scoped and has readable scene labels', ()
     const entry = entryFromContext({ ...topic, isPrivate: true, ID: 20, url: '/personal/54', sceneID: 20, contextValues: { scene: '20' } });
     assert.equal(entry.contextID, 20);
     assert.equal(entry.contextLabel, 'Vector');
-    assert.equal(locationURL(entry), '/personal/54?scene=20');
+    assert.equal(locationURL(entry), '/personal/54/vector');
     assert.equal(validateNavigationPayload({ userID: '1', items: [entry] }).items.length, 1);
 });
 
@@ -154,9 +154,9 @@ test('scene proposals bind parent identity and validate their approved scene URL
     assert.equal(Object.keys(validateProposalDraft({ ...body, name: 'Settings' }).errors).length, 0, 'Scene names do not reserve root routes');
     assert.ok(validateProposalDraft({ ...body, name: 'Settings', parentTopicID: null }).errors.name);
     const approved = { ...proposal, status: 'approved', supportCount: 30, submissionID: 100, sceneID: 19001,
-        canEdit: false, canWithdraw: false, url: '/coding?scene=19001' };
-    assert.equal(parseProposal(approved).url, '/coding?scene=19001');
-    for (const url of ['/coding?scene=19002', '/research?scene=19001', '//example.com/coding?scene=19001', '/coding?scene=19001&scene=19002']) {
+        canEdit: false, canWithdraw: false, url: '/coding/embedded-firmware' };
+    assert.equal(parseProposal(approved).url, '/coding/embedded-firmware');
+    for (const url of ['/coding/other-scene', '/research/embedded-firmware', '//example.com/coding/embedded-firmware', '/coding/embedded-firmware&scene=19002']) {
         assert.throws(() => parseProposal({ ...approved, url }));
     }
     assert.throws(() => validateEditedProposal({ ...proposal, parentTopicID: 191 }, proposal, body));

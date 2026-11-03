@@ -1,3 +1,4 @@
+import { setLoading } from '../shared/loading.js';
 import { createBenchmarkInformationLink } from './benchmark-link.js';
 import { benchmarkAccessibleName } from './weights.js';
 import { animateContent } from '../shared/motion.js?v=workspace-ui-20261008';
@@ -73,7 +74,8 @@ export function createChartWorkspace({ state, getEntries, benchmarkCard, getMemb
         if (!entries.length) {
             nodes.clear(); bars.replaceChildren();
             const empty = document.createElement('p'); empty.className = 'bp-chart-empty';
-            empty.textContent = state.loading ? 'Loading weights...' : state.mode === 'personal'
+            if (state.loading) setLoading(empty, 'Loading weights');
+            else empty.textContent = state.mode === 'personal'
                 ? 'No personal weights for this task yet.' : 'No public weights for this task yet.';
             bars.append(empty); return;
         }

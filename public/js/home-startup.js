@@ -1,6 +1,7 @@
 import { basicComparisonOptions, readComparisonSettings } from './workspace/comparison-settings.js';
 import { canonicalAccountID } from './shared/account-identity.js';
-import { readWorkspacePreferences } from './workspace/preferences.js';
+import { readWorkspacePreferences, readEstimationPreference } from './workspace/preferences.js';
+import { estimationRequest } from './shared/estimation-algorithms.js';
 import { rankingReadBody } from './shared/available-score.js?v=coverage-factor-20261019';
 import { readHomeModelFocusIntent } from './workspace/model-focus-target.js';
 
@@ -51,19 +52,21 @@ export function startHomeReads(target, { fetch = target.fetch.bind(target), ttlM
     const bootstrap = target.document?.querySelector('meta[name="benchpoll-startup-category"]');
     const categoryID = Number(bootstrap?.content);
     let workspaceStarted = false;
-    const startWorkspace = (ID, userID) => {
+    const startWorkspace = (ID, userID, contextValues = {}) => {
         if (workspaceStarted || stopped || Date.now() >= deadline) return;
         const comparison = focusIntent?.valid
             ? { mode: 'best', keys: focusIntent.keys, filters: [] } : basicComparisonOptions(settings(userID));
         const preference = preferences();
         workspaceStarted = true;
-        start('/api/get_weighted_workspace', { categoryID: ID, contextValues: {},
+        start('/api/get_weighted_workspace', { categoryID: ID, contextValues,
             comparison, scoreMode: focusIntent?.valid ? focusIntent.scoreMode : preference.scoreMode,
+            ...estimationRequest(readEstimationPreference()),
             initialMode: focusIntent?.valid ? focusIntent.mode : preference.mode,
             ...(focusIntent?.valid ? { homeComparison: { ...focusIntent.comparison } } : {}),
             benchmarkQuery: '', pinPersonal: false });
     };
-    if (Number.isSafeInteger(categoryID) && categoryID > 0 && bootstrap.dataset.guest === 'true') startWorkspace(categoryID, null);
+    const hasScenePath = target.location.pathname.split('/').filter(Boolean).length === 2;
+    if (!hasScenePath && Number.isSafeInteger(categoryID) && categoryID > 0 && bootstrap.dataset.guest === 'true') startWorkspace(categoryID, null);
     const tree = start('/api/get_page' + target.location.pathname, { treeOnly: true });
     const profile = start('/api/get_user_profile');
     // Speculative work is read-only and usable once, only by the exact normal startup request.
@@ -73,7 +76,7 @@ export function startHomeReads(target, { fetch = target.fetch.bind(target), ttlM
             || profile === undefined) return;
         const userID = profile === null ? null : canonicalAccountID(profile.userID);
         if (profile !== null && !userID) return;
-        startWorkspace(page.currentCategoryID, userID);
+        startWorkspace(page.currentCategoryID, userID, page.contextValues ?? {});
     }).catch(() => {});
     return reads;
 }

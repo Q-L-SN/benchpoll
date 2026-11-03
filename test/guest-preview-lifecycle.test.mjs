@@ -1,3 +1,4 @@
+import { estimationRequest, normalizeEstimationAlgorithm } from '../public/js/shared/estimation-algorithms.js';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFile } from 'node:fs/promises';
@@ -58,7 +59,7 @@ function harness(t, { gesture = null } = {}) {
         setItem: (key, value) => values.set(key, value) };
     const guestDrafts = createGuestDraftStore(() => storage);
     const fixture = createFixtureState({ authenticated: false });
-    const globals = {
+    const globals = { estimationRequest, normalizeEstimationAlgorithm,
         state, structuredClone, Map, Set, Date, Number, guestDrafts,
         cloneEntries, cloneFallbackRules, portableFamilyEntry, FALLBACK_RULE_MODE: 'ordered',
         validateWorkspacePayload, pendingFallbackSave: false,

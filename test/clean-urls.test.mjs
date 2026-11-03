@@ -5,7 +5,7 @@ import vm from 'node:vm';
 import { readRankingContext, rankingContextURL } from '../public/js/shared/ranking-url.js';
 import { contributionPath, contributionRoute } from '../public/js/shared/contribution-navigation.js';
 import { canonicalRankingEntryURL } from '../ranking-entry-url.js';
-import { FEATURED_TOPIC_ID, topicSlug, topicURL } from '../public/js/shared/topics.js';
+import { FEATURED_TOPIC_ID, topicSlug, topicURL, scenePath } from '../public/js/shared/topics.js';
 import { searchHead, replaceSearchSlot, renderTopicDirectory, renderPublicTopic, selectSearchScene, PUBLIC_DOCUMENTS } from '../search-presentation.js';
 
 const serverSource = readFileSync(new URL('../server.js', import.meta.url), 'utf8');
@@ -43,7 +43,7 @@ test('topic routes canonicalize the slug and retire view mode without discarding
     const db = {};
     vm.runInNewContext(routeSource("page.get(['/topics/:categoryID'"), {
         page: { get(paths, callback) { assert.deepEqual([...paths], ['/topics/:categoryID', '/topics/:categoryID/:slug']); route = callback; } },
-        db, publicOrigin: 'https://benchpoll.com', URL,
+        db, publicOrigin: 'https://benchpoll.com', URL, selectSearchScene,
         activeSessionUserID: async req => req.session.userID,
         getTopic: async (actualDB, owner, ID) => {
             assert.equal(actualDB, db); assert.equal(ID, FEATURED_TOPIC_ID); owners.push(owner);
@@ -93,7 +93,7 @@ test('short topic pages render directly and retain ranking intent while old taxo
         activeSessionUserID: async req => req.session?.userID ?? null,
         findTopicBySlug: async (_db, slug) => { lookups.push(slug); return slug === 'intelligence' ? topic : null; },
         resolveLegacyTopic: async (_db, path) => path === '/Intelligence/Old' ? topic : null,
-        searchPresentation: { snapshot: async () => null }, selectSearchScene, renderPublicTopic,
+        searchPresentation: { snapshot: async () => null }, selectSearchScene, renderPublicTopic, scenePath,
         renderHome: async (_res, options) => {
             renders.push(options);
             const html = options.transformHTML(readFileSync(new URL('../private/home.html', import.meta.url), 'utf8'));
@@ -107,11 +107,12 @@ test('short topic pages render directly and retain ranking intent while old taxo
     assert.equal(renders[0].categoryID, 54);
     assert.equal(renders[0].guest, true);
     assert.equal(redirects.length, 0);
-    for (const path of ['/INTELLIGENCE', '/intelligence/', '/Intelligence/Old']) {
+    for (const path of ['/INTELLIGENCE', '/intelligence/']) {
         await route(req(path + '?focusModel=42'), res, assert.fail);
         assert.equal(redirects.at(-1).url, '/intelligence?focusModel=42');
         assert.equal(redirects.at(-1).status, 308);
     }
+    await assert.rejects(route(req('/Intelligence/Old'), res, assert.fail), error => error.status === 404);
     await route(req('/intelligence?view=showcase'), res, assert.fail);
     assert.equal(redirects.at(-1).url, '/');
     let status;
@@ -125,6 +126,33 @@ const dimensions = [
     { key: 'code', options: [{ key: 'any', isDefault: true, isNeutral: true }, { key: 'sandboxed' }] },
     { key: 'scope', options: [{ key: 'any', isDefault: true, isNeutral: true }, { key: 'open' }] }
 ];
+test('public roots append the current named default, scene paths render, and old scene queries are rejected', async () => {
+    let route;
+    const topic = { ID: 54, name: 'Intelligence', url: '/intelligence', scenes: [
+        { ID: 10, name: 'Overall', slug: 'overall', isDefault: true },
+        { ID: 20, name: 'Real-time', slug: 'real-time', isDefault: false }
+    ] };
+    const redirects = [], renders = [];
+    vm.runInNewContext(routeSource("page.get('/*any_path'"), {
+        page: { get(_path, callback) { route = callback; } }, URL, db: {}, publicOrigin: 'https://benchpoll.com',
+        findTopicBySlug: async (_db, slug) => slug === 'intelligence' ? topic : null,
+        resolveLegacyTopic: async () => null, activeSessionUserID: async () => null,
+        selectSearchScene, scenePath, searchPresentation: { snapshot: async () => null },
+        renderHome: async (_res, options) => renders.push(options), renderPublicTopic
+    });
+    const res = { redirect(status, path) { redirects.push({ status, path }); } };
+    const request = originalUrl => route({ originalUrl }, res, error => { throw error; });
+    await request('/intelligence?focusModel=42&discussion=1');
+    assert.deepEqual(redirects.pop(), { status: 302, path: '/intelligence/overall?focusModel=42&discussion=1' });
+    await request('/intelligence/overall'); await request('/intelligence/real-time');
+    assert.equal(renders.length, 2); assert.equal(redirects.length, 0);
+    for (const path of ['/intelligence?scene=10', '/intelligence/overall?scene=10', '/intelligence?context_scene=10', '/intelligence/10', '/intelligence/missing']) {
+        await assert.rejects(request(path), error => error.status === 404, path);
+    }
+    topic.scenes[0].isDefault = false; topic.scenes[1].isDefault = true;
+    await request('/intelligence');
+    assert.deepEqual(redirects.pop(), { status: 302, path: '/intelligence/real-time' });
+});
 test('ranking links use bare options and omit neutral defaults without changing selections', () => {
     const old = 'https://benchpoll.com/topics/54/language-models?context_web=allowed&context_code=sandboxed&context_scope=any';
     const values = readRankingContext(new URL(old).search, dimensions);

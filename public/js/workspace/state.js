@@ -17,6 +17,7 @@ export function createWorkspaceState() {
         contextID: null,
         mode: 'public',
         scoreMode: 'available',
+        estimationAlgorithm: 'current',
         availableInferenceVersion: AVAILABLE_INFERENCE_VERSION,
         personalFallbackExpanded: false,
         pinPersonalBenchmarks: false,

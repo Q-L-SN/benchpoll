@@ -130,6 +130,7 @@ export function createTopicHomeService({ db, rankingCache, now = () => Date.now(
                     topicName: weight.topicName, sceneName: weight.sceneName,
                     benchmarkID: weight.benchmarkID, conditionName: weight.conditionName,
                     weightBasisPoints: weight.weightBasisPoints })),
+                totalCoverageIndex: models.reduce((sum, model) => sum + (Number.isFinite(model.coverage) ? model.coverage / 100 : 0), 0),
                 scoreScale };
         })().then(value => {
             entry.expiresAt = now() + 60000;

@@ -1,3 +1,4 @@
+import { setLoading } from './shared/loading.js';
 import { navigationChannel } from './shared/navigation-channel.js';
 import { createBasicComparisonControls as createComparisonControls } from './workspace/basic-comparison-controls.js';
 import { setHelpText } from './shared/help-popover.js?v=help-popovers-20261008';
@@ -12,7 +13,9 @@ import {
     TOUCH_WEIGHT_BASIS_POINTS_PER_PIXEL, WORKSPACE_LOAD_RETRY_DELAYS_MS, FALLBACK_RULE_MODE
 } from './workspace/constants.js';
 import { createWorkspaceState } from './workspace/state.js?v=fallback-controls-20261009';
-import { readWorkspacePreferences, writeWorkspacePreferences } from './workspace/preferences.js?v=fallback-controls-20261009';
+import { readWorkspacePreferences, writeWorkspacePreferences, readEstimationPreference, writeEstimationPreference } from './workspace/preferences.js?v=fallback-controls-20261009';
+import { estimationRequest, normalizeEstimationAlgorithm } from './shared/estimation-algorithms.js';
+import { createEstimationControl } from './workspace/estimation-control.js';
 import { validateWorkspacePayload, validateRankingPagePayload } from './workspace/contracts.js?v=review-evidence-20261008';
 import {
     cloneEntries, cloneFallbackRules, clonePersonalPieSnapshot,
@@ -43,8 +46,9 @@ import { bulkImportTemplate } from './shared/feedback-templates.js';
 import { comparisonProfileKey } from './shared/comparison-profile-key.js';
 import { animateContent, setVisible, flipPie } from './shared/motion.js?v=workspace-ui-20261008';
 import { createSceneControls } from './workspace/scenes.js';
+import { createPrivateTopicEditor } from './shared/private-topic-editor.js';
 import { createTopicReferencePicker, renderTopicReferences, isTopicReference, topicReferenceError } from './workspace/topic-references.js';
-import { createTopicReferenceSearch } from './workspace/topic-reference-search.js';
+import { createReferenceCoverage } from './workspace/reference-coverage.js';
 import { topicLabelText, renderTopicLabel } from './shared/topic-label.js';
 import { BENCHMARK_GROUPS, benchmarkConditionGroup } from './shared/benchmark-condition-groups.js?v=fallback-discovery-20261005';
 import { captureRankingResume } from './shared/ranking-resume.js';
@@ -149,12 +153,20 @@ updateIndicator.element.id = 'workspace-update-indicator';
 window.addEventListener('pagehide', () => updateIndicator.destroy(), { once: true });
 const sceneControls = createSceneControls({ host: templateStrip, getState: () => state,
     beforeWrite: prepareContextChange,
-    write: (path, body) => pageAccountWriteScope.write(postJSON, path, body),
+    write: (path, body) => pageAccountWriteScope.write(postWriteJSON, path, body),
     onSelect: selectScene,
     async onChanged(id) {
         state.selectedContextValues = { scene: String(id) };
         await loadWeightedWorkspace({ preserveUndo: false });
     }
+});
+const privateTopicEditor = createPrivateTopicEditor({
+    beforeOpen: prepareContextChange,
+    async onSaved(topic) {
+        const selected = topic.scenes.find(scene => scene.ID === state.sceneID) ?? topic.scenes.find(scene => scene.isDefault);
+        window.location.assign(selected?.url ?? topic.url);
+    },
+    async onDeleted() { window.location.assign('/'); }
 });
 const referenceOptions = {
     request: (body, options) => postJSON('/api/get_topic_reference_targets', body, { ...options, timeoutMs: 20000, requireJSON: true }),
@@ -172,9 +184,9 @@ const referenceOptions = {
     }
 };
 const referencePicker = createTopicReferencePicker(referenceOptions);
-const referenceSearch = createTopicReferenceSearch({ ...referenceOptions,
-    canAdd: () => state.mode === 'personal' && !state.loading,
-    onChange: () => renderBenchmarks() });
+const referenceCoverage = createReferenceCoverage({
+    request: (body, options) => postJSON('/api/get_topic_preview', body, options),
+    getScope: () => String(state.userID ?? 'guest') });
 const additionToast = createToast({ avoid: pieAdjustmentStatus });
 const guestDrafts = createGuestDraftStore();
 const pieRecovery = createPersonalPieRecovery({ state, guestDrafts, snapshot: portablePersonalPie });
@@ -249,6 +261,7 @@ function loadVisibleBenchmarkPage() {
     if (group && shouldLoadMore(benchmarkRows)) void loadNextRankingPage('benchmarks', group);
 }
 Object.assign(state, readWorkspacePreferences());
+state.estimationAlgorithm = readEstimationPreference();
 state.availableInferenceVersion = AVAILABLE_INFERENCE_VERSION;
 state.workspaceDisplay = 'standard';
 const homeModelFocusIntent = readHomeModelFocusIntent(window.location.href);
@@ -257,9 +270,30 @@ if (homeModelFocusIntent?.valid) {
     state.scoreMode = homeModelFocusIntent.scoreMode;
 }
 if (homeModelFocusIntent) consumeHomeModelFocusURL();
+const estimationControl = createEstimationControl(document.getElementById('estimation-test-control'), {
+    async onChange(algorithm) {
+        const changeID = ++scoreModeChangeID;
+        const adjustmentsSaved = await finishPendingWeightAdjustments();
+        const pieSaved = adjustmentsSaved && await flushPendingPersonalPieSave();
+        if (changeID !== scoreModeChangeID) return;
+        if (!pieSaved) {
+            setStatus('Your weight change was not saved. Try switching algorithms again.');
+            renderScoringControls(); return;
+        }
+        if (state.estimationAlgorithm === algorithm) return;
+        state.estimationAlgorithm = normalizeEstimationAlgorithm(algorithm);
+        writeEstimationPreference(algorithm);
+        renderScoringControls();
+        void loadWeightedWorkspace({ preserveUndo: true });
+    }
+});
 function renderScoringControls() {
     scoreModeButtons.forEach(button => button.setAttribute('aria-pressed', String(button.dataset.scoreMode === state.scoreMode)));
     scoringSwitch.dataset.mode = state.scoreMode;
+    estimationControl.render(state);
+    setHelpText(scoringSwitch.querySelector('.bp-scoring-help'), state.estimationAlgorithm === 'current'
+        ? 'Estimated score fills missing results where possible, then adjusts the whole index for measured coverage. Score range keeps measured results fixed and shows two scenarios for missing results, not statistical confidence.'
+        : 'Estimated score uses the selected test algorithm for missing weight only. Measured contributions stay fixed. Score range shows the same two missing-score scenarios and is not a confidence interval.');
 }
 renderScoringControls();
 let scoreModeChangeID = 0;
@@ -630,7 +664,7 @@ function sameContextValues(left = {}, right = {}) {
 }
 
 function syncContextValuesToURL() {
-    const url = rankingContextURL(window.location.href, state.dimensions, state.selectedContextValues);
+    const url = rankingContextURL(window.location.href, state.dimensions, state.selectedContextValues, state.scenes);
     window.history.replaceState(window.history.state, '', url);
     updateTopicSearchMetadata({ name: state.topicName, description: state.topicSummary,
         url: '/' + state.categoryPath.replace(/^\/+/, ''), isPrivate: state.contextIsPrivate, scenes: state.scenes }, state.sceneID);
@@ -676,6 +710,11 @@ function renderBreadcrumb() {
     if (state.contextIsPrivate) {
         const label = document.createElement('small'); label.className = 'bp-private-context-label'; label.textContent = 'Private';
         breadcrumb.append(label);
+        const edit = document.createElement('button'); edit.type = 'button'; edit.className = 'bp-quiet-action';
+        edit.setAttribute('aria-label', 'Edit private topic'); edit.dataset.tooltip = 'Edit private topic';
+        const icon = document.createElement('i'); icon.className = 'fa-regular fa-pen-to-square'; icon.setAttribute('aria-hidden', 'true'); edit.append(icon);
+        edit.disabled = !state.authenticated || state.accountWriteBlocked;
+        edit.addEventListener('click', () => void privateTopicEditor.open(state.categoryID, edit)); breadcrumb.append(edit);
     }
     const creator = document.getElementById('workspace-topic-creator');
     creator.replaceChildren();
@@ -887,10 +926,10 @@ function selectedBenchmark() {
 }
 
 function shouldLoadMore(container) {
-    if (container.clientHeight <= 0) return false;
+    if (container.clientHeight <= 0 || container.closest('[inert]')) return false;
     const bounds = container.getBoundingClientRect();
     if (bounds.bottom < 0 || bounds.top > window.innerHeight) return false;
-    // Mobile lists grow with the page instead of owning a scroll viewport.
+    // Mobile lists grow inside the vertically scrolling composition/ranking page.
     if (container.scrollHeight <= container.clientHeight + 1) {
         return bounds.bottom <= window.innerHeight + 180;
     }
@@ -907,7 +946,7 @@ function invalidateRankingPages() {
 
 let rankingRecovery = null;
 function rankingRecoveryScope() {
-    return JSON.stringify([workspaceContextFingerprint(), state.scoreMode, state.availableInferenceVersion, state.personalEditVersion,
+    return JSON.stringify([workspaceContextFingerprint(), state.scoreMode, state.availableInferenceVersion, state.estimationAlgorithm, state.personalEditVersion,
         comparisonProfileKey(state.comparisonRequest ?? { mode: 'best', keys: ['model'], filters: [] }),
         currentBenchmarkFilters()]);
 }
@@ -1564,6 +1603,7 @@ function renderBenchmarks() {
     const familyFocus = benchmarkRowFocus.captureFocus(benchmarkRows)
         ?? (document.activeElement === document.body ? pendingBenchmarkFocus : null);
     benchmarkRows.replaceChildren();
+    referenceCoverage.begin();
     const personalControlsActive = state.mode === 'personal';
     benchmarkCard?.classList.toggle('has-personal-controls', personalControlsActive);
     const fallbackTargetActive = isInlineFallbackTargetActive();
@@ -1589,20 +1629,16 @@ function renderBenchmarks() {
         ? state.pinPersonalBenchmarks ? 'Restore public-weight order' : 'Pin my benchmarks to the top'
         : 'Add benchmarks to Personal Weights to use this';
     if (state.loading) {
-        referenceSearch.render(document.createElement('div'), '', false);
         const loading = document.createElement('div');
         loading.className = 'bp-loading-state';
-        loading.textContent = 'Loading benchmarks…';
+        setLoading(loading, 'Loading benchmarks…');
         benchmarkRows.append(loading);
         return;
     }
-    const topicResults = document.createElement('section');
-    benchmarkRows.append(topicResults);
-    referenceSearch.render(topicResults, benchmarkSearch.value.trim(), !fallbackTargetActive);
     if (state.benchmarks.length === 0 && state.rankingPageLoading.benchmarks) {
         const loading = document.createElement('div');
         loading.className = 'bp-loading-state';
-        loading.textContent = 'Loading benchmarks…';
+        setLoading(loading, 'Loading benchmarks…');
         benchmarkRows.append(loading);
         return;
     }
@@ -1613,16 +1649,17 @@ function renderBenchmarks() {
     const personalWeightFor = object => object.isFamily && !objectInPersonalPie(object) ? null : personalWeightsByID.has(Number(object.ID))
         ? personalWeightsByID.get(Number(object.ID))
         : object.personalWeight;
-    const objects = state.mode === 'personal'
+    const availableObjects = state.mode === 'personal'
         ? state.benchmarks.filter(object => !hiddenPersonalBenchmarkIDs.has(Number(object.ID)))
         : state.benchmarks;
+    const objects = fallbackTargetActive ? availableObjects.filter(object => !isTopicReference(object)) : availableObjects;
     if (objects.length === 0 && !state.rankingPagination?.benchmarks.other.total
         && !state.rankingPagination?.benchmarks.lowCoverage.total) {
         if (state.benchmarks.length > 0 && state.rankingPagination?.benchmarks.primary.hasMore
             && !state.rankingPageError.benchmarks) {
             const loading = document.createElement('div');
             loading.className = 'bp-loading-state';
-            loading.textContent = 'Loading benchmarks…';
+            setLoading(loading, 'Loading benchmarks…');
             benchmarkRows.append(loading);
             window.queueMicrotask(loadVisibleBenchmarkPage);
             return;
@@ -1662,6 +1699,7 @@ function renderBenchmarks() {
         const row = document.createElement('div');
         row.className = 'bp-benchmark-row';
         row.dataset.conditionId = String(object.ID);
+        if (isTopicReference(object)) row.dataset.contextId = String(object.referenceContextID);
         if (object.isFamily) row.dataset.familyKey = object.familyKey;
         row.classList.toggle('is-family', object.isFamily === true);
         const selected = !fallbackTargetActive && Number(state.selectedObjectID) === Number(object.ID)
@@ -1680,7 +1718,7 @@ function renderBenchmarks() {
         const accessibleName = object.isFamily
             ? [benchmarkAccessibleName(object), ...object.familyEntries.map(benchmarkAccessibleName)].join(' → ')
             : benchmarkAccessibleName(object);
-        row.setAttribute('aria-label', object.isFamily ? `Fallback configuration for ${accessibleName}` : `Benchmark ${accessibleName}`);
+        row.setAttribute('aria-label', object.isFamily ? `Fallback configuration for ${accessibleName}` : `${isTopicReference(object) ? 'Topic' : 'Benchmark'} ${accessibleName}`);
         const hasWeight = state.mode === 'personal' ? inPersonalPie : Number(object.publicWeight) > 0;
         if (hasWeight) {
             row.tabIndex = 0;
@@ -1696,10 +1734,12 @@ function renderBenchmarks() {
         const name = createBenchmarkInformationLink(object, { getURL: getBenchmarkMemberURL,
             onInspect: onBenchmarkInspection, className: 'bp-benchmark-name' });
         identity.append(name);
-        const scoreCount = createEvidenceCount(object.scoreCount, { modelCount: object.scoredModelCount });
+        const scoreCount = isTopicReference(object) ? referenceCoverage.create(object)
+            : createEvidenceCount(object.scoreCount, { modelCount: object.scoredModelCount });
         scoreCount.classList.add('bp-benchmark-score-count');
         identity.append(scoreCount);
-        identity.dataset.tooltip = `${accessibleName}, ${object.scoreCount} approved scores from ${object.scoredModelCount} models`;
+        identity.dataset.tooltip = isTopicReference(object) ? accessibleName
+            : `${accessibleName}, ${object.scoreCount} approved scores from ${object.scoredModelCount} models`;
 
         const publicValue = document.createElement('span');
         publicValue.className = 'bp-benchmark-weight bp-benchmark-public-weight';
@@ -1722,12 +1762,14 @@ function renderBenchmarks() {
             if (!alreadyAdded && !unavailable) {
                 const add = document.createElement('button'); add.type = 'button';
                 add.className = 'bp-benchmark-add'; add.dataset.benchmarkControl = 'add';
-                const excluded = excludedFromRanking(object) || object.familyEntries?.some(excludedFromRanking);
+                const missingReference = isTopicReference(object) && !object.hasWeights;
+                const excluded = excludedFromRanking(object) || object.familyEntries?.some(excludedFromRanking) || missingReference;
                 add.setAttribute('aria-disabled', String(Boolean(excluded)));
                 const target = fallbackTargetActive ? 'Fallback' : 'Personal Weights';
                 const label = `Add ${accessibleName} to ${target}`;
-                add.dataset.tooltip = excluded ? AA_EXCLUSION_MESSAGE : label;
-                add.setAttribute('aria-label', excluded ? `${label}. ${AA_EXCLUSION_MESSAGE}` : label);
+                const exclusionMessage = missingReference ? 'This topic has no weights yet.' : AA_EXCLUSION_MESSAGE;
+                add.dataset.tooltip = excluded ? exclusionMessage : label;
+                add.setAttribute('aria-label', excluded ? `${label}. ${exclusionMessage}` : label);
                 add.innerHTML = '<i class="fa-solid fa-plus" aria-hidden="true"></i>';
                 const addLabel = document.createElement('span');
                 addLabel.className = 'bp-benchmark-add-label';
@@ -1739,7 +1781,7 @@ function renderBenchmarks() {
                 add.append(addLabel);
                 add.addEventListener('click', event => {
                     event.stopPropagation();
-                    if (excluded) { setStatus(AA_EXCLUSION_MESSAGE); return; }
+                    if (excluded) { setStatus(exclusionMessage); return; }
                     if (isInlineFallbackTargetActive()) {
                         addObjectToFallbackChain(object);
                         return;
@@ -1808,7 +1850,8 @@ function renderBenchmarks() {
         const footer = document.createElement('div');
         footer.className = 'bp-ranking-page-footer';
         footer.dataset.benchmarkGroup = group;
-        footer.textContent = state.rankingPageLoading[key] ? 'Loading benchmarks…' : state.rankingPageError[key] || '';
+        if (state.rankingPageLoading[key]) setLoading(footer, 'Loading benchmarks');
+        else footer.textContent = state.rankingPageError[key] || '';
         if (!state.rankingPageLoading[key]) {
             const more = document.createElement('button');
             more.type = 'button';
@@ -1882,7 +1925,8 @@ function renderModeState() {
     const personal = state.mode === 'personal';
     const indexTitle = personal ? 'Personal AI Index' : 'Public AI Index';
     modelIndexHeading.textContent = indexTitle;
-    modelIndexTab.textContent = indexTitle;
+    modelIndexTab.textContent = 'AI Index';
+    modelIndexTab.setAttribute('aria-label', indexTitle);
     if (workspaceHeadline.dataset.mode !== state.mode) {
         workspaceHeadline.dataset.mode = state.mode;
         headlineVariants.forEach(variant => { variant.hidden = variant.dataset.headlineMode !== state.mode; });
@@ -1931,7 +1975,7 @@ function renderModeState() {
     compactPieMessage.textContent = personal ? 'Add a benchmark or topic to start your index.' : 'No public weights for this topic or scene yet.';
     compactPieAction.hidden = personal;
     compactPieAction.textContent = hasPersonalWeights ? 'View your personal weights' : 'Create personal weights';
-    pieSvg.style.touchAction = personal && state.personalEntries.length > 1 ? 'pan-x' : 'pan-y';
+    pieSvg.style.touchAction = personal && state.personalEntries.length > 1 ? 'pan-x' : 'pan-x pan-y';
     const showCreatePersonal = !state.loading && !hasPersonalWeights && !personal;
     const showEmptyPersonal = !state.loading && !hasPersonalWeights && personal;
     pieSvg.toggleAttribute('hidden', showEmptyPersonal);
@@ -2143,7 +2187,6 @@ function applyServerWorkspace(payload, {
     state.contextID = Number(payload.context.ID ?? payload.context.contextID ?? state.sceneID) || null;
     if (state.contextIsPrivate) state.mode = 'personal';
     state.selectedContextValues = { ...payload.context.contextValues };
-    updateDiscussionEntry(state.categoryID, state.selectedContextValues, state.contextIsPrivate);
     state.dimensions = payload.context.dimensions.map(dimension => ({
         ...dimension,
         options: dimension.options.map(option => ({ ...option }))
@@ -2207,6 +2250,7 @@ function applyServerWorkspace(payload, {
         window.queueMicrotask(() => revealBenchmarkRow(state.selectedObjectID));
     }
     syncContextValuesToURL();
+    updateDiscussionEntry(state.categoryID, state.selectedContextValues, state.contextIsPrivate);
     navigationChannel.publish({
         context: payload.context,
         userID: payload.userID ?? null,
@@ -2298,6 +2342,7 @@ async function loadWeightedWorkspace({ resetTemplates = false, retryAttempt = 0,
     const requestedComparison = structuredClone(state.comparisonRequest);
     const requestedScoreMode = state.scoreMode;
     const requestedInferenceVersion = state.availableInferenceVersion;
+    const requestedAlgorithm = normalizeEstimationAlgorithm(state.estimationAlgorithm);
     const requestedMode = state.mode;
     const requestedURLSearch = window.location.search;
     const resume = !resetTemplates && pageRecovery?.snapshotID && pageRecovery.snapshotID === state.rankingPagination?.snapshotID
@@ -2306,8 +2351,12 @@ async function loadWeightedWorkspace({ resetTemplates = false, retryAttempt = 0,
     const requestWorkspace = async body => {
         const payload = validateWorkspacePayload(await postJSON('/api/get_weighted_workspace', {
             ...body, availableInferenceVersion: requestedInferenceVersion,
+            ...estimationRequest(requestedAlgorithm),
             ...comparisonControls.requestOptions?.(), ...(resume ? { rankingResume: resume } : {})
         }, { timeoutMs: 60000 }), { resume, initialMode: body.initialMode });
+        if (normalizeEstimationAlgorithm(payload.estimationAlgorithm) !== requestedAlgorithm) {
+            throw Object.assign(new Error('The ranking did not use the selected test algorithm. Please retry.'), { status: 422 });
+        }
         if (verifiedReadOwner === undefined) verifiedReadOwner = payload.userID;
         else if (payload.userID !== verifiedReadOwner) throw accountWriteError();
         return payload;
@@ -2452,6 +2501,7 @@ async function previewGuestPersonalPie() {
                         comparison: state.comparisonRequest,
                         scoreMode: state.scoreMode,
                         availableInferenceVersion: state.availableInferenceVersion,
+                        ...estimationRequest(state.estimationAlgorithm),
                         previewPersonalPie: portablePersonalPie(),
                         initialMode: state.mode,
                         ...requestedBenchmarkFilters
@@ -2624,7 +2674,7 @@ async function persistPersonalPie({ forceSave = false } = {}) {
                 }
                 const editVersion = state.personalEditVersion;
                 const requestedBenchmarkFilters = currentBenchmarkFilters();
-                const presentation = JSON.stringify([state.mode, state.scoreMode, state.availableInferenceVersion, state.comparisonRequest]);
+                const presentation = JSON.stringify([state.mode, state.scoreMode, state.availableInferenceVersion, state.estimationAlgorithm, state.comparisonRequest]);
                 setStatus('');
                 state.personalRankingError = '';
                 renderModels();
@@ -2632,6 +2682,7 @@ async function persistPersonalPie({ forceSave = false } = {}) {
                     state.savePromise = postJSON('/api/get_weighted_workspace', { categoryID, contextValues,
                         comparison: state.comparisonRequest, scoreMode: state.scoreMode,
                         availableInferenceVersion: state.availableInferenceVersion,
+                        ...estimationRequest(state.estimationAlgorithm),
                         initialMode: state.mode, ...requestedBenchmarkFilters }, { timeoutMs: 60000 });
                     const payload = validateWorkspacePayload(await state.savePromise);
                     if (payload.userID !== expectedUserID || state.userID !== expectedUserID) throw accountWriteError();
@@ -2643,7 +2694,7 @@ async function persistPersonalPie({ forceSave = false } = {}) {
                     if (state.userID !== expectedUserID) throw accountWriteError();
                     if (contextFingerprint !== workspaceContextFingerprint()) return true;
                     if (editVersion !== state.personalEditVersion) { state.personalSavePending = true; continue; }
-                    if (presentation !== JSON.stringify([state.mode, state.scoreMode, state.availableInferenceVersion, state.comparisonRequest])) continue;
+                    if (presentation !== JSON.stringify([state.mode, state.scoreMode, state.availableInferenceVersion, state.estimationAlgorithm, state.comparisonRequest])) continue;
                     applyServerWorkspace(payload, { preserveUndo: true, personalSave: true });
                     state.personalIsDraft = false;
                     setStatus('');
@@ -2658,7 +2709,7 @@ async function persistPersonalPie({ forceSave = false } = {}) {
                         setStatus(state.personalRankingError); renderAll(); return false;
                     }
                     if (editVersion !== state.personalEditVersion) { state.personalSavePending = true; continue; }
-                    if (presentation !== JSON.stringify([state.mode, state.scoreMode, state.availableInferenceVersion, state.comparisonRequest])) continue;
+                    if (presentation !== JSON.stringify([state.mode, state.scoreMode, state.availableInferenceVersion, state.estimationAlgorithm, state.comparisonRequest])) continue;
                     state.personalRankingError = 'Your pie is saved. The ranking could not be updated.';
                     setStatus('Saved. Ranking update failed.');
                     renderAll();
@@ -2908,6 +2959,7 @@ pieSvg.addEventListener('pointerdown', event => {
     }
     touchPieGesture = {
         pointerID: event.pointerId,
+        startX: event.clientX,
         startY: event.clientY,
         lastY: event.clientY,
         candidateObjectID: slice ? Number(slice.dataset.objectId) : null,
@@ -2932,6 +2984,12 @@ const flushTouchPiePreview = gesture => {
 
 pieSvg.addEventListener('pointermove', event => {
     if (!touchPieGesture || touchPieGesture.pointerID !== event.pointerId) {
+        return;
+    }
+    if (!touchPieGesture.adjusted && Math.abs(event.clientX - touchPieGesture.startX) > TOUCH_DRAG_THRESHOLD_PX
+        && Math.abs(event.clientX - touchPieGesture.startX) > Math.abs(event.clientY - touchPieGesture.startY) * 1.2) {
+        touchPieGesture = null;
+        if (pieSvg.hasPointerCapture(event.pointerId)) pieSvg.releasePointerCapture(event.pointerId);
         return;
     }
     const deltaY = touchPieGesture.lastY - event.clientY;

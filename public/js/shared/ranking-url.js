@@ -1,3 +1,4 @@
+import { scenePath } from './topics.js';
 const reserved = new Set(['discussion', 'categoryID', 'benchmarkID', 'threadID', 'scene']);
 const invalidContextURL = message => Object.assign(new Error(message), { status: 400 });
 
@@ -16,9 +17,7 @@ export function readRankingContext(search, dimensions = []) {
     const values = {};
     for (const [key, value] of new URLSearchParams(search)) {
         if (key === 'scene' || key === 'context_scene') {
-            if (Object.hasOwn(values, 'scene')) throw invalidContextURL('Repeated scene');
-            values.scene = sceneValue(value);
-            continue;
+            throw invalidContextURL('Scenes use named URL paths.');
         }
         let dimension;
         let selected = value;
@@ -48,13 +47,22 @@ export function readRankingContext(search, dimensions = []) {
     return values;
 }
 
-export function rankingContextURL(input, dimensions = [], values = {}) {
+export function rankingContextURL(input, dimensions = [], values = {}, scenes = []) {
     const url = new URL(input);
-    const extra = [...url.searchParams].filter(([key, value]) => key !== 'scene' && !key.startsWith('context_')
+    if (url.searchParams.has('scene') || url.searchParams.has('context_scene')) {
+        throw invalidContextURL('Scenes use named URL paths.');
+    }
+    const extra = [...url.searchParams].filter(([key, value]) => !key.startsWith('context_')
         && !(dimensions.some(dimension => dimension.key === key) && !reserved.has(key))
         && !(value === '' && ownersOf(key, dimensions).length));
     const parts = [];
-    if (values.scene !== undefined) parts.push(`scene=${sceneValue(values.scene)}`);
+    if (values.scene !== undefined) {
+        const scene = scenes.find(item => String(item.ID) === sceneValue(values.scene));
+        if (!scene) throw invalidContextURL('Unknown scene');
+        const path = scenePath(url.pathname, scene);
+        if (!path) throw invalidContextURL('Invalid topic path');
+        url.pathname = path;
+    }
     for (const dimension of values.scene === undefined ? dimensions : []) {
         const selected = dimension.options.find(option => option.key === values[dimension.key]);
         if (!selected) throw new Error(`Invalid context selection: ${dimension.key}`);

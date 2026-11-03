@@ -86,7 +86,7 @@ test('cancel releases one support slot; retry cannot cancel a later new support'
     assert.equal(h.state.logs.size, 0); assert.equal(h.state.outbox.size, 0);
 });
 
-test('a support waiting on its actor lock observes a committed cancellation rather than a stale full quota', async () => {
+test('a support waiting on the graph lock observes a committed cancellation rather than a stale full quota', async () => {
     const h = harness(), proposals = await makeFour(h);
     for (const proposal of proposals.slice(0, 3)) await vote(h, proposal, contributor);
     let releaseCancel, cancellationReady;
@@ -101,14 +101,14 @@ test('a support waiting on its actor lock observes a committed cancellation rath
     const waitingConnectionID = h.borrowed + 1;
     const waitingVote = vote(h, proposals[3], contributor);
     const waiting = () => h.events.some(event => event.connectionID === waitingConnectionID
-        && event.kind === 'lock-wait' && event.key === `user:${contributor}`);
+        && event.kind === 'lock-wait' && event.key === 'topic-reference-graph');
     let observedWait;
     try {
         for (let attempt = 0; attempt < 100 && !waiting(); attempt++) await new Promise(resolve => setImmediate(resolve));
         observedWait = waiting();
     } finally { releaseCancel(); }
     await Promise.all([cancellation, waitingVote]);
-    assert.equal(observedWait, true, 'The replacement vote reached the still-held actor lock before cancellation committed');
+    assert.equal(observedWait, true, 'The replacement vote reached the still-held graph lock before cancellation committed');
     assert.equal((await page(h)).account.activeSupports, 3);
     assert.equal(h.state.votes.has(`${proposals[0].proposalID}:${contributor}`), false);
     assert.equal(h.state.votes.has(`${proposals[3].proposalID}:${contributor}`), true);
@@ -525,7 +525,7 @@ test('two authors supporting each other share the same numeric user lock order w
 test('page and mutation metadata are account-aware, private, bounded and UTC-stable', async () => {
     const h = harness(), proposal = await propose(h), expectedKeys = ['proposalID', 'name', 'description', 'supportCount',
         'threshold', 'status', 'supported', 'revision', 'expiresAt', 'isMine', 'canSupport', 'canEdit', 'canWithdraw',
-        'canCancelSupport', 'submissionID', 'topicID', 'url'].sort();
+        'canCancelSupport', 'submissionID', 'topicID', 'url', 'hasSnapshot', 'previewURL', 'sourceTopicID'].sort();
     assert.deepEqual(Object.keys(proposal).sort(), expectedKeys);
     assert.equal(proposal.revision, 1); assert.equal(proposal.expiresAt, new Date(h.now + lifetime).toISOString());
     assert.equal(proposal.isMine, true); assert.equal(proposal.canEdit, true); assert.equal(proposal.canWithdraw, true);

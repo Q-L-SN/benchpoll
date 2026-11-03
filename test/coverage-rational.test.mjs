@@ -64,8 +64,7 @@ test('coverage has no preference API and all supported stale request versions up
 
 test('the fresh inference API cannot opt back into the retired formula', () => {
     const fresh = infer(80, .3);
-    const stale = availableResultInference(80, .3, [], null, 0, { method: PAIRWISE_COVERAGE_FACTOR_METHOD });
-    assert.deepEqual(stale, fresh);
+    assert.throws(() => availableResultInference(80, .3, [], null, 0, { method: PAIRWISE_COVERAGE_FACTOR_METHOD }), /Invalid estimation algorithm/);
     assert.notEqual(fresh.coverageFactor, .3 ** .35);
 });
 

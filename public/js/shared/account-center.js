@@ -1,3 +1,4 @@
+import { setLoading } from './loading.js';
 import { postJSON } from './http.js';
 import { pageAccountWriteScope, canonicalAccountID, accountWriteError, isAccountWriteError } from './account-identity.js';
 import { openProfileEditor, profileAvatarURL } from './profile-editor.js';
@@ -287,7 +288,8 @@ export async function openAccountCenter({ profile = null, onProfileSaved, onSign
     const renderLogout = async () => {
         if (busy || blocked) return;
         startView('logout', 'Log out?');
-        const countStatus = element('p', '', 'Checking signed-in devices...');
+        const countStatus = element('p', '');
+        setLoading(countStatus, 'Checking signed-in devices');
         body.append(countStatus);
         const footer = controls();
         const thisDevice = action('Log out on this device', 'fa-solid fa-arrow-right-from-bracket', () => { void commit('/api/logout', 'logout'); });

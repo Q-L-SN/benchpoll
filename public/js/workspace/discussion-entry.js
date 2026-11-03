@@ -1,8 +1,10 @@
 import { postJSON } from '../shared/http.js';
+let latestContext = null;
+export const readDiscussionEntryContext = () => latestContext;
 
 export function categoryDiscussionURL(categoryID, contextValues, benchmarkID = null, conditionID = null) {
     const params = new URLSearchParams({ discussion: '1', categoryID: String(categoryID) });
-    for (const [key, value] of Object.entries(contextValues)) params.set(key === 'scene' ? key : `context_${key}`, value);
+    for (const [key, value] of Object.entries(contextValues)) if (key !== 'scene') params.set(`context_${key}`, value);
     if (benchmarkID !== null) params.set('benchmarkID', String(benchmarkID));
     if (conditionID !== null) params.set('conditionID', String(conditionID));
     return `${window.location.pathname}?${params}`;
@@ -30,6 +32,7 @@ export function createDiscussionEntry(element) {
     let fetchedAt = 0;
     const update = async (categoryID, contextValues, isPrivate = false) => {
         if (!element) return;
+        latestContext = { categoryID, contextValues: { ...contextValues }, isPrivate };
         element.hidden = isPrivate;
         if (isPrivate) {
             ++sequence; current = null; lastContext = null;
