@@ -15,7 +15,13 @@ verification. Read
 before any further production work; do not repeat the migrations based on the
 older pending-release notes. This does not establish cloud VPN/TCP access.
 
-The next pending change adds optional community version choices and a third
+The November 4 release is now deployed at application commit
+`2e2440a003283c897a7a001b3ed5882a0e2bb10d`. Read
+[`../releases/20261104-scene-community-rollout.md`](../releases/20261104-scene-community-rollout.md)
+for the current manifest, schema state, tests and rollback boundary. The two
+new migrations are installed; do not repeat them based on the older pending notes.
+
+That release adds optional community version choices and a third
 mobile discussion page. See [`../community-versions-20261103.md`](../community-versions-20261103.md)
 for the electorate rules, additive schema requirement and narrow release
 exporter. Version and fallback controls live in the contribution dialog.
@@ -29,7 +35,8 @@ That follow-up also adds proposal discussions, collecting/review deletion rules,
 all-scene discussion browsing, emphasized feedback tips and instant sidebar
 positioning. Read [`../scene-community-20261103.md`](../scene-community-20261103.md)
 for the new discussion schema prerequisite and the combined narrow exporter.
-Neither this follow-up nor `935f2b6` is confirmed deployed by this cloud session.
+Both feature commits are confirmed deployed by the local desktop release,
+including fixes for snapshot version conflicts and mobile Add-button occlusion.
 
 ## Repositories And Starting Point
 
@@ -133,7 +140,13 @@ on the server. Restore that note privately before any authorized production work
 The last disk check showed about 12 GiB free on a 77 GiB volume. Do not create
 another multi-gigabyte rehearsal database without checking the disk reserve.
 
-Base application release: `unified-loading-20261103-fa3f4ac`, installed
+Latest release: `scene-community-20261104-d7a43b2`, installed
+`2026-11-04T04:32:26.940Z` (12:32:26 Asia/Shanghai), at commit `2e2440a`.
+Its 232-path manifest is the current baseline. Existing source backups and
+private database/schema receipts are retained server-side. Daily deployment
+automation was cancelled and was not created.
+
+Earlier base application release: `unified-loading-20261103-fa3f4ac`, installed
 `2026-11-03T13:42:07.200Z` (21:42:07 Asia/Shanghai), at commit `5a8f096`.
 It changed 96 files within a 99-file reviewed allowlist. The additive snapshot
 table was verified before installation; the ARC correction completed at
