@@ -1,7 +1,8 @@
 # Personal weight starting points and reset
 
-Prepared on `codex/cloud-handoff-20261101`, after the compact benchmark settings
-update. Not installed in production from cloud. No migration is required.
+Installed by the local merged deployment on November 4, together with compact
+benchmark settings. See the [verified rollout](releases/20261104-github-merge-rollout.md).
+No migration is required.
 
 ## Behavior
 

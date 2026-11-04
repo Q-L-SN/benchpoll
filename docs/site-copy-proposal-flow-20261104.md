@@ -1,7 +1,7 @@
 # Site wording, private-topic proposals and treemap labels
 
-Pending release on `codex/cloud-handoff-20261101`. The cloud workspace has not
-installed these changes in production.
+Installed by the local merged deployment on November 4. See the
+[verified rollout](releases/20261104-github-merge-rollout.md).
 
 ## Behavior
 

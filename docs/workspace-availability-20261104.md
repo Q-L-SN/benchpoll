@@ -1,7 +1,7 @@
 # Available benchmark versions and workspace polish
 
-This change is prepared on `codex/cloud-handoff-20261101`. It has not been
-installed in production from this cloud environment.
+This change was installed by the local merged deployment on November 4.
+See the [verified rollout](releases/20261104-github-merge-rollout.md).
 
 ## Behavior
 

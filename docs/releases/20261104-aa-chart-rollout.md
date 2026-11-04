@@ -1,5 +1,9 @@
 # AA Archival And Chart Interaction Rollout
 
+This remains the AA archive record. Its application baseline was subsequently
+extended by the [merged GitHub rollout](20261104-github-merge-rollout.md), which
+preserved the archive and chart changes. Use that newer runtime verifier.
+
 ## Installed Scope
 
 - AA data batch: `aa-catalogue-archive-20261104`, committed at `2026-11-04T14:04:26Z`.

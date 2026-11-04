@@ -1,7 +1,8 @@
 # Common language scenes and sidebar direction — 2026-11-04
 
-This change is prepared on `codex/cloud-handoff-20261101`, based on the verified
-November 4 rollout. It has not been applied to production by this cloud session.
+This change was installed by the local merged deployment on November 4.
+The guarded scene migration is applied; do not replay it. See the
+[verified rollout](releases/20261104-github-merge-rollout.md).
 
 ## Result
 

@@ -39,55 +39,67 @@ for the new discussion schema prerequisite and the combined narrow exporter.
 Both feature commits are confirmed deployed by the local desktop release,
 including fixes for snapshot version conflicts and mobile Add-button occlusion.
 
-The next pending change, commit `5cdea0dcda58593dc604459084c516576c2ec575`,
-arrived during the local deployment and is NOT included in the installed runtime.
+The scene change, commit `5cdea0dcda58593dc604459084c516576c2ec575`,
+was subsequently installed in the merged local deployment described below.
 It reduces Language to General plus eight common languages and gives Coding
 General plus ten programming-language scenes. Its new guarded data migration
 preserves existing IDs/history and is separate from the old taxonomy. It also
 fixes the sidebar chevron's horizontal direction. Read
 [`../common-language-scenes-20261104.md`](../common-language-scenes-20261104.md)
-before a separate installation; this migration has not been applied to production.
+for its preservation rules. Its migration is now applied; do not replay it.
 
-A further pending workspace fix chooses an available non-AA version when a
+A further workspace fix chooses an available non-AA version when a
 benchmark's stored primary is restricted, removes the AA exclusion sentence,
 fixes discussion-close tooltips, restores light tab backgrounds and lowers the
 treemap name-height threshold while preserving fade clipping. Read
 [`../workspace-availability-20261104.md`](../workspace-availability-20261104.md)
 for its narrow runtime scope and verification. It needs no data migration and
-has not been deployed from cloud; reconcile it with the separate pending scene
-release before building installation assets.
+is included in the merged local deployment.
 
-The next pending frontend update combines version choices and the original
+The next frontend update combines version choices and the original
 fallback cards in one compact dialog, unifies benchmark/topic adding, shortens
 the contribution entry and fixes mobile weight drags interrupted by horizontal
 finger drift. See
 [`../compact-benchmark-settings-20261104.md`](../compact-benchmark-settings-20261104.md)
-for its six-file runtime scope and verification. It needs no migration and has
-not been installed in production from cloud.
+for its six-file runtime scope and verification. It needs no migration and is
+included in the merged local deployment.
 
 The subsequent personal-weight update adds public/blank starting points and a
 two-step reset overlay inside the treemap. Reset stays beside Undo and shares its
 mobile collapse animation. See
 [`../personal-weight-start-20261104.md`](../personal-weight-start-20261104.md)
 for the narrow frontend scope, draft/undo behavior and checks. It requires no
-migration and remains pending production installation.
+migration and is included in the merged local deployment.
 
 The following site update simplifies user-facing wording, moves proposal
 creation to a two-step private-topic snapshot flow, lowers treemap percentage
 thresholds and brings the homepage header/island transition forward. Read
 [`../site-copy-proposal-flow-20261104.md`](../site-copy-proposal-flow-20261104.md)
 for the runtime allowlist and checks. It includes two server-side modules but
-requires no schema or production-data changes; installation remains pending.
+requires no schema or production-data changes; it is now installed.
 
 An independent local maintenance release is now installed: AA catalogue archival
 and the four chart-interaction source changes from `d71b190843ee1e42192f6db458b40b56c11489b6`.
-It does **not** deploy any of the pending cloud updates above. The archive removed
+That maintenance release did **not** deploy the cloud updates above. The archive removed
 30 AA benchmarks and 160 versions from the live catalogue, archived 5,457 score
 rows without deleting their evidence, and created empty default versions 28000
 and 28001. Read [`../aa-catalogue-archive-20261104.md`](../aa-catalogue-archive-20261104.md)
 for the exact inventory, and
 [`../releases/20261104-aa-chart-rollout.md`](../releases/20261104-aa-chart-rollout.md)
-for the current source manifest, verification and restoration boundary.
+for its source manifest, verification and restoration boundary.
+
+The current runtime is the merged local release `github-merge-20261104`,
+installed at `2026-11-04T15:17:42.884Z` from application commit
+`165f47fd0b9ff01507ab1d588df074ccdd4cbb6c`. It installs all five formerly pending
+cloud updates above while preserving the AA archive, memory fix and chart
+changes. A pre-release WebKit fix prevents same-ID mouse events from modifying
+or ending a touch-weight gesture. Read
+[`../releases/20261104-github-merge-rollout.md`](../releases/20261104-github-merge-rollout.md)
+for the current 245-path guard, 58-file overlay, completed scene migration and
+rollback restrictions. Do not run the older chart verifier as the current baseline.
+This remains a reconciled overlay, not permission to replace production with a
+whole repository checkout. Production-only `db.js`, `navigation-service.js` and
+`public/css/ui/navigation.css` were preserved.
 
 ## Repositories And Starting Point
 

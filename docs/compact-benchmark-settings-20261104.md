@@ -1,7 +1,9 @@
 # Compact benchmark configuration and mobile weight gestures
 
-Prepared on `codex/cloud-handoff-20261101`; not installed in production from
-this cloud environment. This frontend change requires no schema/data migration.
+Installed by the local merged deployment on November 4, with a follow-up guard
+against same-ID mouse events interfering with touch gestures. See the
+[verified rollout](releases/20261104-github-merge-rollout.md).
+This frontend change requires no schema/data migration.
 
 ## Behavior
 
