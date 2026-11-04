@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { execFileSync } from 'node:child_process';
 import { createRankingReadCache, cachedRankingRead, cachedRankingCalculation, cloneRankingMetadata, cloneRankingMembersForJSON, deferRankingMetadata, hasRankingReadCache, withRankingReadCache } from '../ranking-read-cache.js';
 import { rankingCacheTriggers, RANKING_DATA_TABLES, RANKING_CATALOGUE_TABLES } from '../ranking-cache-schema.js';
 import { getRankingWorkspace } from '../ranking-service.js';
@@ -70,6 +71,184 @@ test('LRU, age and score-cell capacity bound retained material', async () => {
     await read('a'); assert.equal(loads, 3);
     time = 11; await read('a'); assert.equal(loads, 4);
     cache.clear(); assert.deepEqual(cache.stats, { entries: 0, cells: 0 });
+});
+
+test('the default cache can retain the production-sized evidence pipeline without repeated eviction', async () => {
+    const cache = createRankingReadCache();
+    let loads = 0;
+    for (let pass = 0; pass < 3; pass++) {
+        for (const [key, cells] of [['models', 156160], ['groups', 124799], ['inference', 124799]]) {
+            await cache.read(key, () => { loads++; return cells; }, value => value);
+        }
+    }
+    assert.equal(loads, 3);
+});
+
+test('lazy ranking snapshots do not keep the source score matrices alive', () => {
+    const serviceURL = new URL('../ranking-service.js', import.meta.url).href;
+    const comparisonURL = new URL('../model-comparison.js', import.meta.url).href;
+    execFileSync(process.execPath, ['--expose-gc', '--input-type=module', '-e', `
+        import assert from 'node:assert/strict';
+        import { scoreModels, scoreComparison } from ${JSON.stringify(serviceURL)};
+        import { comparisonOptions } from ${JSON.stringify(comparisonURL)};
+        function snapshot(comparison) {
+            const results = new Map([['10', { normalizedScore: 50 }]]);
+            const model = { ID: 1, modelID: 1, modelName: 'Model', name: 'Model',
+                condition: { ID: 1, parameters: {} }, results };
+            const entries = [{ conditionID: 10, weightBasisPoints: 10000 }];
+            const rows = comparison
+                ? scoreComparison([model], entries, 10000, { scoreMode: 'range', jsonMemberMetadata: true }, comparisonOptions([model]))
+                : scoreModels([model], entries, 10000, { scoreMode: 'range', deferMetadata: true });
+            return { rows, ref: new WeakRef(results) };
+        }
+        const snapshots = [snapshot(false), snapshot(true)];
+        for (let attempt = 0; attempt < 5; attempt++) {
+            await new Promise(resolve => setImmediate(resolve));
+            global.gc();
+        }
+        for (const { rows, ref } of snapshots) {
+            assert.equal(ref.deref(), undefined, 'A lazy snapshot retained its input score matrix');
+            const wire = JSON.parse(JSON.stringify(rows));
+            assert.equal(wire[0].lower, 50);
+            assert.equal(wire[0].calculationScores[0].normalizedScore, 50);
+        }
+    `], { encoding: 'utf8', timeout: 15000, stdio: ['ignore', 'pipe', 'pipe'] });
+});
+
+function runPreparedRankingGCCheck(check) {
+    const moduleURL = path => JSON.stringify(new URL(path, import.meta.url).href);
+    execFileSync(process.execPath, ['--expose-gc', '--input-type=module', '-e', `
+        import assert from 'node:assert/strict';
+        import { scoreModels, scoreComparison } from ${moduleURL('../ranking-service.js')};
+        import { comparisonOptions, groupComparisonModels } from ${moduleURL('../model-comparison.js')};
+        import { createPairwiseReference } from ${moduleURL('../pairwise-score.js')};
+        import { createRankingPager, rankModels } from ${moduleURL('../ranking-pagination.js')};
+        import { createRankingReadCache, cachedRankingRead, cachedRankingCalculation,
+            withRankingReadCache } from ${moduleURL('../ranking-read-cache.js')};
+
+        function preparedRanking(count = 3) {
+            const models = Array.from({ length: count * 2 }, (_, index) => {
+                const modelID = Math.floor(index / 2) + 1;
+                return { ID: index + 1, modelID, modelName: 'Model ' + modelID,
+                    name: 'Model ' + modelID + ' run ' + index,
+                    condition: { parameters: { run: index % 2 } },
+                    results: new Map([
+                        ['10', { normalizedScore: 49 + modelID, evidenceHash: 'weighted-' + index }],
+                        ['20', { normalizedScore: 69 + modelID, evidenceHash: 'unweighted-' + index }]
+                    ]) };
+            });
+            const options = comparisonOptions(models);
+            const groups = groupComparisonModels(models, options, []);
+            const reference = createPairwiseReference(groups);
+            const indexes = new WeakMap(groups.map(group => [group,
+                new Map(group.comparisonScores.map(score => [score.conditionID, score]))]));
+            return { models, groups, options, reference, indexes,
+                entries: [{ conditionID: 10, weightBasisPoints: 10000 }] };
+        }
+        function sourceReferences(fixture) {
+            const unusedScore = fixture.groups[0].comparisonScores.find(score => score.conditionID === 20);
+            return Object.fromEntries(Object.entries({
+                models: fixture.models, rawResults: fixture.models[0].results,
+                groups: fixture.groups, selectedGroup: fixture.groups[0],
+                selectedResults: fixture.groups[0].results,
+                otherGroup: fixture.groups.at(-1), otherResults: fixture.groups.at(-1).results,
+                selectedComparisonScores: fixture.groups[0].comparisonScores,
+                otherComparisonScores: fixture.groups.at(-1).comparisonScores,
+                unusedScore, unusedMemberEvidence: unusedScore.memberEvidence,
+                unusedMemberWeights: unusedScore.memberWeights,
+                reference: fixture.reference, indexes: fixture.indexes,
+                selectedIndex: fixture.indexes.get(fixture.groups[0]),
+                otherIndex: fixture.indexes.get(fixture.groups.at(-1))
+            }).map(([key, value]) => [key, new WeakRef(value)]));
+        }
+        function scoreFixture(fixture, comparison, deferred) {
+            const rules = { scoreMode: 'available', percentileReference: fixture.reference,
+                comparisonScoreIndexes: fixture.indexes };
+            return comparison
+                ? scoreComparison(fixture.models, fixture.entries, 10000,
+                    { ...rules, jsonMemberMetadata: deferred }, fixture.options, fixture.groups)
+                : scoreModels(fixture.groups, fixture.entries, 10000, { ...rules, deferMetadata: deferred });
+        }
+        async function collect() {
+            // WeakRef targets stay alive within a job; yield before each forced collection.
+            for (let attempt = 0; attempt < 5; attempt++) {
+                await new Promise(resolve => setImmediate(resolve));
+                global.gc();
+            }
+        }
+        function assertCollected(refs, label) {
+            for (const [key, ref] of Object.entries(refs)) {
+                assert.equal(ref.deref(), undefined, label + ' retained ' + key);
+            }
+        }
+        ${check}
+    `], { encoding: 'utf8', timeout: 15000, stdio: ['ignore', 'pipe', 'pipe'] });
+}
+
+test('standalone deferred getters release prepared groups, pairwise references and score indexes', () => {
+    runPreparedRankingGCCheck(`
+        function heldGetter(comparison, key) {
+            const fixture = preparedRanking();
+            const rows = scoreFixture(fixture, comparison, true);
+            const getter = Object.getOwnPropertyDescriptor(rows[0], key).get;
+            assert.equal(typeof getter, 'function');
+            const expected = JSON.parse(JSON.stringify(scoreFixture(fixture, comparison, false)[0][key]));
+            return { getter, expected, refs: sourceReferences(fixture),
+                label: (comparison ? 'scoreComparison.' : 'scoreModels.') + key };
+        }
+        const held = [false, true].flatMap(comparison =>
+            (comparison ? ['condition', 'calculationScores', 'members', 'comparisonScores']
+                : ['condition', 'calculationScores']).map(key => heldGetter(comparison, key)));
+        await collect();
+        for (const item of held) {
+            assertCollected(item.refs, item.label);
+            const receiver = {};
+            const value = item.getter.call(receiver);
+            assert.deepEqual(JSON.parse(JSON.stringify(value)), item.expected, item.label);
+            assert.equal(Object.getOwnPropertyDescriptor(receiver, item.label.split('.')[1]).get, undefined);
+            const second = item.getter.call({});
+            assert.deepEqual(second, value);
+            assert.notEqual(second, value, item.label + ' must clone metadata for each receiver');
+        }
+    `);
+});
+
+test('cached pager snapshots release prepared graphs before the final lazy page is serialized', () => {
+    runPreparedRankingGCCheck(`
+        async function snapshot(pager, cache) {
+            const fixture = preparedRanking(26);
+            const refs = sourceReferences(fixture);
+            const expectedLast = JSON.parse(JSON.stringify(rankModels(scoreFixture(fixture, true, false)).at(-1)));
+            const connection = { execute: async () => [[{
+                epoch: 'gc-fixture', data_revision: 1, catalogue_revision: 1, ready: 1
+            }]] };
+            const rows = await withRankingReadCache(connection, cache, async () => {
+                await cachedRankingRead(connection, 'data', 'groups', () => fixture.groups);
+                await cachedRankingRead(connection, 'data', 'indexes', () => fixture.indexes);
+                await cachedRankingRead(connection, 'data', 'reference', () => fixture.reference);
+                return cachedRankingCalculation(connection, 'gc-fixture', () => scoreFixture(fixture, true, true));
+            });
+            const response = pager.create({ scoreMode: 'available', benchmarks: [], versionComposition: [],
+                personalPie: { entries: [] }, comparison: fixture.options,
+                modelLeaderboards: { personal: [], public: rows } });
+            assert.equal(response.modelLeaderboards.public.length, 25);
+            JSON.stringify(response);
+            return { refs, expectedLast, snapshotID: response.rankingPagination.snapshotID };
+        }
+        const pager = createRankingPager({ now: () => 0 });
+        const cache = createRankingReadCache();
+        const state = await snapshot(pager, cache);
+        cache.clear();
+        assert.deepEqual(cache.stats, { entries: 0, cells: 0 });
+        await collect();
+        assertCollected(state.refs, 'unexpired pager snapshot');
+        const next = pager.getPage({ snapshotID: state.snapshotID, list: 'public', offset: 25 });
+        assert.equal(next.items.length, 1);
+        for (const key of ['condition', 'calculationScores', 'members', 'comparisonScores']) {
+            assert.equal(typeof Object.getOwnPropertyDescriptor(next.items[0], key).get, 'function', key);
+        }
+        assert.deepEqual(JSON.parse(JSON.stringify(next)).items, [state.expectedLast]);
+    `);
 });
 
 test('data and catalogue revisions are isolated; old snapshot results cannot fill a newer revision', async () => {

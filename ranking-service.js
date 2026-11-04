@@ -25,7 +25,7 @@ import { loadTopicReferenceTargets, referenceCondition, missingReferenceConditio
     lockTopicReferences, validateTopicReferences, expandTopicReferences, publicReferenceWeights } from './topic-reference-service.js';
 import { startTransactionConnection, commitTransactionConnection, rollbackTransactionConnection,
     releaseTransactionConnection, destroyTransactionConnection } from './db-transaction.js';
-import { cachedRankingRead, cachedRankingCalculation, cloneRankingMetadata, cloneRankingMembersForJSON, deferRankingMetadata, hasRankingReadCache, withRankingReadCache } from './ranking-read-cache.js';
+import { cachedRankingRead, cachedRankingCalculation, cloneRankingMetadata, deferRankingMembersForJSON, deferRankingMetadata, hasRankingReadCache, withRankingReadCache } from './ranking-read-cache.js';
 
 export const PIE_TOTAL_BASIS_POINTS = 10000;
 export const PIE_MIN_ITEM_BASIS_POINTS = 100;
@@ -1043,6 +1043,21 @@ function currentEstimationAlgorithm(value) {
     catch { throw requestError(400, 'invalid_estimation_algorithm'); }
 }
 
+// Separate closure scopes prevent deferred display fields from retaining an entire ranking input.
+const deferredCalculationConditions = new WeakMap();
+function deferScoreMetadata(response, condition, calculationScores, scoringBasisPoints) {
+    deferredCalculationConditions.set(response, new Set(calculationScores.map(score => score.conditionID)));
+    deferRankingMetadata(response, 'condition', () => cloneRankingMetadata(condition));
+    deferRankingMetadata(response, 'calculationScores', () => cloneRankingMetadata(calculationScores).map(score => ({
+        ...score, effectiveWeight: score.weightBasisPoints / scoringBasisPoints * 100,
+        contribution: score.normalizedScore * (score.weightBasisPoints / scoringBasisPoints)
+    })));
+}
+
+function deferComparisonMetadata(response, comparisonScores) {
+    deferRankingMetadata(response, 'comparisonScores', () => cloneRankingMetadata(comparisonScores));
+}
+
 export function scoreModels(models, weightedEntries, totalBasisPoints, { fallbackRules = [], familyComposition = [], fallbackScope = 'personal', scoreMode = 'range', availableInferenceVersion = AVAILABLE_INFERENCE_VERSION, estimationAlgorithm = DEFAULT_ESTIMATION_ALGORITHM, percentileReference = null, comparisonScoreIndexes = null, deferMetadata = false, excludedConditionIDs = new Set() } = {}) {
     currentInferenceVersion(availableInferenceVersion);
     currentEstimationAlgorithm(estimationAlgorithm);
@@ -1165,8 +1180,7 @@ export function scoreModels(models, weightedEntries, totalBasisPoints, { fallbac
             missingWeight: Math.max(0, totalBasisPoints - coveredBasisPoints) / totalBasisPoints * 100
         };
         if (deferMetadata) {
-            deferRankingMetadata(response, 'condition', () => cloneRankingMetadata(model.condition));
-            deferRankingMetadata(response, 'calculationScores', () => cloneRankingMetadata(calculationScores).map(weightedScore));
+            deferScoreMetadata(response, model.condition, calculationScores, scoringBasisPoints);
         }
         return response;
     });
@@ -1200,8 +1214,10 @@ export function scoreComparison(models, entries, total, rules, options, prepared
         Object.assign(response, { comparable, comparisonIdentity: group.comparisonIdentity, comparisonMode: group.comparisonMode,
             lower: comparable ? score.lower : null, upper: comparable ? score.upper : null });
         if (rules.jsonMemberMetadata) {
-            deferRankingMetadata(response, 'members', () => cloneRankingMembersForJSON(group.members));
-            deferRankingMetadata(response, 'comparisonScores', comparisonMetadata);
+            deferRankingMembersForJSON(response, group.members);
+            const usedConditions = deferredCalculationConditions.get(score);
+            deferComparisonMetadata(response, group.comparisonScores.filter(item => usedConditions.has(item.conditionID)));
+            deferredCalculationConditions.delete(score);
         } else {
             response.members = cloneRankingMetadata(group.members);
             response.comparisonScores = comparisonMetadata();

@@ -39,6 +39,12 @@ export function cloneRankingMembersForJSON(members) {
     return cloneRankingMetadata(members.map(member => member.results instanceof Map ? { ...member, results: {} } : member));
 }
 
+export function deferRankingMembersForJSON(object, members) {
+    // Keep only wire metadata, not the source score matrices, in long-lived page snapshots.
+    const metadata = members.map(member => member.results instanceof Map ? { ...member, results: {} } : member);
+    deferRankingMetadata(object, 'members', () => cloneRankingMetadata(metadata));
+}
+
 export function deferRankingMetadata(object, key, load) {
     const replace = function (value) {
         Object.defineProperty(this, key, { value, enumerable: true, configurable: true, writable: true });
@@ -61,7 +67,7 @@ export function copyDeferredRankingRows(rows) {
 }
 
 // Pie rows are always read fresh. Calculation reuse has a separate short-lived, owner-scoped memo.
-export function createRankingReadCache({ maxEntries = 12, maxCells = 400000,
+export function createRankingReadCache({ maxEntries = 12, maxCells = 800000,
     maxAgeMs = 300000, now = () => Date.now() } = {}) {
     const entries = new Map();
     let cells = 0;

@@ -85,3 +85,29 @@ ordinary code rollback.
 The first public workspace read took about 12.6 seconds after startup. This
 release does not claim that ranking/preview latency has been solved. Short
 post-deployment checks also do not establish indefinite transport stability.
+
+## Memory follow-up
+
+At 04:40:56 UTC, the application exhausted its V8 heap and aborted. Systemd
+restarted it at 04:41:01 UTC. The initial journal-priority check missed the
+Node fatal output because stderr is written to `/var/log/benchpoll/error.log`.
+Future release checks must inspect that file and the automatic restart count,
+not only error-priority journal entries. No kernel OOM was recorded.
+
+Read-only, memory-limited diagnostics found two pre-existing issues exposed by
+the current dataset and repeated ranking requests:
+
+- Raw models, comparison groups and inference data total 405,758 score cells,
+  just above the old 400,000-cell budget. Completing one pipeline evicted its
+  own inputs, causing repeated full reads and group rebuilds.
+- Deferred ranking fields retained their surrounding calculation closure,
+  keeping old prepared groups, reference fits and score indexes alive through
+  pagination snapshots even after their read cache was cleared.
+
+The follow-up uses isolated metadata factories, retains only comparisons used
+by the ranking, and raises the still-bounded read budget to 800,000 cells. It
+does not raise Node's heap limit or change score estimation, evidence, weights,
+fallback behavior or database contents. Regression tests first reproduced both
+issues, then verified collection of source graphs while deferred page JSON
+remained readable. Installation and post-install observation are recorded in
+the follow-up release receipt.
