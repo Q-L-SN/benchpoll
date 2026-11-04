@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { readFile } from 'node:fs/promises';
 import { chromium } from 'playwright';
 import { startPreview } from '../scripts/frontend/server.mjs';
 
@@ -18,9 +19,59 @@ test('AA benchmark remains browsable but cannot be added to a personal pie', asy
     await row.waitFor();
     const add = row.locator('[data-benchmark-control="add"]');
     assert.equal(await add.getAttribute('aria-disabled'), 'true');
-    assert.match(await add.getAttribute('title'), /Artificial Analysis.*do not count/);
+    assert.equal(await add.getAttribute('title'), null);
+    assert.equal(await add.getAttribute('data-tooltip'), null);
+    assert.doesNotMatch(await add.getAttribute('aria-label'), /do not count in rankings/);
     const saves = app.state.requests.filter(request => request.path === '/api/save_personal_pie').length;
     await add.click({ force: true });
     await page.waitForTimeout(300);
     assert.equal(app.state.requests.filter(request => request.path === '/api/save_personal_pie').length, saves);
+});
+
+for (const width of [1440, 390]) test(`mixed benchmark adds its independent version and persists it at ${width}px`, async t => {
+    const app = await startPreview({ communityVersions: true, aaBenchmarks: true, mixedAABenchmarks: true });
+    const browser = await chromium.launch({ headless: true });
+    const page = await browser.newPage({ viewport: { width, height: 900 }, reducedMotion: 'reduce', hasTouch: width < 760 });
+    const errors = [];
+    page.on('pageerror', error => errors.push(error.message));
+    t.after(async () => { await browser.close(); await app.close(); assert.deepEqual(errors, []); });
+    if (process.env.BP_TEST_BUILT === '1') await page.route(app.url + '/', async route => route.fulfill({
+        contentType: 'text/html', body: await readFile('private/home-built.html', 'utf8') }));
+    await page.goto(app.url);
+    await page.locator('#benchmark-rows .bp-benchmark-row').first().waitFor();
+    await page.locator('#pie-mode-personal').click();
+    await page.locator('#benchmark-search').fill('Mixed benchmark');
+    const row = page.locator('#benchmark-rows [data-condition-id="9912"]');
+    await row.waitFor();
+    const add = row.locator('[data-benchmark-control="add"]');
+    assert.equal(await add.getAttribute('aria-disabled'), 'false');
+    await add.click();
+    await page.waitForFunction(() => document.getElementById('inline-fallback-toggle')?.disabled === false);
+    await page.locator('#inline-fallback-toggle').click();
+    const settings = page.locator('#benchmark-settings');
+    await settings.waitFor();
+    assert.equal(await settings.locator('.bp-version-choice').count(), 2);
+    assert.equal(await settings.locator('[data-condition-id="9911"]').count(), 0);
+    assert.match(await settings.locator('[data-condition-id="9912"]').textContent(), /Primary version/);
+    await settings.getByRole('button', { name: 'Done', exact: true }).click();
+    await page.waitForTimeout(800);
+    const saves = app.state.requests.filter(request => request.path === '/api/save_personal_pie');
+    assert.ok(saves.length > 0);
+    const saved = saves.at(-1).body.entries.find(entry => entry.conditionID === 9912);
+    assert.equal(saved?.followCommunityVersion, true);
+    assert.equal(saves.at(-1).body.entries.some(entry => entry.conditionID === 9911), false);
+    await page.reload();
+    await page.locator('#benchmark-search').fill('Mixed benchmark');
+    await row.waitFor();
+    assert.equal(await row.locator('[data-benchmark-control="remove"]').count(), 1);
+    await page.locator('#benchmark-search').fill('AA Example');
+    const blocked = page.locator('#benchmark-rows [data-condition-id="9901"] [data-benchmark-control="add"]');
+    await blocked.waitFor();
+    assert.equal(await blocked.getAttribute('aria-disabled'), 'true');
+    assert.equal(await blocked.getAttribute('data-tooltip'), null);
+    const count = app.state.requests.filter(request => request.path === '/api/save_personal_pie').length;
+    await blocked.click({ force: true });
+    await page.waitForTimeout(300);
+    assert.equal(app.state.requests.filter(request => request.path === '/api/save_personal_pie').length, count);
+    assert.doesNotMatch(await page.locator('body').innerText(), /Artificial Analysis benchmarks and versions do not count in rankings/);
 });

@@ -11,6 +11,46 @@ import { savePrivateTopic } from '../private-topic-service.js';
 import { captureTopicSnapshot, createProposalPreviewService, seedSnapshotTopic } from '../topic-snapshot-service.js';
 import { createTopicProposalService, readProposal } from '../topic-proposal-service.js';
 
+test('a restricted primary does not block saving an independent version or its community default', { timeout: 60000 }, async t => {
+    const database = await createLifecycleDatabase(); t.after(() => database.close());
+    const db = database.pool;
+    await seedLifecycleEvidence(db);
+    await db.execute("UPDATE benchmark_conditions SET score_source = 'aa' WHERE ID IN (1, 2)");
+    await db.execute(`INSERT INTO benchmark_conditions
+        (ID, benchmark_ID, condition_key, name, score_direction, uses_percentage_scale, is_default, is_primary)
+        VALUES (4, 1, 'independent', 'Independent', 'higher', 1, 0, 0)`);
+    for (let ID = 1; ID <= 3; ID++) await db.execute(`INSERT INTO benchmark_results
+        (model_ID, benchmark_ID, benchmark_condition_ID, raw_score, source_url, source_type, benchmark_condition_snapshot, score_fields)
+        VALUES (?, 1, 4, ?, 'https://example.test/independent', 'vendor_official', '{}', '[]')`, [ID, ID * 15]);
+    const [topic] = await db.execute("INSERT INTO categories (name, slug) VALUES ('Available versions', 'available-versions')");
+    const categoryID = Number(topic.insertId);
+    await ensureTopicRootContext(db, categoryID);
+    const read = () => getRankingWorkspace(db, { categoryID, userID: '42', scoreMode: 'range' });
+    const initial = await read();
+    const page = createRankingPager().create(initial);
+    validateWorkspacePayload(page);
+    const available = page.benchmarks.find(row => row.benchmarkID === 1);
+    assert.equal(available.conditionID, 4);
+    assert.equal(available.excludedFromRanking, false);
+    assert.equal(page.benchmarks.find(row => row.benchmarkID === 2).excludedFromRanking, true);
+    assert.equal(page.versionComposition.find(group => group.benchmarkID === 1).primaryConditionID, 4);
+    const save = (entries, fallbackRules = []) => savePersonalPie(db, { userID: '42', categoryID,
+        writeIdentity: randomUUID(), expectedRevision: 0, entries, fallbackRules, scoreMode: 'range' });
+    const excluded = error => error.body?.error === 'pie_benchmark_condition_excluded';
+    await assert.rejects(save([{ conditionID: 1, weightBasisPoints: 10000 }]), excluded);
+    await assert.rejects(save([{ conditionID: 2, weightBasisPoints: 10000, followCommunityVersion: true }]), excluded);
+    await assert.rejects(save([{ conditionID: 4, weightBasisPoints: 10000 }],
+        [{ primaryConditionID: 4, mode: 'ordered', entries: [{ conditionID: 1 }] }]), excluded);
+    await save([{ conditionID: available.conditionID, weightBasisPoints: 10000, followCommunityVersion: true }]);
+    const saved = await read();
+    validateWorkspacePayload(createRankingPager().create(saved));
+    assert.deepEqual(saved.personalPie.effectiveEntries.map(entry => entry.conditionID), [4]);
+    assert.deepEqual(saved.modelLeaderboards.personal.map(model => model.lower).sort((a, b) => a - b), [15, 30, 45]);
+    const stored = await loadPersonalPie(db, saved.context.ID, '42');
+    assert.equal(stored.entries[0].conditionID, 4);
+    assert.equal(stored.entries[0].followCommunityVersion, true);
+});
+
 test('real MySQL saves abstention, recalculates inherited versions, and expands topic references', { timeout: 60000 }, async t => {
     const database = await createLifecycleDatabase(); t.after(() => database.close());
     const db = database.pool;

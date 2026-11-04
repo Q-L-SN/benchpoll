@@ -1,6 +1,6 @@
 import { SVG_NS, PIE_WEIGHT_TRANSITION_MS, PIE_GRADIENTS } from './constants.js';
 import { benchmarkConditionLabel, benchmarkAccessibleName, clamp } from './weights.js';
-import { createPieLabelLayout } from './pie-label-layout.js?v=weight-treemap-20261031';
+import { createPieLabelLayout, pieLabelContentBox } from './pie-label-layout.js?v=weight-treemap-20261031';
 import { createWeightTreemapLayout, treemapHoverTransform } from './weight-treemap-layout.js';
 import '../shared/help-popover.js';
 import { isTopicReference, topicLabelText, topicLabelParts, renderTopicLabel, TOPIC_ICON_FONT } from '../shared/topic-label.js';
@@ -120,7 +120,8 @@ export function createPieRenderer({ state, pieSvg, pieHoverTooltip, orderedPieEn
             node.lift.style.setProperty('--bp-tile-hover-scale', hover.scale);
             node.lift.style.setProperty('--bp-tile-hover-x', `${hover.x}px`);
             node.lift.style.setProperty('--bp-tile-hover-y', `${hover.y}px`);
-            const inner = { x: tile.x + 8, y: tile.y + 7, width: Math.max(0, tile.width - 16), height: Math.max(0, tile.height - 14) };
+            const contentBox = pieLabelContentBox(tile.width, tile.height);
+            const inner = { ...contentBox, x: tile.x + contentBox.x, y: tile.y + contentBox.y };
             attributesOf(node.clipRect, inner);
             attributesOf(node.mask, inner);
             attributesOf(node.maskRect, inner);

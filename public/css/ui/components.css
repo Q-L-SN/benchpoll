@@ -83,7 +83,7 @@ body .bp-ui-segmented[data-ui-component="segmented"] {
     min-width: max-content;
     padding: 2px;
     border-radius: 6px;
-    background: var(--bp-track);
+    background: var(--bp-surface-soft);
     isolation: isolate;
 }
 body .bp-ui-segmented[data-ui-component="segmented"]::before {

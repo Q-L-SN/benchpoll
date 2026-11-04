@@ -76,6 +76,29 @@ for (const [engine, width] of [['chromium', 1440], ['chromium', 390], ['webkit',
             return checked;
         });
         assert.equal(matrix, 12);
+        const compact = await page.evaluate(() => {
+            const stage = document.querySelector('.bp-pie-stage');
+            stage.style.height = '28px';
+            window.treemapQA.set([10000], 'A long benchmark name that must keep its original fade treatment');
+            const group = document.querySelector('#weight-pie > g[data-object-id]');
+            const label = group.querySelector('[data-label-kind="name"]');
+            const clipID = group.querySelector('.bp-weight-tile-labels').getAttribute('clip-path').slice(5, -1);
+            const clip = document.getElementById(clipID).querySelector('rect').getBBox();
+            const text = label?.getBBox();
+            return { mode: group.dataset.labelMode, text: label?.textContent, masked: label?.hasAttribute('mask'),
+                size: label?.getAttribute('font-size'), top: text?.y, bottom: text && text.y + text.height,
+                clipTop: clip.y, clipBottom: clip.y + clip.height };
+        });
+        assert.equal(compact.mode, 'truncated');
+        assert.equal(compact.masked, true);
+        assert.equal(compact.text, 'A long benchmark name that must keep its original fade treatment');
+        assert.equal(compact.size, '13');
+        assert.ok(compact.top >= compact.clipTop - .5 && compact.bottom <= compact.clipBottom + .5, JSON.stringify(compact));
+        await page.screenshot({ path: `${output}/${engine}-${width}-compact-name.png` });
+        await page.evaluate(() => {
+            document.querySelector('.bp-pie-stage').style.removeProperty('height');
+            window.treemapQA.set([5000, 3000, 1500, 500]);
+        });
         const target = page.locator('#weight-pie > g[data-object-id="1"]');
         await target.hover();
         await page.waitForFunction(() => {

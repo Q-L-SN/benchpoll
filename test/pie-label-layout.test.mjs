@@ -27,12 +27,12 @@ test('long names retain the full name for fade clipping, never a percentage-only
     assert.equal(label.rows[0].size, 13);
 });
 test('small heights and narrow percentage widths prefer the benchmark name', () => {
-    for (const input of [{ height: 35 }, { name: 'M', width: 40, percent: '100%' }]) {
+    for (const input of [21, 24, 28, 31, 35].map(height => ({ height })).concat({ name: 'M', width: 40, percent: '100%' })) {
         assert.deepEqual(render(input).rows.map(row => row.kind), ['name']);
     }
 });
 test('unrenderable blocks omit text, rather than reduce the font size', () => {
-    for (const input of [{ width: 18 }, { height: 28 }]) assert.deepEqual(render(input).rows, []);
+    for (const input of [{ width: 18 }, { height: 20 }]) assert.deepEqual(render(input).rows, []);
 });
 test('oversized versions do not hide the benchmark name or percentage', () => {
     assert.equal(render({ version: 'An impossibly long version description that cannot wrap onto two lines' }).mode, 'name');

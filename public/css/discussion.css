@@ -19,7 +19,7 @@
 .benchmark-information-description { margin: 0 0 14px; font-size: 13px; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 180px; overflow-y: auto; }
 .benchmark-information-meta { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 6px; font-size: 12px; line-height: 1.6; color: var(--bp-muted); margin-bottom: 12px; }
 .benchmark-information-meta time { color: var(--bp-text); }
-.benchmark-information-actions { display: flex; align-items: stretch; overflow-x: auto; padding: 3px; border-radius: 6px; background: #f0f2f4; }
+.benchmark-information-actions { display: flex; align-items: stretch; overflow-x: auto; padding: 3px; border-radius: 6px; background: var(--bp-surface-soft); }
 .benchmark-view-tabs { display: flex; flex: 1 0 auto; }
 .benchmark-information-actions :is(button, .benchmark-view-link) { display: inline-flex; flex: 1 0 auto; min-height: 40px; align-items: center; justify-content: center; gap: 6px; padding: 6px 9px; border: 0; border-radius: 4px; background: transparent; color: var(--bp-muted); font-size: 12px; line-height: 1.25; text-decoration: none; white-space: nowrap; cursor: pointer; }
 .benchmark-information-actions button[aria-selected="true"] { background: var(--bp-surface); color: var(--bp-ink); font-weight: 700; box-shadow: 0 1px 3px #252d371c; }

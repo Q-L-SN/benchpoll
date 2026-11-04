@@ -1,3 +1,15 @@
+import { excludedFromRanking } from './aa-ranking-policy.js';
+
+// The grouped Add target and the community cold-start default must agree, even
+// when the stored primary is unavailable. Keep wholly restricted groups visible.
+function primaryVersion(versions) {
+    const available = versions.filter(version => !excludedFromRanking(version));
+    const candidates = available.length ? available : versions;
+    return candidates.find(version => version.isPrimaryCondition)
+        ?? [...candidates].sort((left, right) => (right.scoreCount ?? 0) - (left.scoreCount ?? 0)
+            || left.conditionID - right.conditionID)[0];
+}
+
 // Version votes and benchmark weights have separate electorates. An absent flag
 // preserves a saved, explicit version choice; new benchmark additions opt out.
 export function versionChoiceOrder(left, right) {
@@ -10,7 +22,7 @@ export function communityVersionComposition(pies, conditions) {
     const groups = new Map();
     const byCondition = new Map();
     for (const condition of conditions) {
-        if (condition.conditionID < 1 || condition.excludedFromRanking) continue;
+        if (condition.conditionID < 1 || excludedFromRanking(condition)) continue;
         if (!groups.has(condition.benchmarkID)) groups.set(condition.benchmarkID, {
             benchmarkID: condition.benchmarkID, name: condition.name, voters: new Set(), versions: []
         });
@@ -26,8 +38,7 @@ export function communityVersionComposition(pies, conditions) {
     }
     return [...groups.values()].map(group => {
         const total = group.versions.reduce((sum, version) => sum + version.rawWeight, 0);
-        const primary = group.versions.find(version => version.isPrimaryCondition)
-            ?? [...group.versions].sort(versionChoiceOrder)[0];
+        const primary = primaryVersion(group.versions);
         return { benchmarkID: group.benchmarkID, name: group.name, primaryConditionID: primary.conditionID,
             configuredPieCount: group.voters.size, isDefault: total === 0,
             versions: group.versions.map(({ rawWeight, voters, ...version }) => ({ ...version,
@@ -61,7 +72,7 @@ export function groupBenchmarkRows(rows) {
         groups.get(row.benchmarkID).push(row);
     }
     const rowsByWeight = [...references, ...[...groups.values()].map(versions => {
-        const primary = versions.find(row => row.isPrimaryCondition) ?? versions[0];
+        const primary = primaryVersion(versions);
         const personal = versions.filter(row => row.personalWeightBasisPoints !== null && row.personalWeightBasisPoints !== undefined);
         const publicWeightBasisPoints = versions.reduce((sum, row) => sum + (row.publicWeightBasisPoints ?? 0), 0);
         const personalWeightBasisPoints = personal.length ? personal.reduce((sum, row) => sum + row.personalWeightBasisPoints, 0) : null;

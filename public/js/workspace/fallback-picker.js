@@ -5,7 +5,7 @@ import { createBenchmarkInformationLink } from './benchmark-link.js';
 import { setHelpText } from '../shared/help-popover.js?v=help-popovers-20261008';
 import { createFallbackPickerScroll } from './fallback-picker-scroll.js?v=fallback-picker-20261008';
 import { createAction, configureAction } from '../shared/ui-components.js';
-import { AA_EXCLUSION_MESSAGE, excludedFromRanking } from '../shared/aa-ranking-policy.js';
+import { excludedFromRanking } from '../shared/aa-ranking-policy.js';
 
 const element = (tag, className = '', text) => {
     const node = document.createElement(tag); node.className = className;
@@ -149,7 +149,6 @@ export function createFallbackPicker({ catalogue, getScope, getPrimary, getCompo
         column.dataset.excluded = String(excluded);
         column.setAttribute('role', 'listitem');
         const label = element('div', 'bp-fallback-picker-column-heading');
-        if (excluded) column.dataset.tooltip = AA_EXCLUSION_MESSAGE;
         const order = index + 1;
         const name = !choice.entries.length ? 'No fallback' : choice.selectionSource === 'custom' ? 'Your configuration' : `Order ${order}`;
         column.dataset.choiceName = name;
@@ -174,8 +173,8 @@ export function createFallbackPicker({ catalogue, getScope, getPrimary, getCompo
         column.append(label, list);
         if (intent.action === 'add') {
             const add = createAction({ className: 'bp-fallback-picker-card-add', label: 'Add', icon: 'fa-solid fa-plus', variant: 'primary' });
-            add.setAttribute('aria-label', `Add benchmark with ${name.toLowerCase()}${excluded ? `. ${AA_EXCLUSION_MESSAGE}` : ''}`);
-            if (excluded) { add.setAttribute('aria-disabled', 'true'); add.dataset.tooltip = AA_EXCLUSION_MESSAGE; }
+            add.setAttribute('aria-label', `Add benchmark with ${name.toLowerCase()}`);
+            if (excluded) add.setAttribute('aria-disabled', 'true');
             add.addEventListener('click', () => {
                 const activePrimary = validPrimary();
                 if (!activePrimary || intent.action !== 'add' || add.disabled || excluded) return;
@@ -187,7 +186,7 @@ export function createFallbackPicker({ catalogue, getScope, getPrimary, getCompo
         if (intent.action === 'replace') {
             const toggle = createAction({ className: 'bp-fallback-picker-card-toggle', label: 'Use configuration',
                 icon: 'fa-solid fa-plus' });
-            if (excluded) { toggle.setAttribute('aria-disabled', 'true'); toggle.dataset.tooltip = AA_EXCLUSION_MESSAGE; }
+            if (excluded) toggle.setAttribute('aria-disabled', 'true');
             toggle.addEventListener('click', () => {
                 const activePrimary = validPrimary();
                 if (!activePrimary || intent.action !== 'replace' || toggle.disabled) return;

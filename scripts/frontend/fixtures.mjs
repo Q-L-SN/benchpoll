@@ -34,6 +34,13 @@ export const secondaryBenchmark = { ...benchmarks[0], ID: 901, conditionID: 901,
 export const sparseBenchmark = { ...benchmarks[0], ID: 900, conditionID: 900, conditionKey: 'experimental',
     conditionName: 'Experimental', isDefaultCondition: false, isPrimaryCondition: false,
     scoreCount: 1, scoredModelCount: 1, lowCoverage: true, publicWeight: 0, personalWeight: null };
+export const mixedAABenchmarks = [
+    { ID: 9911, conditionKey: 'aa-run', conditionName: 'AA run', scoreCount: 99, excludedFromRanking: true },
+    { ID: 9912, conditionKey: 'independent', conditionName: 'Independent', scoreCount: 20 },
+    { ID: 9913, conditionKey: 'alternate', conditionName: 'Alternate', scoreCount: 5 }
+].map((version, index) => ({ ...benchmarks[0], ...version, conditionID: version.ID, benchmarkID: 9910,
+    name: 'Mixed benchmark', isPrimaryCondition: index === 0, isDefaultCondition: false,
+    publicWeight: 0, personalWeight: null }));
 const modelNames = ['Aster Pro', 'Cedar Sonnet', 'Meridian Flash', 'Atlas Large', 'Cedar Opus', 'Aster Mini', 'Meridian Pro', 'Atlas Small'];
 export const models = modelNames.map((name, index) => ({
     ID: index + 201, modelID: index + 301, name, vendorName: ['Aster', 'Cedar', 'Meridian', 'Atlas'][index % 4],
@@ -44,7 +51,7 @@ export const models = modelNames.map((name, index) => ({
     resultCount: 7, fallbackUsageCount: 0
 }));
 export function weightedEntries(weights) {
-    return weights.map(entry => ({ ...[...benchmarks, secondaryBenchmark, sparseBenchmark].find(item => item.conditionID === entry.conditionID), ...entry, weight: entry.weightBasisPoints / 100 }));
+    return weights.map(entry => ({ ...[...benchmarks, secondaryBenchmark, sparseBenchmark, ...mixedAABenchmarks].find(item => item.conditionID === entry.conditionID), ...entry, weight: entry.weightBasisPoints / 100 }));
 }
 export function familyEntries(entries) {
     const catalogue = [...benchmarks, secondaryBenchmark, sparseBenchmark];
@@ -116,7 +123,8 @@ export function workspace(state, body, { paginate = true } = {}) {
             ] : [{ categoryID: category.ID, name: category.name, pieCount: 128, weightBasisPoints: 10000 }])
                 .map(source => publicEmpty ? { ...source, pieCount: 0, weightBasisPoints: 0 } : source),
             entries: publicEmpty ? [] : weightedEntries(publicWeights) },
-        benchmarks: state.empty ? [] : [...benchmarks, ...extraBenchmarks, ...secondaryBenchmarks, ...sparseBenchmarks, ...aaBenchmarks].map(benchmark => ({
+        benchmarks: state.empty ? [] : [...benchmarks, ...extraBenchmarks, ...secondaryBenchmarks, ...sparseBenchmarks, ...aaBenchmarks,
+            ...(state.mixedAABenchmarks ? mixedAABenchmarks : [])].map(benchmark => ({
             ...benchmark,
             publicWeightBasisPoints: publicWeights.find(entry => entry.conditionID === benchmark.conditionID)?.weightBasisPoints ?? 0,
             publicWeight: (publicWeights.find(entry => entry.conditionID === benchmark.conditionID)?.weightBasisPoints ?? 0) / 100,

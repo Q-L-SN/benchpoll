@@ -128,6 +128,45 @@ test('grouped benchmark search retains full benchmark weights and pagination cou
     assert.equal(result.rankingPagination.benchmarkGrouping, 'flat');
 });
 
+test('an AA primary is replaced by the same available version in the list and community default', () => {
+    const rows = [
+        { ...conditions[0], conditionKey: 'aa-run', conditionName: 'AA run', scoreCount: 99 },
+        { ...conditions[1], conditionID: 5, ID: 5, scoreCount: 25 },
+        { ...conditions[1], conditionID: 4, ID: 4, scoreCount: 25 },
+        { ...conditions[1], conditionID: 6, ID: 6, scoreCount: 3 },
+        conditions[2]
+    ].map(row => ({ ...row, publicWeightBasisPoints: row.conditionID === 5 ? 7000 : 0,
+        personalWeightBasisPoints: row.conditionID === 6 ? 10000 : null }));
+    const group = groupBenchmarkRows(rows).find(row => row.benchmarkID === 10);
+    assert.equal(group.conditionID, 4, 'ties use stable condition IDs, not input order');
+    assert.equal(group.publicWeightBasisPoints, 7000);
+    assert.equal(group.personalWeightBasisPoints, 10000);
+    assert.deepEqual(group.memberConditionIDs, [1, 5, 4, 6]);
+    const composition = communityVersionComposition([], rows);
+    assert.equal(composition[0].primaryConditionID, 4);
+    assert.deepEqual(composition[0].versions.map(version => version.conditionID), [4, 5, 6]);
+    assert.deepEqual(expandCommunityVersions([entry(group.conditionID, 10000, true)], composition), [entry(4)]);
+    const pager = createRankingPager();
+    const page = pager.create({ benchmarks: rows, versionComposition: composition,
+        personalPie: { entries: [] }, modelLeaderboards: { personal: [], public: [] }, scoreMode: 'range' }, { query: 'AA run' });
+    assert.equal(page.benchmarks.length, 1, 'matching an excluded version still returns its parent benchmark');
+    assert.equal(page.benchmarks[0].conditionID, 4);
+    assert.equal(page.benchmarks[0].excludedFromRanking, undefined);
+});
+
+test('only a wholly restricted benchmark remains blocked; eligible primaries and zero-score alternatives survive', () => {
+    const variants = [conditions[0], { ...conditions[1], excludedFromRanking: true }];
+    assert.equal(groupBenchmarkRows(variants)[0].conditionID, 1);
+    const restrictedPrimary = { ...conditions[0], excludedFromRanking: true };
+    const zero = { ...conditions[1], scoreCount: 0 };
+    assert.equal(groupBenchmarkRows([restrictedPrimary, zero])[0].conditionID, 2);
+    assert.equal(communityVersionComposition([], [restrictedPrimary, zero])[0].primaryConditionID, 2);
+    const allRestricted = [restrictedPrimary, { ...zero, excludedFromRanking: true }];
+    assert.equal(groupBenchmarkRows(allRestricted)[0].excludedFromRanking, true);
+    assert.deepEqual(communityVersionComposition([], allRestricted), []);
+    assert.equal(groupBenchmarkRows(conditions)[0].conditionID, 1, 'an available primary stays primary despite fewer scores');
+});
+
 test('the additive migration keeps legacy choices explicit and can be retried without rewriting weights', async () => {
     let exists = false; const writes = [];
     const connection = { async execute(sql) {

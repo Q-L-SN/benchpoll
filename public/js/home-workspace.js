@@ -60,7 +60,7 @@ import { readHomeModelFocusIntent, consumeHomeModelFocusURL, withHomeFocusCompar
     createHomeModelFocus, createModelFocusNotice } from './workspace/model-focus.js';
 import { createModelSearch } from './shared/model-search.js';
 import { normalizeModelFocusTarget } from './workspace/model-focus-target.js';
-import { AA_EXCLUSION_MESSAGE, excludedFromRanking } from './shared/aa-ranking-policy.js';
+import { excludedFromRanking } from './shared/aa-ranking-policy.js';
 import { mountSiteActions } from './shared/site-header.js';
 import { createUpdateIndicator } from './shared/update-indicator.js';
 import { mountDisclosureChevron } from './shared/disclosure-chevron.js';
@@ -1426,7 +1426,7 @@ function replaceFallbackRuleEntries(primaryConditionID, entries, selectionSource
 }
 
 function addObjectToFallbackChain(object) {
-    if (excludedFromRanking(object)) { setStatus(AA_EXCLUSION_MESSAGE); return false; }
+    if (excludedFromRanking(object)) return false;
     const primary = selectedInlineFallbackPrimary();
     if (!primary || !isInlineFallbackTargetActive()) return false;
     if (object.isFamily) {
@@ -1500,7 +1500,7 @@ function applyFallbackConfiguration(primary, choice, action) {
     if (state.mode !== 'personal' || state.loading) return false;
     if (state.personalEntries.find(entry => entry.conditionID === Number(primary.ID))?.followCommunityVersion === true) return false;
     if (!choice.community && (excludedFromRanking(primary) || choice.entries.some(excludedFromRanking))) {
-        setStatus(AA_EXCLUSION_MESSAGE); return false;
+        return false;
     }
     if (action === 'replace' || state.personalEntries.some(entry => Number(entry.conditionID) === Number(primary.ID))) {
         if (!state.personalEntries.some(entry => Number(entry.conditionID) === Number(primary.ID)) || !beginMutation()) return false;
@@ -1568,7 +1568,7 @@ addFallbackBenchmarkButton.addEventListener('click', () => {
 
 function addObjectToPersonalPie(object) {
     if (excludedFromRanking(object) || object.familyEntries?.some(excludedFromRanking)) {
-        setStatus(AA_EXCLUSION_MESSAGE); return false;
+        return false;
     }
     const existing = state.personalEntries.find(entry => Number(entry.conditionID) === Number(object.ID)
         || state.versionComposition && !isTopicReference(object) && !object.isFamily && entry.benchmarkID === object.benchmarkID);
@@ -1852,9 +1852,9 @@ function renderBenchmarks() {
                 add.setAttribute('aria-disabled', String(Boolean(excluded)));
                 const target = fallbackTargetActive ? 'Fallback' : 'Personal Weights';
                 const label = `Add ${accessibleName} to ${target}`;
-                const exclusionMessage = missingReference ? 'This topic has no weights yet.' : AA_EXCLUSION_MESSAGE;
-                add.dataset.tooltip = excluded ? exclusionMessage : label;
-                add.setAttribute('aria-label', excluded ? `${label}. ${exclusionMessage}` : label);
+                const exclusionMessage = missingReference ? 'This topic has no weights yet.' : '';
+                if (!excluded || exclusionMessage) add.dataset.tooltip = exclusionMessage || label;
+                add.setAttribute('aria-label', exclusionMessage ? `${label}. ${exclusionMessage}` : label);
                 add.innerHTML = '<i class="fa-solid fa-plus" aria-hidden="true"></i>';
                 const addLabel = document.createElement('span');
                 addLabel.className = 'bp-benchmark-add-label';
@@ -1866,7 +1866,7 @@ function renderBenchmarks() {
                 add.append(addLabel);
                 add.addEventListener('click', event => {
                     event.stopPropagation();
-                    if (excluded) { setStatus(exclusionMessage); return; }
+                    if (excluded) { if (exclusionMessage) setStatus(exclusionMessage); return; }
                     if (isInlineFallbackTargetActive()) {
                         addObjectToFallbackChain(object);
                         return;

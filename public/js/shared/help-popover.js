@@ -177,6 +177,9 @@ function createHelpController() {
         panel.style.top = geometry.top + 'px';
         panel.style.setProperty('--bp-tooltip-arrow-x', geometry.arrowX + 'px');
         panel.dataset.placement = geometry.placement;
+        if (scrollParents.some(parent => parent.getAnimations?.().some(animation => animation.playState === 'running'))) {
+            schedulePosition();
+        }
     }
     function schedulePosition() {
         if (active && positionFrame === null) positionFrame = requestAnimationFrame(position);
@@ -230,12 +233,15 @@ function createHelpController() {
         if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches && panel.animate) {
             animation = panel.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 120, easing: 'ease-out' });
         }
-        resizeObserver?.observe(trigger);
         resizeObserver?.observe(body);
-        for (let parent = trigger; parent && parent !== document.body; parent = composedParent(parent)) {
+        for (let parent = trigger; parent; parent = composedParent(parent)) {
+            // Opening or closing a rail can move an unchanged-size trigger as
+            // its ancestors resize. Follow that layout until it settles.
+            resizeObserver?.observe(parent);
             parent.addEventListener('scroll', schedulePosition);
             scrollParents.push(parent);
             anchorObserver.observe(parent, { attributes: true, attributeFilter: ['hidden', 'inert', 'class', 'style', 'open'] });
+            if (parent === document.body) break;
         }
         return true;
     }
@@ -244,7 +250,8 @@ function createHelpController() {
         clearTimeout(hideTimer);
         if (!pinned) hideTimer = setTimeout(() => {
             const focus = deepFocus();
-            if (active && active !== hovered && !overPanel && focus !== active && !panel.contains(focus)) close();
+            if (active && active !== hovered && !overPanel
+                && (focus !== active || !active.matches(':focus-visible')) && !panel.contains(focus)) close();
         }, 160);
     }
     function adoptTitle(node) {
@@ -329,7 +336,9 @@ function createHelpController() {
     });
     document.addEventListener('focusin', event => {
         const trigger = triggerAt(event);
-        if (trigger && pointerType !== 'touch') {
+        // Mouse-driven focus restoration (for example, after closing a panel)
+        // should not create a tooltip at an anchor the pointer never reached.
+        if (trigger && pointerType !== 'touch' && trigger.matches(':focus-visible')) {
             if (active && active !== trigger) close();
             show(trigger);
         } else if (!trigger && active && !inPath(event, panel)) close();
@@ -421,6 +430,9 @@ function createHelpController() {
         }
     }, true);
     document.addEventListener('scroll', () => { cancelPress(); schedulePosition(); }, true);
+    for (const type of ['transitionrun', 'transitionend', 'transitioncancel']) document.addEventListener(type, event => {
+        if (active && scrollParents.includes(event.target)) schedulePosition();
+    }, true);
     window.addEventListener('resize', schedulePosition);
     window.addEventListener('blur', () => { cancelPress(); close(); });
     document.addEventListener('visibilitychange', () => { if (document.hidden) { cancelPress(); close(); } });

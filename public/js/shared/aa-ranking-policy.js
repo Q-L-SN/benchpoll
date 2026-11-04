@@ -15,7 +15,6 @@ const aaVersions = new Set([
     '1655:crawl-2c79c5b97186b2b435e8cf01', // VibeDex composite incorporating AA Elo.
     '1687:crawl-6c6f1535abb4a0c68af896bc' // HLE, BenchmarkList republication of the AA API.
 ]);
-export const AA_EXCLUSION_MESSAGE = 'Artificial Analysis benchmarks and versions do not count in rankings.';
 export const AA_DISPLAY_RESTRICTION = 'artificial_analysis';
 export const AA_DISPLAY_MESSAGE = "To respect Artificial Analysis's data-use terms, details and scores for this benchmark version are not displayed here.";
 

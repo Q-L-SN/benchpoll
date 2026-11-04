@@ -48,6 +48,15 @@ fixes the sidebar chevron's horizontal direction. Read
 [`../common-language-scenes-20261104.md`](../common-language-scenes-20261104.md)
 before a separate installation; this migration has not been applied to production.
 
+A further pending workspace fix chooses an available non-AA version when a
+benchmark's stored primary is restricted, removes the AA exclusion sentence,
+fixes discussion-close tooltips, restores light tab backgrounds and lowers the
+treemap name-height threshold while preserving fade clipping. Read
+[`../workspace-availability-20261104.md`](../workspace-availability-20261104.md)
+for its narrow runtime scope and verification. It needs no data migration and
+has not been deployed from cloud; reconcile it with the separate pending scene
+release before building installation assets.
+
 ## Repositories And Starting Point
 
 - Source: <https://github.com/Q-L-SN/benchpoll>, branch `codex/cloud-handoff-20261101`.

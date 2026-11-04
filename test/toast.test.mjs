@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
-import { excludedFromRanking, AA_EXCLUSION_MESSAGE } from '../public/js/shared/aa-ranking-policy.js';
+import { excludedFromRanking } from '../public/js/shared/aa-ranking-policy.js';
 import { isTopicReference } from '../public/js/workspace/topic-references.js';
 
 test('toast is polite, uses text content, replaces its timer and clears without moving focus', async () => {
@@ -55,7 +55,7 @@ test('main Pie success notification follows a real insertion, not a duplicate, r
     const state = { personalEntries: [], limits: { maxPieItems: 2, totalBasisPoints: 10000 } };
     const messages = []; let allowed = true, saves = 0;
     const add = vm.runInNewContext(functionText('addObjectToPersonalPie', 'objectInPersonalPie') + '\naddObjectToPersonalPie', {
-        state, excludedFromRanking, AA_EXCLUSION_MESSAGE, isTopicReference, MIN_WEIGHT_BASIS_POINTS: 1, hiddenPersonalBenchmarkIDs: new Set(),
+        state, excludedFromRanking, isTopicReference, MIN_WEIGHT_BASIS_POINTS: 1, hiddenPersonalBenchmarkIDs: new Set(),
         beginMutation() { return allowed; }, distributeToTarget(values) { return values; }, registerPieEntries() {},
         scheduleSave() { saves++; }, setStatus() {}, additionToast: { show(text) { messages.push(text); } }
     });
@@ -70,7 +70,7 @@ test('main Pie success notification follows a real insertion, not a duplicate, r
 test('fallback Add confirms only a new explicit member and rejects nesting another configuration', () => {
     const primary = { ID: 1 }, messages = []; let entries = [], allowed = true, active = true;
     const add = vm.runInNewContext(functionText('addObjectToFallbackChain', 'moveFallbackMember') + '\naddObjectToFallbackChain', {
-        excludedFromRanking, AA_EXCLUSION_MESSAGE, selectedInlineFallbackPrimary() { return primary; }, isInlineFallbackTargetActive() { return active; },
+        excludedFromRanking, selectedInlineFallbackPrimary() { return primary; }, isInlineFallbackTargetActive() { return active; },
         fallbackRuleFor() { return { entries }; }, beginMutation() { return allowed; },
         fallbackComponentFromBenchmark(object) { return { conditionID: object.ID }; },
         replaceFallbackRuleEntries(ID, values) { entries = values; }, fallbackTargetPrimaryID: null,

@@ -6,7 +6,7 @@ import { fallbackPickerChoices } from '../public/js/workspace/fallback-picker.js
 import { fallbackScrollEdges, sequentialScrollStep } from '../public/js/workspace/fallback-picker-scroll.js';
 import { createBenchmarkFallbackCatalogue } from '../public/js/workspace/benchmark-fallback-catalogue.js';
 import { familyKey } from '../public/js/shared/benchmark-families.js';
-import { excludedFromRanking, AA_EXCLUSION_MESSAGE } from '../public/js/shared/aa-ranking-policy.js';
+import { excludedFromRanking } from '../public/js/shared/aa-ranking-policy.js';
 
 const primary = { ID: 1, conditionID: 1, name: 'Entrance', publicWeightBasisPoints: 2600 };
 const entries = IDs => IDs.map(conditionID => ({ conditionID, benchmarkID: 100 + conditionID, name: `Bench ${conditionID}` }));
@@ -147,7 +147,7 @@ test('replacing a fallback list records one mutation, preserves every entrance w
     const left = source.indexOf('function applyFallbackConfiguration('), right = source.indexOf('function openInlineFallbackPicker(', left);
     const state = { mode: 'personal', loading: false, personalEntries: [{ conditionID: 1, weightBasisPoints: 4500 }, { conditionID: 2, weightBasisPoints: 5500 }] };
     let rule = null, mutations = 0, saves = 0;
-    const apply = vm.runInNewContext(source.slice(left, right) + '\napplyFallbackConfiguration', { state, excludedFromRanking, AA_EXCLUSION_MESSAGE,
+    const apply = vm.runInNewContext(source.slice(left, right) + '\napplyFallbackConfiguration', { state, excludedFromRanking,
         beginMutation() { mutations++; return true; }, replaceFallbackRuleEntries(ID, values) { rule = values.length ? { primaryConditionID: ID, entries: values } : null; },
         fallbackRuleFor() { return rule; }, scheduleSave() { saves++; }, focusPersonalBenchmark() {},
         deactivateInlineFallbackTarget() {}, writeWorkspacePreferences() {},
@@ -169,7 +169,7 @@ test('skip or customize adds the bare entrance and reveals an empty editor witho
     const left = source.indexOf('function applyFallbackConfiguration('), right = source.indexOf('function openInlineFallbackPicker(', left);
     const state = { mode: 'personal', loading: false, personalEntries: [] };
     let added = null, focused = null, editing = null;
-    const apply = vm.runInNewContext(source.slice(left, right) + '\napplyFallbackConfiguration', { state, excludedFromRanking, AA_EXCLUSION_MESSAGE,
+    const apply = vm.runInNewContext(source.slice(left, right) + '\napplyFallbackConfiguration', { state, excludedFromRanking,
         addObjectToPersonalPie(object) { added = object; return true; },
         focusPersonalBenchmark(object) { focused = object; },
         deactivateInlineFallbackTarget() {}, writeWorkspacePreferences() {},

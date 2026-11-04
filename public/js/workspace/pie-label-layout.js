@@ -1,3 +1,9 @@
+export function pieLabelContentBox(width, height) {
+    const verticalPadding = Math.max(2, Math.min(7, (height - 17) / 2));
+    return { x: 8, y: verticalPadding, width: Math.max(0, width - 16),
+        height: Math.max(0, height - verticalPadding * 2) };
+}
+
 export function createPieLabelLayout(measure) {
     function wrapped(text, width, size, weight, fontFamily, maximum = 2) {
         if (!text) return [];
@@ -16,7 +22,7 @@ export function createPieLabelLayout(measure) {
     }
 
     function layout({ name, version = '', percent, width, height, fontFamily, topic = false }) {
-        const innerWidth = Math.max(0, width - 16), innerHeight = Math.max(0, height - 14);
+        const { width: innerWidth, height: innerHeight } = pieLabelContentBox(width, height);
         if (innerWidth < 4 || innerHeight < 17) return { mode: 'hidden', rows: [] };
         const names = topic ? measure(name, 13, 600, fontFamily).width <= innerWidth ? [name] : null
             : wrapped(name, innerWidth, 13, 600, fontFamily);

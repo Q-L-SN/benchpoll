@@ -70,7 +70,7 @@ for (const engine of ['chromium', 'webkit']) for (const width of [320, 390, 760,
         const aaAdd = page.locator('.bp-benchmark-row[data-condition-id="9901"] .bp-benchmark-add');
         await aaAdd.waitFor();
         assert.equal(await aaAdd.getAttribute('aria-disabled'), 'true');
-        assert.match(await aaAdd.getAttribute('data-tooltip'), /Artificial Analysis|AA/);
+        assert.equal(await aaAdd.getAttribute('data-tooltip'), null);
         await mobilePanel(page, width, 'models');
         const action = page.locator('#contribute-data-button');
         await action.waitFor();
