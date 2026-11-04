@@ -162,18 +162,14 @@ for (const width of [390, 1440]) test(`scenes and references: keyboard, search, 
     assert.equal(await inlineTopics.locator('.fa-layer-group').count(), 1);
     assert.equal(await inlineTopics.locator('.fa-angle-right').count(), 1);
     await page.locator('#benchmark-search').fill('');
-    await page.locator('#weight-add-topic').click();
-    const picker = page.locator('#topic-reference-dialog');
-    await picker.getByRole('searchbox').fill('Research');
-    assert.equal(await picker.locator('[data-context-id]').count(), 0, 'parent-name search requires a separate scene choice');
-    assert.equal(await picker.getByRole('button', { name: 'Research', exact: true }).getAttribute('aria-expanded'), 'false');
-    await picker.getByRole('button', { name: 'Research', exact: true }).click();
-    assert.equal(await picker.locator('[data-context-id]').count(), 2);
-    assert.equal(fixture.saves.length, 0, 'choosing a topic with scenes is not an implicit reference');
-    await picker.getByRole('button', { name: 'All topics', exact: true }).click();
-    await picker.getByRole('searchbox').fill('Photon');
+    await page.locator('#weight-add-benchmark').click();
+    assert.equal(await page.locator('#weight-add-actions button').count(), 1);
+    assert.equal(await page.locator('#topic-reference-dialog').count(), 0);
+    assert.equal(await page.locator('#benchmark-search').evaluate(node => node === document.activeElement), true);
+    await page.locator('#benchmark-search').fill('Photon');
+    await page.locator('.bp-benchmark-row[data-context-id="16702"]').waitFor();
     const firstSave = page.waitForResponse(response => response.url().endsWith('/api/save_personal_pie'));
-    await picker.locator('[data-context-id="16702"]').getByRole('button', { name: 'Add', exact: true }).click();
+    await page.locator('.bp-benchmark-row[data-context-id="16702"] .bp-benchmark-add').click();
     await page.waitForSelector('[data-reference-id="16702"]');
     await firstSave;
     await page.waitForSelector('#topic-reference-weights summary');
@@ -196,10 +192,11 @@ for (const width of [390, 1440]) test(`scenes and references: keyboard, search, 
     await page.waitForSelector('#topic-reference-weights summary');
     await page.reload();
     await page.waitForSelector('[data-reference-id="16702"]');
-    await page.locator('#weight-add-topic').click();
-    await picker.getByRole('searchbox').fill('Private');
-    assert.equal(await picker.locator('[data-context-id]').count(), 0, 'private targets excluded for a public source');
-    await picker.getByRole('button', { name: 'Close topic selector' }).click();
+    await page.locator('#weight-add-benchmark').click();
+    await page.locator('#benchmark-search').fill('Private');
+    await page.waitForFunction(() => !document.querySelector('.bp-benchmark-row[data-context-id]'));
+    assert.equal(await page.locator('.bp-benchmark-row[data-context-id]').count(), 0, 'private targets excluded for a public source');
+    await page.locator('#benchmark-search').fill('');
     fixture.setIssues([{ targetContextID: 16702, name: 'Research / Photon experiments', reason: 'empty' }]);
     await page.locator('#workspace-refresh').click();
     await page.waitForSelector('.bp-reference-warnings');
@@ -273,9 +270,9 @@ test('private owner creates scenes and changes the default without changing the 
     await page.waitForFunction(() => document.getElementById('scene-tab-99899')?.textContent === 'Optical design');
     assert.equal(new URL(page.url()).pathname, '/personal/998/optical-design', 'renaming changes the path while preserving reference identity');
     assert.equal(fixture.writes.at(-1).sceneID, 99899);
-    await page.locator('#weight-add-topic').click();
-    await page.locator('#topic-reference-dialog').getByRole('searchbox').fill('Private plans');
-    await page.locator('#topic-reference-dialog [data-context-id="99901"]').waitFor();
+    await page.locator('#weight-add-benchmark').click();
+    await page.locator('#benchmark-search').fill('Private plans');
+    await page.locator('.bp-benchmark-row[data-context-id="99901"]').waitFor();
 });
 
 test('guest references use read-only previews and retain independent scene drafts', async t => {
@@ -289,13 +286,12 @@ test('guest references use read-only previews and retain independent scene draft
     await page.goto(app.url + '/intelligence/vector-images');
     await page.waitForSelector('#scene-tab-5402[aria-selected="true"]');
     await page.locator('#personal-pie-create').click();
-    const picker = page.locator('#topic-reference-dialog');
     for (const name of ['Photon', 'Coding']) {
-        await page.locator('#weight-add-topic').click();
-        await picker.getByRole('searchbox').fill(name);
+        await page.locator('#weight-add-benchmark').click();
+        await page.locator('#benchmark-search').fill(name);
         const preview = page.waitForResponse(response => response.url().endsWith('/api/get_weighted_workspace')
             && response.request().postDataJSON().previewPersonalPie?.entries.some(entry => entry.conditionID < 0));
-        await picker.getByRole('button', { name: 'Add', exact: true }).click(); await preview;
+        await page.locator('.bp-benchmark-row[data-context-id] .bp-benchmark-add').click(); await preview;
         await page.waitForSelector('#topic-reference-weights summary');
     }
     await page.locator('#weight-pie > g[data-object-id="-16702"]').click();

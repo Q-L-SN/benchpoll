@@ -52,7 +52,7 @@ for (const width of [1440, 390]) test(`mixed benchmark adds its independent vers
     await settings.waitFor();
     assert.equal(await settings.locator('.bp-version-choice').count(), 2);
     assert.equal(await settings.locator('[data-condition-id="9911"]').count(), 0);
-    assert.match(await settings.locator('[data-condition-id="9912"]').textContent(), /Primary version/);
+    assert.equal(await settings.locator('[data-condition-id="9912"]').getAttribute('data-default-version'), 'true');
     await settings.getByRole('button', { name: 'Done', exact: true }).click();
     await page.waitForTimeout(800);
     const saves = app.state.requests.filter(request => request.path === '/api/save_personal_pie');

@@ -48,7 +48,7 @@ import { comparisonProfileKey } from './shared/comparison-profile-key.js';
 import { animateContent, setVisible, flipPie } from './shared/motion.js?v=workspace-ui-20261008';
 import { createSceneControls } from './workspace/scenes.js';
 import { createPrivateTopicEditor } from './shared/private-topic-editor.js';
-import { createTopicReferencePicker, renderTopicReferences, isTopicReference, topicReferenceError } from './workspace/topic-references.js';
+import { renderTopicReferences, isTopicReference, topicReferenceError } from './workspace/topic-references.js';
 import { createReferenceCoverage } from './workspace/reference-coverage.js';
 import { topicLabelText, renderTopicLabel } from './shared/topic-label.js';
 import { BENCHMARK_GROUPS, benchmarkConditionGroup } from './shared/benchmark-condition-groups.js?v=fallback-discovery-20261005';
@@ -169,22 +169,6 @@ const privateTopicEditor = createPrivateTopicEditor({
     },
     async onDeleted() { window.location.assign('/'); }
 });
-const referenceOptions = {
-    request: (body, options) => postJSON('/api/get_topic_reference_targets', body, { ...options, timeoutMs: 20000, requireJSON: true }),
-    getScope: () => `${workspaceContextFingerprint()}|${state.mode}|${state.userID ?? 'guest'}`,
-    getCurrentContextID: () => state.contextID,
-    getEntries: () => state.personalEntries,
-    isPrivate: () => state.contextIsPrivate,
-    async onAdd(target) {
-        const scope = workspaceContextFingerprint();
-        if (state.mode !== 'personal' || state.loading || !await finishPendingWeightAdjustments()
-            || scope !== workspaceContextFingerprint()) return false;
-        const added = addObjectToPersonalPie(target);
-        if (added) { state.workspaceView = 'focus'; renderAll(); }
-        return added;
-    }
-};
-const referencePicker = createTopicReferencePicker(referenceOptions);
 const referenceCoverage = createReferenceCoverage({
     request: (body, options) => postJSON('/api/get_topic_preview', body, options),
     getScope: () => String(state.userID ?? 'guest') });
@@ -197,10 +181,10 @@ const getBenchmarkMemberURL = member => categoryDiscussionURL(state.categoryID, 
 const benchmarkRowFocus = createBenchmarkRowFocus();
 const benchmarkFallbackCatalogue = createBenchmarkFallbackCatalogue({
     request: body => postJSON('/api/get_ranking_page', body),
-    onChange: () => { renderBenchmarks(); fallbackPicker.refresh(); },
+    onChange: () => { renderBenchmarks(); fallbackPicker.refresh(); benchmarkSettings.refresh(); },
     onExpired: page => { void recoverRankingPages(page); }
 });
-const fallbackPicker = createFallbackPicker({ catalogue: benchmarkFallbackCatalogue,
+const fallbackPickerOptions = { catalogue: benchmarkFallbackCatalogue,
     getScope: () => `${workspaceContextFingerprint()}|${state.mode}|${state.userID ?? 'guest'}`,
     getPrimary: ID => state.benchmarks.find(object => Number(object.ID) === Number(ID))
         ?? state.benchmarkDetailsByID.get(Number(ID)),
@@ -212,8 +196,10 @@ const fallbackPicker = createFallbackPicker({ catalogue: benchmarkFallbackCatalo
     onApply: applyFallbackConfiguration, onCustomize: primary => state.versionComposition
         ? benchmarkSettings.open(primary, { custom: true }) : beginInlineFallbackEditing(primary),
     getMemberURL: getBenchmarkMemberURL, onInspectVersion: onBenchmarkInspection
-});
+};
+const fallbackPicker = createFallbackPicker(fallbackPickerOptions);
 const benchmarkSettings = createBenchmarkSettings({
+    fallbackPickerOptions,
     getScope: () => `${workspaceContextFingerprint()}|${state.userID ?? 'guest'}`,
     getData(benchmarkID) {
         const group = state.versionComposition?.find(item => item.benchmarkID === benchmarkID);
@@ -233,7 +219,6 @@ const benchmarkSettings = createBenchmarkSettings({
         const primary = group.versions.find(version => version.conditionID === group.primaryConditionID);
         if (!state.personalEntries.some(entry => entry.benchmarkID === group.benchmarkID)) addObjectToPersonalPie(primary);
     },
-    onFallback: primary => fallbackPicker.open(primary, { action: 'replace', getReturnFocus: () => inlineFallbackToggle }),
     onCustom: (primary, entries) => applyFallbackConfiguration(primary,
         { community: entries === null, entries: entries ?? [], selectionSource: 'custom' }, 'replace')
 });
@@ -1330,7 +1315,7 @@ function renderInlineFallback() {
         publicFallbackToggle.hidden = state.mode === 'personal';
         for (const control of [inlineFallbackToggle, publicFallbackToggle]) {
             (control.querySelector('span') ?? control).textContent = state.contextIsPrivate
-                ? 'Configure versions and fallback' : 'Know this benchmark? Help configure it';
+                ? 'Configure this benchmark' : 'Contribute your expertise';
             control.setAttribute('aria-haspopup', 'dialog'); control.setAttribute('aria-controls', 'benchmark-settings');
             control.removeAttribute('aria-expanded'); control.disabled = state.loading;
         }
@@ -2108,7 +2093,6 @@ function renderReferenceState() {
             removeObjectFromPersonalPie(object);
         }
     });
-    referencePicker.refresh();
 }
 
 function publishContextWeights() {
@@ -2873,7 +2857,11 @@ personalPieCreate.addEventListener('click', () => {
 });
 personalEmptyPublicReturn.addEventListener('click', () => setMode('public'));
 compactPieAction.addEventListener('click', () => setMode('personal'));
-personalPieFindBenchmarks.addEventListener('click', () => {
+personalPieFindBenchmarks.addEventListener('click', async () => {
+    const scope = workspaceContextFingerprint();
+    if (state.mode !== 'personal' || state.loading || !await finishPendingWeightAdjustments()
+        || scope !== workspaceContextFingerprint()) return;
+    deactivateInlineFallbackTarget();
     benchmarkSearch.focus({ preventScroll: true });
     benchmarkSearch.scrollIntoView({
         behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
@@ -2882,12 +2870,6 @@ personalPieFindBenchmarks.addEventListener('click', () => {
 });
 
 document.getElementById('weight-add-benchmark').addEventListener('click', () => personalPieFindBenchmarks.click());
-document.getElementById('weight-add-topic').addEventListener('click', async event => {
-    const trigger = event.currentTarget;
-    if (state.mode !== 'personal' || state.loading || !await finishPendingWeightAdjustments()) return;
-    deactivateInlineFallbackTarget();
-    await referencePicker.open(trigger);
-});
 guestDraftSave.addEventListener('click', async () => {
     if (state.legacyDraftAvailable || state.personalDraftUnavailable) {
         await loadWeightedWorkspace({ preserveUndo: true, legacyClaim: state.legacyDraftAvailable });
@@ -3097,6 +3079,13 @@ pieSvg.addEventListener('pointermove', event => {
         gesture.previewFrame = requestAnimationFrame(() => flushTouchPiePreview(gesture));
     }
 });
+
+// Cancel the native pan only after this finger has begun adjusting a weight.
+// Preventing pointermove alone does not stop the browser from later claiming a
+// slightly diagonal drag for horizontal paging and issuing pointercancel.
+pieSvg.addEventListener('touchmove', event => {
+    if (touchPieGesture?.adjusted && event.touches.length === 1 && event.cancelable) event.preventDefault();
+}, { passive: false });
 
 const endTouchPieGesture = (event, cancelled = false) => {
     if (!touchPieGesture || touchPieGesture.pointerID !== event.pointerId) {

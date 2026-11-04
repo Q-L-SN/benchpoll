@@ -57,6 +57,14 @@ for its narrow runtime scope and verification. It needs no data migration and
 has not been deployed from cloud; reconcile it with the separate pending scene
 release before building installation assets.
 
+The next pending frontend update combines version choices and the original
+fallback cards in one compact dialog, unifies benchmark/topic adding, shortens
+the contribution entry and fixes mobile weight drags interrupted by horizontal
+finger drift. See
+[`../compact-benchmark-settings-20261104.md`](../compact-benchmark-settings-20261104.md)
+for its six-file runtime scope and verification. It needs no migration and has
+not been installed in production from cloud.
+
 ## Repositories And Starting Point
 
 - Source: <https://github.com/Q-L-SN/benchpoll>, branch `codex/cloud-handoff-20261101`.

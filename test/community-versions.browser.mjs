@@ -36,25 +36,33 @@ for (const [engine, width] of built ? [[chromium, 390]] : [[chromium, 1440], [ch
         assert.equal(await page.locator('#benchmark-rows .bp-benchmark-condition').count(), 0);
         await page.locator('#pie-mode-personal').click();
         await page.waitForFunction(() => document.getElementById('pie-mode-personal').getAttribute('aria-selected') === 'true');
-        await page.locator('#inline-fallback-toggle').click();
+        assert.equal(await page.locator('.bp-inline-fallback-info').count(), 0);
+        assert.equal(await page.locator('#weight-add-actions button').count(), 1);
+        const entry = page.locator('#inline-fallback-toggle');
+        assert.equal(await entry.innerText(), 'Contribute your expertise');
+        assert.equal(await entry.locator('span').evaluate(node => {
+            const range = document.createRange(); range.selectNodeContents(node);
+            return range.getClientRects().length;
+        }), 1, 'The contribution entry stays on a single line');
+        await entry.click();
         const settings = page.locator('#benchmark-settings'); await settings.waitFor();
-        assert.match(await settings.textContent(), /Only explicit choices/);
-        assert.equal(await settings.getByRole('button', { name: 'Fallback: Follow community', exact: true }).isDisabled(), true);
+        assert.match(await settings.locator('.bp-benchmark-settings-status').textContent(), /Versions and fallback follow community/);
+        assert.equal(await settings.getByRole('button', { name: /Follow community/i }).count(), 0);
+        assert.equal(await settings.locator('.bp-benchmark-settings-placeholder').isVisible(), true);
         assert.equal(await settings.locator('.bp-version-choice').first().getAttribute('data-condition-id'), '901');
         await page.waitForTimeout(260); // Capture the fully opened dialog, after its entrance animation.
         await page.screenshot({ path: `${output}/${engine.name()}-${width}${built ? '-built' : ''}-settings.png` });
-        await settings.locator('[data-condition-id="901"]').click();
-        await page.waitForFunction(() => !document.querySelector('#benchmark-settings .bp-benchmark-settings-section:last-child button').disabled);
-        await settings.getByRole('button', { name: 'Fallback: Follow community', exact: true }).click();
-        const chooser = page.locator('#fallback-picker'); await chooser.waitFor();
+        await settings.locator('.bp-version-choice[data-condition-id="901"]').click();
+        const chooser = settings.locator('.bp-fallback-picker-embedded'); await chooser.waitFor();
+        assert.equal(await page.locator('#fallback-picker').isVisible(), false);
         await chooser.locator('[data-family-key="[901]"] .bp-fallback-picker-card-toggle').click();
-        await chooser.locator('.bp-fallback-picker-cancel').click();
-        await page.waitForFunction(() => !document.getElementById('inline-fallback-toggle').disabled);
-        await page.locator('#inline-fallback-toggle').click(); await settings.waitFor();
-        await settings.locator('[data-condition-id="1"]').click();
-        assert.equal(await settings.getByRole('button', { name: 'Fallback: Follow community', exact: true }).count(), 1);
-        await settings.locator('.bp-version-community').click();
-        assert.equal(await settings.getByRole('button', { name: 'Fallback: Follow community', exact: true }).isDisabled(), true);
+        await chooser.locator('[data-family-key="[901]"] .bp-fallback-picker-card-toggle[aria-pressed="true"]').click();
+        assert.match(await settings.locator('.bp-benchmark-settings-status').textContent(), /Fallback follows community/);
+        assert.equal(await settings.locator('.bp-version-choice[data-condition-id="901"]').getAttribute('aria-pressed'), 'true');
+        await settings.locator('.bp-version-choice[data-condition-id="1"]').click();
+        await settings.locator('.bp-version-choice[data-condition-id="1"][aria-pressed="true"]').click();
+        assert.equal(await chooser.isVisible(), false);
+        assert.match(await settings.locator('.bp-benchmark-settings-status').textContent(), /Versions and fallback follow community/);
         await settings.getByRole('button', { name: 'Done', exact: true }).click();
         await page.waitForFunction(() => !document.getElementById('workspace-undo').disabled);
         await new Promise(resolve => setTimeout(resolve, 1000));
@@ -65,24 +73,22 @@ for (const [engine, width] of built ? [[chromium, 390]] : [[chromium, 1440], [ch
         assert.deepEqual(saves.at(-1).body.fallbackRules, []);
         await page.locator('#workspace-undo').click();
         await page.locator('#inline-fallback-toggle').click(); await settings.waitFor();
-        assert.equal(await settings.locator('[data-condition-id="1"]').getAttribute('aria-pressed'), 'true');
+        assert.equal(await settings.locator('.bp-version-choice[data-condition-id="1"]').getAttribute('aria-pressed'), 'true');
         if (width === 1440) {
-            await settings.getByRole('button', { name: 'Fallback: Follow community', exact: true }).click();
-            await chooser.getByRole('button', { name: 'Create my own', exact: true }).click();
+            await settings.getByRole('button', { name: 'Create my own', exact: true }).click();
             await settings.locator('.bp-custom-fallback-editor').waitFor();
             await chooser.waitFor({ state: 'hidden' });
             await settings.getByRole('searchbox', { name: 'Find fallback versions' }).fill('Advanced reasoning');
             await settings.locator('.bp-custom-fallback-results button').click();
             await settings.getByRole('button', { name: 'Use this fallback order', exact: true }).click();
-            await settings.getByRole('button', { name: 'Edit fallback order', exact: true }).click();
+            await settings.getByRole('button', { name: 'Edit my order', exact: true }).click();
             assert.equal(await settings.locator('.bp-custom-fallback-editor li').count(), 2);
             assert.match(await settings.locator('.bp-custom-fallback-editor li').nth(1).textContent(), /Advanced reasoning/);
             await settings.getByRole('button', { name: 'Remove', exact: true }).click();
             await settings.getByRole('button', { name: 'Use this fallback order', exact: true }).click();
-            assert.equal(await settings.getByRole('button', { name: 'Fallback: No fallback', exact: true }).count(), 1);
-            await settings.getByRole('button', { name: 'Follow community instead', exact: true }).click();
-            assert.equal(await settings.getByRole('button', { name: 'Fallback: Follow community', exact: true }).count(), 1);
-            assert.equal(await settings.locator('[data-condition-id="1"]').getAttribute('aria-pressed'), 'true');
+            await chooser.locator('[data-family-key="[1]"] .bp-fallback-picker-card-toggle[aria-pressed="true"]').click();
+            assert.match(await settings.locator('.bp-benchmark-settings-status').textContent(), /Fallback follows community/);
+            assert.equal(await settings.locator('.bp-version-choice[data-condition-id="1"]').getAttribute('aria-pressed'), 'true');
         }
         await settings.getByRole('button', { name: 'Done', exact: true }).click();
         if (width < 760) {

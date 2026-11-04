@@ -41,8 +41,11 @@ export function fallbackPickerChoices(primary, { catalogue, composition, current
 }
 
 export function createFallbackPicker({ catalogue, getScope, getPrimary, getComposition, getCurrent, canApply, onApply, onCustomize,
-    getMemberURL, onInspectVersion }) {
-    const dialog = element('global-dialog', 'bp-fallback-picker'); dialog.id = 'fallback-picker'; dialog.hidden = true;
+    getMemberURL, onInspectVersion, host = null, actionsHost = null }) {
+    const dialog = host ?? element('global-dialog', 'bp-fallback-picker');
+    if (host) dialog.classList.add('bp-fallback-picker', 'bp-fallback-picker-embedded');
+    else dialog.id = 'fallback-picker';
+    dialog.hidden = true;
     const heading = element('div', 'bp-fallback-picker-heading'); heading.slot = 'title';
     const title = element('span', '', 'Choose fallback configuration');
     heading.append(title);
@@ -77,7 +80,14 @@ export function createFallbackPicker({ catalogue, getScope, getPrimary, getCompo
     const customize = createAction({ className: 'bp-fallback-picker-customize', label: 'Create my own', icon: 'fa-regular fa-pen-to-square', variant: 'quiet' });
     customize.hidden = true;
     customAdd.hidden = true;
-    actions.append(customize, cancel, customAdd); dialog.append(heading, body, actions); document.body.append(dialog);
+    actions.append(customize, cancel, customAdd);
+    if (host) {
+        question.hidden = true; cancel.hidden = true;
+        body.removeAttribute('slot'); actions.removeAttribute('slot');
+        dialog.append(body);
+        (actionsHost ?? dialog).append(actions);
+        if (actionsHost) actions.hidden = true;
+    } else { dialog.append(heading, body, actions); document.body.append(dialog); }
     const scrolling = createFallbackPickerScroll({ shell, viewport, track, previous, next });
     let intent = null;
     const sessionChoices = new Map();
@@ -89,7 +99,8 @@ export function createFallbackPicker({ catalogue, getScope, getPrimary, getCompo
     function close({ restore = true } = {}) {
         const focus = returnFocus; intent = null; applying = false; renderedKey = '';
         dialog.returnFocus = null; dialog.hidden = true;
-        if (restore) requestAnimationFrame(() => {
+        if (actionsHost) actions.hidden = true;
+        if (restore && !host) requestAnimationFrame(() => {
             const target = focus?.();
             if (target?.isConnected && !target.disabled && !target.closest('[hidden], [inert]')) target.focus({ preventScroll: true });
         });
@@ -113,7 +124,7 @@ export function createFallbackPicker({ catalogue, getScope, getPrimary, getCompo
         const primary = validPrimary();
         const current = primary ? getCurrent(primary.ID) : null;
         const currentKey = current ? familyKey(primary.ID, current.entries) : null;
-        selectionStatus.hidden = intent.action === 'view';
+        selectionStatus.hidden = Boolean(host) || intent.action === 'view';
         selectionStatus.dataset.selection = currentKey ? 'manual' : 'community';
         selectionStatus.textContent = currentKey
             ? current.selectionSource === 'custom' ? 'Using your custom fallback configuration.'
@@ -139,7 +150,8 @@ export function createFallbackPicker({ catalogue, getScope, getPrimary, getCompo
         if (intent.action === 'view') { cancel.disabled = false; return; }
         customAdd.disabled = applying || !primary || !canApply(primary.ID, intent.action);
         customize.disabled = applying || !primary || !canApply(primary.ID, intent.action);
-        customize.hidden = intent.action !== 'replace' || current?.selectionSource === 'custom';
+        customize.hidden = intent.action !== 'replace' || !host && current?.selectionSource === 'custom';
+        if (host) customize.querySelector('span').textContent = current?.selectionSource === 'custom' ? 'Edit my order' : 'Create my own';
         cancel.disabled = applying;
     }
 
@@ -258,7 +270,9 @@ export function createFallbackPicker({ catalogue, getScope, getPrimary, getCompo
         closeButton.setAttribute('aria-label', readOnly ? 'Close fallback configurations' : 'Close fallback chooser');
         track.setAttribute('role', 'list');
         track.setAttribute('aria-label', readOnly ? 'Public fallback configurations' : 'Fallback orders');
-        dialog.hidden = false; refresh();
+        dialog.hidden = false;
+        if (actionsHost) actions.hidden = readOnly;
+        refresh();
         scrolling.reset();
         const view = catalogue.view(primary);
         if (!view.loaded && !view.loading && (view.hasMore || !Object.hasOwn(primary, 'fallbackConfigCount'))) void catalogue.load(Number(primary.ID));

@@ -124,7 +124,7 @@ export function workspace(state, body, { paginate = true } = {}) {
                 .map(source => publicEmpty ? { ...source, pieCount: 0, weightBasisPoints: 0 } : source),
             entries: publicEmpty ? [] : weightedEntries(publicWeights) },
         benchmarks: state.empty ? [] : [...benchmarks, ...extraBenchmarks, ...secondaryBenchmarks, ...sparseBenchmarks, ...aaBenchmarks,
-            ...(state.mixedAABenchmarks ? mixedAABenchmarks : [])].map(benchmark => ({
+            ...(state.mixedAABenchmarks ? mixedAABenchmarks : []), ...(state.additionalBenchmarkVersions ?? [])].map(benchmark => ({
             ...benchmark,
             publicWeightBasisPoints: publicWeights.find(entry => entry.conditionID === benchmark.conditionID)?.weightBasisPoints ?? 0,
             publicWeight: (publicWeights.find(entry => entry.conditionID === benchmark.conditionID)?.weightBasisPoints ?? 0) / 100,
