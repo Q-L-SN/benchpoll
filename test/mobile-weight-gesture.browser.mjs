@@ -43,6 +43,11 @@ for (const [engine, width] of built ? [[chromium, 390], [webkit, 390]] : [[chrom
         const saves = () => fixture.state.requests.filter(request => request.path === '/api/save_personal_pie').length;
         const savedWeight = () => fixture.state.personalEntries.find(entry => entry.conditionID === 1).weightBasisPoints;
         const saveCount = saves();
+        await page.evaluate(() => {
+            document.getElementById('weight-pie').addEventListener('pointerdown', event => {
+                if (event.pointerType === 'touch') window.weightTestTouchID = event.pointerId;
+            }, { once: true });
+        });
         await send('touchStart');
         let previous = initial;
         // A small vertical start followed by sideways drift used to trigger pointercancel.
@@ -52,6 +57,18 @@ for (const [engine, width] of built ? [[chromium, 390], [webkit, 390]] : [[chrom
             const current = await weight();
             assert.ok(current > previous, `Weight must keep following the finger: ${previous} -> ${current}`);
             previous = current;
+            if (dy === -5) {
+                // WebKit can reuse a pointer ID for mouse and touch events.
+                await page.evaluate(() => {
+                    const target = document.getElementById('weight-pie');
+                    for (const type of ['pointermove', 'pointerup', 'pointercancel']) target.dispatchEvent(new PointerEvent(type, {
+                        bubbles: true, pointerId: window.weightTestTouchID, pointerType: 'mouse', clientX: 0, clientY: 0
+                    }));
+                });
+                await page.waitForTimeout(30);
+                assert.equal(await weight(), current, 'Mouse events cannot change or finish the touch gesture');
+                assert.equal(saves(), saveCount);
+            }
         }
         await send('touchMove', -30, -50);
         await page.waitForTimeout(30);

@@ -37,6 +37,8 @@ for (const engine of built ? [chromium] : [chromium, webkit]) {
         await entry.focus();
         await page.keyboard.press('Tab');
         await page.keyboard.press('Shift+Tab');
+        // WebKit's native tab order may return to the account control instead.
+        await entry.focus();
         await tooltip.waitFor({ state: 'visible' });
         await page.keyboard.press('Enter');
         await page.waitForFunction(() => document.activeElement.id === 'discussion-close');

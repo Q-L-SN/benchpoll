@@ -3081,6 +3081,7 @@ pieSvg.addEventListener('pointerdown', event => {
     }
     touchPieGesture = {
         pointerID: event.pointerId,
+        pointerType: event.pointerType,
         startX: event.clientX,
         startY: event.clientY,
         lastY: event.clientY,
@@ -3105,7 +3106,8 @@ const flushTouchPiePreview = gesture => {
 };
 
 pieSvg.addEventListener('pointermove', event => {
-    if (!touchPieGesture || touchPieGesture.pointerID !== event.pointerId) {
+    if (!touchPieGesture || touchPieGesture.pointerID !== event.pointerId
+        || touchPieGesture.pointerType !== event.pointerType) {
         return;
     }
     if (!touchPieGesture.adjusted && Math.abs(event.clientX - touchPieGesture.startX) > TOUCH_DRAG_THRESHOLD_PX
@@ -3138,7 +3140,8 @@ pieSvg.addEventListener('touchmove', event => {
 }, { passive: false });
 
 const endTouchPieGesture = (event, cancelled = false) => {
-    if (!touchPieGesture || touchPieGesture.pointerID !== event.pointerId) {
+    if (!touchPieGesture || touchPieGesture.pointerID !== event.pointerId
+        || touchPieGesture.pointerType !== event.pointerType) {
         return;
     }
     const completedGesture = touchPieGesture;
