@@ -540,7 +540,7 @@ function weightTooltip(tile) {
 }
 
 function renderWeights(container, weights, width, height, isPrivate = false) {
-    const tiles = weightLayout(weights, width, height);
+    const tiles = weightLayout(weights, width, height, view);
     container.style.setProperty('--th-tile-ink', HOME_WEIGHT_THEME.ink);
     container.style.setProperty('--th-tile-divider', HOME_WEIGHT_THEME.divider);
     container.dataset.texture = HOME_WEIGHT_THEME.texture;
@@ -631,9 +631,9 @@ function renderModel(model, preview, geometry, plotHeight, scoreScale, topicHref
     identity.append(mark, name);
     const scoreText = !bar.comparable ? 'No comparable score' : filters.scoreMode === 'range'
         ? `Score range ${label} to ${rankingNumber(model.upper)}` : `Score ${label}`;
-    column.dataset.tooltip = `${model.modelName || model.name}\n${scoreText}\n${rankingNumber(model.coverage ?? 0)}% benchmark coverage`;
+    const description = `${model.modelName || model.name}\n${scoreText}\n${rankingNumber(model.coverage ?? 0)}% benchmark coverage`;
     if (!href) column.setAttribute('role', 'img');
-    column.setAttribute('aria-label', `${href ? 'Open ' : ''}${column.dataset.tooltip.replaceAll('\n', '. ')}`);
+    column.setAttribute('aria-label', `${href ? 'Open ' : ''}${description.replaceAll('\n', '. ')}`);
     column.append(plot, identity);
     return column;
 }

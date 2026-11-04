@@ -1,4 +1,5 @@
 import * as hierarchyModule from '../vendor/d3-hierarchy-3.1.2.js';
+import { createWeightTreemapLayout } from '../workspace/weight-treemap-layout.js';
 
 // The pinned UMD exposes a global in native modules and exports in the bundle.
 const { hierarchy, treemap, treemapSlice, treemapDice, treemapSquarify } = hierarchyModule.hierarchy ? hierarchyModule : hierarchyModule.default ?? globalThis.d3;
@@ -141,9 +142,17 @@ export function weightChainLength(tiles, height) {
     return end < 0 ? tiles.length : end;
 }
 
-export function weightLayout(weights, width, height) {
+export function weightLayout(weights, width, height, view = 'default') {
     const { entries, total } = weightEntries(weights);
     if (!entries.length || !Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return [];
+    if (view === 'weights') {
+        // Layout-only IDs include Other and entries without a condition ID; keep their original metadata in the result.
+        return createWeightTreemapLayout({ padding: 0 })(entries.map((entry, index) => ({
+            conditionID: index + 1, weightBasisPoints: entry.weightBasisPoints
+        })), width, height).map(({ conditionID, x, y, width, height }) => ({
+            ...entries[conditionID - 1], total, x, y, width, height
+        }));
+    }
     let best = null, prefix = 0, headCost = 0;
     // Full-height leading columns can expose a longer chain than rows alone,
     // especially when one large weight would otherwise push everything down.

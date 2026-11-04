@@ -110,7 +110,6 @@ export function createPieRenderer({ state, pieSvg, pieHoverTooltip, orderedPieEn
             const percent = Number(tile.weightBasisPoints) / state.limits.totalBasisPoints * 100;
             const description = `${benchmarkAccessibleName(tile)}: ${percent.toFixed(2)}%${hasFallback ? '. Fallback enabled' : ''}`;
             attributesOf(node.group, { 'aria-label': description, 'aria-pressed': selected });
-            node.group.dataset.tooltip = description;
             node.group.dataset.weight = String(tile.weightBasisPoints);
             attributesOf(node.rect, { x: tile.x, y: tile.y, width: Math.max(0, tile.width), height: Math.max(0, tile.height),
                 fill: `var(--bp-chart-${colorIndex}-start, ${PIE_GRADIENTS[colorIndex][0]})` });

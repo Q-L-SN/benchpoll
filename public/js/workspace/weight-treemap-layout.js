@@ -4,7 +4,7 @@ const { hierarchy, treemap, treemapResquarify } = hierarchyModule.hierarchy
     ? hierarchyModule : hierarchyModule.default ?? globalThis.d3;
 const horizontalShapeBias = 3;
 
-export function createWeightTreemapLayout() {
+export function createWeightTreemapLayout({ padding: outerPadding = 14 } = {}) {
     let root = null;
     let identity = '';
     const layout = treemap().tile(treemapResquarify).round(false).padding(0);
@@ -26,7 +26,7 @@ export function createWeightTreemapLayout() {
         const w = Number.isFinite(width) ? Math.max(0, width) : 0;
         const h = Number.isFinite(height) ? Math.max(0, height) : 0;
         if (!root.value || !w || !h) return [];
-        const padding = Math.min(14, w / 10, h / 10);
+        const padding = Math.min(outerPadding, w / 10, h / 10);
         // Stretch the layout space vertically, then compress it to favor wide, shallow tiles without changing areas.
         layout.size([w - padding * 2, (h - padding * 2) * horizontalShapeBias])(root);
         return root.leaves().map(node => ({ ...byID.get(node.data.id),

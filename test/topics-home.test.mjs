@@ -8,6 +8,7 @@ import { FEATURED_TOPIC_ID, OTHER_THRESHOLD, MAX_BAR_RATIO, TREEMAP_FADE, HOME_W
     weightEntries, weightLayout, weightChainLength, modelLabelLayout, MODEL_IDENTITY_HEIGHT, WEIGHT_LABEL_METRICS, fitWeightLabel, columnLayout, modelColumnOpacity, modelBarScale, barGeometry, mergePreview } from '../public/js/topics-home/layout.js';
 import { fixtureWeights } from '../scripts/frontend/topics-home-fixtures.mjs';
 import { readHomeModelFocusIntent } from '../public/js/workspace/model-focus.js';
+import { createWeightTreemapLayout } from '../public/js/workspace/weight-treemap-layout.js';
 
 test('54 stays first, without regrouping other flat topics', () => {
     assert.equal(FEATURED_TOPIC_ID, 54);
@@ -446,6 +447,7 @@ test('the official D3 distribution remains executable in an esbuild browser ESM 
         delete globalThis.d3;
         const bundled = await import(`data:text/javascript;base64,${Buffer.from(result.outputFiles[0].text).toString('base64')}`);
         assert.equal(bundled.weightLayout([{ conditionID: 1, name: 'Benchmark', weightBasisPoints: 100 }], 100, 100)[0].width, 100);
+        assert.equal(bundled.weightLayout([{ conditionID: 1, name: 'Benchmark', weightBasisPoints: 100 }], 100, 100, 'weights')[0].width, 100);
     } finally { globalThis.d3 = previous; }
 });
 
@@ -488,6 +490,63 @@ test('model hover changes only the plot background, not the bar or identity', as
     const css = await readFile(new URL('../public/css/topics-home.css', import.meta.url), 'utf8');
     assert.match(css, /@media \(hover: hover\)[\s\S]*\.th-model:hover \.th-model-plot\s*\{ background: #26313d0d; \}/);
     assert.doesNotMatch(css, /\.th-model:hover \.th-(?:model-bar|model-range|model-identity|vendor-mark|model-name)/);
+});
+
+test('home columns keep accessible score descriptions without registering a tooltip', async () => {
+    const source = await readFile(new URL('../public/js/topics-home.js', import.meta.url), 'utf8');
+    const renderer = source.slice(source.indexOf('function renderModel('), source.indexOf('function appendModelPage('));
+    assert.ok(renderer);
+    assert.doesNotMatch(renderer, /column\.(?:dataset\.(?:tooltip|helpText|helpContent)|title)\s*=|column\.setAttribute\(['"](?:title|data-tooltip|data-help-text|data-help-content)['"]/);
+    assert.match(renderer, /column\.setAttribute\('aria-label'/);
+    assert.match(renderer, /benchmark coverage/);
+    assert.match(renderer, /column\.href = href/);
+    assert.match(source, /node\.dataset\.tooltip = weightTooltip\(tile\)/, 'home weight explanations remain available');
+});
+
+test('full home weights reuse landscape-priority layout without changing mixed-view geometry', () => {
+    for (const [width, height] of [[240, 260], [330, 260], [360, 300], [1260, 300]]) {
+        for (const weights of [fixtureWeights, Array.from({ length: 12 }, (_, index) => ({
+            conditionID: index + 1, name: `Benchmark ${index}`, weightBasisPoints: 100
+        }))]) {
+            const mixed = weightLayout(weights, width, height);
+            const tiles = weightLayout(weights, width, height, 'weights');
+            const { entries, total } = weightEntries(weights);
+            const expected = createWeightTreemapLayout({ padding: 0 })(entries.map((entry, index) => ({
+                conditionID: index + 1, weightBasisPoints: entry.weightBasisPoints
+            })), width, height).map(({ conditionID, x, y, width, height }) => ({ ...entries[conditionID - 1], total, x, y, width, height }));
+            assert.deepEqual(tiles, expected);
+            assert.deepEqual(tiles, weightLayout([...weights].reverse(), width, height, 'weights'));
+            const wide = tiles.filter(tile => tile.width > tile.height * 1.2);
+            assert.ok(wide.length >= Math.ceil(tiles.length * 2 / 3), `${width}x${height}: wide tile count`);
+            assert.ok(wide.reduce((sum, tile) => sum + tile.share, 0) >= .7);
+            assert.ok(Math.abs(tiles.reduce((sum, tile) => sum + tile.width * tile.height, 0) - width * height) < 1e-7);
+            for (const [index, tile] of tiles.entries()) {
+                assert.ok(tile.x >= 0 && tile.y >= 0 && tile.x + tile.width <= width + 1e-7 && tile.y + tile.height <= height + 1e-7);
+                assert.ok(Math.abs(tile.width * tile.height / (width * height) - tile.share) < 1e-9);
+                for (const other of tiles.slice(index + 1)) {
+                    assert.ok(Math.min(tile.x + tile.width, other.x + other.width) - Math.max(tile.x, other.x) < 1e-7
+                        || Math.min(tile.y + tile.height, other.y + other.height) - Math.max(tile.y, other.y) < 1e-7);
+                }
+            }
+            assert.deepEqual(weightLayout(weights, width, height, 'default'), mixed);
+        }
+    }
+});
+
+test('full home weights retain topic references, missing IDs, Other members and invalid-input handling', () => {
+    const weights = [{ conditionID: -54, name: 'Coding', objectType: 'topic', weightBasisPoints: 8000 },
+        { name: 'No condition ID', weightBasisPoints: 1900 },
+        { conditionID: 0, name: 'Small A', weightBasisPoints: 50 },
+        { conditionID: 3, name: 'Small B', weightBasisPoints: 50 }];
+    const tiles = weightLayout(weights, 360, 300, 'weights');
+    assert.deepEqual(tiles.map(({ total, x, y, width, height, ...entry }) => entry), weightEntries(weights).entries);
+    assert.equal(tiles.find(tile => tile.key === 'other').members.length, 2);
+    assert.equal(tiles.reduce((sum, tile) => sum + tile.weightBasisPoints, 0), 10000);
+    assert.deepEqual(weightLayout([], 360, 300, 'weights'), []);
+    for (const size of [0, -1, NaN, Infinity]) {
+        assert.deepEqual(weightLayout(weights, size, 300, 'weights'), []);
+        assert.deepEqual(weightLayout(weights, 360, size, 'weights'), []);
+    }
 });
 
 test('range is one complete neutral upper column behind the unchanged vendor-color known column', async () => {

@@ -67,7 +67,8 @@ for (const [engine, width] of [['chromium', 1440], ['chromium', 390], ['webkit',
                             if (!row.hasAttribute('mask') && (box.x < rect.x - .1 || box.x + box.width > rect.x + rect.width + .1
                                 || box.y < rect.y - .1 || box.y + box.height > rect.y + rect.height + .1)) throw new Error('Label escaped block');
                         }
-                        if (!group.dataset.tooltip.includes('%')) throw new Error('Missing full weight tooltip');
+                        if (!group.getAttribute('aria-label')?.includes('%')) throw new Error('Missing accessible weight description');
+                        if (group.matches('[data-tooltip], [title]') || group.querySelector('title')) throw new Error('Unexpected weight tooltip');
                     }
                     checked++;
                 }
@@ -130,10 +131,14 @@ for (const [engine, width] of [['chromium', 1440], ['chromium', 390], ['webkit',
             const outer = group.closest('svg').getBoundingClientRect(), rect = group.querySelector('.bp-weight-tile').getBoundingClientRect();
             return rect.left >= outer.left && rect.right <= outer.right && rect.top >= outer.top && rect.bottom <= outer.bottom;
         }), true);
+        await page.waitForTimeout(350);
+        assert.equal(await page.locator('#bp-help-popover').isVisible(), false, 'hover enlarges the tile without a tooltip');
+        assert.match(await target.getAttribute('aria-label'), /50\.00%\. Fallback enabled/);
         await target.click();
         for (const key of ['Enter', 'Space']) { await target.focus(); await page.keyboard.press(key); }
         assert.deepEqual(await page.evaluate(() => window.treemapQA.selections), [1, 1, 1]);
         assert.equal(await target.evaluate(node => document.activeElement === node), true);
+        assert.equal(await page.locator('#bp-help-popover').isVisible(), false, 'keyboard selection remains tooltip-free');
         await page.evaluate(() => window.treemapQA.set([6000, 2000, 1000, 1000], 'Benchmark', true));
         await page.waitForFunction(() => window.treemapQA.state.pieAnimationFrame === null);
         assert.equal(await target.getAttribute('data-weight'), '6000');
@@ -176,6 +181,10 @@ for (const [engine, width] of [['chromium', 1440], ['chromium', 390], ['webkit',
         const id = Number(await page.locator('#weight-pie > g[data-object-id]').first().getAttribute('data-object-id'));
         const target = page.locator(`#weight-pie > g[data-object-id="${id}"]`);
         const original = app.state.personalEntries.find(entry => entry.conditionID === id).weightBasisPoints;
+        await target.hover();
+        await page.waitForTimeout(350);
+        assert.equal(await target.getAttribute('data-tooltip'), null);
+        assert.equal(await page.locator('#bp-help-popover').isVisible(), false);
         await target.click();
         assert.equal(await target.getAttribute('aria-pressed'), 'true');
         const saved = page.waitForResponse(response => response.url().endsWith('/api/save_personal_pie') && response.status() === 200);
@@ -210,6 +219,13 @@ for (const [engine, width] of [['chromium', 1440], ['chromium', 390], ['webkit',
         await page.locator('#pie-mode-public').click();
         await page.waitForFunction(() => document.querySelector('#weight-pie').getAttribute('aria-label').startsWith('Public'));
         assert.match(await page.locator('#weight-pie').getAttribute('aria-label'), /^Public.*treemap/);
+        await page.locator('#weight-pie > g[data-object-id]').first().hover();
+        await page.waitForTimeout(350);
+        assert.equal(await page.locator('#weight-pie [data-tooltip], #weight-pie title').count(), 0);
+        assert.equal(await page.locator('#bp-help-popover').isVisible(), false, 'public tiles are tooltip-free too');
+        await page.locator('[data-help-content="public-pie-tooltip"]').hover();
+        await page.locator('#bp-help-popover').waitFor({ state: 'visible' });
+        assert.match(await page.locator('#bp-help-popover').textContent(), /Your saved weights help shape the public index/);
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
     });
 }
