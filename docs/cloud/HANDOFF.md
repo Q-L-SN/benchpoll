@@ -79,6 +79,16 @@ thresholds and brings the homepage header/island transition forward. Read
 for the runtime allowlist and checks. It includes two server-side modules but
 requires no schema or production-data changes; installation remains pending.
 
+An independent local maintenance release is now installed: AA catalogue archival
+and the four chart-interaction source changes from `d71b190843ee1e42192f6db458b40b56c11489b6`.
+It does **not** deploy any of the pending cloud updates above. The archive removed
+30 AA benchmarks and 160 versions from the live catalogue, archived 5,457 score
+rows without deleting their evidence, and created empty default versions 28000
+and 28001. Read [`../aa-catalogue-archive-20261104.md`](../aa-catalogue-archive-20261104.md)
+for the exact inventory, and
+[`../releases/20261104-aa-chart-rollout.md`](../releases/20261104-aa-chart-rollout.md)
+for the current source manifest, verification and restoration boundary.
+
 ## Repositories And Starting Point
 
 - Source: <https://github.com/Q-L-SN/benchpoll>, branch `codex/cloud-handoff-20261101`.
@@ -183,12 +193,16 @@ another multi-gigabyte rehearsal database without checking the disk reserve.
 
 Base feature release: `scene-community-20261104-d7a43b2`, installed
 `2026-11-04T04:32:26.940Z` (12:32:26 Asia/Shanghai), at commit `2e2440a`.
-Latest follow-up: `ranking-memory-20261104`, installed
+Memory follow-up: `ranking-memory-20261104`, installed
 `2026-11-04T05:02:14.018Z` (13:02:14 Asia/Shanghai), at commit `a8f3a7e`.
-The current baseline is the feature release's 232-path manifest with the two
-ranking-source overrides in the memory follow-up receipt. Verify it using
-`deploy-ranking-memory-20261104.mjs verify` from that follow-up's release directory;
-the unmodified feature verifier will correctly flag the two superseded hashes.
+Latest UI follow-up: `chart-interactions-20261104`, installed
+`2026-11-04T14:20:29.517Z` (22:20:29 Asia/Shanghai). Its verified 10-file overlay
+contains only four chart modules and rebuilt homepage/workspace assets. The
+current baseline is the feature release's 232-path manifest plus the memory
+and chart overrides. Verify it using `deploy-chart-interactions-20261104.mjs verify`
+from the chart release directory. Earlier verifiers now correctly flag the
+superseded UI hashes. AA data archival completed separately at
+`2026-11-04T14:04:26Z`; do not replay that batch or older AA restoration scripts.
 Existing source backups and private database/schema receipts are retained
 server-side. Daily deployment automation was cancelled and was not created.
 

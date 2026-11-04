@@ -23,7 +23,7 @@ async function geometry(card) {
 
 for (const engine of [chromium, webkit]) for (const width of [390, 1440]) {
     test(`${engine.name()} ${width}: quiet model bars, landscape full weights and unchanged mixed view`, async t => {
-        const app = await startTopicsPreview({ built: false });
+        const app = await startTopicsPreview({ built: process.env.BP_UI_BUILT === '1' });
         t.after(() => app.close());
         const browser = await engine.launch(launch);
         t.after(() => browser.close());
