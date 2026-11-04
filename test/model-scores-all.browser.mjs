@@ -222,7 +222,7 @@ export async function runAllScoresBrowserQA({ output = 'D:/Codex-artifacts/websi
             });
             await page.waitForFunction(() => document.getElementById('model-scores-summary').textContent.includes('Score range 32 to 92'));
             assert.equal(await details.count(), 0);
-            assert.match(await page.locator('#model-scores-summary').innerText(), /not a confidence interval/);
+            assert.match(await page.locator('#model-scores-summary').innerText(), /Missing results count as 0 at the lower end and 100 at the upper end/);
         }, { viewport: { width, height: 900 } });
 
         await run('accordion-and-evidence', async ({ page, requests }) => {

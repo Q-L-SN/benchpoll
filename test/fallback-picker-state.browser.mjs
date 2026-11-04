@@ -201,7 +201,7 @@ test('Escape dismisses the shared help layer before cancelling the chooser and r
     await page.getByRole('button', { name: 'About fallback configuration shares', exact: true }).click();
     const tooltip = page.getByRole('tooltip');
     await tooltip.waitFor();
-    assert.match(await tooltip.textContent(), /Following the community is not a vote\. No fallback is an explicit choice/);
+    assert.match(await tooltip.textContent(), /Leave the choice open to follow those shares\. Choosing No fallback counts as a preference/);
     await page.keyboard.press('Escape');
     await tooltip.waitFor({ state: 'hidden' });
     assert.equal(await page.locator('#fallback-picker').isVisible(), true);

@@ -42,7 +42,7 @@ test('full privacy document has navigable collection, use, storage, transfer, re
     assert.match(privacy, /id="international"/);
     assert.match(privacy, /enforced Content Security Policy/i);
     assert.match(privacy, /external Cloudflare Web Analytics/i);
-    assert.match(privacy, /(?:does not|not a blanket block)[^.]*same-origin[^.]*image-based tracking/i);
+    assert.match(privacy, /same-origin scripts and HTTPS images remain permitted/i);
     assert.doesNotMatch(privacy, /Nonessential analytics scripts[^.]*blocked from executing/i);
     assert.match(privacy, /Cloudflare provides DNS, proxying and network protection/i);
 });
@@ -104,7 +104,7 @@ test('legal pages publish owner-confirmed contact inboxes without inventing a le
         }
         for (const path of ['/cookies', '/community-guidelines']) assert.ok(document.includes(`href="${path}"`));
     }
-    assert.match(privacy, /missing information remains unresolved/i);
+    assert.match(privacy, /legal name and postal address have not been published/i);
     assert.doesNotMatch(terms, /legal name and postal address have not been published|missing information remains unresolved/i);
     assert.match(terms, /agreement between you and/);
     assert.doesNotMatch(privacy, /No alternative private contact route is currently confirmed/i);
@@ -125,8 +125,8 @@ test('terms cover community ranking limits, necessary content rights and proport
         assert.match(terms, new RegExp(`href="#${id}"`));
     }
     assert.match(terms, /currently free[^.]*no payment or subscription/i);
-    assert.match(terms, /missing score is not proof of zero ability/i);
-    assert.match(terms, /Personal pies[^.]*not new laboratory measurements/i);
+    assert.match(terms, /Missing scores represent gaps in the evidence/i);
+    assert.match(terms, /Personal pies define your evaluation choices and weights/i);
     assert.match(terms, /saved pies in public categories contribute to aggregate Public Weights/i);
     assert.match(terms, /exclude manipulated activity/i);
     assert.match(terms, /retain ownership/i);
@@ -178,11 +178,11 @@ test('privacy requests use the anonymous account page and human verification, no
         assert.match(document, /without signing in/i);
         assert.match(document, /access, correction, erasure or objection/i);
         assert.match(document, /human[^.]*verif/i);
-        assert.match(document, /not (?:an )?automatic full[- ]erasure/i);
+        assert.match(document, /Requests, replies and erasure are handled manually/i);
         assert.doesNotMatch(document, /\bdata-privacy-request(?:\s|=|>)/);
     }
     assert.match(privacy, /reply email address and message/i);
-    assert.match(privacy, /email address alone is not proof of ownership/i);
+    assert.match(privacy, /human will verify ownership/i);
     assert.doesNotMatch(privacy, /(?:form|request)[^.]*requires GitHub sign-in/i);
 });
 

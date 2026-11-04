@@ -313,8 +313,8 @@ function renderScoringControls() {
     scoringSwitch.dataset.mode = state.scoreMode;
     estimationControl.render(state);
     setHelpText(scoringSwitch.querySelector('.bp-scoring-help'), state.estimationAlgorithm === 'current'
-        ? 'Estimated score fills missing results where possible, then adjusts the whole index for measured coverage. Score range keeps measured results fixed and shows two scenarios for missing results, not statistical confidence.'
-        : 'Estimated score uses the selected test algorithm for missing weight only. Measured contributions stay fixed. Score range shows the same two missing-score scenarios and is not a confidence interval.');
+        ? 'Estimated score combines available results and estimates, then adjusts the whole index for measured coverage. Score range keeps measured results fixed and fills gaps with 0 or 100.'
+        : 'Estimated score adjusts missing weight using the selected method and keeps measured contributions fixed. Score range fills gaps with 0 or 100.');
 }
 renderScoringControls();
 let scoreModeChangeID = 0;
@@ -1428,7 +1428,7 @@ function addObjectToFallbackChain(object) {
     const primary = selectedInlineFallbackPrimary();
     if (!primary || !isInlineFallbackTargetActive()) return false;
     if (object.isFamily) {
-        setStatus('Choose a benchmark version, not another fallback configuration.');
+        setStatus('Choose a benchmark version to add as a backup.');
         return false;
     }
     const conditionID = Number(object.ID);

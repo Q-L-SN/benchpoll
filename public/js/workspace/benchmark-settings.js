@@ -24,8 +24,8 @@ export function createBenchmarkSettings({ getScope, getData, onVersion, onContri
     const versions = node('section', 'bp-benchmark-settings-section bp-benchmark-settings-versions');
     const versionHeading = node('div', 'bp-benchmark-settings-section-heading');
     const help = createAction({ label: 'About community version choices', icon: 'fa-regular fa-circle-question', iconOnly: true });
-    setHelpText(help, 'Only explicit choices shape community proportions, weighted by your allocation to this benchmark. '
-        + 'Versions are ordered by selection share, then approved score count. Click a selected version again to follow community choices without adding a vote.');
+    setHelpText(help, 'Your version choice contributes to community proportions, weighted by your allocation to this benchmark. '
+        + 'Versions are ordered by selection share, then approved score count. Click your selected version again to clear your vote and follow the community.');
     versionHeading.append(node('h3', '', 'Benchmark version'), help);
     const list = node('div', 'bp-version-choices'); list.setAttribute('role', 'group'); list.setAttribute('aria-label', 'Benchmark versions');
     versions.append(versionHeading, list);

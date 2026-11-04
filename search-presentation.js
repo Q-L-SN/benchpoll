@@ -4,10 +4,10 @@ import { FEATURED_TOPIC_ID, sceneSummary, topicSlug } from './public/js/shared/t
 export const PUBLIC_DOCUMENTS = Object.freeze([
     { path: '/', title: SITE_TITLE, description: SITE_DESCRIPTION, type: 'CollectionPage' },
     { path: '/how-it-works', title: 'How BenchPoll Works - Weights, Scores and Fallback', description: 'Understand BenchPoll public and personal AI indices, topic references, measured coverage, missing-score estimation and community fallback.' },
-    { path: '/terms', title: 'Terms of Use | BenchPoll', description: 'Terms for BenchPoll accounts, evaluation contributions, public and private topics, AI indices and discussions.', modified: '2026-11-01' },
-    { path: '/privacy', title: 'Privacy Policy | BenchPoll', description: 'How BenchPoll handles account information, private topics, contributions and privacy requests.', modified: '2026-10-30' },
-    { path: '/cookies', title: 'Cookie and Local Storage Policy | BenchPoll', description: 'Cookies, local storage, session preferences and your choices on BenchPoll.', modified: '2026-10-28' },
-    { path: '/community-guidelines', title: 'Contribution and Community Rules | BenchPoll', description: 'Evidence, sources, discussions, moderation and participation rules for BenchPoll.', modified: '2026-10-28' }
+    { path: '/terms', title: 'Terms of Use | BenchPoll', description: 'Terms for BenchPoll accounts, evaluation contributions, public and private topics, AI indices and discussions.', modified: '2026-11-04' },
+    { path: '/privacy', title: 'Privacy Policy | BenchPoll', description: 'How BenchPoll handles account information, private topics, contributions and privacy requests.', modified: '2026-11-04' },
+    { path: '/cookies', title: 'Cookie and Local Storage Policy | BenchPoll', description: 'Cookies, local storage, session preferences and your choices on BenchPoll.', modified: '2026-11-04' },
+    { path: '/community-guidelines', title: 'Contribution and Community Rules | BenchPoll', description: 'Evidence, sources, discussions, moderation and participation rules for BenchPoll.', modified: '2026-11-04' }
 ]);
 
 export const escapeHTML = value => String(value ?? '').replace(/[&<>"']/g, char => ({
@@ -136,9 +136,9 @@ export function discoveryText(topics, origin) {
 
 > ${SITE_TAGLINE}
 
-BenchPoll is a community-weighted AI model ranking platform. Participants choose benchmark and topic weights to define what matters in an AI index. The tagline "${SITE_TAGLINE}" describes this shared choice of evaluation priorities. Benchmark evidence supplies measured results; community preferences determine their importance. Explore public rankings by topic and scene, inspect the evidence, or build a personal index.
+BenchPoll is a community-weighted AI model ranking platform. Participants choose benchmark and topic weights to define what matters in an AI index. Explore public rankings by topic and scene, inspect the evidence, or build a personal index.
 
-BenchPoll publishes community-weighted AI indices, not new laboratory measurements. Public and personal indices are distinct. Estimated scores can include inferred results; measured coverage excludes those estimates. Score range is not a confidence interval. Topic references expand weights rather than averaging child index scores. Scores depend on the selected topic, scene, weights and comparison settings.
+Benchmark evidence supplies measured results; public or personal weights determine their importance. Estimated scores combine available results with estimates and a coverage adjustment. Coverage counts measured results, including successful fallbacks. Score range holds measurements fixed and fills missing scores with 0 at the lower end and 100 at the upper end. Topic references expand into benchmark weights before scores are calculated. Scores depend on the selected topic, scene, weights and comparison settings.
 
 ## Methodology and evidence
 - ${link('How BenchPoll works', '/how-it-works')}

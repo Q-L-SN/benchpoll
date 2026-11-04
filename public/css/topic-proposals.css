@@ -10,6 +10,9 @@
 }
 .tp-page a { color: inherit; }
 .tp-page [hidden] { display: none !important; }
+#proposal-details-step { display: grid; gap: 18px; }
+.tp-update-notice { display: flex; align-items: flex-start; gap: 10px; padding: 12px; border: 1px solid var(--bp-line); border-radius: 6px; background: var(--bp-surface-soft); color: var(--bp-text); font-size: 13px; }
+.tp-update-notice i { margin-top: 3px; flex-shrink: 0; }
 .tp-page { overflow-anchor: none; }
 .tp-page :is(h1, h2, h3, p) { margin: 0; overflow-wrap: anywhere; }
 .tp-page :is(button, a, input, textarea) { letter-spacing: 0; }
@@ -153,6 +156,7 @@ body.tp-page .bp-ui-action[data-ui-variant] { min-height: 44px; }
     .tp-dialog { padding: 18px; }
     .tp-dialog-heading h2 { font-size: 18px; }
     .tp-dialog-actions { display: grid; grid-template-columns: auto minmax(0, 1fr); }
+    #proposal-submit { grid-column: 1 / -1; }
     #proposal-editor-withdraw { grid-column: 1 / -1; justify-self: start; }
 }
 .tp-tabs { display: flex; gap: 8px; margin: 4px 0 16px; border-bottom: 1px solid var(--bp-line, #dfe3e8); }

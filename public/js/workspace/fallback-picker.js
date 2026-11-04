@@ -60,7 +60,7 @@ export function createFallbackPicker({ catalogue, getScope, getPrimary, getCompo
     const help = button('bp-help-trigger', '', 'circle-question');
     help.querySelector('i').className = 'fa-regular fa-circle-question';
     help.setAttribute('aria-label', 'About fallback configuration shares');
-    setHelpText(help, 'Only explicit choices shape community shares, weighted by each person\'s allocation to this benchmark. Following the community is not a vote. No fallback is an explicit choice; missing-score estimation remains separate.');
+    setHelpText(help, 'Community shares come from explicit choices, weighted by each person\'s allocation to this benchmark. Leave the choice open to follow those shares. Choosing No fallback counts as a preference for using the selected version alone.');
     const electorate = element('span', 'bp-fallback-picker-electorate');
     const navigation = element('div', 'bp-fallback-picker-navigation');
     const previous = button('bp-fallback-picker-arrow', '', 'chevron-left'); previous.setAttribute('aria-label', 'Previous fallback order');
@@ -251,7 +251,7 @@ export function createFallbackPicker({ catalogue, getScope, getPrimary, getCompo
         const recommended = view.featured.some(row => row.familyEntries.length > 0);
         customAdd.hidden = intent.action !== 'add';
         configureAction(customAdd, { variant: recommended ? 'quiet' : 'primary' });
-        customAdd.querySelector('span').textContent = `Skip fallback or create my own${recommended ? ' (not recommended)' : ''}`;
+        customAdd.querySelector('span').textContent = 'Skip fallback or create my own';
         shell.setAttribute('aria-busy', String(view.loading));
         updateSelection(); scrolling.refresh();
     }

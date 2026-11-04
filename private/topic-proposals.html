@@ -36,8 +36,8 @@
             <ul>
                 <li>Up to <strong>3 active supports</strong> and <strong>1 collecting proposal</strong> per account.</li>
                 <li>Collection lasts <strong>14 days</strong>. Review and closed proposals do not use these limits. Private Topics are unaffected.</li>
-                <li>While collecting, you can cancel support or edit or withdraw your own proposal. Editing resets all supports, not the deadline.</li>
-                <li>New Topics start from your saved private Topic. Everyone can preview its configuration and try personal weights before supporting it.</li>
+                <li>While collecting, you can cancel support or edit or withdraw your own proposal. Updating a proposal resets its support count and keeps the original deadline.</li>
+                <li>Submit a saved private Topic with its scenes and weights. Everyone can preview and discuss the proposal; the proposer controls its weights while collecting support.</li>
             </ul>
         </section>
         <section class="tp-quota" aria-label="Your proposal limits">
@@ -64,27 +64,23 @@
         </section>
         <noscript><p>JavaScript is required to load Topic proposals. <a href="/">Back to Topics</a></p></noscript>
     </main>
-    <dialog id="proposal-dialog" class="tp-dialog" aria-labelledby="proposal-dialog-title" aria-describedby="proposal-review-notice">
+    <dialog id="proposal-dialog" class="tp-dialog" aria-labelledby="proposal-dialog-title" aria-describedby="proposal-step-label">
         <header class="tp-dialog-heading">
             <h2 id="proposal-dialog-title">Propose a Topic</h2>
             <button id="proposal-close" class="bp-ui-action is-icon-only" data-ui-variant="quiet" type="button" aria-label="Close proposal" data-tooltip="Close proposal"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
         </header>
         <form id="proposal-form" method="dialog" novalidate>
-            <div class="tp-field">
-                <label for="proposal-target">Proposal for</label>
-                <select id="proposal-target" class="bp-ui-input" aria-describedby="proposal-target-error"><option value="">New topic</option></select>
-                <p id="proposal-target-error" class="tp-field-error" hidden></p>
-                <div id="proposal-target-status" class="tp-form-status" role="status" hidden></div>
-            </div>
+            <p id="proposal-step-label" class="tp-review-notice">Step 1 of 2 · Choose a private Topic</p>
             <div id="proposal-source-field" class="tp-field">
                 <label for="proposal-source">Your private Topic</label>
-                <select id="proposal-source" class="bp-ui-input"><option value="">Choose a saved private Topic</option></select>
+                <select id="proposal-source" class="bp-ui-input" aria-describedby="proposal-source-error"><option value="">Choose a saved private Topic</option></select>
                 <p id="proposal-source-error" class="tp-field-error" hidden></p>
-                <p class="tp-review-notice">Publish a snapshot of its scenes, saved weights and fallback choices. Your original stays private. Private references must be removed first.</p>
+                <div id="proposal-source-status" class="tp-form-status" role="status" hidden></div>
+                <p class="tp-review-notice">Share its scenes, saved weights and fallback choices as a proposal snapshot. Your original stays private. Use public references in the configuration you submit.</p>
                 <a id="proposal-source-link" hidden target="_blank" rel="noopener">Open private Topic</a>
-                <button id="proposal-source-refresh" class="bp-ui-action" data-ui-variant="quiet" type="button">Refresh private Topics</button>
                 <a href="/">Create or configure a private Topic</a>
             </div>
+            <div id="proposal-details-step" hidden>
             <div class="tp-field">
                 <div class="tp-field-label"><label for="proposal-name">Topic name</label><span id="proposal-name-count" class="tp-count">0 / 128</span></div>
                 <input id="proposal-name" class="bp-ui-input" name="name" type="text" required autocomplete="off" aria-describedby="proposal-name-count proposal-name-error" autofocus>
@@ -96,15 +92,19 @@
                 <p id="proposal-description-error" class="tp-field-error" hidden></p>
             </div>
             <p id="proposal-review-notice" class="tp-review-notice"><i class="fa-solid fa-users" aria-hidden="true"></i><span>30 supporters send your proposal to administrator review.</span></p>
+            <p id="proposal-update-notice" class="tp-update-notice"><i class="fa-solid fa-arrow-rotate-left" aria-hidden="true"></i><span>After publication, updating this proposal resets its support count to zero. The collection deadline stays the same.</span></p>
             <p id="proposal-edit-notice" class="tp-review-notice" hidden></p>
             <div id="proposal-latest-version" class="tp-latest-version" hidden></div>
             <p id="proposal-email-notice" class="tp-email-notice">You will receive the review result by email. We will use the verified address linked to your GitHub account.</p>
+            </div>
             <div id="proposal-form-status" class="tp-form-status" role="alert" hidden></div>
             <div id="proposal-sign-in-note" class="tp-sign-in-note" hidden></div>
             <footer class="tp-dialog-actions">
                 <button id="proposal-editor-withdraw" class="bp-ui-action" data-ui-variant="quiet" type="button" hidden><i class="fa-solid fa-trash-can" aria-hidden="true"></i><span>Withdraw</span></button>
                 <button id="proposal-cancel" class="bp-ui-action" data-ui-variant="quiet" type="button">Cancel</button>
-                <button id="proposal-submit" class="bp-ui-action" data-ui-variant="primary" type="submit" disabled><i class="fa-solid fa-paper-plane" aria-hidden="true"></i><span>Publish proposal</span></button>
+                <button id="proposal-back" class="bp-ui-action" data-ui-variant="quiet" type="button" hidden>Back</button>
+                <button id="proposal-next" class="bp-ui-action" data-ui-variant="primary" type="button" disabled>Next</button>
+                <button id="proposal-submit" class="bp-ui-action" data-ui-variant="primary" type="submit" disabled hidden><i class="fa-solid fa-paper-plane" aria-hidden="true"></i><span>Publish proposal</span></button>
             </footer>
         </form>
     </dialog>

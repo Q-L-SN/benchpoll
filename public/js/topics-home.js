@@ -1033,7 +1033,7 @@ function syncHeader() {
     const restingHeight = headerPlaceholder.getBoundingClientRect().height;
     const threshold = document.body.classList.contains('is-scrolled')
         ? Math.max(restingHeight, header.getBoundingClientRect().height) : restingHeight;
-    const passed = $('#home-hero').getBoundingClientRect().bottom <= threshold + 16;
+    const passed = $('#home-hero').getBoundingClientRect().bottom <= threshold + 96;
     setHeaderVisible(passed);
     if (!passed) topicSearchLayer.close({ reason: 'header-hidden' });
     document.documentElement.style.setProperty('--th-header-height', `${Math.ceil(header.getBoundingClientRect().height)}px`);

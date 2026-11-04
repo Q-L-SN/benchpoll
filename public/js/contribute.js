@@ -374,7 +374,7 @@ function renderEvaluationSuggestions(query) {
         return '';
     }
     return `<div class="evaluation-suggestions" role="listbox" aria-label="Existing benchmarks">
-        <p class="duplicate-check-heading"><strong>Is your benchmark already listed?</strong><span>Do not submit it twice. Select a match to add a version instead.</span></p>
+        <p class="duplicate-check-heading"><strong>Is your benchmark already listed?</strong><span>Select a match to add a version to it.</span></p>
         ${conditionSuggestionGroups(suggestions, ({ object, condition }) => `<button type="button" role="option" data-select-evaluation="${escapeHTML(object.ID)}">
             ${benchmarkChoiceLabel(object, condition)}${conditionScoreCount(condition)}
         </button>`)}

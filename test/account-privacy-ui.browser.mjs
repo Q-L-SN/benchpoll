@@ -287,7 +287,7 @@ test('senior closure requires resolution, preserves unsaved drafts and confirms 
     assert.equal(await page.locator('#queue-resolution').inputValue(), 'Verified through an established channel; request handled manually.');
     await page.locator('#update-request').click();
     await page.waitForFunction(() => document.getElementById('queue-update-result').dataset.tone === 'success');
-    assert.match(await page.locator('#queue-update-result').textContent(), /No email was sent and no data was automatically erased/);
+    assert.match(await page.locator('#queue-update-result').textContent(), /Send any reply and carry out any approved data changes separately/);
     assert.equal(state.requests.at(-1).body.expectedUserID, '9007199254740993');
     assert.equal(state.entries[0].status, 'closed');
 });

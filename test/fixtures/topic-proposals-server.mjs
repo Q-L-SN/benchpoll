@@ -36,7 +36,8 @@ const defaultProposals = () => [
 
 export async function startProposalFixture({ port = 0, profile = proposalProfile, proposals = defaultProposals() } = {}) {
     const state = { profile: structuredClone(profile), proposals: structuredClone(proposals),
-        topics: [{ ID: 54, name: 'Intelligence', isPrivate: false }, { ID: 190, name: 'Coding', isPrivate: false }],
+        topics: [{ ID: 54, name: 'Intelligence', isPrivate: false }, { ID: 190, name: 'Coding', isPrivate: false },
+            { ID: 501, name: 'My evaluation', description: 'Evaluate models for my daily work.', isPrivate: true }],
         csrfToken: 'local-proposal-csrf-token', privacyUserID: undefined,
         requests: [], staticRequests: [], failures: [], responses: new Map(), holds: new Map(),
         authors: new Map([[105, PROPOSAL_OWNER]]), voters: new Map(), replays: new Map(), now: () => Date.now() };
@@ -88,10 +89,10 @@ export async function startProposalFixture({ port = 0, profile = proposalProfile
                 const keys = {
                     '/api/get_user_profile': [], '/api/get_privacy_status': [], '/api/get_device_count': [], '/api/get_topics': [],
                     '/api/get_topic_proposals': [...(Object.hasOwn(body, 'view') ? ['view'] : []), ...(Object.hasOwn(body, 'before') ? ['before'] : [])],
-                    '/api/propose_topic': ['name', 'description', 'csrfToken', 'expectedUserID', ...(Object.hasOwn(body, 'parentTopicID') ? ['parentTopicID'] : [])],
+                    '/api/propose_topic': ['sourceTopicID', 'name', 'description', 'csrfToken', 'expectedUserID'],
                     '/api/vote_topic_proposal': ['proposalID', 'revision', 'csrfToken', 'expectedUserID'],
                     '/api/cancel_topic_proposal_support': ['proposalID', 'revision', 'csrfToken', 'expectedUserID'],
-                    '/api/edit_topic_proposal': ['proposalID', 'revision', 'name', 'description', 'csrfToken', 'expectedUserID'],
+                    '/api/edit_topic_proposal': ['proposalID', 'revision', 'name', 'description', 'csrfToken', 'expectedUserID', ...(Object.hasOwn(body, 'sourceTopicID') ? ['sourceTopicID'] : [])],
                     '/api/withdraw_topic_proposal': ['proposalID', 'revision', 'csrfToken', 'expectedUserID']
                 }[pathname];
                 if (!keys || !body || Array.isArray(body) || JSON.stringify(Object.keys(body).sort()) !== JSON.stringify(keys.sort())) return send(400, { error: 'unexpected_fixture_payload' });
@@ -99,7 +100,7 @@ export async function startProposalFixture({ port = 0, profile = proposalProfile
                 const queued = state.responses.get(pathname)?.shift();
                 if (queued && !queued.commit) return send(queued.code ?? 200, queued.body, queued);
                 if (pathname === '/api/get_user_profile') return send(200, state.profile);
-                if (pathname === '/api/get_topics') return send(200, { topics: state.topics });
+                if (pathname === '/api/get_topics') return send(200, { topics: state.topics.filter(topic => state.profile || !topic.isPrivate) });
                 if (pathname === '/api/get_privacy_status') return send(200, { authenticated: Boolean(state.profile),
                     userID: state.privacyUserID === undefined ? state.profile?.userID ?? null : state.privacyUserID,
                     csrfToken: state.csrfToken });
@@ -132,14 +133,14 @@ export async function startProposalFixture({ port = 0, profile = proposalProfile
                     if (accountQuota().activeProposalID !== null) fail(409, 'active_topic_proposal_limit');
                     if (typeof body.name !== 'string' || !body.name || [...body.name].length > 128) fail(400, 'invalid_topic_name');
                     normalizeTopicSummary(body.description);
-                    const parent = body.parentTopicID === undefined ? null : state.topics.find(topic => topic.ID === body.parentTopicID && !topic.isPrivate);
-                    if (body.parentTopicID !== undefined && !parent) fail(400, 'public_topic_required');
-                    if (!parent && isReservedTopicSlug(body.name)) fail(400, 'reserved_topic_name');
+                    if (!state.topics.some(topic => topic.isPrivate && topic.ID === body.sourceTopicID)) fail(400, 'private_topic_source_required');
+                    if (isReservedTopicSlug(body.name)) fail(400, 'reserved_topic_name');
                     if (state.proposals.some(item => item.name === body.name)) fail(409, 'topic_proposal_exists');
                     const proposal = fixtureProposal({ proposalID: Math.max(0, ...state.proposals.map(item => item.proposalID)) + 1,
                         name: body.name, description: body.description, supportCount: 0, canSupport: false,
                         expiresAt: new Date(state.now() + 14 * 86400000).toISOString(),
-                        ...(parent ? { kind: 'scene', parentTopicID: parent.ID, parentTopicName: parent.name, sceneID: null } : {}) });
+                        hasSnapshot: true, sourceTopicID: body.sourceTopicID });
+                    proposal.previewURL = `/topic-proposals/${proposal.proposalID}/preview`;
                     state.proposals.unshift(proposal);
                     state.authors.set(proposal.proposalID, state.profile.userID);
                     result = serialize(proposal);

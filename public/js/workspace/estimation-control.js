@@ -12,8 +12,8 @@ export function createEstimationControl(host, { onChange }) {
     return { render({ scoreMode, estimationAlgorithm }) {
         host.hidden = scoreMode !== 'available'; select.value = estimationAlgorithm;
         const selected = ESTIMATION_ALGORITHMS.find(item => item.ID === estimationAlgorithm);
-        setHelpText(help, selected.description + ' This is a test setting for this tab. '
-            + (estimationAlgorithm === 'current' ? 'The default algorithm is unchanged.'
-                : 'Missing-only methods use 50 for gaps without a prediction and bound predictions to 0–100. The midpoint is a test assumption, not a statistical confidence estimate.'));
+        setHelpText(help, selected.description + ' Applies to this tab.'
+            + (estimationAlgorithm === 'current' ? ''
+                : ' Predictions use a 0–100 range, with a fixed midpoint of 50 for unresolved gaps.'));
     } };
 }

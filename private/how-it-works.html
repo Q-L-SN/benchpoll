@@ -69,7 +69,7 @@
                     <p>Open a topic for its public index, a model for its results and sources. Personal weights let you build your own index.</p>
                     <p>Filters apply to every card; <strong>Estimated score</strong> is the default. Browse Popular, Recent, or Mine.</p>
                     <p>A topic may have one level of scenes with separate weights and discussions. The default scene comes first.</p>
-                    <p>Expand topics to browse scenes; scene search matches appear immediately. Scenes are evaluation goals. The default does not average the others.</p>
+                    <p>Open a topic's scene picker to browse its evaluation goals. Search results show matching scenes within their topic card. Each scene, including the default, uses its own weights.</p>
                 </section>
                 <section id="personal" class="bp-how-section" data-how-section>
                     <h2>Make the ranking yours</h2>
@@ -78,28 +78,28 @@
                 </section>
                 <section id="public" class="bp-how-section" data-how-section>
                     <h2>Community priorities</h2>
-                    <p id="calculation-details"><strong>Public Weights</strong> combine saved personal weight configurations in this topic, shaped by recent activity. Editing yours updates your contribution, not the number of votes.</p>
+                    <p id="calculation-details"><strong>Public Weights</strong> combine saved personal weight configurations in this topic, shaped by recent activity. Each person contributes one configuration, updated with their edits.</p>
                     <p>Older configurations remain eligible to fill sparse samples up to 10 total.</p>
                     <p>Each topic or scene has its own Public Weights. Another topic contributes only through an explicit reference. Private topics and their weights never contribute to Public Weights.</p>
                 </section>
                 <section id="references" class="bp-how-section" data-how-section>
                     <h2>Build an index from other topics</h2>
-                    <p>You can add another topic as a weight item, choosing a specific scene if it has scenes. References follow live weights, not copies. Changing a default scene does not retarget existing references.</p>
+                    <p>You can add another topic as a weight item, choosing a specific scene if it has scenes. References follow live weights and stay linked to the scene you selected.</p>
                     <p>Public indices always follow public target weights. Personal indices prefer your saved target weights and otherwise follow public weights. Private topics may reference your other private topics; public-topic configurations cannot reference private topics.</p>
                     <p>Weights multiply along reference paths and combine for each benchmark version. Different fallback choices retain their shares. Scores and coverage correction are calculated after expansion; child scores are never averaged.</p>
-                    <p>References combine capabilities; they do not intersect requirements. Combining real-time image generation and vector generation does not by itself measure real-time vector generation.</p>
-                    <p>Circular references are rejected. Empty or unavailable targets retain their missing weight and show a notice, rather than increasing other weights.</p>
+                    <p>References combine capabilities. To evaluate a specific combination, such as real-time vector generation, use benchmarks that test those requirements together.</p>
+                    <p>References must form an acyclic chain. Empty or unavailable targets retain their missing weight and show a notice.</p>
                 </section>
                 <section id="rankings" class="bp-how-section" data-how-section>
                     <h2>Scores and coverage</h2>
                     <p>Both modes use the same qualifying measurements, converted using each test's score range and direction, then combined using your weights. Fallback is resolved first.</p>
                     <ul>
-                        <li><strong>Estimated score:</strong> combines measured results with shared-test estimates. Isolated extreme results have less influence on estimates; incomplete measured coverage reduces the total, not just its estimated part.</li>
-                        <li><strong>Score range:</strong> missing scores count as 0 at the lower end and 100 at the upper end; measured scores stay fixed. Ranks by the lower end. Not a confidence interval.</li>
+                        <li><strong>Estimated score:</strong> combines measured results with shared-test estimates. Isolated extreme results have less influence on estimates; incomplete measured coverage reduces the whole total.</li>
+                        <li><strong>Score range:</strong> missing scores count as 0 at the lower end and 100 at the upper end; measured scores stay fixed. Models rank by the lower end.</li>
                     </ul>
                     <p><strong>Coverage is the share of weight with measured results</strong>, including successful fallbacks. Estimates do not increase coverage. Unresolved gaps are left out of Estimated score by default. Without a real result on a weighted test, a model cannot rank.</p>
                     <p><strong>Coverage factor:</strong> f(c)=5c/(1+4c), with measured coverage c. Nonnegative totals use f(c), negatives 2-f(c); full coverage is unchanged.</p>
-                    <p><strong>Test algorithm</strong> applies only to this tab. Missing-only methods keep measured contributions fixed, bound predictions to 0–100, and start unresolved gaps at 50. This midpoint is a trial assumption, not an empirical estimate.</p>
+                    <p><strong>Test algorithm</strong> applies to this tab. Missing-only methods keep measured contributions fixed, bound predictions to 0–100, and use a fixed midpoint of 50 for unresolved gaps.</p>
                     <p><strong>Unadjusted</strong> keeps that missing contribution; <strong>Rational</strong> multiplies it by f(c); <strong>Linear</strong> by c; <strong>Square root</strong> by √c. <strong>Midpoint</strong> blends it toward 50 using c and 1−c, so scores can rise or fall. All five stay within Score range; full coverage is unchanged.</p>
                     <p>Turn on effort or harness to rank settings separately; otherwise use each model's best qualifying score per test. Missing settings stay in an unknown group.</p>
                 </section>
@@ -108,12 +108,12 @@
                     <p>Added benchmarks <strong>follow the community</strong>. Open <strong>Know this benchmark? Help configure it</strong> to select a version, then choose a saved order or edit your own. Both are optional.</p>
                     <p>Explicit choices updated within 14 days shape version and fallback proportions per topic/scene, weighted by benchmark allocation. Following adds no vote.</p>
                     <p>Unselected versions follow community proportions; without votes, use the primary version. Changing versions clears fallback. If nobody has chosen, the index works normally without backups.</p>
-                    <p>Try the chosen version first, then backups in order. The first available score counts, not the highest, including zero and negative scores. No fallback disables backups, not estimation; deselect your configuration to follow the community again.</p>
+                    <p>Try the chosen version first, then backups in order. The first available score counts, including zero and negative scores. No fallback uses the chosen version alone, with estimation still available; deselect your configuration to follow the community again.</p>
                     <p>Backup versions are selected explicitly. New versions never join an existing order automatically.</p>
                 </section>
                 <section id="account" class="bp-how-section" data-how-section>
                     <h2>Your account</h2>
-                    <p>Propose a configured private topic through the hall. Its scenes and saved weights become a frozen snapshot. Anyone can preview, try weights, or save a private copy. Replacing the snapshot resets support.</p>
+                    <p>Propose a configured private topic through the hall. Its scenes and saved weights become a snapshot. Anyone can preview and discuss it; the proposer controls weights while collecting support. Replacing the snapshot resets support.</p>
                     <p>Support up to 3 collecting proposals and author 1. Collection lasts 14 days; 30 other supporters trigger administrator review. Private topics and scenes are immediate, editable, and visible only to you.</p>
                     <p>Edit your display name and avatar in the account dialog. GitHub links are your choice.</p>
                 </section>

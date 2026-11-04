@@ -70,16 +70,16 @@ test('short explanations name current navigation and preserve practical scoring 
     assert.match(guide, /effort or harness to rank settings separately/);
     assert.match(guide, /best qualifying score per test/);
     assert.match(guide, /Missing settings stay in an unknown group/);
-    assert.match(guide, /Not a confidence interval/);
+    assert.match(guide, /missing scores count as 0 at the lower end and 100 at the upper end/);
 });
 
 test('contribution instructions distinguish pending requests, public data and run settings', () => {
     const form = read('private/contribute.html');
-    assert.match(form, /You do not have to wait for approval/);
-    assert.match(form, /Submitted does not mean published/);
-    assert.match(form, /Model settings are not test versions/);
+    assert.match(form, /You can reference your own pending additions while they are reviewed/);
+    assert.match(form, /Review comes before publication/);
+    assert.match(form, /Record model settings with the score/);
     assert.match(form, /explain the differences/);
-    assert.match(form, /latest successful update counts/);
+    assert.match(form, /latest successful update/);
     const editor = read('public/js/contribution/score-fields.js');
     assert.match(editor, /\['effort', 'harness'\]/);
     assert.doesNotMatch(editor, /New options need review|createFieldForm|Propose/);

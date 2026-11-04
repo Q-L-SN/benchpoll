@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createPieLabelLayout } from '../public/js/workspace/pie-label-layout.js';
+import { createPieLabelLayout, pieLabelContentBox } from '../public/js/workspace/pie-label-layout.js';
 
 const measure = (text, size) => ({ width: text.length * size * .55 });
 const render = options => createPieLabelLayout(measure).layout({ name: 'MMLU', version: '', percent: '25%',
@@ -17,11 +17,11 @@ test('names and versions wrap only at word boundaries without dropping words', (
     assert.equal(label.rows.filter(row => row.kind === 'name').map(row => row.text).join(' '), 'Code generation');
     assert.equal(label.rows.filter(row => row.kind === 'version').map(row => row.text).join(' '), 'full offline binary accuracy');
 });
-test('long names retain the full name for fade clipping, never a percentage-only label', () => {
+test('long names keep fade clipping while leaving room for the percentage', () => {
     const name = 'An extremely long benchmark name without enough space';
     const label = render({ name, width: 80, height: 120 });
-    assert.equal(label.mode, 'truncated');
-    assert.deepEqual(label.rows.map(row => row.kind), ['name']);
+    assert.equal(label.mode, 'compact');
+    assert.deepEqual(label.rows.map(row => row.kind), ['name', 'percent']);
     assert.equal(label.rows[0].text, name);
     assert.equal(label.rows[0].clipped, true);
     assert.equal(label.rows[0].size, 13);
@@ -29,6 +29,12 @@ test('long names retain the full name for fade clipping, never a percentage-only
 test('small heights and narrow percentage widths prefer the benchmark name', () => {
     for (const input of [21, 24, 28, 31, 35].map(height => ({ height })).concat({ name: 'M', width: 40, percent: '100%' })) {
         assert.deepEqual(render(input).rows.map(row => row.kind), ['name']);
+    }
+    for (const height of [40, 44, 48, 52, 56]) {
+        const label = render({ height, name: 'A long name that needs fade clipping' });
+        assert.deepEqual(label.rows.map(row => row.kind), ['name', 'percent']);
+        assert.equal(label.rows[1].text, '25%');
+        assert.ok(label.rows[1].size >= 15);
     }
 });
 test('unrenderable blocks omit text, rather than reduce the font size', () => {
@@ -43,10 +49,11 @@ test('weight treemap labels never include fallback branch icons', () => {
     assert.equal(render({ height: 60 }).fallbackIcon, undefined);
 });
 test('non-clipped label widths and baselines stay within each rectangle', () => {
-    for (const width of [0, 20, 36, 60, 100, 180, 320]) for (const height of [0, 20, 32, 60, 100, 300]) {
+    for (const width of [0, 20, 36, 60, 100, 180, 320]) for (const height of [0, 20, 32, 40, 44, 48, 60, 100, 300]) {
         const label = render({ width, height });
+        const box = pieLabelContentBox(width, height);
         for (const row of label.rows) {
-            assert.ok(row.y >= 7 && row.y <= height - 7);
+            assert.ok(row.y - row.size >= box.y && row.y + 2 <= box.y + box.height);
             if (!row.clipped) assert.ok(measure(row.text, row.size).width <= width - 16);
         }
     }

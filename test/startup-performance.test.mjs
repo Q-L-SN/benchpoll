@@ -14,10 +14,10 @@ const links = [...html.matchAll(/<link\s+rel="([^"]+)"\s+href="([^"]+)"[^>]*>/g)
 test('missing-score help distinguishes whole-index adjustment from fixed measured range scenarios', () => {
     const help = html.match(/<button class="bp-scoring-help[^>]*data-help-text="([^"]+)"/)?.[1];
     assert.ok(help);
-    assert.match(help, /Estimated score fills missing results where possible/);
+    assert.match(help, /Estimated score combines available results and estimates/);
     assert.match(help, /Score range keeps measured results fixed/);
     assert.match(help, /adjusts the whole index for measured coverage/);
-    assert.match(help, /not statistical confidence/);
+    assert.match(help, /fills gaps with 0 or 100/);
 });
 
 test('homepage preload hints exactly match reachable module URL identities without executing new modules', async () => {

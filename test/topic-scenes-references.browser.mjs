@@ -465,35 +465,36 @@ test('long scene dialogs scroll independently and load only visible scene previe
     assert.equal(await trigger.evaluate(node => node === document.activeElement), true);
 });
 
-test('public scene proposals select a parent explicitly and preserve it during edits', async t => {
+test('proposal hall uses private topics and ignores the retired scene-target query', async t => {
     const app = await startProposalFixture(), browser = await chromium.launch({ headless: true });
-    app.state.topics.push({ ID: 999, name: 'Private plans', isPrivate: true });
     const page = await browser.newPage({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' });
     const errors = []; page.on('pageerror', error => errors.push(error.message));
     t.after(async () => { await browser.close(); await app.close(); assert.deepEqual(errors, []); assert.deepEqual(app.state.failures, []); });
     await page.goto(app.url + '?parentTopicID=190');
     await page.locator('#open-proposal:not(:disabled)').click();
-    await page.waitForFunction(() => document.querySelector('#proposal-target option[value="190"]')?.textContent === 'Scene in Coding');
-    assert.equal(await page.locator('#proposal-target').inputValue(), '190');
-    assert.equal(await page.locator('#proposal-target option[value="999"]').count(), 0);
+    await page.waitForFunction(() => !document.querySelector('#proposal-source').disabled);
+    assert.equal(await page.locator('#proposal-target').count(), 0);
+    assert.equal(await page.locator('#proposal-source option[value="190"]').count(), 0);
+    await page.getByRole('combobox', { name: 'Your private Topic' }).click();
+    await page.getByRole('option', { name: 'My evaluation', exact: true }).click();
+    await page.locator('#proposal-next').click();
     await page.locator('#proposal-name').fill('Embedded systems');
     await page.locator('#proposal-description').fill('Write and debug resource-constrained firmware.');
     await page.locator('#proposal-submit').click();
     await page.waitForFunction(() => !document.getElementById('proposal-dialog').open);
     const submitted = app.state.requests.find(request => request.path === '/api/propose_topic');
-    assert.equal(submitted.body.parentTopicID, 190);
+    assert.equal(submitted.body.sourceTopicID, 501);
+    assert.equal(Object.hasOwn(submitted.body, 'parentTopicID'), false);
     const row = page.locator('.tp-row').filter({ hasText: 'Embedded systems' });
-    assert.match(await row.textContent(), /Scene in Coding/);
     await row.getByRole('button', { name: 'Edit Embedded systems' }).click();
-    assert.equal(await page.locator('#proposal-target').isDisabled(), true);
-    assert.equal(await page.locator('#proposal-target').inputValue(), '190');
+    await page.waitForFunction(() => !document.querySelector('#proposal-next').disabled);
+    await page.locator('#proposal-next').click();
     await page.locator('#proposal-name').fill('Embedded firmware');
     await page.locator('#proposal-submit').click();
     await page.waitForFunction(() => !document.getElementById('proposal-dialog').open);
     const edited = app.state.requests.find(request => request.path === '/api/edit_topic_proposal');
-    assert.equal(Object.hasOwn(edited.body, 'parentTopicID'), false, 'an existing proposal cannot switch its target');
-    assert.equal(app.state.proposals.find(proposal => proposal.name === 'Embedded firmware').parentTopicID, 190);
-    await page.screenshot({ path: `${output}/scene-proposal-390.png` });
+    assert.equal(Object.hasOwn(edited.body, 'parentTopicID'), false);
+    await page.screenshot({ path: `${output}/private-topic-proposal-390.png` });
 });
 
 for (const width of [390, 1440]) test(`sidebar scene search returns parent topics with matching scene summaries at ${width}`, async t => {

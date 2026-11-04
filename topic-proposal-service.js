@@ -240,14 +240,12 @@ export function createTopicProposalService({ pool, queueForReview, captureSnapsh
 
     async function propose(userID, body, key) {
         userID = account(userID);
-        record(body, ['sourceTopicID', 'name', 'description', 'parentTopicID']);
-        if (body.sourceTopicID === undefined && body.parentTopicID === undefined) fail(400, 'private_topic_source_required');
-        if (body.sourceTopicID !== undefined && body.parentTopicID !== undefined) fail(400, 'invalid_topic_proposal_request');
-        const normalized = body.sourceTopicID === undefined ? normalizeTopicProposalRequest(body)
-            : { sourceTopicID: topicProposalID(body.sourceTopicID), ...(body.name === undefined && body.description === undefined ? {}
+        record(body, ['sourceTopicID', 'name', 'description']);
+        if (body.sourceTopicID === undefined) fail(400, 'private_topic_source_required');
+        const normalized = { sourceTopicID: topicProposalID(body.sourceTopicID), ...(body.name === undefined && body.description === undefined ? {}
                 : normalizeTopicProposalRequest({ name: body.name, description: body.description })) };
         let { name, description } = normalized;
-        const { parentTopicID, sourceTopicID } = normalized;
+        const { sourceTopicID } = normalized;
         return write(userID, key, 'propose_topic', normalized, async (connection, { actor }) => {
             if (!actor.email_verified_at || !moderationRecipientEmail(actor.email)) {
                 fail(409, 'verified_email_required', { action: 'reauthorize_github' });
@@ -259,30 +257,8 @@ export function createTopicProposalService({ pool, queueForReview, captureSnapsh
                 (SELECT COUNT(*) FROM write_requests WHERE actor_user_ID = ? AND action = 'propose_topic'
                     AND response_status = 200 AND created_at >= NOW() - INTERVAL 1 DAY)) AS count`, [userID, userID]);
             if (Number(count.count) >= 20) fail(429, 'topic_creation_limit');
-            const snapshot = sourceTopicID === undefined ? null : await captureSnapshot(connection, userID, sourceTopicID, { name, description });
-            if (snapshot) ({ name, description } = snapshot);
-            if (parentTopicID !== undefined) {
-                const { slug } = await assertPublicSceneAvailable(connection, parentTopicID, name, { lock: true });
-                await releaseExpiredSceneReservations(connection, parentTopicID, slug, name);
-                const findExisting = async (locking = '') => {
-                    const [rows] = await connection.execute(`SELECT ID FROM topic_proposals WHERE parent_topic_ID = ?
-                        AND (scene_reservation_slug = ? OR scene_reservation_name = ?) LIMIT 1${locking}`, [parentTopicID, slug, name]);
-                    return rows[0];
-                };
-                const existing = await findExisting();
-                if (existing) fail(409, 'topic_proposal_exists', { proposalID: Number(existing.ID) });
-                let inserted;
-                try {
-                    [inserted] = await connection.execute(`INSERT INTO topic_proposals
-                        (user_ID, name, slug, description, parent_topic_ID, scene_reservation_slug, scene_reservation_name)
-                        VALUES (?, ?, ?, ?, ?, ?, ?)`, [userID, name, slug, description, parentTopicID, slug, name]);
-                } catch (error) {
-                    if (error.code !== 'ER_DUP_ENTRY') throw error;
-                    const duplicate = await findExisting(' FOR SHARE');
-                    fail(409, 'topic_proposal_exists', { proposalID: duplicate ? Number(duplicate.ID) : null });
-                }
-                return readProposal(connection, topicProposalID(Number(inserted.insertId)), userID);
-            }
+            const snapshot = await captureSnapshot(connection, userID, sourceTopicID, { name, description });
+            ({ name, description } = snapshot);
             const slug = await assertPublicTopicAvailable(connection, { name, description });
             await releaseExpiredReservations(connection, slug, name);
             const findExisting = async (locking = '') => {
@@ -301,7 +277,7 @@ export function createTopicProposalService({ pool, queueForReview, captureSnapsh
                 const duplicate = await findExisting(' FOR SHARE');
                 fail(409, 'topic_proposal_exists', { proposalID: duplicate ? Number(duplicate.ID) : null });
             }
-            if (snapshot) await saveSnapshot(connection, Number(inserted.insertId), 1, sourceTopicID, snapshot);
+            await saveSnapshot(connection, Number(inserted.insertId), 1, sourceTopicID, snapshot);
             return readProposal(connection, topicProposalID(Number(inserted.insertId)), userID);
         });
     }

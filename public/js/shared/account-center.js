@@ -262,7 +262,7 @@ export async function openAccountCenter({ profile = null, onProfileSaved, onSign
             try { localStorage.setItem('user-profile-update', 'null'); } catch { /* Notification is optional. */ }
             startView('success', kind === 'deactivate' ? 'Account deactivated' : 'You have been logged out');
             if (kind === 'deactivate') {
-                body.append(element('p', '', 'Your account records have not been completely erased. Signing in with GitHub again reactivates the account.'));
+                body.append(element('p', '', 'Your account records are retained. Signing in with GitHub again reactivates the account.'));
                 body.append(privacyLink('Privacy Policy', '/privacy#rights'));
                 body.append(privacyLink('Revoke GitHub access', 'https://github.com/settings/connections/applications/' + CLIENT_ID));
             }

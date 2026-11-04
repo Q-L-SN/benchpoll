@@ -178,10 +178,10 @@ test('current help describes the factor while calculation details keep before an
     const guide = read('private/how-it-works.html');
     assert.doesNotMatch(guide, /deduct 2 points for every missing 10% of weight/);
     assert.match(guide, /shared-test estimates/);
-    assert.match(guide, /incomplete measured coverage reduces the total/);
+    assert.match(guide, /incomplete measured coverage reduces the whole total/);
     assert.match(guide, /Estimates do not increase coverage/);
     assert.match(guide, /Unresolved gaps are left out of Estimated score/);
-    assert.match(guide, /Not a confidence interval/);
+    assert.match(guide, /missing scores count as 0 at the lower end and 100 at the upper end/);
     const details = read('public/js/workspace/model-scores.js');
     assert.match(details, /Before adjustment:/);
     assert.match(details, /After adjustment:/);

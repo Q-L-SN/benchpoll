@@ -95,6 +95,24 @@ for (const [engine, width] of [['chromium', 1440], ['chromium', 390], ['webkit',
         assert.equal(compact.size, '13');
         assert.ok(compact.top >= compact.clipTop - .5 && compact.bottom <= compact.clipBottom + .5, JSON.stringify(compact));
         await page.screenshot({ path: `${output}/${engine}-${width}-compact-name.png` });
+        const compactWeight = await page.evaluate(() => {
+            document.querySelector('.bp-pie-stage').style.height = '50px';
+            window.treemapQA.set([10000], 'A long benchmark name that keeps its original fade and percentage');
+            const group = document.querySelector('#weight-pie > g[data-object-id]');
+            const name = group.querySelector('[data-label-kind="name"]');
+            const weight = group.querySelector('[data-label-kind="percent"]');
+            const rect = group.querySelector('.bp-weight-tile').getBBox(), bounds = weight?.getBBox();
+            return { mode: group.dataset.labelMode, name: name?.textContent, weight: weight?.textContent,
+                size: weight?.getAttribute('font-size'), fits: bounds && bounds.y >= rect.y
+                    && bounds.y + bounds.height <= rect.y + rect.height && bounds.x >= rect.x
+                    && bounds.x + bounds.width <= rect.x + rect.width };
+        });
+        assert.equal(compactWeight.mode, 'compact');
+        assert.equal(compactWeight.weight, '100%');
+        assert.equal(compactWeight.size, '15');
+        assert.equal(compactWeight.fits, true);
+        assert.doesNotMatch(compactWeight.name, /…|\.\.\./);
+        await page.screenshot({ path: `${output}/${engine}-${width}-compact-weight.png` });
         await page.evaluate(() => {
             document.querySelector('.bp-pie-stage').style.removeProperty('height');
             window.treemapQA.set([5000, 3000, 1500, 500]);

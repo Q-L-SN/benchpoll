@@ -249,7 +249,7 @@ test('deactivation retains honest data/erasure disclosure and only writes after 
     await center(page).getByRole('button', { name: 'Deactivate account', exact: true }).click();
     await page.waitForFunction(() => window.signedOut.length === 1);
     assert.deepEqual(writes(state), [{ path: '/api/delete_account', body: { expectedUserID: owner } }]);
-    assert.match(await center(page).innerText(), /not been completely erased/);
+    assert.match(await center(page).innerText(), /account records are retained/);
     assert.match(await center(page).getByRole('link', { name: 'Revoke GitHub access' }).getAttribute('href'), /^https:\/\/github\.com\/settings\/connections\/applications\//);
 });
 

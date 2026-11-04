@@ -43,12 +43,12 @@ test('public discovery excludes private records and emits only canonical scene a
     }
     const xml = discoverySitemap([topic], origin);
     assert.equal([...xml.matchAll(/<url>/g)].length, PUBLIC_DOCUMENTS.length + 2);
-    assert.match(xml, /<lastmod>2026-11-01<\/lastmod>/);
+    assert.match(xml, /<lastmod>2026-11-04<\/lastmod>/);
     const robots = discoveryRobots(origin);
     assert.match(robots, /Disallow: \/personal\//);
     assert.match(robots, /Sitemap: https:\/\/benchpoll.com\/sitemap.xml/);
     assert.doesNotMatch(robots, /Disallow: \/(?:js|css|assets)/);
-    assert.match(discoveryText([topic], origin), /not new laboratory measurements/);
+    assert.match(discoveryText([topic], origin), /Benchmark evidence supplies measured results/);
 });
 
 test('HTML, XML and JSON-LD treat user-provided text as data, not markup', () => {

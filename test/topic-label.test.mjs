@@ -20,8 +20,10 @@ test('narrow topic tiles retain the full icon/name path for fading, not a detach
     const layout = createPieLabelLayout(text => ({ width: text.length * 7 }));
     const name = topicLabelText({ topicName: 'Research', sceneName: 'Experiments' });
     const result = layout.layout({ name, topic: true, percent: '60%', width: 95, height: 120, fontFamily: 'sans-serif' });
-    assert.equal(result.mode, 'truncated');
-    assert.equal(result.rows.length, 1);
+    assert.equal(result.mode, 'compact');
+    assert.equal(result.rows.length, 2);
+    assert.equal(result.rows[1].kind, 'percent');
+    assert.equal(result.rows[0].clipped, true);
     assert.equal(result.rows[0].text, name);
 });
 

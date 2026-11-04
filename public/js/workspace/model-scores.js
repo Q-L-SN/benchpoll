@@ -416,7 +416,7 @@ export function createModelScoresView({ state, modelScoresDialog, modelScoresTit
         if (range && model.comparable !== false) {
             const detail = document.createElement('p');
             detail.className = 'bp-model-inference-summary';
-            detail.textContent = 'Missing results count as 0 at the lower end and 100 at the upper end. Measured results stay fixed. Models rank by the lower end; this is not a confidence interval.';
+            detail.textContent = 'Missing results count as 0 at the lower end and 100 at the upper end. Measured results stay fixed. Models rank by the lower end.';
             modelScoresSummary.append(detail);
         }
         const inference = model.availableInference;
@@ -427,10 +427,10 @@ export function createModelScoresView({ state, modelScoresDialog, modelScoresTit
             const detail = document.createElement('p');
             detail.className = 'bp-model-inference-summary';
             detail.textContent = model.missingWeight <= 0 ? '' : inference.inferredFraction > 0
-                ? `${(inference.inferredFraction * 100).toFixed(2)}% of the weight uses estimated results from comparisons on shared tests, not measurements.`
-                : 'The available comparisons cannot estimate the missing results.';
+                ? `${(inference.inferredFraction * 100).toFixed(2)}% of the weight uses estimates from shared-test comparisons.`
+                : 'Estimates are unavailable for the missing results.';
             if (inference.unresolvedFraction > 0) detail.textContent += missingOnly
-                ? ` ${(inference.unresolvedFraction * 100).toFixed(2)}% of the weight has no measurement or prediction and starts at 50 in this trial.`
+                ? ` ${(inference.unresolvedFraction * 100).toFixed(2)}% of the weight has no measurement or prediction and starts at 50.`
                 : ` ${(inference.unresolvedFraction * 100).toFixed(2)}% of the weight has no measurement or estimate and is left out of the average.`;
             if (usesCoverageFactor || missingOnly) {
                 modelScoresSummary.append(detail);

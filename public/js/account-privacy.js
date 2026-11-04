@@ -266,7 +266,7 @@ export function createAccountPrivacyUI({ root = document, request = postJSON, sc
             const result = await send('/api/submit_privacy_request', body);
             if (!nonempty(result?.reference)) throw failure('unconfirmed_privacy_request');
             state.submittedRequest = requestKey();
-            setResult('request-result', `Request recorded. Reference: ${result.reference}. This confirms receipt only, not email delivery or data erasure.`, 'success');
+            setResult('request-result', `Request recorded. Reference: ${result.reference}. Keep this reference for follow-up. A reviewer will verify your request and arrange the next steps.`, 'success');
         }, { requestOutcome: true });
     });
 
@@ -360,7 +360,7 @@ export function createAccountPrivacyUI({ root = document, request = postJSON, sc
             const listed = state.queue.items.find(entry => entry.reference === item.reference);
             if (listed) Object.assign(listed, { status: body.status, resolution: body.resolution });
             renderQueueList();
-            setResult('queue-update-result', 'Handling record saved. No email was sent and no data was automatically erased.', 'success');
+            setResult('queue-update-result', 'Handling record saved. Send any reply and carry out any approved data changes separately.', 'success');
         }, { account: true });
     });
 

@@ -16,7 +16,7 @@ const aaVersions = new Set([
     '1687:crawl-6c6f1535abb4a0c68af896bc' // HLE, BenchmarkList republication of the AA API.
 ]);
 export const AA_DISPLAY_RESTRICTION = 'artificial_analysis';
-export const AA_DISPLAY_MESSAGE = "To respect Artificial Analysis's data-use terms, details and scores for this benchmark version are not displayed here.";
+export const AA_DISPLAY_MESSAGE = "Results for this version are unavailable under the source's data-use terms.";
 
 export function isAABenchmark(name) {
     const value = String(name ?? '').trim().toLowerCase();

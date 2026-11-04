@@ -195,6 +195,6 @@ test('retired list UI and native help are absent; chooser and editor share one c
     assert.match(picker, /customAdd\.hidden = intent\.action !== 'add'/);
     assert.match(picker, /variant: recommended \? 'quiet' : 'primary'/);
     assert.match(picker, /Skip fallback or create my own/);
-    assert.match(picker, /\(not recommended\)/);
+    assert.doesNotMatch(picker, /\(not recommended\)/);
     assert.doesNotMatch(picker, /Do not choose|Not among these/);
 });

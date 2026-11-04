@@ -102,7 +102,7 @@
     <global-dialog id="delete-account-success-dialog" hidden>
         <div slot="title">Account deactivated</div>
         <div slot="body">
-            Your account records have not been completely erased. See the <a href="/privacy#rights" target="_blank" rel="noopener">Privacy Policy</a> for erasure requests. To disconnect GitHub access, revoke our app in your GitHub settings.
+            Your account records are retained. To request erasure, see the <a href="/privacy#rights" target="_blank" rel="noopener">Privacy Policy</a>. To disconnect GitHub access, revoke our app in your GitHub settings.
             Link: <a id="revoke-github-auth-link" target="_blank"></a>
             (GitHub may ask you to confirm your password.)
         </div>
@@ -328,7 +328,7 @@
                             </div>
                             <div id="public-pie-summary" class="bp-public-pie-summary" hidden>
                                 <span class="bp-public-count-group"><span id="public-pie-count"></span><button class="bp-public-pie-info bp-help-trigger" type="button" aria-label="How Public Weights are calculated" aria-describedby="public-pie-tooltip" data-help-content="public-pie-tooltip"><i class="fa-regular fa-circle-question" aria-hidden="true"></i></button></span>
-                                <span id="public-pie-tooltip" hidden><strong>Your saved weights help shape the public index.</strong><p>Recent saved configurations determine the mix. Editing yours updates your contribution; it does not add another vote.</p><a href="/how-it-works#calculation-details">How public weights are calculated</a></span>
+                                <span id="public-pie-tooltip" hidden><strong>Your saved weights help shape the public index.</strong><p>Recent saved configurations determine the mix. Each person contributes one configuration, updated with their edits.</p><a href="/how-it-works#calculation-details">How public weights are calculated</a></span>
                             </div>
                             <div class="bp-pie-stage">
                                 <svg id="weight-pie" viewBox="0 0 360 360" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Public index composition"></svg>
@@ -374,7 +374,7 @@
                                         <div class="bp-inline-fallback-frame">
                                             <div id="inline-fallback-chart" class="bp-inline-fallback-chart" role="group" aria-label="Fallback order" tabindex="-1" hidden></div>
                                             <div class="bp-fallback-add-actions" role="group" aria-label="Add fallback options">
-                                                <button id="inline-fallback-add-benchmark" type="button" hidden aria-pressed="false" aria-label="Add a benchmark to Fallback" data-help-action="follow" data-help-text="Choose backups using + in Evaluation items. They are tried in order only when this benchmark has no score; they do not become separate weight items."><i class="fa-solid fa-plus" aria-hidden="true"></i><span>Add fallback benchmark</span></button>
+                                                <button id="inline-fallback-add-benchmark" type="button" hidden aria-pressed="false" aria-label="Add a benchmark to Fallback" data-help-action="follow" data-help-text="Choose backups using + in Evaluation items. When this benchmark has no score, backups are tried in order using its existing weight."><i class="fa-solid fa-plus" aria-hidden="true"></i><span>Add fallback benchmark</span></button>
                                             </div>
                                         </div>
                                     </div>
@@ -437,7 +437,7 @@
                         <div class="bp-scoring-switch" role="group" aria-label="Missing benchmark scores" data-ui-component="segmented" data-mode="available">
                             <button type="button" data-score-mode="available" aria-pressed="true" aria-label="Estimated score" data-tooltip="Estimated score"><i class="fa-solid fa-wand-magic-sparkles bp-score-mode-icon" aria-hidden="true"></i><span>Estimated score</span></button>
                             <button type="button" data-score-mode="range" aria-pressed="false" aria-label="Score range" data-tooltip="Score range"><i class="fa-solid fa-arrows-left-right bp-score-mode-icon" aria-hidden="true"></i><span>Score range</span></button>
-                            <button class="bp-scoring-help bp-help-trigger" type="button" aria-label="About missing scores" data-help-text="Estimated score fills missing results where possible, then adjusts the whole index for measured coverage. Score range keeps measured results fixed and shows two scenarios for missing results, not statistical confidence."><i class="fa-regular fa-circle-question" aria-hidden="true"></i></button>
+                            <button class="bp-scoring-help bp-help-trigger" type="button" aria-label="About missing scores" data-help-text="Estimated score combines available results and estimates, then adjusts the whole index for measured coverage. Score range keeps measured results fixed and fills gaps with 0 or 100."><i class="fa-regular fa-circle-question" aria-hidden="true"></i></button>
                         </div>
                         <div class="bp-quick-comparison" role="group" aria-label="Compare separately">
                             <button class="bp-comparison-icon" type="button" data-quick-comparison="reasoning" aria-label="Compare reasoning effort separately" data-tooltip="Compare reasoning effort separately" aria-pressed="false" disabled><i class="fa-solid fa-brain" aria-hidden="true"></i></button>
@@ -451,7 +451,7 @@
                     <div id="estimation-test-control" class="bp-estimation-test">
                         <label for="estimation-algorithm">Test algorithm</label>
                         <select id="estimation-algorithm" aria-label="Test estimation algorithm"></select>
-                        <button type="button" class="bp-help-trigger" aria-label="About the test algorithm" data-help-text="Compare experimental ways to handle missing scores. This setting applies only to this tab; the default algorithm remains unchanged."><i class="fa-regular fa-circle-question" aria-hidden="true"></i></button>
+                        <button type="button" class="bp-help-trigger" aria-label="About the test algorithm" data-help-text="Compare methods for estimating missing scores in this tab."><i class="fa-regular fa-circle-question" aria-hidden="true"></i></button>
                     </div>
                     <div class="bp-model-head" aria-hidden="true">
                         <span>#</span>

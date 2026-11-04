@@ -2,7 +2,7 @@ import { setLoading, setButtonLoading } from './shared/loading.js';
 import { postJSON, postWriteJSON } from './shared/http.js';
 import { pageAccountWriteScope, canonicalAccountID, accountWriteError, isAccountWriteError } from './shared/account-identity.js';
 import { openSignIn, installSignInLinks, listenAccountChange } from './shared/sign-in.js';
-import { createAction } from './shared/ui-components.js';
+import { createAction, enhanceUI, handleCustomSelectKeydown } from './shared/ui-components.js';
 import { profileAvatarURL } from './shared/profile-editor.js';
 import { normalizeTopicSummary, isReservedTopicSlug, topicSlug } from './shared/topics.js';
 import { mountSiteActions } from './shared/site-header.js';
@@ -225,10 +225,12 @@ export function mountProposalHall() {
     const $ = selector => document.querySelector(selector);
     mountSiteActions($('#proposals-site-links'), { accountID: 'proposals-account', accountButton: true });
     const dialog = $('#proposal-dialog'), form = $('#proposal-form'), submit = $('#proposal-submit');
+    enhanceUI(form);
     const fields = { name: $('#proposal-name'), description: $('#proposal-description') };
-    const target = $('#proposal-target'), targetStatus = $('#proposal-target-status');
+    const targetStatus = $('#proposal-source-status');
     const source = $('#proposal-source');
-    let parentTopicID = null, sourceTopicID = null, publicTopics = [], privateTopics = [], targetsLoaded = false, targetsLoading = false;
+    let parentTopicID = null, sourceTopicID = null, privateTopics = [], targetsLoaded = false, targetsLoading = false, sourceSequence = 0;
+    let editorStep = 'source';
     const list = $('#proposals-list'), listStatus = $('#proposals-list-status'), more = $('#proposals-load-more');
     const proposals = new Map(), rowErrors = new Map(), supporting = new Set(), operations = new Map();
     const drafts = new Map();
@@ -282,26 +284,16 @@ export function mountProposalHall() {
         let draft = drafts.get(key) ?? fallback;
         if (!drafts.has(key)) try { draft = JSON.parse(sessionStorage.getItem(key)) ?? fallback; } catch { /* Storage is optional. */ }
         for (const key of Object.keys(fields)) fields[key].value = typeof draft[key] === 'string' && draft[key].length <= 16384 ? draft[key] : '';
-        parentTopicID = positiveID(draft.parentTopicID) ? draft.parentTopicID : null;
+        parentTopicID = editing?.parentTopicID ?? null;
         sourceTopicID = positiveID(draft.sourceTopicID) ? draft.sourceTopicID : null;
         renderTargets();
         return draft;
     }
     restoreDraft(DRAFT_KEY);
-    const requestedParent = Number(new URLSearchParams(location.search).get('parentTopicID'));
-    if (positiveID(requestedParent)) { parentTopicID = requestedParent; renderTargets(); }
     const requestedSource = Number(new URLSearchParams(location.search).get('sourceTopicID'));
     if (positiveID(requestedSource)) { sourceTopicID = requestedSource; parentTopicID = null; }
 
     function renderTargets() {
-        const options = [new window.Option('New topic', '')];
-        for (const topic of publicTopics) options.push(new window.Option(`Scene in ${topic.name}`, String(topic.ID)));
-        if (parentTopicID !== null && !publicTopics.some(topic => topic.ID === parentTopicID)) {
-            const unavailable = new window.Option(editing?.parentTopicName ? `Scene in ${editing.parentTopicName}`
-                : targetsLoaded ? 'Topic unavailable' : 'Selected topic', String(parentTopicID));
-            unavailable.disabled = true; options.push(unavailable);
-        }
-        target.replaceChildren(...options); target.value = parentTopicID === null ? '' : String(parentTopicID);
         source.replaceChildren(new window.Option('Choose a saved private Topic', ''), ...privateTopics.map(topic => new window.Option(topic.name, String(topic.ID))));
         if (sourceTopicID !== null && !privateTopics.some(topic => topic.ID === sourceTopicID)) {
             const unavailable = new window.Option(targetsLoaded ? 'Private Topic unavailable' : 'Selected private Topic', String(sourceTopicID));
@@ -311,28 +303,29 @@ export function mountProposalHall() {
         const link = $('#proposal-source-link'); link.hidden = !privateTopics.some(topic => topic.ID === sourceTopicID);
         if (!link.hidden) link.href = '/personal/' + sourceTopicID;
     }
-    async function loadTargets() {
-        if (targetsLoaded || targetsLoading) return;
-        targetsLoading = true; targetStatus.hidden = false; setLoading(targetStatus, 'Loading topics');
+    async function loadTargets({ refresh = false } = {}) {
+        if ((!refresh && targetsLoaded) || targetsLoading || accountState !== 'ready') return;
+        const sequence = ++sourceSequence, epoch = accountEpoch;
+        targetsLoaded = false; targetsLoading = true; targetStatus.hidden = false; setLoading(targetStatus, 'Loading private topics');
+        syncFields();
         try {
             const data = await postJSON('/api/get_topics', {}, READ_OPTIONS);
+            if (sequence !== sourceSequence || epoch !== accountEpoch || accountState !== 'ready') return;
             if (!Array.isArray(data?.topics)) throw invalidResponse();
-            publicTopics = data.topics.filter(topic => topic.isPrivate !== true && positiveID(topic.ID) && typeof topic.name === 'string');
             privateTopics = data.topics.filter(topic => topic.isPrivate === true && positiveID(topic.ID) && typeof topic.name === 'string');
-            publicTopics.sort((a, b) => a.name.localeCompare(b.name));
+            privateTopics.sort((a, b) => a.name.localeCompare(b.name));
             targetsLoaded = true; targetStatus.hidden = true; targetStatus.replaceChildren(); renderTargets();
             if (!editing && sourceTopicID !== null && !fields.name.value) fillSource();
+            if (!privateTopics.length) {
+                targetStatus.textContent = 'Create a private Topic and configure its weights to get started.'; targetStatus.hidden = false;
+            }
         } catch {
-            targetStatus.replaceChildren(element('span', '', 'Could not load public Topics. '));
+            if (sequence !== sourceSequence || epoch !== accountEpoch || accountState !== 'ready') return;
+            targetStatus.replaceChildren(element('span', '', 'Could not load your private Topics. '));
             const retry = createAction({ label: 'Retry', icon: 'fa-solid fa-rotate-right', variant: 'quiet' });
             retry.addEventListener('click', () => void loadTargets()); targetStatus.append(retry); targetStatus.hidden = false;
-        } finally { targetsLoading = false; syncFields(); }
+        } finally { if (sequence === sourceSequence) { targetsLoading = false; syncFields(); } }
     }
-    target.addEventListener('change', () => {
-        if (creating || editing) return;
-        parentTopicID = target.value ? Number(target.value) : null;
-        formMessage(null); syncFields(); saveDraft();
-    });
     function fillSource() {
         const topic = privateTopics.find(topic => topic.ID === sourceTopicID);
         if (topic) { fields.name.value = topic.name; fields.description.value = topic.description; }
@@ -341,7 +334,11 @@ export function mountProposalHall() {
         sourceTopicID = source.value ? Number(source.value) : null;
         fillSource(); renderTargets(); syncFields(); saveDraft();
     });
-    $('#proposal-source-refresh').addEventListener('click', () => { targetsLoaded = false; void loadTargets(); });
+    const refreshSources = () => {
+        if (dialog.open && editorStep === 'source' && !creating && !document.hidden) void loadTargets({ refresh: true });
+    };
+    window.addEventListener('focus', refreshSources);
+    document.addEventListener('visibilitychange', refreshSources);
 
     const actorReady = () => accountState === 'ready' && listAuthenticated === true && quotaFresh;
     const proposalByID = id => activeProposal?.proposalID === id ? activeProposal : proposals.get(id);
@@ -376,22 +373,24 @@ export function mountProposalHall() {
 
     function syncFields() {
         const draft = validateProposalDraft(draftValues());
-        const needsSource = parentTopicID === null && (!editing || editing.hasSnapshot);
-        $('#proposal-source-field').hidden = parentTopicID !== null;
-        source.disabled = creating;
-        const sourceError = needsSource && (!sourceTopicID || targetsLoaded && !privateTopics.some(topic => topic.ID === sourceTopicID))
+        const needsSource = parentTopicID === null;
+        const reviewing = editorStep === 'details';
+        $('#proposal-source-field').hidden = reviewing;
+        $('#proposal-details-step').hidden = !reviewing;
+        $('#proposal-next').hidden = reviewing;
+        $('#proposal-back').hidden = !reviewing || !needsSource;
+        $('#proposal-back').disabled = creating;
+        submit.hidden = !reviewing;
+        source.disabled = creating || targetsLoading || accountState !== 'ready';
+        const sourceError = needsSource && (!sourceTopicID || !targetsLoaded || !privateTopics.some(topic => topic.ID === sourceTopicID))
             ? 'Choose one of your saved private Topics. Configure its default scene before proposing it.' : '';
         if (sourceError) draft.errors.sourceTopicID = sourceError;
         $('#proposal-source-error').textContent = attempted ? sourceError : '';
         $('#proposal-source-error').hidden = !attempted || !sourceError;
-        if (!editing && parentTopicID !== null && (!targetsLoaded || !publicTopics.some(topic => topic.ID === parentTopicID))) {
-            draft.errors.parentTopicID = targetsLoaded ? 'This public Topic is unavailable. Choose another Topic.' : 'Load the public Topics before proposing a scene.';
-        }
-        const targetError = $('#proposal-target-error');
-        targetError.textContent = attempted ? draft.errors.parentTopicID ?? '' : '';
-        targetError.hidden = !targetError.textContent;
-        target.disabled = creating || Boolean(editing);
-        target.setAttribute('aria-invalid', String(Boolean(attempted && draft.errors.parentTopicID)));
+        source.setAttribute('aria-invalid', String(Boolean(attempted && sourceError)));
+        $('#proposal-next').disabled = creating || ['loading', 'failed', 'blocked'].includes(accountState)
+            || accountState === 'ready' && (Boolean(sourceError) || targetsLoading);
+        $('#proposal-next').textContent = accountState === 'guest' ? 'Sign in to choose a Topic' : 'Next';
         for (const [key, input] of Object.entries(fields)) {
             const length = unicodeLength(input.value), limit = key === 'name' ? 128 : 180;
             const counter = $(`#proposal-${key}-count`), error = $(`#proposal-${key}-error`);
@@ -403,11 +402,14 @@ export function mountProposalHall() {
             error.textContent = invalid ? draft.errors[key] : '';
             input.readOnly = creating;
         }
-        submit.disabled = creating || supporting.size > 0 || listLoading || ['loading', 'failed', 'blocked'].includes(accountState)
+        submit.disabled = !reviewing || Boolean(sourceError) || creating || supporting.size > 0 || listLoading || ['loading', 'failed', 'blocked'].includes(accountState)
             || accountState === 'ready' && (!actorReady() || (editing ? editConflict || !editable() : proposalFull()));
         actionLabel(submit, creating ? editing ? 'Saving...' : 'Publishing...' : accountState === 'guest' ? 'Sign in to publish'
             : editing ? 'Save edits' : 'Publish proposal', creating ? 'spinner' : editing ? 'check' : 'paper-plane');
-        $('#proposal-dialog-title').textContent = editing ? 'Edit proposal' : parentTopicID !== null ? 'Propose a scene' : 'Propose a Topic';
+        $('#proposal-dialog-title').textContent = reviewing ? editing ? 'Review your changes' : 'Review your proposal' : 'Choose a private Topic';
+        $('#proposal-step-label').textContent = needsSource
+            ? reviewing ? 'Step 2 of 2 · Review the name and summary before publishing' : 'Step 1 of 2 · Choose a private Topic'
+            : 'Review the name and summary before saving';
         $('label[for="proposal-name"]').textContent = parentTopicID !== null ? 'Scene name' : 'Topic name';
         $('#proposal-review-notice').hidden = Boolean(editing);
         $('#proposal-email-notice').hidden = Boolean(editing);
@@ -463,11 +465,13 @@ export function mountProposalHall() {
         accountState = 'blocked';
         security = null;
         quotaFresh = false;
+        sourceSequence++; targetsLoading = false; targetsLoaded = false; privateTopics = []; renderTargets();
         renderAccount();
     }
 
     async function loadProfile() {
         const epoch = ++accountEpoch;
+        sourceSequence++; targetsLoading = false; targetsLoaded = false; privateTopics = []; renderTargets();
         accountState = 'loading';
         security = null;
         renderAccount();
@@ -496,6 +500,7 @@ export function mountProposalHall() {
         }
         if (listAuthenticated !== null && listAuthenticated !== (accountState === 'ready')
             && ['guest', 'ready'].includes(accountState)) void loadPage();
+        if (dialog.open && accountState === 'ready') void loadTargets({ refresh: true });
     }
 
     function assertActor(owner, epoch) {
@@ -795,14 +800,15 @@ export function mountProposalHall() {
     }
     function showEditor(source) {
         trigger = source;
+        editorStep = editing?.parentTopicID != null ? 'details' : 'source';
         attempted = false;
         formMessage(null);
         $('#proposal-latest-version').hidden = true;
         syncFields();
         dialog.showModal();
-        void loadTargets();
+        void loadTargets({ refresh: true });
         document.body.classList.add('tp-modal-open');
-        fields.name.focus({ preventScroll: true });
+        (editorStep === 'source' ? $('#proposal-source') : fields.name).focus({ preventScroll: true });
     }
     function openEditor(proposal, source) {
         if (!proposal?.canEdit || !actorReady() || creating || supporting.size || listLoading || proposalStatus(proposal) !== 'open') return;
@@ -863,8 +869,22 @@ export function mountProposalHall() {
     });
     $('#proposal-close').addEventListener('click', closeDialog);
     $('#proposal-cancel').addEventListener('click', closeDialog);
+    $('#proposal-next').addEventListener('click', () => {
+        if (creating || editorStep !== 'source') return;
+        if (accountState === 'guest') { saveDraft(); openSignIn(); return; }
+        if (!targetsLoaded || targetsLoading || !privateTopics.some(topic => topic.ID === sourceTopicID)) return;
+        editorStep = 'details'; attempted = false; formMessage(null); syncFields(); saveDraft();
+        fields.name.focus({ preventScroll: true });
+    });
+    $('#proposal-back').addEventListener('click', () => {
+        if (creating) return;
+        editorStep = 'source'; attempted = false; formMessage(null); syncFields(); saveDraft();
+        source.focus({ preventScroll: true });
+        void loadTargets({ refresh: true });
+    });
     dialog.addEventListener('cancel', event => { event.preventDefault(); closeDialog(); });
     const trapFocus = host => host.addEventListener('keydown', event => {
+        if (handleCustomSelectKeydown(event)) return;
         if (event.key === 'Escape' || event.key === 'Tab') event.stopPropagation();
         if (event.key !== 'Tab') return;
         const items = [...host.querySelectorAll('button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), a[href]')]
@@ -903,10 +923,11 @@ export function mountProposalHall() {
     });
     form.addEventListener('submit', async event => {
         event.preventDefault();
+        if (editorStep !== 'details') return;
         if (creating || supporting.size > 0 || listLoading || editConflict) return;
         attempted = true;
         const draft = syncFields();
-        if (Object.keys(draft.errors).length) { (fields[Object.keys(draft.errors)[0]] ?? target).focus(); return; }
+        if (Object.keys(draft.errors).length) { (fields[Object.keys(draft.errors)[0]] ?? source).focus(); return; }
         saveDraft();
         if (accountState === 'guest') { openSignIn(); return; }
         if (!actorReady() || (editing ? !editable() : proposalFull())) return;
@@ -923,7 +944,6 @@ export function mountProposalHall() {
             assertActor(owner, epoch);
             const body = { name: draft.name, description: draft.description, csrfToken,
                 ...(parentTopicID === null && sourceTopicID !== null ? { sourceTopicID } : {}),
-                ...(!previous && parentTopicID !== null ? { parentTopicID } : {}),
                 ...(previous ? { proposalID: previous.proposalID, revision: previous.revision } : {}) };
             const validate = result => previous ? validateEditedProposal(result, previous, body) : validatePublishedProposal(result, body);
             const value = await pageAccountWriteScope.write((path, payload) => postWriteJSON(path, payload, {

@@ -72,6 +72,13 @@ mobile collapse animation. See
 for the narrow frontend scope, draft/undo behavior and checks. It requires no
 migration and remains pending production installation.
 
+The following site update simplifies user-facing wording, moves proposal
+creation to a two-step private-topic snapshot flow, lowers treemap percentage
+thresholds and brings the homepage header/island transition forward. Read
+[`../site-copy-proposal-flow-20261104.md`](../site-copy-proposal-flow-20261104.md)
+for the runtime allowlist and checks. It includes two server-side modules but
+requires no schema or production-data changes; installation remains pending.
+
 ## Repositories And Starting Point
 
 - Source: <https://github.com/Q-L-SN/benchpoll>, branch `codex/cloud-handoff-20261101`.

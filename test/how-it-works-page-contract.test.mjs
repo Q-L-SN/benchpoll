@@ -67,7 +67,7 @@ test('Personal and Public copy keeps saving, independent topics and privacy dist
     assert.match(section('personal'), /Unsaved changes are marked/);
     assert.match(section('public'), /saved personal weight configurations in this topic/);
     assert.match(section('public'), /shaped by recent activity/);
-    assert.match(section('public'), /Editing yours updates your contribution, not the number of votes/);
+    assert.match(section('public'), /Each person contributes one configuration, updated with their edits/);
     assert.match(section('public'), /Another topic contributes only through an explicit reference/);
     assert.match(section('public'), /Private topics and their weights never contribute to Public Weights/);
     assert.match(section('public'), /id="calculation-details"/, 'Existing Public help links still reach the relevant short explanation');
@@ -76,9 +76,9 @@ test('Personal and Public copy keeps saving, independent topics and privacy dist
 test('guide explains concrete scene identity and dynamic weight resolution without double scoring', () => {
     assert.match(section('topics'), /one level of scenes/);
     assert.match(section('topics'), /default scene comes first/);
-    assert.match(section('topics'), /scene search matches appear immediately/);
+    assert.match(section('topics'), /Search results show matching scenes within their topic card/);
     assert.match(section('references'), /specific scene if it has scenes/);
-    assert.match(section('references'), /Changing a default scene does not retarget existing references/);
+    assert.match(section('references'), /stay linked to the scene you selected/);
     assert.match(section('references'), /Public indices always follow public target weights/);
     assert.match(section('references'), /Personal indices prefer your saved target weights/);
     assert.match(section('references'), /coverage correction are calculated after expansion/);
@@ -93,10 +93,10 @@ test('score copy distinguishes normalized measurements, estimates and unresolved
     assert.match(scores, /Fallback is resolved first/);
     assert.match(scores, /Estimated score:[\s\S]*shared-test estimates/);
     assert.match(scores, /Isolated extreme results have less influence on estimates/);
-    assert.match(scores, /incomplete measured coverage reduces the total/);
+    assert.match(scores, /incomplete measured coverage reduces the whole total/);
     assert.match(scores, /missing scores count as 0 at the lower end and 100 at the upper end; measured scores stay fixed/);
-    assert.match(scores, /Ranks by the lower end/);
-    assert.match(scores, /Not a confidence interval/);
+    assert.match(scores, /Models rank by the lower end/);
+    assert.match(scores, /missing scores count as 0 at the lower end and 100 at the upper end/);
     assert.match(scores, /Coverage is the share of weight with measured results/);
     assert.match(scores, /including successful fallbacks/);
     assert.match(scores, /Estimates do not increase coverage/);
@@ -111,9 +111,9 @@ test('fallback copy preserves explicit order, community inheritance, and real ze
     const fallback = section('fallback');
     assert.match(fallback, /choose a saved order or edit your own/);
     assert.match(fallback, /chosen version first, then backups in order/);
-    assert.match(fallback, /first available score counts, not the highest/);
+    assert.match(fallback, /first available score counts/);
     assert.match(fallback, /including zero and negative scores/);
-    assert.match(fallback, /No fallback disables backups, not estimation/);
+    assert.match(fallback, /No fallback uses the chosen version alone, with estimation still available/);
     assert.match(fallback, /Explicit choices updated within 14 days shape version and fallback proportions per topic\/scene, weighted by benchmark allocation/);
     assert.match(fallback, /Following adds no vote/);
     assert.match(fallback, /deselect your configuration to follow the community again/);

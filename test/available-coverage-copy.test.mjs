@@ -38,10 +38,10 @@ test('brief help distinguishes shared-test estimates from measured weighted cove
     assert.ok(brief);
     assert.match(brief, /Estimated score:[\s\S]*shared-test estimates/);
     assert.match(brief, /Isolated extreme results have less influence on estimates/);
-    assert.match(brief, /incomplete measured coverage reduces the total/);
+    assert.match(brief, /incomplete measured coverage reduces the whole total/);
     assert.match(brief, /Estimates do not increase coverage/);
     assert.match(brief, /Coverage is the share of weight with measured results/);
-    assert.match(brief, /reduces the total, not just its estimated part/);
+    assert.match(brief, /reduces the whole total/);
     assert.match(brief, /including successful fallbacks/);
     assert.match(brief, /5c\/\(1\+4c\)/);
     assert.match(brief, /Nonnegative totals use f\(c\), negatives 2-f\(c\)/);
@@ -56,20 +56,20 @@ test('short score help preserves range endpoints, unresolved gaps and fallback-f
     assert.match(brief, /same qualifying measurements, converted using each test's score range and direction/);
     assert.match(brief, /Fallback is resolved first/);
     assert.match(brief, /missing scores count as 0 at the lower end and 100 at the upper end; measured scores stay fixed/);
-    assert.match(brief, /Ranks by the lower end/);
-    assert.match(brief, /Not a confidence interval/);
+    assert.match(brief, /Models rank by the lower end/);
+    assert.match(brief, /missing scores count as 0 at the lower end and 100 at the upper end/);
     assert.match(brief, /Unresolved gaps are left out of Estimated score/);
     assert.match(brief, /Without a real result on a weighted test, a model cannot rank/);
     const fallback = guide.match(/<section id="fallback"[\s\S]*?<\/section>/)?.[0];
     assert.ok(fallback);
     assert.match(fallback, /chosen version first, then backups in order/);
-    assert.match(fallback, /first available score counts, not the highest, including zero and negative scores/);
-    assert.match(fallback, /No fallback disables backups, not estimation/);
+    assert.match(fallback, /first available score counts, including zero and negative scores/);
+    assert.match(fallback, /No fallback uses the chosen version alone, with estimation still available/);
 });
 
 test('model details show before and after scores while the formula stays in the guide', () => {
     const text = summary(factorInference(80, .5, .5));
-    assert.match(text, /50\.00% of the weight uses estimated results from comparisons on shared tests, not measurements/);
+    assert.match(text, /50\.00% of the weight uses estimates from shared-test comparisons/);
     assert.match(text, /Before adjustment: 80/);
     assert.match(text, /After adjustment: 67/);
     assert.match(text, /How it works/);
@@ -120,7 +120,7 @@ test('old v3 deduction summaries and v1/v2 summaries remain supported', () => {
     assert.doesNotMatch(v3, /Coverage factor:|Negative scores/);
     for (const version of [1, 2]) {
         const text = summary({ ...legacy, version });
-        assert.match(text, /50\.00% of the weight uses estimated results from comparisons on shared tests, not measurements/);
+        assert.match(text, /50\.00% of the weight uses estimates from shared-test comparisons/);
         assert.doesNotMatch(text, /Coverage factor:|deduction|Negative scores/);
     }
 });
@@ -129,7 +129,7 @@ test('range summaries show both endpoints and do not present the lower end as a 
     const text = summary(null, .4, true, { lower: 32, upper: 92 });
     assert.match(text, /Score range 32 to 92; measured results cover 40% of the weight/);
     assert.match(text, /Measured results stay fixed/);
-    assert.match(text, /Models rank by the lower end; this is not a confidence interval/);
+    assert.match(text, /Models rank by the lower end/);
     assert.doesNotMatch(text, /Index score|Coverage factor|whole index/);
     assert.doesNotMatch(summary(null, 0, false, { lower: 0, upper: 100 }), /Score range|Models rank/);
 });

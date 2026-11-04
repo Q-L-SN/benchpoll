@@ -223,10 +223,10 @@ test('community policy links real forms and covers evidence, synced versions, pr
         'reasoning effort', 'harness version', 'Do not guess missing settings',
         'vendor-reported result', 'Check for duplicates', 'dated source snapshot', 'manual new-score submissions are disabled',
         'source mapping', 'Request bulk import', 'plain-text feedback form', 'at least 16', 'verified email',
-        'not real-name verification', 'third-party license', 'copyright', 'trademarks', 'not automatically public posts',
+        'Email verification checks access to that address', 'third-party license', 'copyright', 'trademarks', 'private reports remain within the review process',
         'harassment', 'privacy violations', 'spam votes', 'misleading vendor claims', 'evidence-backed criticism',
-        'immediate review', 'no guaranteed dedicated appeal button', 'No designated statutory copyright agent',
-        'does not itself send an email', 'not guaranteed']) assert.ok(text.includes(phrase), phrase);
+        'Submitted items enter the review queue', 'decision you question', 'operator reviews the request',
+        'follow-up messages and any deletion are handled manually', 'Delivery can be delayed or fail']) assert.ok(text.includes(phrase), phrase);
     assert.doesNotMatch(text, /DMCA agent|mailto:|guaranteed email|all submissions are public|private reports are published/i);
 });
 

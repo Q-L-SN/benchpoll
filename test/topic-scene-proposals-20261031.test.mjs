@@ -20,6 +20,16 @@ function harness() {
 }
 const request = (parentTopicID = 172) => ({ parentTopicID, name: 'General', description: 'Overall capability.' });
 
+// Historical proposals remain reviewable after creation moves to private-topic snapshots.
+async function seedExistingScene(h, userID, body = request()) {
+    const slug = body.name.toLowerCase().replaceAll(' ', '-');
+    const [inserted] = await h.pool.execute(`INSERT INTO topic_proposals
+        (user_ID, name, slug, description, parent_topic_ID, scene_reservation_slug, scene_reservation_name)
+        VALUES (?, ?, ?, ?, ?, ?, ?)`, [userID, body.name, slug, body.description, body.parentTopicID, slug, body.name]);
+    return (await h.service.list(userID)).proposals.find(proposal => proposal.proposalID === inserted.insertId);
+}
+
+
 test('proposal shape accepts a topic parent, rejects a scene parent and preserves ordinary topic normalization', () => {
     assert.deepEqual(normalizeTopicProposalRequest(request()), request());
     assert.deepEqual(normalizeTopicProposalRequest({ name: 'New field', description: 'Useful capability.' }),
@@ -29,30 +39,21 @@ test('proposal shape accepts a topic parent, rejects a scene parent and preserve
     }
 });
 
-test('scene proposals use per-parent reservations and share the existing author quota', async () => {
-    const h = harness();
-    const first = await h.service.propose('42', request(), randomUUID());
-    assert.equal(first.kind, 'scene'); assert.equal(first.parentTopicID, 172); assert.equal(first.status, 'open');
-    assert.equal(first.sceneID, null); assert.equal(first.url, null);
-    assert.equal(h.state.scenes.length, 0, 'Proposing never publishes a scene');
-    await assert.rejects(h.service.propose('42', request(173), randomUUID()), errorIs('active_topic_proposal_limit'));
-    const other = await h.service.propose('43', request(173), randomUUID());
-    assert.equal(other.name, 'General'); assert.equal(other.parentTopicID, 173);
-    await assert.rejects(h.service.propose('100', request(), randomUUID()), errorIs('topic_proposal_exists'));
-    assert.ok(h.state.proposals.every(row => row.reservation_name === null && row.scene_reservation_name === 'General'));
-});
-
-test('guests, private parents and non-topic identities cannot create public scenes', async () => {
+test('new proposals require a private topic and reject standalone scene or text-only submissions', async () => {
     const h = harness();
     await assert.rejects(h.service.propose(null, request(), randomUUID()), errorIs('authentication_required'));
-    await assert.rejects(h.service.propose('42', request(501), randomUUID()), errorIs('topic_not_found'));
-    await assert.rejects(h.service.propose('42', request(1095), randomUUID()), errorIs('topic_not_found'));
+    for (const body of [request(), request(501), request(1095), { ...request(), sourceTopicID: 501 }]) {
+        await assert.rejects(h.service.propose('42', body, randomUUID()), errorIs('invalid_topic_proposal_request'));
+    }
+    await assert.rejects(h.service.propose('42', { name: 'New topic', description: 'Useful capability.' }, randomUUID()),
+        errorIs('private_topic_source_required'));
     assert.equal(h.state.proposals.length, 0);
+    assert.equal(h.state.scenes.length, 0);
 });
 
 test('thirty supports enqueue one review with parent identity, then approved scene retains context identity and URL', async () => {
     const h = harness();
-    const proposal = await h.service.propose('42', request(), randomUUID());
+    const proposal = await seedExistingScene(h, '42');
     for (let index = 0; index < 30; index++) {
         await h.service.support(String(100 + index), { proposalID: proposal.proposalID, revision: 1 }, randomUUID());
     }
@@ -69,7 +70,7 @@ test('thirty supports enqueue one review with parent identity, then approved sce
 });
 
 test('editing a scene proposal resets support without changing its parent, and reviewer edits are respected', async () => {
-    const h = harness(), proposal = await h.service.propose('42', request(), randomUUID());
+    const h = harness(), proposal = await seedExistingScene(h, '42');
     await h.service.support('100', { proposalID: proposal.proposalID, revision: 1 }, randomUUID());
     const edited = await h.service.edit('42', { proposalID: proposal.proposalID, revision: 1,
         name: 'Vector output', description: 'Create vector images.' }, randomUUID());
@@ -85,7 +86,7 @@ test('editing a scene proposal resets support without changing its parent, and r
 });
 
 test('review mismatch, missing supports and mistaken ordinary-topic completion are rejected', async () => {
-    const h = harness(), proposal = await h.service.propose('42', request(), randomUUID());
+    const h = harness(), proposal = await seedExistingScene(h, '42');
     const row = h.state.proposals[0]; row.status = 'pending'; row.moderation_log_ID = 99;
     const metadata = { moderationLogID: 99, submittedBy: '42' };
     await assert.rejects(lockTopicProposalForReview(h.pool, { ...request(173), proposalID: proposal.proposalID }, metadata), errorIs('topic_proposal_review_mismatch'));
@@ -96,7 +97,7 @@ test('review mismatch, missing supports and mistaken ordinary-topic completion a
 });
 
 test('read-only moderation preview supports synthetic negative INSERT IDs without changing state', async () => {
-    const h = harness(), proposal = await h.service.propose('42', { ...request(), name: 'Vector output' }, randomUUID());
+    const h = harness(), proposal = await seedExistingScene(h, '42', { ...request(), name: 'Vector output' });
     const row = h.state.proposals[0]; row.status = 'pending'; row.moderation_log_ID = 99;
     h.state.votes = Array.from({ length: 30 }, (_, index) => ({ proposal_ID: row.ID, user_ID: String(100 + index) }));
     const before = structuredClone(h.state), recorded = [];
@@ -113,7 +114,7 @@ test('read-only moderation preview supports synthetic negative INSERT IDs withou
 });
 
 test('real connections and JSON-shaped preview flags cannot approve or persist negative context identities', async () => {
-    const h = harness(), body = { ...request(), name: 'Vector output' }, proposal = await h.service.propose('42', body, randomUUID());
+    const h = harness(), body = { ...request(), name: 'Vector output' }, proposal = await seedExistingScene(h, '42', body);
     const row = h.state.proposals[0]; row.status = 'pending'; row.moderation_log_ID = 99;
     h.state.votes = Array.from({ length: 30 }, (_, index) => ({ proposal_ID: row.ID, user_ID: String(100 + index) }));
     for (const flags of [{}, { allowSynthetic: true }, { TOPIC_SCENE_SQL_PREVIEW: true }, { preview: true, simulation: true }]) {
@@ -134,7 +135,7 @@ test('real connections and JSON-shaped preview flags cannot approve or persist n
 
 test('the actual server preview recorder marks only its non-writing connection for scene approval', async () => {
     const h = harness(), body = { ...request(), name: 'Vector output' };
-    const proposal = await h.service.propose('42', body, randomUUID());
+    const proposal = await seedExistingScene(h, '42', body);
     const row = h.state.proposals[0]; row.status = 'pending'; row.moderation_log_ID = 99;
     h.state.votes = Array.from({ length: 30 }, (_, index) => ({ proposal_ID: row.ID, user_ID: String(100 + index) }));
     const before = structuredClone(h.state), source = await readFile(new URL('../server.js', import.meta.url), 'utf8');
