@@ -44,14 +44,14 @@
     }
     .bp-discussion-workspace #discussion-close, .bp-discussion-workspace #discussion-brand-slot { display: none; }
     .bp-discussion-workspace .discussion-scroll { overscroll-behavior-x: auto; padding-inline-end: 0; }
-    .bp-home:not(.is-showcase) .bp-context-actions > :is(#workspace-refresh, #workspace-undo) {
+    .bp-home:not(.is-showcase) .bp-context-actions > :is(#workspace-refresh, #workspace-undo, #workspace-reset) {
         border: 0; background: transparent; box-shadow: none;
     }
-    .bp-home:not(.is-showcase) .bp-context-actions > #workspace-undo {
+    .bp-home:not(.is-showcase) .bp-context-actions > :is(#workspace-undo, #workspace-reset) {
         flex: 0 0 var(--bp-mobile-undo-width, 44px); width: var(--bp-mobile-undo-width, 44px);
         min-width: 0; padding: 0; overflow: hidden; opacity: var(--bp-mobile-undo-opacity, 1);
     }
-    .bp-home:not(.is-showcase) #workspace-undo[aria-hidden="true"] { visibility: hidden; pointer-events: none; }
+    .bp-home:not(.is-showcase) :is(#workspace-undo, #workspace-reset)[aria-hidden="true"] { visibility: hidden; pointer-events: none; }
     .bp-home:not(.is-showcase) .bp-workspace .bp-mobile-panels {
         position: fixed; inset: auto auto calc(14px + env(safe-area-inset-bottom, 0px)) 50%; z-index: 45;
         transform: translateX(-50%); display: flex; width: min(380px, calc(100vw - 24px));

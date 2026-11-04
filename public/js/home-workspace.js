@@ -37,6 +37,7 @@ import { createBenchmarkRowFocus } from './workspace/benchmark-family-row.js?v=f
 import { createBenchmarkFallbackCatalogue } from './workspace/benchmark-fallback-catalogue.js?v=fallback-picker-20261008';
 import { createFallbackPicker } from './workspace/fallback-picker.js?v=fallback-controls-20261009';
 import { createBenchmarkSettings } from './workspace/benchmark-settings.js';
+import { createPersonalPieStart, publicWeightStart } from './workspace/personal-pie-start.js';
 import { fallbackStatusLabel } from './shared/fallback-choice.js';
 import { initializeFallbackAppearance } from './workspace/fallback-appearance.js?v=fallback-appearance-20261014';
 import { createBenchmarkInformationLink } from './workspace/benchmark-link.js';
@@ -108,6 +109,7 @@ const publicPieSummary = document.getElementById('public-pie-summary');
 const publicPieCount = document.getElementById('public-pie-count');
 const undoButton = document.getElementById('workspace-undo');
 const redoButton = document.getElementById('workspace-redo');
+const resetButton = document.getElementById('workspace-reset');
 const addFallbackBenchmarkButton = document.getElementById('inline-fallback-add-benchmark');
 const refreshButton = document.getElementById('workspace-refresh');
 const lastUpdated = document.getElementById('last-updated');
@@ -223,6 +225,14 @@ const benchmarkSettings = createBenchmarkSettings({
         { community: entries === null, entries: entries ?? [], selectionSource: 'custom' }, 'replace')
 });
 initializeFallbackAppearance();
+const personalPieStart = createPersonalPieStart({
+    stage: pieSvg.closest('.bp-pie-stage'),
+    getScope: () => `${workspaceContextFingerprint()}|${state.userID ?? 'guest'}|${state.personalRevision}|${state.personalEditVersion}`,
+    getPublicStart: () => publicWeightStart(state.publicEntries, state.versionComposition, state.limits),
+    isPrivate: () => state.contextIsPrivate,
+    onApply: startPersonalPie,
+    onChange: () => renderModeState()
+});
 let benchmarkSearchTimer = null;
 let lowCoverageExpanded = false;
 let otherConditionsExpanded = false;
@@ -572,7 +582,7 @@ function updatePieAdjustmentStatus() {
     updateWeightAdjustmentCursor();
     const entry = state.personalEntries.find(item => Number(item.conditionID) === Number(state.selectedObjectID));
     const single = state.personalEntries.length === 1;
-    const visible = state.mode === 'personal' && Boolean(entry)
+    const visible = !personalPieStart.isOpen && state.mode === 'personal' && Boolean(entry)
         && (single || state.workspaceView === 'focus' || pieCard?.classList.contains('is-adjusting-weight'));
     if (!visible) {
         if (pieAdjustmentStatus.getAttribute('aria-hidden') !== 'true') void setVisible(pieAdjustmentStatus, false);
@@ -756,11 +766,14 @@ function renderTemplateControls() {
 }
 
 function updateUndoState() {
-    undoButton.disabled = state.gestureOpen
+    undoButton.disabled = personalPieStart.isOpen || state.gestureOpen
         || wheelWeightCommitTimer !== null
         || !state.editHistory.canUndo;
     redoButton.hidden = !state.editHistory.canRedo;
-    redoButton.disabled = state.gestureOpen || wheelWeightCommitTimer !== null || !state.editHistory.canRedo;
+    redoButton.disabled = personalPieStart.isOpen || state.gestureOpen || wheelWeightCommitTimer !== null || !state.editHistory.canRedo;
+    resetButton.hidden = state.mode !== 'personal';
+    resetButton.disabled = personalPieStart.isOpen || state.loading || state.gestureOpen || wheelWeightCommitTimer !== null
+        || state.accountWriteBlocked || state.personalRecoveryBlocked || state.personalSaveConflict;
 }
 
 function requestLogin() {
@@ -1991,6 +2004,9 @@ function renderBenchmarks() {
 }
 
 function renderModeState() {
+    personalPieStart.refresh();
+    const choosingStart = personalPieStart.isOpen;
+    pieCard.classList.toggle('is-starting-personal-weights', choosingStart);
     renderReferenceState();
     const personal = state.mode === 'personal';
     const indexTitle = personal ? 'Personal AI Index' : 'Public AI Index';
@@ -2036,7 +2052,7 @@ function renderModeState() {
         guestDraftDiscard.hidden = !state.authenticated && !state.legacyDraftAvailable;
     }
     personalPieGuidance.hidden = false;
-    publicPieSummary.hidden = personal;
+    publicPieSummary.hidden = personal || choosingStart;
     publicPieCount.textContent = `${state.publicParticipantCount.toLocaleString('en-US')} saved weight ${state.publicParticipantCount === 1 ? 'set' : 'sets'}`;
     const hasPersonalWeights = state.personalEntries.length > 0;
     const emptyPie = !state.loading && currentPieEntries().length === 0;
@@ -2053,8 +2069,8 @@ function renderModeState() {
     pieCard.classList.toggle('has-empty-personal-pie', showEmptyPersonal);
     personalPieGuidance.hidden = emptyPie;
     modeSwitch.hidden = !hasPersonalWeights || state.contextIsPrivate;
-    personalPieCreate.hidden = !showCreatePersonal;
-    personalEmptyMode.hidden = !showEmptyPersonal && !state.contextIsPrivate;
+    personalPieCreate.hidden = !showCreatePersonal || choosingStart;
+    personalEmptyMode.hidden = !showEmptyPersonal && !state.contextIsPrivate && !(choosingStart && !hasPersonalWeights);
     pieCard.classList.toggle('has-personal-create-cta', showCreatePersonal);
     modeSwitch?.classList.toggle('is-public', !personal);
     personalModeButton.classList.toggle('selected', personal);
@@ -2063,13 +2079,14 @@ function renderModeState() {
     publicModeButton.setAttribute('aria-selected', String(!personal));
     renderSelectedWeightHeading();
     updatePieAdjustmentStatus();
+    updateUndoState();
     publishContextWeights();
 }
 
 function renderSelectedWeightHeading() {
     const entries = currentPieEntries();
     const selected = entries.find(entry => Number(entry.conditionID) === Number(state.selectedObjectID)) ?? entries[0];
-    personalPieGuidance.hidden = !selected;
+    personalPieGuidance.hidden = !selected || personalPieStart.isOpen;
     if (isTopicReference(selected)) renderTopicLabel(pieInstruction, topicLabelText(selected));
     else pieInstruction.textContent = selected ? benchmarkAccessibleName(selected) : '';
     if (selected && !isTopicReference(selected) && typeof selected.scoredModelCount === 'number') {
@@ -2128,6 +2145,7 @@ function renderPendingPieMode() {
         ? `Loading ${pendingPieMode === 'personal' ? 'Personal' : 'Public'} Weights` : '';
 }
 async function setMode(mode) {
+    if (personalPieStart.isOpen) personalPieStart.close({ restore: false });
     const sequence = ++modeSwitchSequence;
     const requestedMode = mode === 'public' && !state.contextIsPrivate ? 'public' : 'personal';
     if (requestedMode === state.mode) { pendingPieMode = null; renderPendingPieMode(); return; }
@@ -2852,11 +2870,43 @@ async function applyWorkspaceState(detail = {}) {
 
 personalModeButton.addEventListener('click', () => setMode('personal'));
 publicModeButton.addEventListener('click', () => setMode('public'));
-personalPieCreate.addEventListener('click', () => {
-    setMode('personal');
-});
+async function openPersonalStart(trigger, reset = false) {
+    const scope = workspaceContextFingerprint(), user = state.userID;
+    if (state.loading || state.accountWriteBlocked || state.personalRecoveryBlocked || state.personalSaveConflict
+        || !await prepareContextChange() || scope !== workspaceContextFingerprint() || user !== state.userID) return;
+    if (reset && state.mode !== 'personal') return;
+    fallbackPicker.close({ restore: false }); benchmarkSettings.close();
+    personalPieStart.open({ reset, trigger });
+}
+
+function startPersonalPie(entries, isCurrent) {
+    if (!isCurrent() || state.loading || state.accountWriteBlocked || state.personalRecoveryBlocked || state.personalSaveConflict) return false;
+    const changed = entries.length > 0 || state.personalEntries.length > 0 || state.personalFallbackRules.length > 0;
+    personalPieStart.close({ restore: false });
+    modeSwitchSequence++; pendingPieMode = null; renderPendingPieMode();
+    state.loadSequence++;
+    state.mode = 'personal'; writeWorkspacePreferences(state);
+    if (changed && !beginMutation()) return false;
+    resetPieVisualState(); hiddenPersonalBenchmarkIDs.clear();
+    state.personalEntries = cloneEntries(entries); state.personalFallbackRules = [];
+    state.personalCommunityComposition = [];
+    state.referenceIssues.personal = []; state.effectiveEntries.personal = null;
+    state.selectedObjectID = entries[0]?.conditionID ?? null; state.selectedFamilyKey = null;
+    state.workspaceView = 'overview'; state.personalFallbackExpanded = false;
+    registerPieEntries(state.personalEntries);
+    setStatus(''); renderAll();
+    if (changed) scheduleSave();
+    (entries.length ? personalModeButton : document.getElementById('weight-add-benchmark')).focus({ preventScroll: true });
+    return true;
+}
+
+personalPieCreate.addEventListener('click', () => { void openPersonalStart(personalPieCreate); });
+resetButton.addEventListener('click', () => { void openPersonalStart(resetButton, true); });
 personalEmptyPublicReturn.addEventListener('click', () => setMode('public'));
-compactPieAction.addEventListener('click', () => setMode('personal'));
+compactPieAction.addEventListener('click', () => {
+    if (state.personalEntries.length) void setMode('personal');
+    else void openPersonalStart(compactPieAction);
+});
 personalPieFindBenchmarks.addEventListener('click', async () => {
     const scope = workspaceContextFingerprint();
     if (state.mode !== 'personal' || state.loading || !await finishPendingWeightAdjustments()

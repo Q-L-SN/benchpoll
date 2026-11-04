@@ -6,7 +6,7 @@ export function initializeMobilePanels(workspace) {
     const mobile = window.matchMedia('(max-width: 760px)');
     const enabled = () => mobile.matches && workspace.dataset.display !== 'charts';
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
-    const undo = workspace.querySelector('#workspace-undo');
+    const editingControls = [...workspace.querySelectorAll('#workspace-undo, #workspace-reset')];
     const names = controls.map(control => control.dataset.mobilePanel);
     let current = names.includes(workspace.dataset.mobilePanel) ? workspace.dataset.mobilePanel : 'mix';
     let lastAnnounced = null, previewingDiscussion = false;
@@ -26,9 +26,9 @@ export function initializeMobilePanels(workspace) {
             previewingDiscussion = true;
             window.dispatchEvent(new CustomEvent('benchpoll:mobile-panel-preview', { detail: { panel: 'discussion' } }));
         }
-        if (undo) {
-            undo.inert = enabled() && value > .99;
-            if (undo.inert) undo.setAttribute('aria-hidden', 'true'); else undo.removeAttribute('aria-hidden');
+        for (const control of editingControls) {
+            control.inert = enabled() && value > .99;
+            if (control.inert) control.setAttribute('aria-hidden', 'true'); else control.removeAttribute('aria-hidden');
         }
     }
     function commit() {

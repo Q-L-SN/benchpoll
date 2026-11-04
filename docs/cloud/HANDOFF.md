@@ -65,6 +65,13 @@ finger drift. See
 for its six-file runtime scope and verification. It needs no migration and has
 not been installed in production from cloud.
 
+The subsequent personal-weight update adds public/blank starting points and a
+two-step reset overlay inside the treemap. Reset stays beside Undo and shares its
+mobile collapse animation. See
+[`../personal-weight-start-20261104.md`](../personal-weight-start-20261104.md)
+for the narrow frontend scope, draft/undo behavior and checks. It requires no
+migration and remains pending production installation.
+
 ## Repositories And Starting Point
 
 - Source: <https://github.com/Q-L-SN/benchpoll>, branch `codex/cloud-handoff-20261101`.

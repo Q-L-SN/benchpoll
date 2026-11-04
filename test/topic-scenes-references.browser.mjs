@@ -138,7 +138,10 @@ for (const width of [390, 1440]) test(`scenes and references: keyboard, search, 
     assert.equal(await page.locator('.bp-scene-actions').isVisible(), false);
     await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
     await page.screenshot({ path: `${output}/workspace-scene-tabs-${width}.png` });
-    if (await page.locator('#personal-pie-create').isVisible()) await page.locator('#personal-pie-create').click();
+    if (await page.locator('#personal-pie-create').isVisible()) {
+        await page.locator('#personal-pie-create').click();
+        await page.locator('#personal-pie-start-blank').click();
+    }
     assert.equal(await page.locator('.bp-scene-tab').first().getAttribute('data-scene-id'), '5401');
     assert.equal(await page.locator('.bp-scene-default').count(), 0);
     assert.equal(await page.locator('.bp-template-picker').count(), 0);
@@ -286,6 +289,7 @@ test('guest references use read-only previews and retain independent scene draft
     await page.goto(app.url + '/intelligence/vector-images');
     await page.waitForSelector('#scene-tab-5402[aria-selected="true"]');
     await page.locator('#personal-pie-create').click();
+    await page.locator('#personal-pie-start-blank').click();
     for (const name of ['Photon', 'Coding']) {
         await page.locator('#weight-add-benchmark').click();
         await page.locator('#benchmark-search').fill(name);

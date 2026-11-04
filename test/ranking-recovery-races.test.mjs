@@ -124,7 +124,8 @@ async function createHarness(version = before ? 'before' : 'current') {
         renderModeState() {}, updateUndoState() {}, updateLastUpdated() {}, renderInlineFallback() {}, revealBenchmarkRow() {}, loadVisibleBenchmarkPage() {},
         waitForGestureToSettle: async () => {}, portableFamilyEntry: entry => ({ conditionID: entry.conditionID }),
         FALLBACK_CONFIGURATION_VERSION, FALLBACK_RULE_MODE: 'ordered', WORKSPACE_LOAD_RETRY_DELAYS_MS: [], invalidSavedComparison: () => false,
-        undoButton: { disabled: false }, redoButton: { disabled: false, hidden: true },
+        undoButton: { disabled: false }, redoButton: { disabled: false, hidden: true }, resetButton: { disabled: false, hidden: true },
+        personalPieStart: { isOpen: false },
         setStatus(message) { state.statusMessage = message; }, renderLoadError(error) { loadErrors.push(error); state.loading = false; },
         postJSON(route, body) {
             if (route === '/api/get_ranking_page') return Promise.resolve(getPage(body));
