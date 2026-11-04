@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { canonicalAccountID } from './public/js/shared/account-identity.js';
-import { topicSlug, topicURL, normalizeTopicSummary, scenePath } from './public/js/shared/topics.js';
+import { topicSlug, topicURL, normalizeTopicSummary, scenePath, sceneSlug } from './public/js/shared/topics.js';
 import { claimWriteIntent, completeWriteIntent } from './write-idempotency.js';
 import { startTransactionConnection, commitTransactionConnection, rollbackTransactionConnection,
     releaseTransactionConnection } from './db-transaction.js';
@@ -31,7 +31,7 @@ function valuesRecord(value) {
 }
 
 function sceneURLSlug(scene) {
-    const slug = scene.slug || topicSlug(scene.name);
+    const slug = scene.slug || sceneSlug(scene.name);
     // Preserve the stored 80-character prefix so the alias cannot collide with a shorter valid slug.
     return slug.length === 80 && /^[a-z0-9]+(?:-[a-z0-9]+)*-$/.test(slug) ? `${slug}scene` : slug;
 }
@@ -185,7 +185,7 @@ export async function assertPublicSceneAvailable(connection, categoryID, name, {
     const [topics] = await connection.execute(`SELECT ID, name, slug, description, owner_user_ID FROM categories
         WHERE ID = ? AND is_active = 1 AND owner_user_ID IS NULL${lock ? ' FOR UPDATE' : ''}`, [categoryID]);
     if (topics.length !== 1) fail(404, 'topic_not_found');
-    const slug = topicSlug(name);
+    const slug = sceneSlug(name);
     const [existing] = await connection.execute(`SELECT context_ID FROM topic_scenes
         WHERE category_ID = ? AND (slug = ? OR name = ?)${excludeSceneID === null ? '' : ' AND context_ID <> ?'} LIMIT 1`,
     [categoryID, slug, name, ...(excludeSceneID === null ? [] : [excludeSceneID])]);
@@ -208,7 +208,7 @@ export async function insertTopicScene(connection, categoryID, request, { contex
         WHERE ID = ? AND category_ID = ?`, [context.serialized, context.contextHash, contextID, categoryID]);
     await connection.execute(`INSERT INTO topic_scenes
         (context_ID, category_ID, name, slug, description, position, is_default, is_active, legacy_context_values)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)`, [contextID, categoryID, request.name, topicSlug(request.name),
+        VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)`, [contextID, categoryID, request.name, sceneSlug(request.name),
         request.description, position, Number(request.isDefault === true), legacyValues === null ? null : JSON.stringify(legacyValues)]);
     return contextID;
 }
@@ -279,7 +279,7 @@ export async function updatePrivateTopicScene(db, userID, body, key = null) {
         if (request.isDefault) await connection.execute('UPDATE topic_scenes SET is_default = 0 WHERE category_ID = ? AND is_default = 1', [request.categoryID]);
         await connection.execute(`UPDATE topic_scenes SET name = ?, slug = ?, description = ?, position = ?, is_default = ?
             WHERE context_ID = ? AND category_ID = ? AND is_active = 1`,
-        [request.name, topicSlug(request.name), request.description, request.position ?? scene.position,
+        [request.name, sceneSlug(request.name), request.description, request.position ?? scene.position,
             Number(request.isDefault ?? scene.isDefault), scene.ID, request.categoryID]);
         return { sceneID: scene.ID, contextID: scene.ID, categoryID: request.categoryID };
     });

@@ -38,6 +38,13 @@ for the new discussion schema prerequisite and the combined narrow exporter.
 Both feature commits are confirmed deployed by the local desktop release,
 including fixes for snapshot version conflicts and mobile Add-button occlusion.
 
+The next pending change reduces Language to General plus eight common languages
+and gives Coding General plus ten programming-language scenes. Its new guarded
+data migration preserves existing IDs/history and is separate from the old
+taxonomy. It also fixes the sidebar chevron's horizontal direction. Read
+[`../common-language-scenes-20261104.md`](../common-language-scenes-20261104.md)
+before installing; this cloud session has not applied it to production.
+
 ## Repositories And Starting Point
 
 - Source: <https://github.com/Q-L-SN/benchpoll>, branch `codex/cloud-handoff-20261101`.

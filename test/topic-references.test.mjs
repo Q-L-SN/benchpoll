@@ -22,6 +22,13 @@ test('reference discovery keeps older public and personal weights available with
 });
 const node = (contextID, entries, extra = {}) => ({ contextID, entries, ...extra });
 
+test('reference discovery uses stored scene paths for punctuation-bearing programming languages', async () => {
+    const db = { execute: async () => [[{ context_ID: '10', category_ID: 180, scene_ID: '10', topic_name: 'Coding',
+        slug: 'coding', scene_name: 'C++', scene_slug: 'c-plus-plus', owner_user_ID: null }]] };
+    const [target] = await loadTopicReferenceTargets(db);
+    assert.equal(target.url, '/coding/c-plus-plus');
+});
+
 test('references multiply path shares and combine identical leaf benchmarks', async () => {
     const nodes = new Map([[2, node(2, [entry(10, 6000), entry(11, 4000)])],
         [3, node(3, [entry(-2, 5000), entry(11, 5000)])]]);

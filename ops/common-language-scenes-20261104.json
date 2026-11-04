@@ -1,0 +1,38 @@
+{
+  "version": "common_language_scenes_20261104",
+  "language": {
+    "ID": 219,
+    "name": "Language",
+    "slug": "language",
+    "expectedActiveScenes": 185,
+    "scenes": [
+      { "name": "General", "slug": "general", "language": "any" },
+      { "name": "English", "slug": "english", "language": "en" },
+      { "name": "Chinese", "slug": "chinese", "language": "zh" },
+      { "name": "Japanese", "slug": "japanese", "language": "ja" },
+      { "name": "Korean", "slug": "korean", "language": "ko" },
+      { "name": "Spanish", "slug": "spanish", "language": "es" },
+      { "name": "French", "slug": "french", "language": "fr" },
+      { "name": "German", "slug": "german", "language": "de" },
+      { "name": "Arabic", "slug": "arabic", "language": "ar" }
+    ]
+  },
+  "coding": {
+    "ID": 180,
+    "name": "Coding",
+    "slug": "coding",
+    "scenes": [
+      { "name": "General", "slug": "general" },
+      { "name": "Python", "slug": "python" },
+      { "name": "JavaScript", "slug": "javascript" },
+      { "name": "TypeScript", "slug": "typescript" },
+      { "name": "Java", "slug": "java" },
+      { "name": "C", "slug": "c" },
+      { "name": "C++", "slug": "c-plus-plus" },
+      { "name": "C#", "slug": "c-sharp" },
+      { "name": "Go", "slug": "go" },
+      { "name": "Rust", "slug": "rust" },
+      { "name": "PHP", "slug": "php" }
+    ]
+  }
+}

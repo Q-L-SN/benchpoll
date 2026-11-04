@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { canonicalAccountID } from './public/js/shared/account-identity.js';
-import { topicSlug } from './public/js/shared/topics.js';
+import { topicSlug, sceneSlug } from './public/js/shared/topics.js';
 import { normalizeTopicRequest, serializeTopic, topicID } from './topic-service.js';
 import { loadTopicSceneCatalog, normalizeTopicSceneRequest, lockTopicReferenceGraph,
     ensureTopicRootContext, insertTopicScene, EMPTY_TOPIC_CONTEXT_HASH } from './topic-scenes-service.js';
@@ -41,7 +41,7 @@ export function normalizePrivateTopicEdit(body) {
         if (typeof description !== 'string') fail(400, 'invalid_scene_description');
         const normalized = normalizeTopicSceneRequest({ categoryID: categoryID ?? 1, name: item.name,
             description: description.trim() || metadata.description });
-        const nameKey = normalized.name.toLocaleLowerCase(), slug = topicSlug(normalized.name);
+        const nameKey = normalized.name.toLocaleLowerCase(), slug = sceneSlug(normalized.name);
         if (seenNames.has(nameKey) || seenSlugs.has(slug)) fail(409, 'topic_scene_exists');
         seenKeys.add(item.key); seenNames.add(nameKey); seenSlugs.add(slug); if (ID !== null) seenIDs.add(ID);
         return { key: item.key, ID, name: normalized.name, description: description.trim() ? normalized.description : '' };

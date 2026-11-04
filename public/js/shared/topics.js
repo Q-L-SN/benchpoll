@@ -9,7 +9,7 @@ export function scenePath(input, scene = null) {
     if (parts[0] === 'personal' && (!/^[1-9]\d*$/.test(parts[1] ?? '') || parts.length < 2)) return null;
     if (scene !== null) {
         if (!scene || typeof scene !== 'object' || typeof scene.name !== 'string' || !scene.name.trim()) return null;
-        const slug = scene.slug || topicSlug(scene.name);
+        const slug = scene.slug || sceneSlug(scene.name);
         if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) return null;
         url.pathname = '/' + [...parts.slice(0, rootLength), slug].join('/');
     }
@@ -70,6 +70,12 @@ const compactReservedSlugs = new Set(RESERVED_TOPIC_SLUGS.map(slug => slug.repla
 export function topicSlug(name) {
     return String(name ?? '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
         .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'topic';
+}
+
+// Scene names include programming languages: punctuation distinguishes C, C++ and C#.
+// Existing stored scene slugs remain authoritative; this only derives a new path.
+export function sceneSlug(name) {
+    return topicSlug(String(name ?? '').replaceAll('+', ' plus ').replaceAll('#', ' sharp '));
 }
 
 export function isReservedTopicSlug(value) {

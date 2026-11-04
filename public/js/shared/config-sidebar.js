@@ -1,4 +1,3 @@
-import { mountDisclosureChevron } from './disclosure-chevron.js';
 import { bindDrawerDrag } from './drawer-drag.js';
 
 const STORAGE_KEY = 'benchpoll:config-sidebar-collapsed';
@@ -17,7 +16,7 @@ export function createConfigSidebar() {
     const discussionSlot = document.getElementById('discussion-brand-slot');
     const brand = document.querySelector('.bp-shell .bp-brand');
     if (!sidebar || !toggle || !headerSlot || !brand) return null;
-    mountDisclosureChevron(toggle, { icon: toggle.querySelector('.bp-sidebar-toggle-direction') });
+    const direction = toggle.querySelector('.bp-sidebar-toggle-direction');
     const mobile = window.matchMedia('(max-width: 760px)');
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
     const identity = document.querySelector('.bp-context-identity');
@@ -44,7 +43,10 @@ export function createConfigSidebar() {
         const hidden = discussionOpen() || !mobile.matches && collapsed;
         sidebar.inert = hidden;
         sidebar.setAttribute('aria-hidden', String(hidden));
-        toggle.setAttribute('aria-expanded', String(!collapsed && !discussionOpen()));
+        const expanded = !collapsed && !discussionOpen();
+        toggle.setAttribute('aria-expanded', String(expanded));
+        direction?.classList.toggle('fa-chevron-left', expanded);
+        direction?.classList.toggle('fa-chevron-right', !expanded);
         const label = collapsed ? 'Show topics sidebar' : 'Hide topics sidebar';
         toggle.setAttribute('aria-label', label);
         toggle.dataset.tooltip = label;
