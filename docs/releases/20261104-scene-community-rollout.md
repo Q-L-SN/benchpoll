@@ -5,7 +5,9 @@
 - Application: `https://benchpoll.com`.
 - Source branch: `codex/cloud-handoff-20261101`.
 - Source commit: `2e2440a003283c897a7a001b3ed5882a0e2bb10d`, incorporating
-  `935f2b6`, `d7a43b2` and two deployment-gate fixes.
+  `935f2b6`, `d7a43b2` and two deployment-gate fixes. The current runtime also
+  includes the two-file memory follow-up at
+  `a8f3a7e56ab29970f897ad638e8dd395f364d229`, described below.
 - Release: `scene-community-20261104-d7a43b2`.
 - Installed: `2026-11-04T04:32:26.940Z`, 12:32:26 Asia/Shanghai.
 - 56 changed files installed from a 61-file allowlist. All 232 guarded paths
@@ -109,5 +111,37 @@ by the ranking, and raises the still-bounded read budget to 800,000 cells. It
 does not raise Node's heap limit or change score estimation, evidence, weights,
 fallback behavior or database contents. Regression tests first reproduced both
 issues, then verified collection of source graphs while deferred page JSON
-remained readable. Installation and post-install observation are recorded in
-the follow-up release receipt.
+remained readable.
+
+The follow-up was installed as `ranking-memory-20261104` at
+`2026-11-04T05:02:14.018Z` (13:02:14 Asia/Shanghai). It replaced only
+`ranking-read-cache.js` and `ranking-service.js`, with hash-checked backups,
+guarded rollback and verification of all 232 runtime paths. Database/schema
+changes and frontend builds were not repeated. Its receipt overrides those two
+hashes in the feature manifest; use its operator's `verify` command for the
+combined baseline.
+
+- Final full unit suite: 3,313 passed, 8 explicit skips, zero failures.
+- GC regressions cover individual deferred getters and cached pagination,
+  including unused comparison evidence. Both fail with the old scorer;
+  existing wire-equivalence, laziness and mutation-isolation tests pass.
+- A separate process capped at 768 MB used real production data through
+  read-only transactions. After three fresh retained pagination snapshots,
+  post-GC heap was 424 MB before and 220 MB after. Clearing snapshots/cache
+  returned the heap to 19 MB. These are bounded probe results, not a claim
+  about indefinite process memory usage.
+- Chromium 1440/390 and WebKit 390 public journeys passed after the follow-up.
+  The measured workspace read took 1.4 seconds with warm evidence. Effort-only,
+  harness-only, combined and default comparisons all returned their first and
+  second pages; no scoring evidence was written by these checks.
+- Seventeen production samples through 05:11:28 UTC, 554 seconds after healthy
+  installation, showed zero automatic restarts and zero Nginx/upstream errors.
+  Actual stderr contained one ordinary 404 for a nonexistent legacy ranking
+  URL, with no new heap-fatal output. Final sampled service memory was about
+  677 MiB and its observed peak was about 1,026 MiB. The score-sync timer
+  remained active. This bounded observation is not continuous monitoring.
+
+Commit `5cdea0dcda58593dc604459084c516576c2ec575` arrived on the source branch
+during this deployment. Its Language/Coding scene curation, sidebar change and
+additional data migration are pending a separate reviewed rollout. They were
+not mixed into the pinned `a8f3a7e` runtime recorded here.

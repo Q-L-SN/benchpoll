@@ -15,8 +15,9 @@ verification. Read
 before any further production work; do not repeat the migrations based on the
 older pending-release notes. This does not establish cloud VPN/TCP access.
 
-The November 4 release is now deployed at application commit
-`2e2440a003283c897a7a001b3ed5882a0e2bb10d`. Read
+The November 4 feature release was deployed at application commit
+`2e2440a003283c897a7a001b3ed5882a0e2bb10d`. The current runtime additionally
+includes memory follow-up `a8f3a7e56ab29970f897ad638e8dd395f364d229`. Read
 [`../releases/20261104-scene-community-rollout.md`](../releases/20261104-scene-community-rollout.md)
 for the current manifest, schema state, tests and rollback boundary. The two
 new migrations are installed; do not repeat them based on the older pending notes.
@@ -38,12 +39,14 @@ for the new discussion schema prerequisite and the combined narrow exporter.
 Both feature commits are confirmed deployed by the local desktop release,
 including fixes for snapshot version conflicts and mobile Add-button occlusion.
 
-The next pending change reduces Language to General plus eight common languages
-and gives Coding General plus ten programming-language scenes. Its new guarded
-data migration preserves existing IDs/history and is separate from the old
-taxonomy. It also fixes the sidebar chevron's horizontal direction. Read
+The next pending change, commit `5cdea0dcda58593dc604459084c516576c2ec575`,
+arrived during the local deployment and is NOT included in the installed runtime.
+It reduces Language to General plus eight common languages and gives Coding
+General plus ten programming-language scenes. Its new guarded data migration
+preserves existing IDs/history and is separate from the old taxonomy. It also
+fixes the sidebar chevron's horizontal direction. Read
 [`../common-language-scenes-20261104.md`](../common-language-scenes-20261104.md)
-before installing; this cloud session has not applied it to production.
+before a separate installation; this migration has not been applied to production.
 
 ## Repositories And Starting Point
 
@@ -144,14 +147,25 @@ current frontend. Do not spend the next task redesigning retired pages.
 The encrypted `OPERATIONS.md` records the production host, application and
 backup paths, service name and database name. Production runtime secrets stay
 on the server. Restore that note privately before any authorized production work.
-The last disk check showed about 12 GiB free on a 77 GiB volume. Do not create
+The November 4 disk check showed about 19 GiB free on a 77 GiB volume. Do not create
 another multi-gigabyte rehearsal database without checking the disk reserve.
 
-Latest release: `scene-community-20261104-d7a43b2`, installed
+Base feature release: `scene-community-20261104-d7a43b2`, installed
 `2026-11-04T04:32:26.940Z` (12:32:26 Asia/Shanghai), at commit `2e2440a`.
-Its 232-path manifest is the current baseline. Existing source backups and
-private database/schema receipts are retained server-side. Daily deployment
-automation was cancelled and was not created.
+Latest follow-up: `ranking-memory-20261104`, installed
+`2026-11-04T05:02:14.018Z` (13:02:14 Asia/Shanghai), at commit `a8f3a7e`.
+The current baseline is the feature release's 232-path manifest with the two
+ranking-source overrides in the memory follow-up receipt. Verify it using
+`deploy-ranking-memory-20261104.mjs verify` from that follow-up's release directory;
+the unmodified feature verifier will correctly flag the two superseded hashes.
+Existing source backups and private database/schema receipts are retained
+server-side. Daily deployment automation was cancelled and was not created.
+
+The feature deployment exposed a pre-existing deferred-metadata retention issue
+and a too-small ranking read-cache budget. One V8 OOM restart occurred before
+the follow-up. Check actual application stderr and systemd restart counts, not
+only journal error priority. Do not replay migrations or raise the heap limit
+to recreate the fix; the source correction is installed.
 
 Earlier base application release: `unified-loading-20261103-fa3f4ac`, installed
 `2026-11-03T13:42:07.200Z` (21:42:07 Asia/Shanghai), at commit `5a8f096`.
@@ -216,4 +230,3 @@ setup, unit tests and a browser preview. Summarize exactly what is ready and wha
 still requires network/account setup. Do not deploy, modify production data or
 replay migrations during the initial environment verification. Then continue
 with the owner's next explicit product request.
-
