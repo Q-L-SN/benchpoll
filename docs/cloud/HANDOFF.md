@@ -153,8 +153,9 @@ table was verified before installation; the ARC correction completed at
 `2026-11-03T13:44:52.457Z`. Application and score-sync timer were restored and
 health checks passed. The latest one-file follow-up is
 `upstream-idle-20261103-9361ce9`, installed `2026-11-03T14:08:05.271Z`, at commit
-`9361ce9`. Verify the base manifest plus that explicit server-file override;
-the original server hash has been superseded. The encrypted handoff still contains historical release
+`9361ce9`. Those receipts describe the historical November 3 baseline; for current
+verification use the November 4 manifest above, which supersedes their changed
+file hashes. The encrypted handoff still contains historical release
 receipts plus the SSH key and trusted host identity; use the current rollout
 note for deployment state. Verify host identity; never disable host-key checks.
 
@@ -208,3 +209,4 @@ setup, unit tests and a browser preview. Summarize exactly what is ready and wha
 still requires network/account setup. Do not deploy, modify production data or
 replay migrations during the initial environment verification. Then continue
 with the owner's next explicit product request.
+
