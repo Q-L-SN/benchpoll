@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { getTopic, normalizeTopicRequest, topicID } from './topic-service.js';
-import { loadPersonalPie, loadBenchmarkConditions, normalizePreviewPersonalPie, getProposalRankingWorkspace } from './ranking-service.js';
+import { loadPersonalPie, loadBenchmarkConditions, normalizePreviewPersonalPie, getProposalRankingWorkspace, validateBenchmarkVersionChoices } from './ranking-service.js';
 import { loadTopicReferenceTargets } from './topic-reference-service.js';
 import { loadTopicSceneCatalog, insertTopicScene, TOPIC_SCENE_SQL_PREVIEW } from './topic-scenes-service.js';
 import { ensureBenchmarkFamily } from './benchmark-family-service.js';
@@ -19,6 +19,7 @@ export async function validateSnapshotEvidence(connection, snapshot, userID = nu
     const targets = new Map((await loadTopicReferenceTargets(connection, userID)).map(item => [item.contextID, item]));
     for (const scene of snapshot.scenes) {
         const pie = normalizePreviewPersonalPie({ entries: scene.entries, fallbackRules: scene.fallbackRules });
+        validateBenchmarkVersionChoices(pie.entries, conditions, 409);
         for (const ID of [...pie.entries.map(entry => entry.conditionID), ...pie.fallbackRules.flatMap(rule => rule.entries.map(entry => entry.conditionID))]) {
             if (ID < 0) {
                 const target = targets.get(-ID);

@@ -28,6 +28,10 @@
     }
     .bp-home:not(.is-showcase) .bp-workspace-grid > :is(.bp-left-workspace, .bp-right-workspace)::-webkit-scrollbar { display: none; }
     .bp-home:not(.is-showcase) .bp-left-workspace > .bp-benchmark-card { margin-top: 16px; }
+    .bp-home:not(.is-showcase) .bp-workspace-grid > .bp-left-workspace {
+        padding-bottom: calc(96px + var(--bp-mobile-notice-height, 0px) + env(safe-area-inset-bottom, 0px));
+        scroll-padding-bottom: calc(96px + var(--bp-mobile-notice-height, 0px) + env(safe-area-inset-bottom, 0px));
+    }
     .bp-home:not(.is-showcase) .bp-pie-adjustment-status { bottom: calc(84px + env(safe-area-inset-bottom, 0px)); }
     .bp-home:not(.is-showcase) .bp-workspace:not([data-mobile-panel="mix"]) .bp-pie-adjustment-status { visibility: hidden; pointer-events: none; }
     .bp-home:not(.is-showcase) #discussion-entry { display: none; }

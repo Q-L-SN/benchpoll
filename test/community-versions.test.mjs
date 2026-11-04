@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { communityVersionComposition, expandCommunityVersions, groupBenchmarkRows } from '../public/js/shared/benchmark-version-choice.js';
-import { loadPublicPie, normalizePreviewPersonalPie, scoreModels } from '../ranking-service.js';
+import { loadPublicPie, normalizePreviewPersonalPie, scoreModels, validateBenchmarkVersionChoices } from '../ranking-service.js';
 import { createRankingPager } from '../ranking-pagination.js';
 import { migrateCommunityVersions } from '../scripts/migrate-community-versions-20261103.mjs';
 
@@ -13,6 +13,17 @@ const conditions = [
 const entry = (conditionID, weightBasisPoints = 10000, follows = false) => ({ conditionID, weightBasisPoints,
     ...(follows ? { followCommunityVersion: true } : {}) });
 const pie = (...entries) => ({ entries });
+
+test('shared version validation rejects conflicting abstentions while preserving explicit multi-version mixes', () => {
+    const catalogue = new Map(conditions.map(condition => [condition.conditionID, condition]));
+    for (const entries of [[entry(1, 5000, true), entry(2, 5000)], [entry(1, 5000), entry(2, 5000, true)]]) {
+        assert.throws(() => validateBenchmarkVersionChoices(entries, catalogue, 409),
+            error => error.status === 409 && error.body?.error === 'pie_benchmark_version_conflict');
+    }
+    for (const entries of [[entry(1, 5000), entry(2, 5000)], [entry(1, 5000, true), entry(3, 5000)], [entry(-9), entry(1)]]) {
+        assert.doesNotThrow(() => validateBenchmarkVersionChoices(entries, catalogue));
+    }
+});
 
 test('abstention changes neither version denominator nor selection count, even with large weights', () => {
     const voters = new Map([[1, pie(entry(1, 2000))], [2, pie(entry(2, 6000))]]);

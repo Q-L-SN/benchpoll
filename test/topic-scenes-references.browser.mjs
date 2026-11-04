@@ -228,9 +228,9 @@ test('public topics without scenes leave no empty scene action strip', async t =
     assert.equal(await page.getByRole('link', { name: 'Propose a scene', exact: true }).count(), 0);
 });
 
-test('benchmark search adds a concrete topic reference without opening the separate topic picker', async t => {
+for (const width of [320, 390]) test(`benchmark search adds a concrete topic reference below the adjustment notice at ${width}`, async t => {
     const app = await startConfigSidebarPreview(), browser = await chromium.launch({ headless: true, env: localBrowserEnv });
-    const page = await browser.newPage({ viewport: { width: 390, height: 900 }, reducedMotion: 'reduce' });
+    const page = await browser.newPage({ viewport: { width, height: 900 }, reducedMotion: 'reduce' });
     const errors = []; page.on('pageerror', error => errors.push(error.message));
     t.after(async () => { await browser.close(); await app.close(); assert.deepEqual(errors, []); });
     const fixture = await mountWorkspaceFixture(page, app);

@@ -1802,7 +1802,7 @@ function validatePieEntries(entries) {
     return normalized;
 }
 
-function validateBenchmarkVersionChoices(entries, conditionsByID, status = 400) {
+export function validateBenchmarkVersionChoices(entries, conditionsByID, status = 400) {
     const groups = new Map();
     for (const entry of entries) {
         if (entry.conditionID < 1) continue;
