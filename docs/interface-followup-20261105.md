@@ -29,6 +29,9 @@ also carries the existing pending homepage changes in `topics-home.js`.
 - Resets still require confirmation before replacing allocations/version/fallback
   choices. Without public weights they go straight to blank-reset confirmation.
   Revision/account/context invalidation, draft behavior and Undo are preserved.
+  The start chooser and reset confirmation hide the entire lower editing area,
+  including Add benchmark or topic, topic references and Contribute your expertise.
+  Cancelling or completing the flow restores that area's ordinary visibility.
 - The desktop workspace's outer document is constrained to the viewport; lists
   and panels retain their own scrolling. The no-JavaScript view remains scrollable.
 - Opening a private topic without a scene path no longer interprets its numeric
@@ -127,5 +130,9 @@ All write journeys use disposable local fixtures. No production writes are used.
   their four real-browser cases pass together with the affected unit contracts.
 - The later `All` label follow-up passes the home build and both existing
   discussion-scene browser journeys at 390 / 1440 px; mobile layout was reviewed.
+- The lower-controls follow-up passes the home build, focused lint and 5 source /
+  4 compiled personal start/reset journeys. Direct Chromium/WebKit checks confirm
+  controls stay hidden through reset choice and confirmation, then return after
+  cancellation or completion; the mobile screenshot was reviewed.
 
 Browser-engine emulation is not a physical iPhone/Safari-device test.

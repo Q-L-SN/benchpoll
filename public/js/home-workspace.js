@@ -2000,6 +2000,7 @@ function renderModeState() {
     personalPieStart.refresh();
     const choosingStart = personalPieStart.isOpen;
     pieCard.classList.toggle('is-starting-personal-weights', choosingStart);
+    document.getElementById('pie-edit-controls').hidden = choosingStart;
     renderReferenceState();
     const personal = state.mode === 'personal';
     const indexTitle = personal ? 'Personal AI Index' : 'Public AI Index';

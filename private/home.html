@@ -341,45 +341,47 @@
                                 <button id="pie-empty-compact-action" type="button"></button>
                             </div>
                             <div id="pie-hover-tooltip" class="bp-pie-hover-tooltip" role="tooltip" hidden></div>
-                            <div id="weight-add-actions" class="bp-weight-add-actions" hidden>
-                                <button id="weight-add-benchmark" class="bp-quiet-action" type="button" aria-controls="benchmark-card"><i class="fa-solid fa-plus" aria-hidden="true"></i><span>Add benchmark or topic</span></button>
-                            </div>
-                            <section id="topic-reference-weights" class="bp-topic-reference-weights" aria-label="Topic references" hidden></section>
-                            <section id="inline-fallback" class="bp-inline-fallback" aria-label="Fallback" hidden>
-                                <div class="bp-inline-fallback-toolbar">
-                                    <div id="inline-fallback-personal-control" class="bp-inline-fallback-personal-control">
-                                        <button id="inline-fallback-toggle" class="bp-inline-fallback-toggle" type="button" data-ui-disclosure aria-haspopup="dialog" aria-controls="fallback-picker">
-                                            <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
-                                            <span>Fallback: Follow community</span>
-                                        </button>
-                                    </div>
-                                    <button id="public-fallback-toggle" class="bp-public-fallback-toggle" type="button" aria-haspopup="dialog" aria-controls="fallback-picker" hidden>View fallback configurations</button>
+                            <div id="pie-edit-controls">
+                                <div id="weight-add-actions" class="bp-weight-add-actions" hidden>
+                                    <button id="weight-add-benchmark" class="bp-quiet-action" type="button" aria-controls="benchmark-card"><i class="fa-solid fa-plus" aria-hidden="true"></i><span>Add benchmark or topic</span></button>
                                 </div>
-                                <div id="inline-fallback-settings" class="bp-inline-fallback-settings" hidden>
-                                    <div class="bp-fallback-configuration-heading">
-                                        <div class="bp-fallback-configuration-identity"><strong id="inline-fallback-configuration-label">Current fallback</strong><span id="inline-fallback-entrance"></span></div>
-                                        <div class="bp-fallback-configuration-actions">
-                                            <button id="inline-fallback-configurations" class="bp-quiet-action" type="button" aria-haspopup="dialog" aria-controls="fallback-picker"><i class="fa-solid fa-right-left" aria-hidden="true"></i><span>Switch configuration</span></button>
-                                            <button id="inline-fallback-edit" class="bp-quiet-action" type="button" aria-label="Edit fallback" aria-controls="inline-fallback-editor"><i class="fa-regular fa-pen-to-square" aria-hidden="true"></i><span class="bp-ui-action-label">Edit</span></button>
-                                            <button id="inline-fallback-done" class="bp-ui-action" data-ui-variant="secondary" type="button" hidden><span class="bp-ui-action-label">Finish editing</span></button>
+                                <section id="topic-reference-weights" class="bp-topic-reference-weights" aria-label="Topic references" hidden></section>
+                                <section id="inline-fallback" class="bp-inline-fallback" aria-label="Fallback" hidden>
+                                    <div class="bp-inline-fallback-toolbar">
+                                        <div id="inline-fallback-personal-control" class="bp-inline-fallback-personal-control">
+                                            <button id="inline-fallback-toggle" class="bp-inline-fallback-toggle" type="button" data-ui-disclosure aria-haspopup="dialog" aria-controls="fallback-picker">
+                                                <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
+                                                <span>Fallback: Follow community</span>
+                                            </button>
                                         </div>
+                                        <button id="public-fallback-toggle" class="bp-public-fallback-toggle" type="button" aria-haspopup="dialog" aria-controls="fallback-picker" hidden>View fallback configurations</button>
                                     </div>
-                                    <div id="inline-fallback-preview" class="bp-fallback-configuration-preview" hidden><div id="inline-fallback-preview-sequence" class="bp-fallback-preview-sequence"></div></div>
-                                    <div id="inline-fallback-editor" class="bp-inline-fallback-editor" hidden>
-                                        <p id="inline-fallback-guide" class="bp-inline-fallback-guide" hidden></p>
-                                        <div class="bp-inline-fallback-frame">
-                                            <div id="inline-fallback-chart" class="bp-inline-fallback-chart" role="group" aria-label="Fallback order" tabindex="-1" hidden></div>
-                                            <div class="bp-fallback-add-actions" role="group" aria-label="Add fallback options">
-                                                <button id="inline-fallback-add-benchmark" type="button" hidden aria-pressed="false" aria-label="Add a benchmark to Fallback" data-help-action="follow" data-help-text="Choose backups using + in Evaluation items. When this benchmark has no score, backups are tried in order using its existing weight."><i class="fa-solid fa-plus" aria-hidden="true"></i><span>Add fallback benchmark</span></button>
+                                    <div id="inline-fallback-settings" class="bp-inline-fallback-settings" hidden>
+                                        <div class="bp-fallback-configuration-heading">
+                                            <div class="bp-fallback-configuration-identity"><strong id="inline-fallback-configuration-label">Current fallback</strong><span id="inline-fallback-entrance"></span></div>
+                                            <div class="bp-fallback-configuration-actions">
+                                                <button id="inline-fallback-configurations" class="bp-quiet-action" type="button" aria-haspopup="dialog" aria-controls="fallback-picker"><i class="fa-solid fa-right-left" aria-hidden="true"></i><span>Switch configuration</span></button>
+                                                <button id="inline-fallback-edit" class="bp-quiet-action" type="button" aria-label="Edit fallback" aria-controls="inline-fallback-editor"><i class="fa-regular fa-pen-to-square" aria-hidden="true"></i><span class="bp-ui-action-label">Edit</span></button>
+                                                <button id="inline-fallback-done" class="bp-ui-action" data-ui-variant="secondary" type="button" hidden><span class="bp-ui-action-label">Finish editing</span></button>
+                                            </div>
+                                        </div>
+                                        <div id="inline-fallback-preview" class="bp-fallback-configuration-preview" hidden><div id="inline-fallback-preview-sequence" class="bp-fallback-preview-sequence"></div></div>
+                                        <div id="inline-fallback-editor" class="bp-inline-fallback-editor" hidden>
+                                            <p id="inline-fallback-guide" class="bp-inline-fallback-guide" hidden></p>
+                                            <div class="bp-inline-fallback-frame">
+                                                <div id="inline-fallback-chart" class="bp-inline-fallback-chart" role="group" aria-label="Fallback order" tabindex="-1" hidden></div>
+                                                <div class="bp-fallback-add-actions" role="group" aria-label="Add fallback options">
+                                                    <button id="inline-fallback-add-benchmark" type="button" hidden aria-pressed="false" aria-label="Add a benchmark to Fallback" data-help-action="follow" data-help-text="Choose backups using + in Evaluation items. When this benchmark has no score, backups are tried in order using its existing weight."><i class="fa-solid fa-plus" aria-hidden="true"></i><span>Add fallback benchmark</span></button>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
-                                </div>
-                                <div id="inline-fallback-save-error" class="bp-inline-fallback-save-error" hidden>
-                                    <span role="alert">Fallback not saved. Your changes are kept.</span>
-                                    <button id="inline-fallback-save-retry" type="button">Retry</button>
-                                </div>
-                            </section>
+                                    <div id="inline-fallback-save-error" class="bp-inline-fallback-save-error" hidden>
+                                        <span role="alert">Fallback not saved. Your changes are kept.</span>
+                                        <button id="inline-fallback-save-retry" type="button">Retry</button>
+                                    </div>
+                                </section>
+                            </div>
                         </section>
                     </div>
 
