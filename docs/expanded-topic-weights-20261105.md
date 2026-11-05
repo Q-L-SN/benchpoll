@@ -1,9 +1,9 @@
 # Selected topic composition and expanded benchmark view
 
-Pending source update after `ec6ff65` on `codex/cloud-handoff-20261101`.
-The last confirmed deployment remains the `dbab95c` baseline in
-[`releases/20261105-github-merge-rollout.md`](releases/20261105-github-merge-rollout.md).
-This update supplements the pending overlays in
+Deployed at `cd45740` by release `github-merge-20261105-cd45740`, together with
+both preceding follow-ups. See the
+[verified rollout](releases/20261105-workspace-rollout.md) for the current
+baseline, checks and rollback. The source scope below supplements the overlays in
 [`personal-start-polish-20261105.md`](personal-start-polish-20261105.md) and
 [`inline-settings-interactions-20261105.md`](inline-settings-interactions-20261105.md).
 

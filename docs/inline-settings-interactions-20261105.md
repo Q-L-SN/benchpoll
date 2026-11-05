@@ -1,11 +1,10 @@
 # Inline benchmark settings and plain How it works
 
-Pending source update after `23cdef0` on `codex/cloud-handoff-20261101`.
-The last confirmed deployment remains the `dbab95c` baseline recorded in
-[`github-merge-20261105-dbab95c`](releases/20261105-github-merge-rollout.md).
-The previous pending update is documented in
+Deployed at `cd45740` by release `github-merge-20261105-cd45740`. See the
+[verified rollout](releases/20261105-workspace-rollout.md) for the current
+baseline, checks and rollback. The preceding update is documented in
 [`personal-start-polish-20261105.md`](personal-start-polish-20261105.md).
-Neither note confirms deployment of these follow-ups.
+All three follow-ups were installed together; do not replay their overlays.
 
 ## Behavior
 

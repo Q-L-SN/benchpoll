@@ -6,42 +6,30 @@ making changes. It describes the current project, not the old `main` branch.
 ## Current Deployment (2026-11-05)
 
 All GitHub updates through application commit
-`dbab95cd098b12922527f244ec6440a60df35209` are deployed, including `2b44907`,
-`bd728ff`, `356a80c`, and `dbab95c`. Release `github-merge-20261105-dbab95c`
-completed at `2026-11-05T04:31:54.383Z`. It preserves production-only sources,
-the AA archive, prior migrations and memory/chart fixes. No new migration,
-dependency update or ongoing-review bug fix was included. The review remains
-paused at the owner's request.
+`cd45740c5368fc236fda9f61472609db1733e671` are deployed. Release
+`github-merge-20261105-cd45740` completed at `2026-11-05T08:08:51.786Z`
+(16:08:51, Asia/Shanghai). It includes all three follow-ups `23cdef0`, `ec6ff65`
+and `cd45740`, on top of the earlier `dbab95c` release.
 
-Read [`../releases/20261105-github-merge-rollout.md`](../releases/20261105-github-merge-rollout.md)
-for the current 259-file guard, 49-file overlay, verification and rollback.
-Use that release's verifier, not earlier manifests. The deployment descriptions
-below are historical context and must not be replayed.
+Read [`../releases/20261105-workspace-rollout.md`](../releases/20261105-workspace-rollout.md)
+for the current 277-file guard, 45-file overlay, verification and rollback.
+Use that release's verifier, not earlier manifests. Production-only sources,
+AA archives, prior migrations and memory/chart fixes are preserved. No new
+migration, dependency update or local ongoing-review bug fix was included.
+The general interaction review remains paused at the owner's request.
 
-Pending after the current deployment: personal-start animation/crossfade fixes,
-removal of the duplicate empty-view search button, consistent light segmented
-controls, floating homepage Scenes controls, and borderless desktop Refresh/Undo.
-Read
-[`../personal-start-polish-20261105.md`](../personal-start-polish-20261105.md) for
-the 17-source overlay and checks. This follow-up requires home and index rebuilds
-and has no migration or production-data change; it is not yet confirmed deployed.
+The following feature notes are now deployed, not pending:
 
-Also pending: inline benchmark version/fallback settings with retained expansion,
-name-only evaluation-item detail links, treemap-only wheel adjustment and an
-inline instruction banner, and a plain-language How it works page. Read
-[`../inline-settings-interactions-20261105.md`](../inline-settings-interactions-20261105.md)
-for the additional 14-source overlay and verification. It requires matching home
-and index builds plus an application restart for the reviewed startup CSP pin.
-It has no migration or production-data change and is not confirmed deployed.
+- [`../personal-start-polish-20261105.md`](../personal-start-polish-20261105.md):
+  personal-start transitions, unified segmented controls and homepage scenes.
+- [`../inline-settings-interactions-20261105.md`](../inline-settings-interactions-20261105.md):
+  inline version/fallback settings, chart-only gestures and the simplified guide.
+- [`../expanded-topic-weights-20261105.md`](../expanded-topic-weights-20261105.md):
+  selected-topic composition, expanded read-only weights and topic heading.
 
-Also pending: selected-topic composition normalized to 100%, a read-only view
-that expands topics and merges benchmarks, rounded coverage indices, continuous
-topic/scene link underlines, relocated weight controls, and the topic name as the
-main workspace heading. Read
-[`../expanded-topic-weights-20261105.md`](../expanded-topic-weights-20261105.md)
-for the additional 18-source overlay and verification. It requires home/index
-rebuilds and an application restart for the workspace response and SSR changes.
-There is no migration or production-data change; deployment is not confirmed.
+The preceding `dbab95c` release is recorded in
+[`../releases/20261105-github-merge-rollout.md`](../releases/20261105-github-merge-rollout.md).
+Descriptions below are historical context and must not be replayed.
 
 ## Earlier Deployment History
 

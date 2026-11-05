@@ -1,8 +1,10 @@
 # Personal start, shared switches and card controls
 
-Pending source update after the deployed `dbab95c` baseline recorded in
-[`github-merge-20261105-dbab95c`](releases/20261105-github-merge-rollout.md).
-This note does not confirm deployment of the new changes.
+Deployed at `cd45740` by release `github-merge-20261105-cd45740`, together with
+the inline-settings and expanded-topic follow-ups. See the
+[verified rollout](releases/20261105-workspace-rollout.md) for the current
+baseline, checks and rollback. The source verification below is retained as
+historical evidence, not a pending deployment instruction.
 
 ## Behavior
 
