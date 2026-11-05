@@ -1,10 +1,10 @@
 # Workspace, guide and contribution follow-up — November 5
 
-Source handoff on `codex/cloud-handoff-20261101`; not a production rollout
-record. The last recorded production baseline is the reconciled
-[`github-merge-20261104`](releases/20261104-github-merge-rollout.md) release.
-Verify the installed hashes before preparing a narrow overlay. This follow-up
-also carries the existing pending homepage changes in `topics-home.js`.
+Deployed through `dbab95c` in the reconciled
+[`November 5 rollout`](releases/20261105-github-merge-rollout.md), including both
+small follow-ups and the earlier homepage changes in `topics-home.js`. The
+feature and source-verification notes below describe the handoff; use the rollout
+record for current installed hashes and operations. No migration was required.
 
 ## User-visible behavior
 

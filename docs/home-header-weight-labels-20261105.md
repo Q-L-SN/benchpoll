@@ -1,7 +1,7 @@
 # Homepage controls and full-weight labels
 
-Pending deployment after the verified
-[`github-merge-20261104` release](releases/20261104-github-merge-rollout.md).
+Deployed with all subsequent GitHub updates through `dbab95c` in the verified
+[`November 5 rollout`](releases/20261105-github-merge-rollout.md).
 
 The homepage header and settings island now start their shared transition
 another 64 px earlier in the document. The hero-boundary offset increases from

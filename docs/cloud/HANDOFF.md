@@ -3,6 +3,23 @@
 This is the operational entry point for the 2026-11-01 handoff. Read it before
 making changes. It describes the current project, not the old `main` branch.
 
+## Current Deployment (2026-11-05)
+
+All GitHub updates through application commit
+`dbab95cd098b12922527f244ec6440a60df35209` are deployed, including `2b44907`,
+`bd728ff`, `356a80c`, and `dbab95c`. Release `github-merge-20261105-dbab95c`
+completed at `2026-11-05T04:31:54.383Z`. It preserves production-only sources,
+the AA archive, prior migrations and memory/chart fixes. No new migration,
+dependency update or ongoing-review bug fix was included. The review remains
+paused at the owner's request.
+
+Read [`../releases/20261105-github-merge-rollout.md`](../releases/20261105-github-merge-rollout.md)
+for the current 259-file guard, 49-file overlay, verification and rollback.
+Use that release's verifier, not earlier manifests. The deployment descriptions
+below are historical context and must not be replayed.
+
+## Earlier Deployment History
+
 The combined 2026-11-03 release is now deployed. The owner asked the local
 desktop agent to deploy the GitHub changes because cloud environment setup was
 blocked. Application commit `5a8f096fda624faa0ed69958facc6b040283deec` includes
@@ -101,21 +118,22 @@ This remains a reconciled overlay, not permission to replace production with a
 whole repository checkout. Production-only `db.js`, `navigation-service.js` and
 `public/css/ui/navigation.css` were preserved.
 
-A pending homepage follow-up moves the header/settings-island transition
+A homepage follow-up moves the header/settings-island transition
 another 64 px earlier and removes separate version names from the full-weight
 view and its tooltips. Read
 [`../home-header-weight-labels-20261105.md`](../home-header-weight-labels-20261105.md)
 for the one-source runtime scope, index rebuild and completed checks. It has
-no schema or data changes and is not yet confirmed deployed.
+no schema or data changes and is included in the November 5 rollout above.
 
-A further pending interface update adds seamless ranking segments, shallow-tile
+A further interface update adds seamless ranking segments, shallow-tile
 percentages, the refined personal-weight start/reset flow, ordinary-view version
 label hiding, a redesigned How It Works page, persistent AA submission guidance
 and automatic textarea sizing. Read
 [`../interface-followup-20261105.md`](../interface-followup-20261105.md) for the
 exact runtime allowlist and checks. Rebuild home and index; the read-only
 discussion-label change also requires an application restart. No migration or
-production-data change is included. GitHub publication is not a deployment record.
+production-data change is included. This update and its two smaller follow-ups
+are now confirmed deployed by the November 5 rollout above.
 
 ## Repositories And Starting Point
 
