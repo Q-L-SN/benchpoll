@@ -6,17 +6,20 @@ import { startPreview } from '../scripts/frontend/server.mjs';
 import { familyEntries } from '../scripts/frontend/fixtures.mjs';
 
 const built = process.env.BP_TEST_BUILT === '1';
-const output = 'artifacts/personal-pie-start-20261104';
+const output = process.env.BP_START_ARTIFACTS ?? 'artifacts/personal-pie-start-20261104';
 await mkdir(output, { recursive: true });
 async function setup(t, engine, width, options = {}) {
     const fixture = await startPreview({ communityVersions: true, ...options });
     const browser = await engine.launch({ headless: true });
-    const page = await browser.newPage({ viewport: { width, height: 844 }, isMobile: width < 760, hasTouch: width < 760, reducedMotion: 'reduce' });
+    const page = await browser.newPage({ viewport: { width, height: 844 }, isMobile: width < 760, hasTouch: width < 760, reducedMotion: options.motion ? 'no-preference' : 'reduce' });
     page.setDefaultTimeout(10000);
     const errors = []; page.on('pageerror', error => errors.push(error.message));
     t.after(async () => { await browser.close(); await fixture.close(); assert.deepEqual(errors, []); });
     await page.addInitScript(() => localStorage.setItem('benchpoll:config-sidebar-collapsed', 'true'));
-    if (built) await page.route(fixture.url + '/', async route => route.fulfill({ contentType: 'text/html', body: await readFile('private/home-built.html', 'utf8') }));
+    if (options.initialMode) await page.addInitScript(mode => sessionStorage.setItem('benchpoll-workspace-preferences-v1',
+        JSON.stringify({ mode, scoreMode: 'available' })), options.initialMode);
+    if (built) await page.route(url => url.origin === fixture.url && ['/', '/reasoning'].includes(url.pathname),
+        async route => route.fulfill({ contentType: 'text/html', body: await readFile(new URL('../private/home-built.html', import.meta.url), 'utf8') }));
     await page.goto(fixture.url);
     await page.locator('#benchmark-card[aria-busy="false"]').waitFor();
     const settled = () => page.waitForFunction(() => document.getElementById('model-card').getAttribute('aria-busy') === 'false');
@@ -34,13 +37,21 @@ for (const [engine, width] of built ? [[chromium, 390], [webkit, 390]] : [[chrom
         await page.locator('#personal-pie-create').click();
         await overlay.locator('#personal-pie-start-public').waitFor();
         assert.equal(await overlay.getAttribute('data-step'), 'choose');
+        assert.equal(await page.locator('#pie-mode-personal').getAttribute('aria-selected'), 'true');
+        assert.equal(await page.evaluate(() => JSON.parse(sessionStorage.getItem('benchpoll-workspace-preferences-v1')).mode), 'personal');
         assert.equal(saves().length, 0, 'Opening the chooser creates no weights');
+        assert.equal(await overlay.locator('.bp-pie-start-close').count(), 0);
+        assert.equal(await page.locator('#personal-pie-empty').isVisible(), false);
+        assert.equal(await page.locator('#weight-pie').getAttribute('aria-label'), 'Public index composition treemap');
+        assert.ok(await page.locator('#weight-pie > g[data-object-id]').count() > 1, 'The chooser sits over public weights');
         const layout = await overlay.evaluate(root => {
             const bounds = root.getBoundingClientRect(), buttons = [...root.querySelectorAll('.bp-pie-start-choices:not([hidden]) > button')].map(node => node.getBoundingClientRect());
             return { insideStage: root.parentElement.classList.contains('bp-pie-stage'), top: buttons[0].toJSON(), bottom: buttons[1].toJSON(), bounds: bounds.toJSON(),
                 inert: root.parentElement.querySelector('.bp-pie-start-background').inert };
         });
         assert.ok(layout.insideStage && layout.inert);
+        assert.equal(layout.top.height, layout.bottom.height);
+        assert.ok(layout.top.height >= 44);
         assert.ok(layout.top.bottom < layout.bottom.top && Math.abs(layout.top.x + layout.top.width / 2 - (layout.bounds.x + layout.bounds.width / 2)) < 2, JSON.stringify(layout));
         await page.screenshot({ path: `${output}/${engine.name()}-${width}-choose-${built ? 'built' : 'source'}.png` });
         await save(() => overlay.getByRole('button', { name: 'From public weights', exact: true }).click());
@@ -111,13 +122,10 @@ test('resetting removes version/fallback choices only after confirmation and Und
     assert.deepEqual(fixture.state.fallbackRules, []);
 });
 
-test('empty public weights keep the chooser visible on mobile and allow a blank start without saving', async t => {
+test('empty public weights start blank on mobile without a chooser or save', async t => {
     const { page, saves, overlay } = await setup(t, chromium, 320, { personalEntries: [], publicWeights: [] });
     await page.locator('#pie-empty-compact-action').click();
-    await overlay.waitFor();
-    assert.equal(await overlay.locator('#personal-pie-start-public').isDisabled(), true);
-    assert.match(await overlay.innerText(), /No public weights/);
-    await overlay.getByRole('button', { name: 'From blank', exact: true }).click();
+    await page.waitForFunction(() => document.getElementById('pie-mode-personal').getAttribute('aria-selected') === 'true');
     assert.equal(await overlay.isVisible(), false);
     assert.equal(await page.locator('#pie-mode-personal').getAttribute('aria-selected'), 'true');
     assert.equal(saves().length, 0);
@@ -139,14 +147,55 @@ test('guest public starts stay drafts and resetting to blank never calls the sav
     assert.equal(saves().length, 0);
 });
 
-test('private topics keep public starting weights unavailable', async t => {
+test('private topics reset directly to blank confirmation', async t => {
     const { page, saves, overlay } = await setup(t, webkit, 390, { isPrivate: true });
     await page.locator('#workspace-reset').click();
-    assert.equal(await overlay.locator('#personal-pie-start-public').isDisabled(), true);
-    assert.match(await overlay.innerText(), /unavailable for private topics/);
-    await overlay.locator('#personal-pie-start-blank').click();
+    assert.equal(await overlay.getAttribute('data-step'), 'confirm');
+    assert.equal(await overlay.locator('#personal-pie-start-public').isVisible(), false);
     await overlay.getByRole('button', { name: 'Keep my weights' }).click();
     assert.equal(saves().length, 0);
+});
+
+for (const engine of [chromium, webkit]) test(`${engine.name()}: the starting-point chooser carries Personal mode into another topic`, async t => {
+    const { page, overlay, saves } = await setup(t, engine, 390, { personalEntries: [] });
+    await page.locator('#personal-pie-create').click();
+    await overlay.waitFor();
+    assert.equal(await overlay.getAttribute('data-step'), 'choose');
+    assert.equal(saves().length, 0);
+    await page.goto(new URL('/reasoning', page.url()).href);
+    await overlay.waitFor();
+    assert.equal(await overlay.getAttribute('data-step'), 'choose');
+    assert.equal(await page.locator('#pie-mode-personal').getAttribute('aria-selected'), 'true');
+    await overlay.getByRole('button', { name: 'From blank', exact: true }).click();
+    await page.locator('#workspace-refresh').click();
+    await page.locator('#benchmark-card[aria-busy="false"]').waitFor();
+    assert.equal(await overlay.isVisible(), false, 'A chosen blank start is retained on same-topic refresh');
+    assert.equal(saves().length, 0);
+    assert.equal(await page.locator('.bp-mode-switch').isVisible(), true);
+    await page.locator('#pie-mode-public').click();
+    await page.locator('#personal-pie-create').waitFor();
+    assert.equal(await page.locator('.bp-mode-switch').isVisible(), false);
+    assert.equal(await page.locator('#personal-empty-mode').count(), 0);
+});
+
+test('a reset without public weights skips the chooser but still requires confirmation', async t => {
+    const { fixture, page, overlay, save, saves } = await setup(t, webkit, 390, { publicWeights: [], initialMode: 'personal' });
+    const before = structuredClone(fixture.state.personalEntries);
+    await page.locator('.bp-left-workspace').evaluate(node => { node.scrollTop = node.scrollHeight; });
+    await page.locator('#workspace-reset').click();
+    assert.equal(await overlay.getAttribute('data-step'), 'confirm');
+    const confirmationBox = await overlay.boundingBox();
+    assert.ok(confirmationBox.y >= 0 && confirmationBox.y + confirmationBox.height <= 844, 'The reset confirmation is brought back into view');
+    assert.equal(await overlay.locator('#personal-pie-start-public').isVisible(), false);
+    assert.deepEqual(fixture.state.personalEntries, before);
+    assert.equal(saves().length, 0);
+    const heights = await overlay.locator('.bp-pie-start-choices:not([hidden]) > button').evaluateAll(buttons => buttons.map(button => button.getBoundingClientRect().height));
+    assert.deepEqual(heights, [44, 44]);
+    await overlay.getByRole('button', { name: 'Keep my weights' }).click();
+    assert.deepEqual(fixture.state.personalEntries, before);
+    await page.locator('#workspace-reset').click();
+    await save(() => overlay.locator('#personal-pie-start-confirm').click());
+    assert.deepEqual(fixture.state.personalEntries, []);
 });
 
 test('a refreshed saved revision cancels an old reset confirmation', async t => {
@@ -186,4 +235,54 @@ test('mobile Reset and Undo shrink together while the finger is still moving', a
     await page.waitForFunction(() => document.querySelector('.bp-workspace').dataset.mobilePanel === 'models');
     assert.equal(saves().length, 0);
     await cdp.detach();
+});
+
+for (const engine of [chromium, webkit]) test(`${engine.name()}: reveal Public then slide to Personal before showing the chooser`, async t => {
+    const { page, saves } = await setup(t, engine, 390, { personalEntries: [], motion: true });
+    await page.evaluate(() => document.fonts.ready);
+    const frames = await page.evaluate(() => new Promise(resolve => {
+        const frames = [], start = performance.now(), control = document.querySelector('.bp-mode-switch');
+        document.getElementById('personal-pie-create').click();
+        const sample = () => {
+            frames.push({ visible: !control.hidden, personal: document.getElementById('pie-mode-personal').getAttribute('aria-selected') === 'true',
+                overlay: !document.getElementById('personal-pie-start').hidden,
+                x: new DOMMatrix(getComputedStyle(control, '::before').transform).m41,
+                publicX: document.getElementById('pie-mode-public').offsetLeft,
+                personalX: document.getElementById('pie-mode-personal').offsetLeft });
+            if (performance.now() - start < 800) requestAnimationFrame(sample); else resolve(frames);
+        };
+        requestAnimationFrame(sample);
+    }));
+    assert.ok(frames.some(frame => frame.visible && !frame.personal && !frame.overlay), JSON.stringify(frames));
+    assert.ok(frames.some(frame => frame.visible && frame.personal && !frame.overlay
+        && frame.x > frame.personalX + 1 && frame.x < frame.publicX - 1), 'The indicator crosses intermediate positions before revealing the choices');
+    assert.ok(frames.at(-1).overlay);
+    assert.equal(saves().length, 0);
+    await page.locator('#pie-mode-public').click();
+    await page.locator('#personal-pie-create').waitFor();
+    assert.equal(await page.locator('.bp-mode-switch').isVisible(), false);
+});
+
+for (const engine of [chromium, webkit]) test(`${engine.name()}: workspace scroll stays in its panels without a blank page below`, async t => {
+    const { page } = await setup(t, engine, 1440);
+    const root = () => page.evaluate(() => ({ top: scrollY, height: document.documentElement.scrollHeight, viewport: innerHeight,
+        heading: document.querySelector('.bp-page-heading').getBoundingClientRect().top }));
+    const before = await root();
+    await page.evaluate(() => scrollTo(0, 10000));
+    await page.mouse.move(700, 820); await page.mouse.wheel(0, 1500);
+    assert.deepEqual(await root(), before);
+    const rows = page.locator('#model-rows');
+    await rows.hover(); await page.mouse.wheel(0, 500);
+    await page.waitForFunction(() => document.getElementById('model-rows').scrollTop > 0);
+    assert.equal((await root()).top, 0);
+    await page.locator('#discussion-entry').click();
+    await page.locator('#discussion-close').click();
+    await page.locator('#pie-mode-personal').click();
+    await page.locator('#workspace-reset').click();
+    await page.locator('#personal-pie-start-blank').click();
+    await page.getByRole('button', { name: 'Keep my weights', exact: true }).click();
+    await page.setViewportSize({ width: 1000, height: 640 });
+    await page.evaluate(() => scrollTo(0, 10000));
+    const final = await root();
+    assert.equal(final.top, 0); assert.ok(final.height <= final.viewport + 1);
 });

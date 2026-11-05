@@ -26,8 +26,8 @@ test('long names keep fade clipping while leaving room for the percentage', () =
     assert.equal(label.rows[0].clipped, true);
     assert.equal(label.rows[0].size, 13);
 });
-test('small heights and narrow percentage widths prefer the benchmark name', () => {
-    for (const input of [21, 24, 28, 31, 35].map(height => ({ height })).concat({ name: 'M', width: 40, percent: '100%' })) {
+test('extremely small heights and narrow percentage widths prefer the benchmark name', () => {
+    for (const input of [{ height: 21, width: 40 }, { name: 'M', width: 40, percent: '100%' }]) {
         assert.deepEqual(render(input).rows.map(row => row.kind), ['name']);
     }
     for (const height of [40, 44, 48, 52, 56]) {
@@ -35,6 +35,20 @@ test('small heights and narrow percentage widths prefer the benchmark name', () 
         assert.deepEqual(label.rows.map(row => row.kind), ['name', 'percent']);
         assert.equal(label.rows[1].text, '25%');
         assert.ok(label.rows[1].size >= 15);
+    }
+});
+test('flat blocks reserve the right side for the weight and fade names before it', () => {
+    for (const height of [21, 24, 28, 31, 35]) for (const percent of ['1%', '25%', '100%']) {
+        const name = 'A complete benchmark name that extends beyond its available space';
+        const label = render({ height, percent, name });
+        assert.equal(label.mode, 'inline');
+        const [title, weight] = label.rows;
+        assert.equal(title.text, name);
+        assert.equal(title.clipped, true);
+        assert.equal(title.align, 'start');
+        assert.equal(weight.align, 'end');
+        assert.equal(title.y, weight.y);
+        assert.equal(title.clipWidth + measure(percent, weight.size).width + 8, 124);
     }
 });
 test('unrenderable blocks omit text, rather than reduce the font size', () => {

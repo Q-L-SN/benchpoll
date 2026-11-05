@@ -1,6 +1,7 @@
 import { mountCustomSelect, observeCustomSelects } from './custom-select.js?v=custom-select-20261013';
 import { observeInputClears } from './input-clear.js';
 import { mountDisclosureChevron, observeDisclosureChevrons } from './disclosure-chevron.js';
+import { observeTextareaAutosize } from './textarea-autosize.js';
 export { createDisclosureChevron, mountDisclosureChevron, observeDisclosureChevrons } from './disclosure-chevron.js';
 export { observeCustomSelects, handleCustomSelectKeydown } from './custom-select.js?v=custom-select-20261013';
 export { mountInputClear, observeInputClears } from './input-clear.js';
@@ -129,7 +130,7 @@ export function enhanceUI(root = document) {
 
 // Some pages compose primitives without calling enhanceUI for their whole document.
 if (typeof document !== 'undefined') {
-    const observe = () => { observeInputClears(); observeDisclosureChevrons(); };
+    const observe = () => { observeInputClears(); observeDisclosureChevrons(); observeTextareaAutosize(); };
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', observe, { once: true });
     else observe();
 }

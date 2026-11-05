@@ -57,12 +57,12 @@ export function animateModelColumns(container, previous) {
     }
 }
 
-export function renderModelBarChart({ container, models, state, scale, showVendorMarks, onActivate, onNeedMore, hasMore, initialScrollLeft = 0 }) {
-    const figure = document.createElement('div'); figure.className = 'bp-model-bar-chart';
+export function renderModelBarChart({ container, models, state, scale, showVendorMarks, onActivate, onNeedMore, hasMore, initialScrollLeft = 0, reuse = false }) {
+    const figure = reuse ? container.querySelector('.bp-model-bar-chart') : document.createElement('div'); figure.className = 'bp-model-bar-chart';
     figure.setAttribute('role', 'group'); figure.setAttribute('aria-label', 'Model scores, highest ranked first');
     const axis = document.createElement('div'); axis.className = 'bp-model-chart-axis'; axis.setAttribute('aria-hidden', 'true');
     const ticks = modelChartTicks(scale);
-    for (const value of ticks) {
+    for (const value of reuse ? [] : ticks) {
         const tick = document.createElement('span');
         const position = scale.position(value);
         tick.style.bottom = `${position}%`;
@@ -70,16 +70,20 @@ export function renderModelBarChart({ container, models, state, scale, showVendo
         else if (position <= .001) tick.dataset.edge = 'bottom';
         tick.textContent = rankingNumber(value); axis.append(tick);
     }
-    const scroll = document.createElement('div'); scroll.className = 'bp-model-chart-scroll';
+    const scroll = reuse ? figure.querySelector('.bp-model-chart-scroll') : document.createElement('div'); scroll.className = 'bp-model-chart-scroll';
     scroll.tabIndex = 0; scroll.setAttribute('aria-label', 'Scroll to see more models');
-    const columns = document.createElement('div'); columns.className = 'bp-model-chart-columns';
-    if (hasMore) columns.style.minWidth = 'calc(100% + 56px)';
+    const columns = reuse ? scroll.querySelector('.bp-model-chart-columns') : document.createElement('div'); columns.className = 'bp-model-chart-columns';
+    columns.style.minWidth = hasMore ? 'calc(100% + 56px)' : '';
     const grid = document.createElement('div'); grid.className = 'bp-model-chart-grid'; grid.setAttribute('aria-hidden', 'true');
-    for (const value of ticks) {
+    for (const value of reuse ? [] : ticks) {
         const line = document.createElement('span'); line.style.bottom = `${scale.position(value)}%`; grid.append(line);
     }
-    columns.append(grid);
+    if (!reuse) columns.append(grid);
+    const existing = new Map([...columns.querySelectorAll('[data-model-key]')].map(node => [node.dataset.modelKey, node]));
+    let previousColumn = null;
     models.forEach(model => {
+        const key = rankingRowKey(model);
+        if (existing.has(key)) { previousColumn = existing.get(key); return; }
         const comparable = model.comparable !== false;
         const column = document.createElement('div'); column.className = 'bp-model-column';
         column.dataset.modelKey = rankingRowKey(model); column.dataset.rank = model.rank;
@@ -119,8 +123,11 @@ export function renderModelBarChart({ container, models, state, scale, showVendo
             event.preventDefault(); void onActivate(model);
         };
         column.addEventListener('click', activate); column.addEventListener('keydown', activate);
-        column.append(plot, identity); columns.append(column);
+        column.append(plot, identity);
+        columns.insertBefore(column, previousColumn ? previousColumn.nextSibling : columns.querySelector('.bp-model-column'));
+        previousColumn = column;
     });
+    if (reuse) return scroll;
     scroll.append(columns); figure.append(axis, scroll); container.append(figure);
     if (state.scoreMode === 'range' && models.some(model => model.comparable !== false && model.upper > model.lower)) {
         const legend = document.createElement('div'); legend.className = 'bp-model-chart-legend';

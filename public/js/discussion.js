@@ -96,7 +96,7 @@ const benchmarkScores = createBenchmarkScoresView({ onViewChange(showScores) {
     $('benchmark-discussion-view').hidden = showScores || informationOnly;
     $('discussion-composer').hidden = showScores || informationOnly;
     $('private-benchmark-discussion-notice').hidden = showScores || !informationOnly;
-    $('benchmark-information-condition').hidden = showScores;
+    $('benchmark-information-condition').hidden = true;
     $('benchmark-information-status').hidden = showScores;
     for (const [id, selected] of [['benchmark-scores-back', !showScores], ['benchmark-scores-open', showScores]]) {
         $(id).setAttribute('aria-selected', String(selected));
@@ -379,7 +379,6 @@ async function loadBenchmarkInformation() {
                 heading.replaceChildren(link);
             }
         } catch { /* Benchmarks without a valid public URL keep a plain title. */ }
-        $('benchmark-information-condition').textContent = info.conditionName;
         $('benchmark-scores-open').hidden = false;
         if (hasAADisplayRestriction(info)) {
             $('benchmark-information-status').textContent = AA_DISPLAY_MESSAGE;
@@ -721,7 +720,7 @@ function selectMention(index) {
     if (!currentMatch) { closeSuggestions(); return; }
     mentionStart = text.selectionStart - currentMatch[1].length - 1;
     if (state.mentions.length >= 10) { $('composer-status').textContent = 'You can reference up to 10 benchmarks.'; return; }
-    const label = selected.conditionName.toLowerCase() === 'default' ? selected.name : `${selected.name} (${selected.conditionName})`;
+    const label = selected.name;
     if (!state.mentions.some(item => item.conditionID === Number(selected.conditionID))) state.mentions.push({ benchmarkID: Number(selected.benchmarkID), conditionID: Number(selected.conditionID), label });
     if (mentionStart !== null) text.setRangeText(`@${label} `, mentionStart, text.selectionStart, 'end');
     renderMentions(); closeSuggestions(); text.focus();
@@ -739,7 +738,7 @@ async function suggest() {
         const panel = $('mention-suggestions'); panel.replaceChildren(); panel.hidden = false;
         if (!mentionMatches.length) panel.append(node('p', '', 'No matching benchmarks.'));
         mentionMatches.forEach((item, index) => {
-            const button = node('button', '', item.conditionName.toLowerCase() === 'default' ? item.name : `${item.name} (${item.conditionName})`);
+            const button = node('button', '', item.name);
             button.type = 'button'; button.id = `mention-option-${index}`; button.setAttribute('role', 'option');
             button.setAttribute('aria-selected', String(index === 0));
             button.addEventListener('mousedown', event => event.preventDefault());

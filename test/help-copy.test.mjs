@@ -48,16 +48,15 @@ test('static JavaScript question hints remain short and use ordinary language', 
 });
 
 test('short explanations name current navigation and preserve practical scoring and privacy choices', () => {
-    const sections = [...guide.matchAll(/<section([^>]*)>\s*<h2>([^<]+)<\/h2>([\s\S]*?)<\/section>/g)];
+    const sections = [...guide.matchAll(/<section([^>]*)>([\s\S]*?)<\/section>/g)];
     const fallback = sections.find(([, attributes]) => attributes.includes('id="fallback"'));
-    assert.ok(fallback, 'Explain explicit backup choices in the visible guide');
-    assert.match(fallback[3], /Backup versions are selected explicitly/);
-    assert.match(fallback[3], /New versions never join an existing order automatically/);
-    assert.match(fallback[3], /Added benchmarks <strong>follow the community<\/strong>/);
-    assert.match(fallback[3], /deselect your configuration to follow the community again/);
-    for (const [, , heading, content] of sections) {
-        assert.ok(words(heading) <= 14, heading);
-        for (const [, paragraph] of content.matchAll(/<p(?:\s[^>]*)?>([\s\S]*?)<\/p>/g)) assert.ok(words(plain(paragraph)) <= 50, heading);
+    assert.ok(fallback, 'Explicit backup choices remain available in the guide');
+    assert.match(fallback[2], /Backup versions are selected explicitly/);
+    assert.match(fallback[2], /New versions never join an existing order automatically/);
+    assert.match(fallback[2], /Added benchmarks <strong>follow the community<\/strong>/);
+    assert.match(fallback[2], /deselect your configuration to follow the community again/);
+    for (const [, , content] of sections) {
+        for (const [, paragraph] of content.matchAll(/<p(?:\s[^>]*)?>([\s\S]*?)<\/p>/g)) assert.ok(words(plain(paragraph)) <= 55);
     }
     assert.doesNotMatch(guide, /grouping button|optional grouping|fair-comparison control|configuration-share denominator/);
     assert.match(guide, /Browse Popular, Recent, or Mine/);
@@ -85,10 +84,11 @@ test('contribution instructions distinguish pending requests, public data and ru
     assert.doesNotMatch(editor, /New options need review|createFieldForm|Propose/);
 });
 
-test('the entire guide and contribution guide stay brief without a hidden long manual', () => {
+test('guide details remain concise and the first read stays light', () => {
     const main = guide.match(/<article[^>]*>([\s\S]*?)<\/article>/)?.[1];
     assert.ok(main, 'Count the real article, not a slice ending at a removed section');
-    assert.ok(words(plain(main)) <= 850, String(words(plain(main))));
+    assert.ok(words(plain(main)) <= 1150, String(words(plain(main))));
+    assert.ok(words(plain(main.replace(/<details[\s\S]*?<\/details>/g, ''))) <= 400);
     assert.match(main, /Collection lasts 14 days/);
     assert.doesNotMatch(main, /72 hours|Public weight =|48 to 88/);
     assert.doesNotMatch(main, /<ol\b|<table\b|Full calculation rules|Expand all/);

@@ -178,7 +178,7 @@ export function createFallbackPicker({ catalogue, getScope, getPrimary, getCompo
         [primary, ...choice.entries].forEach(entry => {
             const item = element('li', 'bp-fallback-chain-step');
             const identity = element('span', 'bp-fallback-picker-step-name');
-            identity.append(createBenchmarkInformationLink(entry, { getURL: getMemberURL,
+            identity.append(createBenchmarkInformationLink(entry, { getURL: getMemberURL, showVersion: true,
                 onInspect: event => { close({ restore: false }); onInspectVersion?.(event); } }));
             item.append(identity); list.append(item);
         });
@@ -239,7 +239,7 @@ export function createFallbackPicker({ catalogue, getScope, getPrimary, getCompo
             }
             renderedKey = signature;
         }
-        question.replaceChildren(createBenchmarkInformationLink(primary, { getURL: getMemberURL,
+        question.replaceChildren(createBenchmarkInformationLink(primary, { getURL: getMemberURL, showVersion: true,
             onInspect: event => { close({ restore: false }); onInspectVersion?.(event); } }));
         const count = getComposition(primary.ID)?.configuredPieCount ?? 0;
         electorate.textContent = count ? `${count} explicit ${count === 1 ? 'choice' : 'choices'}` : 'No community choices yet';

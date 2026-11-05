@@ -113,9 +113,9 @@ test('custom normalization requires both anchors but does not constrain entered 
     assert.doesNotMatch(submissionValidation, /to \+∞|−∞ to/);
 });
 
-test('condition names remain single-line with a separate optional public explanation', () => {
+test('condition names wrap and grow separately from their optional public explanation', () => {
     const benchmarkRows = sourceBetween('function conditionRows(', 'function changeOperationSelector(');
-    assert.match(benchmarkRows, /<input required[^>]*data-condition-input/);
+    assert.match(benchmarkRows, /<textarea required rows="1"[^>]*data-condition-input/);
     assert.doesNotMatch(benchmarkRows, /Score direction|Status/);
     assert.match(benchmarkRows, /<textarea[^>]*data-field="differenceExplanation"[^>]*maxlength="10000"/);
     assert.match(benchmarkRows, /maxlength="\$\{Math\.max\(60, originalConditionName\(profile\)/);

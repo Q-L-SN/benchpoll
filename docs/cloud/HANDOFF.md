@@ -108,6 +108,15 @@ view and its tooltips. Read
 for the one-source runtime scope, index rebuild and completed checks. It has
 no schema or data changes and is not yet confirmed deployed.
 
+A further pending interface update adds seamless ranking segments, shallow-tile
+percentages, the refined personal-weight start/reset flow, ordinary-view version
+label hiding, a redesigned How It Works page, persistent AA submission guidance
+and automatic textarea sizing. Read
+[`../interface-followup-20261105.md`](../interface-followup-20261105.md) for the
+exact runtime allowlist and checks. Rebuild home and index; the read-only
+discussion-label change also requires an application restart. No migration or
+production-data change is included. GitHub publication is not a deployment record.
+
 ## Repositories And Starting Point
 
 - Source: <https://github.com/Q-L-SN/benchpoll>, branch `codex/cloud-handoff-20261101`.

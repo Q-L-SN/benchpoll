@@ -65,7 +65,6 @@ function renderWeights() {
         const label = weights.get(selectedKey)?.find(item => item.conditionID === entry.conditionID);
         const row = element('label', 'pp-weight-row');
         const name = element('span', '', label?.name ?? (entry.conditionID < 0 ? 'Topic reference' : 'Evaluation item'));
-        if (label?.conditionName) name.append(element('small', '', label.conditionName));
         const input = element('input', ''); input.type = 'number'; input.min = '0'; input.max = '100'; input.step = '1';
         input.value = String((current.get(entry.conditionID) ?? 0) / 100); input.dataset.conditionId = String(entry.conditionID);
         input.disabled = busy || !canAdjustWeights();

@@ -10,7 +10,7 @@ const modulePath = 'public/js/contribution/score-fields.js';
 const allowedModules = new Set([
     modulePath, 'public/js/shared/score-fields.js', 'public/js/shared/score-field-presets.js',
     'public/js/shared/ui-components.js', 'public/js/shared/custom-select.js', 'public/js/shared/input-clear.js',
-    'public/js/shared/disclosure-chevron.js'
+    'public/js/shared/disclosure-chevron.js', 'public/js/shared/textarea-autosize.js'
 ]);
 const fixtureHTML = `<!doctype html><html lang="en"><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Fixed score fields</title>

@@ -6,6 +6,8 @@
     display: none !important;
 }
 
+textarea { resize: none !important; }
+
 :root {
     color-scheme: light;
 

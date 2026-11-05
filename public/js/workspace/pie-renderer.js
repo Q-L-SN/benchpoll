@@ -1,11 +1,11 @@
 import { SVG_NS, PIE_WEIGHT_TRANSITION_MS, PIE_GRADIENTS } from './constants.js';
-import { benchmarkConditionLabel, benchmarkAccessibleName, clamp } from './weights.js';
+import { benchmarkAccessibleName, clamp } from './weights.js';
 import { createPieLabelLayout, pieLabelContentBox } from './pie-label-layout.js?v=weight-treemap-20261031';
 import { createWeightTreemapLayout, treemapHoverTransform } from './weight-treemap-layout.js';
 import '../shared/help-popover.js';
 import { isTopicReference, topicLabelText, topicLabelParts, renderTopicLabel, TOPIC_ICON_FONT } from '../shared/topic-label.js';
 
-export function createPieRenderer({ state, pieSvg, pieHoverTooltip, orderedPieEntries, currentPieEntries, selectedObjectIndex, renderInlineFallback, fallbackRuleFor, publicFallbackRuleFor, onSelect }) {
+export function createPieRenderer({ state, pieSvg, pieHoverTooltip, orderedPieEntries, currentPieEntries, selectedObjectIndex, renderInlineFallback, fallbackRuleFor, publicFallbackRuleFor, onSelect, getPreview = () => null }) {
     const measure = document.createElement('canvas').getContext('2d');
     const labelMetrics = new Map();
     const labelLayout = createPieLabelLayout(metricsOf);
@@ -86,7 +86,8 @@ export function createPieRenderer({ state, pieSvg, pieHoverTooltip, orderedPieEn
         return node;
     }
 
-    function draw(tiles) {
+    function draw(tiles, preview = false) {
+        const mode = preview ? 'public' : state.mode;
         const desired = new Set(tiles.map(tile => Number(tile.conditionID)));
         for (const [id, node] of nodes) if (!desired.has(id)) {
             for (const key of ['group', 'clip', 'gradient', 'mask']) node[key].remove();
@@ -102,9 +103,9 @@ export function createPieRenderer({ state, pieSvg, pieHoverTooltip, orderedPieEn
         const fontFamily = getComputedStyle(pieSvg).fontFamily;
         tiles.forEach((tile, index) => {
             const id = Number(tile.conditionID), node = nodes.get(id) ?? makeTile(id);
-            const selected = Number(state.selectedObjectID) === id;
+            const selected = !preview && Number(state.selectedObjectID) === id;
             const colorIndex = (state.pieOrderByObjectID.get(id) ?? index) % PIE_GRADIENTS.length;
-            const fallback = state.mode === 'personal' ? fallbackRuleFor(id) : publicFallbackRuleFor(id);
+            const fallback = mode === 'personal' ? fallbackRuleFor(id) : publicFallbackRuleFor(id);
             const hasFallback = Boolean(fallback?.entries?.length || fallback?.families?.some(
                 family => family.weightBasisPoints > 0 && family.entries?.length));
             const percent = Number(tile.weightBasisPoints) / state.limits.totalBasisPoints * 100;
@@ -122,42 +123,46 @@ export function createPieRenderer({ state, pieSvg, pieHoverTooltip, orderedPieEn
             const contentBox = pieLabelContentBox(tile.width, tile.height);
             const inner = { ...contentBox, x: tile.x + contentBox.x, y: tile.y + contentBox.y };
             attributesOf(node.clipRect, inner);
-            attributesOf(node.mask, inner);
-            attributesOf(node.maskRect, inner);
-            attributesOf(node.gradient, { x1: inner.x + inner.width - Math.min(14, inner.width / 3),
-                x2: inner.x + inner.width, y1: 0, y2: 0 });
             const topic = isTopicReference(tile);
             const label = labelLayout.layout({ name: topic ? topicLabelText(tile) : tile.name, topic,
-                version: topic ? '' : benchmarkConditionLabel(tile),
                 percent: `${Math.round(percent)}%`, width: tile.width, height: tile.height, fontFamily });
+            const nameBox = { ...inner, width: label.rows.find(row => row.kind === 'name')?.clipWidth ?? inner.width };
+            attributesOf(node.mask, nameBox);
+            attributesOf(node.maskRect, nameBox);
+            attributesOf(node.gradient, { x1: nameBox.x + nameBox.width - Math.min(14, nameBox.width / 3),
+                x2: nameBox.x + nameBox.width, y1: 0, y2: 0 });
             node.group.dataset.labelMode = label.mode;
-            const signature = JSON.stringify(label.rows.map(row => [row.kind, row.text, row.size, row.weight, row.clipped]));
+            const signature = JSON.stringify(label.rows.map(row => [row.kind, row.text, row.size, row.weight, row.clipped, row.align]));
             if (node.signature !== signature) {
                 node.signature = signature;
                 node.labels.replaceChildren(...label.rows.map(row => {
                     const text = element('text', { 'data-label-kind': row.kind, 'font-size': row.size, 'font-weight': row.weight,
-                        'text-anchor': row.clipped ? 'start' : 'middle', ...(row.clipped ? { mask: `url(#${node.mask.id})` } : {}) });
+                        'text-anchor': row.align ?? (row.clipped ? 'start' : 'middle'), ...(row.clipped ? { mask: `url(#${node.mask.id})` } : {}) });
                     if (topic && row.kind === 'name') renderTopicLabel(text, row.text);
                     else text.textContent = row.text;
                     return text;
                 }));
             }
             [...node.labels.querySelectorAll('[data-label-kind]')].forEach((text, i) => {
-                attributesOf(text, { x: label.rows[i].clipped ? inner.x : tile.x + tile.width / 2, y: tile.y + label.rows[i].y });
+                const row = label.rows[i];
+                attributesOf(text, { x: row.align === 'end' ? inner.x + inner.width
+                    : row.align === 'start' || row.clipped ? inner.x : tile.x + tile.width / 2, y: tile.y + row.y });
             });
         });
         raiseActive();
-        pieSvg.setAttribute('aria-label', `${state.mode === 'personal' ? 'Personal' : 'Public'} index composition treemap`);
+        pieSvg.setAttribute('aria-label', `${mode === 'personal' ? 'Personal' : 'Public'} index composition treemap`);
         visualTiles = new Map(tiles.map(tile => [Number(tile.conditionID), { ...tile }]));
+        if (preview) return;
         state.visualPieWeights = new Map(tiles.map(tile => [Number(tile.conditionID), tile.weightBasisPoints]));
         state.visualPieEntries = new Map(tiles.map(tile => [Number(tile.conditionID), { ...tile }]));
     }
 
     function renderPie({ animateWeights = false, layoutOnly = false } = {}) {
         if (disposed) return;
-        const entries = orderedPieEntries(currentPieEntries());
-        if (selectedObjectIndex(entries) < 0) state.selectedObjectID = entries[0]?.conditionID ?? null;
-        if (!layoutOnly) renderInlineFallback();
+        const preview = getPreview();
+        const entries = orderedPieEntries(preview ?? currentPieEntries());
+        if (!preview && selectedObjectIndex(entries) < 0) state.selectedObjectID = entries[0]?.conditionID ?? null;
+        if (!layoutOnly && !preview) renderInlineFallback();
         const bounds = pieSvg.getBoundingClientRect();
         if (bounds.width > 0 && bounds.height > 0) { width = bounds.width; height = bounds.height; }
         pieSvg.setAttribute('viewBox', `0 0 ${width} ${height}`);
@@ -168,7 +173,7 @@ export function createPieRenderer({ state, pieSvg, pieHoverTooltip, orderedPieEn
         lastSize = size; lastScope = scope;
         if (state.pieAnimationFrame !== null) cancelAnimationFrame(state.pieAnimationFrame);
         state.pieAnimationFrame = null;
-        if (!canAnimate) { draw(targets); return; }
+        if (preview || !canAnimate) { draw(targets, Boolean(preview)); return; }
         const collapsed = tile => ({ ...tile, x: tile.x + tile.width / 2, y: tile.y + tile.height / 2,
             width: 0, height: 0, weightBasisPoints: 0 });
         const targetMap = new Map(targets.map(tile => [Number(tile.conditionID), tile]));

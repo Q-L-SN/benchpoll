@@ -212,8 +212,7 @@ async function decorate(connection, rows, userID) {
         mentions: mentions.filter(item => Number(item.post_ID) === Number(row.ID)).map(item => ({
             benchmarkID: item.benchmark_ID == null ? null : Number(item.benchmark_ID),
             conditionID: item.condition_ID == null ? null : Number(item.condition_ID),
-            label: item.condition_name && item.condition_name.toLowerCase() !== 'default'
-                ? `${item.benchmark_name} (${item.condition_name})` : item.benchmark_name
+            label: item.benchmark_name
         })).filter((item, index, items) => items.findIndex(other => other.benchmarkID === item.benchmarkID
             && other.conditionID === item.conditionID && other.label === item.label) === index) }));
 }

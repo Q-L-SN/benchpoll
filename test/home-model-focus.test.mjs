@@ -275,12 +275,13 @@ test('a deep target is located in one request and does not turn a jump into load
     assert.equal(h.state.modelLeaderboards.public, originalModels);
     assert.deepEqual(h.state.rankingPagination.public, originalPage);
     await h.controller.loadPage(75);
-    assert.equal(h.view.getFocusPage().offset, 75);
+    assert.equal(h.view.getFocusPage().offset, 50);
+    assert.equal(h.view.getFocusPage().items.length, 50);
+    await h.controller.loadPage(25);
+    assert.equal(h.view.getFocusPage().offset, 25);
+    assert.deepEqual(h.view.getFocusPage().items.map(model => model.modelID), Array.from({ length: 75 }, (_, i) => i + 26));
     assert.deepEqual(h.state.rankingPagination.public, originalPage);
-    assert.deepEqual(h.requests.map(item => item.body.offset), [undefined, 75]);
-    h.controller.backToTop();
-    assert.equal(h.view.getFocusPage(), null);
-    assert.equal(h.rows.length, 25);
+    assert.deepEqual(h.requests.map(item => item.body.offset), [undefined, 75, 25]);
     assert.equal(h.state.rankingPagination.public.nextOffset, 25);
     h.controller.destroy();
 });
@@ -403,11 +404,11 @@ test('untrusted locate payloads cannot render or highlight a different model', a
     h.controller.destroy();
 });
 
-test('focus page navigation rejects invalid offsets before requesting another page', async () => {
+test('continuous windows reject invalid and nonadjacent offsets before requesting a segment', async () => {
     const h = harness();
     await h.controller.reveal();
     const page = h.view.getFocusPage();
-    for (const offset of [-25, 1, 26, 125, Number.NaN, '75']) await h.controller.loadPage(offset);
+    for (const offset of [-25, 0, 1, 26, 50, 100, 125, Number.NaN, '75']) await h.controller.loadPage(offset);
     assert.equal(h.requests.length, 1);
     assert.equal(h.view.getFocusPage(), page);
     h.controller.destroy();
@@ -438,13 +439,47 @@ test('a cancelled page request cannot replace the current focus page or leave it
     await h.controller.reveal();
     const previous = h.view.getFocusPage();
     const task = h.controller.loadPage(75);
-    assert.equal(h.view.getFocusPage().loading, true);
-    h.events.emit('keydown', { key: 'Escape' });
+    assert.equal(h.view.getFocusPage().loading, 'next');
+    h.controller.cancel();
     assert.equal(h.requests.at(-1).options.signal.aborted, true);
     complete();
     await task;
     assert.equal(h.view.getFocusPage().offset, previous.offset);
     assert.equal(h.view.getFocusPage().loading, false);
+    h.controller.destroy();
+});
+
+test('continued touch, wheel and keyboard scrolling does not abort an in-flight segment or request it twice', async () => {
+    let complete;
+    const h = harness({ request: (path, body) => path.endsWith('locate_ranking_model') ? h.pager.locateModel(body)
+        : new Promise(resolve => { complete = () => resolve(h.pager.getPage(body)); }) });
+    await h.controller.reveal();
+    const task = h.controller.loadPage(75);
+    for (const type of ['wheel', 'touchstart', 'pointerdown', 'keydown']) h.events.emit(type, { key: 'ArrowDown' });
+    await h.controller.loadPage(75);
+    assert.equal(h.requests.length, 2);
+    assert.equal(h.requests.at(-1).options.signal.aborted, false);
+    complete(); await task;
+    assert.equal(h.view.getFocusPage().items.length, 50);
+    assert.equal(h.view.getFocusPage().loading, false);
+    h.controller.destroy();
+});
+
+test('segment failures preserve the complete window and retry the same boundary', async () => {
+    let attempts = 0;
+    const h = harness({ request: (path, body) => {
+        if (path.endsWith('locate_ranking_model')) return h.pager.locateModel(body);
+        if (++attempts === 1) throw new Error('Offline');
+        return h.pager.getPage(body);
+    } });
+    await h.controller.reveal();
+    const previous = h.view.getFocusPage();
+    await h.controller.loadPage(25);
+    assert.equal(h.view.getFocusPage().items, previous.items);
+    assert.equal(h.view.getFocusPage().errorDirection, 'previous');
+    await h.controller.loadPage(25);
+    assert.equal(h.view.getFocusPage().offset, 25);
+    assert.equal(h.view.getFocusPage().items.length, 50);
     assert.equal(h.view.getFocusPage().error, '');
     h.controller.destroy();
 });

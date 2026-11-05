@@ -7,8 +7,8 @@ import { renderModelBarChart, captureModelColumns, animateModelColumns, modelBar
 import { mountBarEndpointLabel } from '../shared/bar-label.js';
 import { rankingNumber } from '../shared/ranking-number.js';
 import { markModelFocusTarget } from './model-focus-target.js';
-import { createAction } from '../shared/ui-components.js';
 import { RANKING_PAGE_SIZE } from '../shared/ranking-resume.js';
+import { visibleModelAnchor } from './model-scroll-window.js';
 
 export function modelRankingEmptyMessage(state) {
     if (state.mode === 'personal' && !state.personalEntries.length) {
@@ -58,44 +58,46 @@ export function createCoveragePie(coverage) {
 }
 
 export function createModelListView({ state, modelRows, openApprovedModelResults, onNeedMore, onRetrySave,
-    onFocusPageRequest, onFocusPageClose, onUpdateStatus }) {
+    onFocusPageRequest, onFocusRefresh, onUpdateStatus }) {
     const status = document.getElementById('model-ranking-status');
     const notice = createRankingNotice({ status, rows: modelRows });
     let renderedScope = '';
     let renderedModels = null;
     let renderedVersion = -1;
     let renderedSignature = '';
+    let renderedContentSignature = '';
+    let renderedRows = new Map();
+    let renderedChartModels = [];
     let focusPage = null;
     function getFocusPage() {
         return focusPage && focusPage.snapshotID === state.rankingPagination?.snapshotID && focusPage.list === state.mode ? focusPage : null;
     }
-    function renderFocusPagination(page) {
-        const navigation = document.createElement('nav');
-        navigation.className = 'bp-model-focus-pagination';
-        navigation.setAttribute('aria-label', 'Model ranking pages');
-        const add = (label, icon, action, disabled = false) => {
-            const control = createAction({ label, icon: `fa-solid fa-${icon}`, iconOnly: true });
-            control.dataset.modelFocusAction = label;
-            control.disabled = disabled;
-            control.setAttribute('aria-disabled', String(disabled || Boolean(page.loading)));
-            control.addEventListener('click', () => { if (!page.loading && !disabled) action(); });
-            navigation.append(control);
-        };
-        add('Top of ranking', 'angles-up', () => onFocusPageClose());
-        add('Previous models', 'chevron-left', () => onFocusPageRequest(Math.max(0, page.offset - RANKING_PAGE_SIZE[page.list])), page.offset === 0);
-        const range = document.createElement('span');
-        range.textContent = `${page.offset + 1}-${page.nextOffset} / ${page.total}`;
-        navigation.append(range);
-        add('Next models', 'chevron-right', () => onFocusPageRequest(page.nextOffset), !page.hasMore);
-        if (page.loading || page.error) {
-            const message = document.createElement('span');
-            message.className = 'bp-model-focus-error';
-            message.setAttribute('role', 'status');
-            if (page.loading) setLoading(message, 'Loading models');
-            else message.textContent = page.error;
-            navigation.append(message);
+    function renderWindowEdges(page, charts) {
+        for (const direction of ['previous', 'next']) {
+            let edge = modelRows.querySelector(`[data-model-window-edge="${direction}"]`);
+            const available = direction === 'previous' ? page.offset > 0 : page.hasMore;
+            if (!available) { edge?.remove(); continue; }
+            if (!edge) {
+                edge = document.createElement('div');
+                edge.className = 'bp-ranking-page-footer bp-model-window-edge';
+                edge.classList.toggle('is-chart', charts);
+                edge.dataset.modelWindowEdge = direction;
+                edge.setAttribute('role', 'status');
+                if (direction === 'previous') modelRows.insertBefore(edge, modelRows.querySelector('[data-model-key], .bp-model-bar-chart'));
+                else modelRows.append(edge);
+            }
+            edge.replaceChildren();
+            if (page.loading === direction) setLoading(edge, 'Loading models');
+            else if (page.error && page.errorDirection === direction) {
+                edge.append(page.error);
+                const retry = document.createElement('button');
+                retry.type = 'button';
+                retry.textContent = page.expired ? 'Refresh' : 'Retry';
+                retry.addEventListener('click', () => page.expired ? onFocusRefresh?.()
+                    : onFocusPageRequest(direction === 'previous' ? page.offset - RANKING_PAGE_SIZE[page.list] : page.nextOffset));
+                edge.append(retry);
+            }
         }
-        modelRows.append(navigation);
     }
     function renderRankingStatus(scope) {
         const pending = state.loading || state.comparisonPending || state.mode === 'personal' && state.personalRankingDirty;
@@ -109,27 +111,34 @@ export function createModelListView({ state, modelRows, openApprovedModelResults
         const showVendorMarks = (state.comparison ?? state.comparisonRequest ?? { keys: ['model'] }).keys.includes('model');
         const charts = state.workspaceDisplay === 'charts';
         const scope = JSON.stringify([state.categoryID, state.selectedContextValues, state.mode, state.scoreMode, state.workspaceDisplay,
-            focused?.snapshotID, focused?.offset]);
+            focused?.snapshotID]);
         renderRankingStatus(JSON.stringify([state.categoryID, state.selectedContextValues, state.mode, state.scoreMode]));
         const pending = state.loading || state.comparisonPending || state.mode === 'personal' && state.personalRankingDirty;
         // Keep the last calculation intact until a current response supplies its replacement.
         if (renderedScope === scope && renderedModels === models && pending
             && !state.personalRankingError && !state.comparisonNeedsSelection) return;
-        const signature = JSON.stringify([scope, state.rankingVersion, models.length, state.rankingPageLoading[state.mode],
-            state.rankingPageError[state.mode], state.comparisonNeedsSelection, state.comparisonError, showVendorMarks,
+        const contentSignature = JSON.stringify([scope, state.rankingVersion, state.comparisonNeedsSelection, state.comparisonError, showVendorMarks,
             state.guestPreviewError, state.personalRankingError, state.personalSaveError,
-            state.personalSaveConflict, state.personalRankingRefreshNeeded, state.saving, focused?.loading, focused?.error]);
+            state.personalSaveConflict, state.personalRankingRefreshNeeded, state.saving]);
+        const signature = JSON.stringify([contentSignature, models.length, state.rankingPageLoading[state.mode],
+            state.rankingPageError[state.mode], focused?.offset, focused?.loading, focused?.error, focused?.errorDirection]);
         if (renderedModels === models && renderedSignature === signature) return;
         const sameScope = renderedScope === scope;
         const changed = sameScope && renderedVersion !== state.rankingVersion;
         const focusKey = modelRows.contains(document.activeElement) ? document.activeElement.closest('[data-model-key]')?.dataset.modelKey : null;
-        const focusAction = modelRows.contains(document.activeElement) ? document.activeElement.closest('[data-model-focus-action]')?.dataset.modelFocusAction : null;
+        const currentModels = new Set(models);
+        const reusable = renderedContentSignature === contentSignature && !pending && models.length > 0
+            && (charts ? renderedChartModels.length > 0 && renderedChartModels.every(model => currentModels.has(model))
+                : renderedRows.size > 0 && [...renderedRows.values()].every(item => currentModels.has(item.model)));
+        const anchor = sameScope && renderedContentSignature === contentSignature ? visibleModelAnchor(modelRows) : null;
         const previous = changed ? charts ? captureModelColumns(modelRows) : captureRankingRows(modelRows) : new Map();
         renderedScope = scope; renderedVersion = state.rankingVersion;
         renderedModels = models; renderedSignature = signature;
+        renderedContentSignature = contentSignature;
         const scrollTop = sameScope ? modelRows.scrollTop : 0;
         const scrollLeft = sameScope ? modelRows.querySelector('.bp-model-chart-scroll')?.scrollLeft ?? 0 : 0;
-        notice.resetRows();
+        if (!reusable) { notice.resetRows(); renderedRows = new Map(); renderedChartModels = []; }
+        else if (!focused) modelRows.querySelector('.bp-ranking-page-footer')?.remove();
         if (state.mode === 'personal' && (state.personalSaveError || state.personalRankingRefreshNeeded && state.personalRankingError)) {
             const error = document.createElement('div');
             error.className = 'bp-error-state bp-pie-save-error';
@@ -196,18 +205,23 @@ export function createModelListView({ state, modelRows, openApprovedModelResults
         const fillTopBar = state.scoreMode === 'available';
         const scaleModels = focused ? [...(state.modelLeaderboards[state.mode] ?? []).slice(0, 1), ...models] : models;
         const scale = modelScoreScale(scaleModels, state.rankingPagination?.modelScales?.[state.mode], { fillTopBar });
-        if (focused) renderFocusPagination(focused);
         if (charts) {
             renderModelBarChart({ container: modelRows, models, state, scale, showVendorMarks,
                 onActivate: openApprovedModelResults, onNeedMore: focused ? () => {} : onNeedMore,
-                hasMore: !focused && page?.hasMore, initialScrollLeft: scrollLeft });
-        } else models.forEach(model => {
+                hasMore: !focused && page?.hasMore, initialScrollLeft: scrollLeft, reuse: reusable });
+            renderedChartModels = [...models];
+        } else {
+        let previousRow = null;
+        models.forEach(model => {
+            const key = rankingRowKey(model);
+            const existing = renderedRows.get(key);
+            if (reusable && existing) { previousRow = existing.row; return; }
             const comparable = model.comparable !== false;
             const selectedScore = Number(model.lower);
 
             const row = document.createElement('div');
             row.className = 'bp-model-row';
-            row.dataset.modelKey = rankingRowKey(model);
+            row.dataset.modelKey = key;
             row.dataset.rank = String(model.rank ?? 0);
             row.classList.toggle('is-incomparable', !comparable);
             row.classList.toggle('has-inline-score', comparable);
@@ -301,9 +315,13 @@ export function createModelListView({ state, modelRows, openApprovedModelResults
             row.append(rank, identity, track);
             if (comparable) mountBarEndpointLabel(track, score, Math.max(startPosition, lowerPosition), Math.min(startPosition, lowerPosition));
             else row.append(score);
-            modelRows.append(row);
+            modelRows.insertBefore(row, previousRow ? previousRow.nextSibling : modelRows.querySelector('.bp-model-row'));
+            previousRow = row;
+            renderedRows.set(key, { model, row });
         });
+        }
         [...modelRows.querySelectorAll('[data-model-key]')].forEach((row, index) => markModelFocusTarget(row, models[index]));
+        if (focused) renderWindowEdges(focused, charts);
         if (!focused && ((!charts && page?.hasMore) || state.rankingPageLoading[state.mode] || state.rankingPageError[state.mode])) {
             const footer = document.createElement('div');
             footer.className = 'bp-ranking-page-footer';
@@ -320,13 +338,9 @@ export function createModelListView({ state, modelRows, openApprovedModelResults
             }
             modelRows.append(footer);
         }
-        modelRows.scrollTop = scrollTop;
+        if (!reusable) modelRows.scrollTop = scrollTop;
+        anchor?.restore();
         if (focusKey) [...modelRows.querySelectorAll('[data-model-key]')].find(row => row.dataset.modelKey === focusKey)?.focus({ preventScroll: true });
-        if (focusAction) {
-            const controls = [...modelRows.querySelectorAll('[data-model-focus-action]')];
-            (controls.find(control => control.dataset.modelFocusAction === focusAction && !control.disabled)
-                ?? controls.find(control => !control.disabled))?.focus({ preventScroll: true });
-        }
         if (changed) {
             if (charts) animateModelColumns(modelRows, previous);
             else animateRankingChanges(modelRows, previous);

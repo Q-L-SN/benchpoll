@@ -42,39 +42,6 @@
     animation: bp-model-jump-focus 1.9s ease-out both;
 }
 
-.bp-model-focus-pagination {
-    position: sticky;
-    top: 0;
-    z-index: 3;
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 6px;
-    min-height: 44px;
-    padding: 4px 8px;
-    background: var(--bp-surface, #fff);
-    border-bottom: 1px solid var(--bp-line, #dfe5df);
-}
-
-.bp-model-focus-pagination > span {
-    min-width: 0;
-    margin-inline: auto;
-    color: var(--bp-muted, #69766f);
-    font-size: 12px;
-    overflow-wrap: anywhere;
-}
-
-.bp-model-focus-pagination .bp-ui-action {
-    flex: 0 0 44px;
-    width: 44px;
-    min-height: 44px;
-}
-
-.bp-model-focus-pagination [aria-disabled="true"] {
-    opacity: .5;
-}
-
-.bp-model-focus-pagination .bp-model-focus-error,
 .bp-model-focus-status {
     flex-basis: 100%;
     padding: 8px;
@@ -83,6 +50,9 @@
     line-height: 1.5;
     overflow-wrap: anywhere;
 }
+
+.bp-model-window-edge { overflow-anchor: none; }
+.bp-model-window-edge.is-chart:empty { display: none; }
 
 @keyframes bp-model-jump-focus {
     0%, 35% { background-color: var(--accent-soft, #e7f0e9); outline-color: var(--accent-color, #246650); }

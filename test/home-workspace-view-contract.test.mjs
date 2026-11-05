@@ -149,12 +149,12 @@ test('new benchmark uses the fixed heading action and compact sidebar legal cont
     assert.match(styles, /\.bp-sidebar-footer\s*\{[^}]*display:\s*flex[^}]*flex-wrap:\s*nowrap/s);
 });
 
-test('empty personal state uses a creation card instead of an inactive mode switch', () => {
+test('empty Public uses the creation card and empty Personal retains the shared mode switch', () => {
     assert.match(html, /id="personal-pie-create"[^>]*hidden/);
     assert.match(html, /Rank AI your way/);
     assert.doesNotMatch(html, /Choose what counts\. Set your weights\./);
-    assert.match(html, /id="personal-empty-public-return"/);
-    assert.match(workspace, /modeSwitch\.hidden = !hasPersonalWeights/);
+    assert.doesNotMatch(html, /personal-empty-public-return|personal-empty-mode/);
+    assert.match(workspace, /modeSwitch\.hidden = state\.contextIsPrivate \|\| !hasPersonalWeights && !personal/);
     assert.match(workspace, /personalPieCreate\.hidden = !showCreatePersonal/);
     assert.match(workspace, /personalPieEmpty.hidden = !showEmptyPersonal/);
     assert.doesNotMatch(workspace, /No weights in this context/);
@@ -168,7 +168,7 @@ test('benchmark contribution links are unboxed and benchmark weight labels stay 
     assert.match(workspace, /Math\.round\(Number\(personalWeight\)\)/);
 });
 
-test('benchmark conditions render as separate muted labels and default stays hidden', () => {
+test('benchmark version names require an explicit detail-view opt-in and default stays hidden', () => {
     assert.match(workspace, /function benchmarkConditionLabel\(object\)/);
     const labelHelper = workspace.slice(
         workspace.indexOf('function benchmarkConditionLabel(object)'),
@@ -176,7 +176,8 @@ test('benchmark conditions render as separate muted labels and default stays hid
     );
     assert.match(labelHelper, /conditionName\.toLocaleLowerCase\('en-US'\) === 'default'/);
     assert.doesNotMatch(labelHelper, /object\.isDefaultCondition/);
-    assert.match(workspace, /condition\.className = 'bp-benchmark-condition'/);
+    assert.match(workspace, /const version = !showVersion/);
+    assert.match(workspace, /benchmarkAccessibleName\(object, \{ showVersion = false \}/);
     assert.match(workspace, /kind: 'version', text, size: 11/);
     assert.match(rankingPages, /if \(query && !snapshot\.search\)/);
     assert.match(rankingPages, /snapshot\.search = benchmarkSearchIndex\(snapshot\.benchmarks, snapshot\.familiesByEntrance\)/);

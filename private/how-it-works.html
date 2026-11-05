@@ -26,73 +26,68 @@
     <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png?v=benchpoll-brand-20260919">
     <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
     <link rel="stylesheet" href="/css/global.css">
-    <link rel="stylesheet" href="/css/home-v2.css?v=fallback-controls-20261009">
-    <link rel="stylesheet" href="/css/how-it-works.css?v=topics-help-20261022">
+    <link rel="stylesheet" href="/css/ui/tokens.css">
+    <link rel="stylesheet" href="/css/how-it-works.css?v=guide-20261105">
     <link rel="stylesheet" href="/css/site-palette.css?v=shared-controls-20261010">
     <link rel="stylesheet" href="/css/typography.css?v=manrope-static-20261007">
-    <script src="/js/how-it-works.js?v=topics-help-20261022" type="module"></script>
+    <script src="/js/how-it-works.js?v=guide-20261105" type="module"></script>
 </head>
 <body class="bp-how-page">
-    <div class="bp-shell bp-how-shell">
-        <aside class="bp-sidebar bp-how-sidebar" aria-label="BenchPoll guide">
-            <a class="bp-brand" href="/" aria-label="BenchPoll home"><img class="bp-brand-lockup" src="/assets/benchpoll-logo.svg" alt="BenchPoll" width="155" height="32"></a>
-            <button id="taxonomy-toggle" class="bp-taxonomy-toggle" type="button" aria-label="Open guide navigation" aria-expanded="false"><i class="fa-solid fa-bars" aria-hidden="true"></i></button>
-            <button id="taxonomy-close" class="bp-taxonomy-close" type="button" aria-label="Close guide navigation"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
-            <div class="bp-how-sidebar-heading"><span>The guide</span><strong>How it works</strong></div>
-            <nav class="bp-taxonomy bp-how-nav" aria-label="Page sections">
-                <a class="is-active" href="#overview" data-how-link><span>Start here</span></a>
-                <a href="#topics" data-how-link><span>Topics and scenes</span></a>
-                <a href="#references" data-how-link><span>Topic references</span></a>
-                <a href="#personal" data-how-link><span>Your Pie</span></a>
-                <a href="#public" data-how-link><span>Public Weights</span></a>
-                <a href="#rankings" data-how-link><span>Scores and coverage</span></a>
-                <a href="#fallback" data-how-link><span>Fallback</span></a>
-                <a href="#account" data-how-link><span>Your account</span></a>
-                <a href="#trust" data-how-link><span>Check the evidence</span></a>
-            </nav>
-            <footer class="bp-sidebar-footer">
-                <span aria-label="Copyright 2026 BenchPoll">&copy; 2026</span>
-                <nav aria-label="Legal and social links"><a href="/terms">Terms</a><a href="/privacy">Privacy</a><a href="/cookies">Cookies</a><a href="/community-guidelines">Community</a><a href="https://x.com/BenchPoll" target="_blank" rel="noopener" aria-label="BenchPoll on X">X</a></nav>
-            </footer>
-        </aside>
-        <button id="taxonomy-scrim" class="bp-taxonomy-scrim" type="button" aria-label="Close guide navigation"></button>
-        <main class="bp-how-main">
-            <article class="bp-how-content">
-                <header id="overview" class="bp-how-header" data-how-section>
-                    <h1>How BenchPoll works</h1>
-                    <p class="bp-how-lede">Define Super Intelligence, democratically.</p>
-                    <p>Compare AI models by topic or scene. Benchmark results supply the evidence; community or personal weights define what matters.</p>
-                    <a class="bp-how-primary-link" href="/">Browse Topics <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></a>
-                </header>
-                <section id="topics" class="bp-how-section" data-how-section>
-                    <h2>Start with a topic</h2>
-                    <p>Open a topic for its public index, a model for its results and sources. Personal weights let you build your own index.</p>
+    <a class="hi-skip" href="#overview">Skip to guide</a>
+    <header class="hi-topbar">
+        <a class="hi-brand" href="/" aria-label="BenchPoll home"><img class="bp-brand-lockup" src="/assets/benchpoll-logo.svg" alt="BenchPoll" width="155" height="32"></a>
+        <nav class="hi-nav" aria-label="Page sections">
+            <a href="#overview" data-how-link>The idea</a><a href="#personal" data-how-link>Your index</a><a href="#rankings" data-how-link>The scores</a><a href="#details" data-how-link>Go deeper</a>
+        </nav>
+        <div class="hi-top-actions"><button id="how-motion" type="button" aria-label="Pause animations" aria-pressed="false" hidden><i class="fa-solid fa-pause" aria-hidden="true"></i></button><a href="/" class="hi-explore">Explore topics <i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i></a></div>
+    </header>
+    <main class="bp-how-main">
+        <article class="bp-how-content">
+            <header id="overview" class="hi-hero" data-how-section>
+                <div class="hi-hero-copy" data-reveal>
+                    <span class="hi-eyebrow">How BenchPoll works</span>
+                    <h1>Define intelligence<br><em>on your terms.</em></h1>
+                    <p class="hi-lede">Real benchmark results. Priorities chosen by people. An AI index that reflects what matters to you.</p>
+                    <a class="hi-primary" href="/">Browse Topics <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></a>
+                    <a class="hi-continue" href="#topics">See how it comes together <i class="fa-solid fa-arrow-down" aria-hidden="true"></i></a>
+                </div>
+                <figure class="hi-demo" aria-labelledby="how-demo-caption" data-reveal>
+                    <div class="hi-demo-glow" aria-hidden="true"></div>
+                    <div class="hi-demo-top"><span><i class="fa-solid fa-sliders" aria-hidden="true"></i> Your perspective</span><span>Changes the ranking</span></div>
+                    <div class="hi-plot" aria-label="Illustrative ranking">
+                        <div class="hi-map" aria-hidden="true"><span>Reasoning</span><span>Coding</span><span>Language</span><span></span><span></span><span></span></div>
+                        <div class="hi-column" data-demo-model="a" style="--slot:2;--height:76%;--color:#cb866c;--light:#f3c8b4"><div class="hi-column-fill"><span>A</span></div><span class="hi-column-label">Model A</span></div>
+                        <div class="hi-column" data-demo-model="b" style="--slot:1;--height:78%;--color:#709985;--light:#c7e5cc"><div class="hi-column-fill"><span>B</span></div><span class="hi-column-label">Model B</span></div>
+                        <div class="hi-column" data-demo-model="c" style="--slot:0;--height:81%;--color:#8e80bf;--light:#dfcffa"><div class="hi-column-fill"><span>C</span></div><span class="hi-column-label">Model C</span></div>
+                        <div class="hi-column" data-demo-model="d" style="--slot:3;--height:74%;--color:#7493b6;--light:#c6d9ef"><div class="hi-column-fill"><span>D</span></div><span class="hi-column-label">Model D</span></div>
+                    </div>
+                    <div class="hi-demo-controls" role="group" aria-label="Try different priorities">
+                        <button type="button" data-priority="balanced" aria-pressed="true">Balanced</button><button type="button" data-priority="coding" aria-pressed="false">Coding</button><button type="button" data-priority="reasoning" aria-pressed="false">Reasoning</button>
+                    </div>
+                    <figcaption id="how-demo-caption">Try a priority. Watch the order change.<small>Illustrative models with complete measured coverage</small></figcaption>
+                    <span id="how-demo-status" class="hi-sr-only" role="status"></span>
+                </figure>
+            </header>
+            <section id="topics" class="bp-how-section hi-topic-section" data-how-section data-reveal>
+                <div class="hi-section-copy"><span class="hi-eyebrow">01 / Find your focus</span><h2>Start with a question<br>that matters to you.</h2><p>Explore a topic. Choose a scene. See which models perform well on the work you care about.</p><details class="bp-how-rule-answer"><summary>Topics and scenes</summary><div class="hi-answer"><p>Open a topic for its public index, a model for its results and sources. Personal weights let you build your own index.</p>
                     <p>Filters apply to every card; <strong>Estimated score</strong> is the default. Browse Popular, Recent, or Mine.</p>
                     <p>A topic may have one level of scenes with separate weights and discussions. The default scene comes first.</p>
-                    <p>Open a topic's scene picker to browse its evaluation goals. Search results show matching scenes within their topic card. Each scene, including the default, uses its own weights.</p>
-                </section>
-                <section id="personal" class="bp-how-section" data-how-section>
-                    <h2>Make the ranking yours</h2>
-                    <p>Add benchmarks or topic references from <strong>Evaluation items</strong> to <strong>Personal Weights</strong>. <strong>Index composition</strong> totals 100% when nonempty. With two or more items, select a block and adjust its weight; other shares rebalance.</p>
-                    <p><strong>Try it without signing in.</strong> Sign in to save your weights. Unsaved changes are marked on the page.</p>
-                </section>
-                <section id="public" class="bp-how-section" data-how-section>
-                    <h2>Community priorities</h2>
-                    <p id="calculation-details"><strong>Public Weights</strong> combine saved personal weight configurations in this topic, shaped by recent activity. Each person contributes one configuration, updated with their edits.</p>
+                    <p>Open a topic's scene picker to browse its evaluation goals. Search results show matching scenes within their topic card. Each scene, including the default, uses its own weights.</p></div></details></div>
+                <div class="hi-topics-art" aria-hidden="true"><div class="hi-topic-orbit"></div><div class="hi-topic-chip hi-chip-one"><i class="fa-solid fa-code"></i>Coding</div><div class="hi-topic-chip hi-chip-two"><i class="fa-solid fa-language"></i>Language</div><div class="hi-topic-chip hi-chip-three"><i class="fa-solid fa-flask"></i>Science</div><div class="hi-topic-chip hi-chip-four"><i class="fa-solid fa-brain"></i>Intelligence</div><span class="hi-topic-dot"></span></div>
+            </section>
+            <section id="personal" class="bp-how-section hi-personal-section" data-how-section data-reveal>
+                <div class="hi-weight-art" aria-hidden="true"><div class="hi-weight-top"><span>Your priorities</span><strong>100%</strong></div><div class="hi-weight-map"><span>Reasoning<strong>50%</strong></span><span>Coding<strong>30%</strong></span><span>Language<strong>20%</strong></span></div><div class="hi-weight-bottom"><i class="fa-solid fa-up-down"></i> More of what matters to you</div></div>
+                <div class="hi-section-copy"><span class="hi-eyebrow">02 / Shape your index</span><h2>A little more of this.<br>A little less of that.</h2><p>Give each benchmark a share of your index. Adjust a block in the weight chart and the other shares rebalance.</p><details class="bp-how-rule-answer"><summary>Starting and saving your weights</summary><div class="hi-answer"><p>Add benchmarks or topic references from <strong>Evaluation items</strong> to <strong>Personal Weights</strong>. <strong>Index composition</strong> totals 100% when nonempty. With two or more items, select a block and adjust its weight; other shares rebalance.</p>
+                    <p><strong>Try it without signing in.</strong> Sign in to save your weights. Unsaved changes are marked on the page.</p></div></details></div>
+            </section>
+            <section id="public" class="bp-how-section hi-public-section" data-how-section data-reveal>
+                <div class="hi-section-copy"><span class="hi-eyebrow">03 / Add your perspective</span><h2>Many perspectives.<br>One public index.</h2><p>Your saved weights join other people's choices to shape the public index for that topic and scene.</p><details class="bp-how-rule-answer"><summary>How public weights come together</summary><div class="hi-answer"><p id="calculation-details"><strong>Public Weights</strong> combine saved personal weight configurations in this topic, shaped by recent activity. Each person contributes one configuration, updated with their edits.</p>
                     <p>Older configurations remain eligible to fill sparse samples up to 10 total.</p>
-                    <p>Each topic or scene has its own Public Weights. Another topic contributes only through an explicit reference. Private topics and their weights never contribute to Public Weights.</p>
-                </section>
-                <section id="references" class="bp-how-section" data-how-section>
-                    <h2>Build an index from other topics</h2>
-                    <p>You can add another topic as a weight item, choosing a specific scene if it has scenes. References follow live weights and stay linked to the scene you selected.</p>
-                    <p>Public indices always follow public target weights. Personal indices prefer your saved target weights and otherwise follow public weights. Private topics may reference your other private topics; public-topic configurations cannot reference private topics.</p>
-                    <p>Weights multiply along reference paths and combine for each benchmark version. Different fallback choices retain their shares. Scores and coverage correction are calculated after expansion; child scores are never averaged.</p>
-                    <p>References combine capabilities. To evaluate a specific combination, such as real-time vector generation, use benchmarks that test those requirements together.</p>
-                    <p>References must form an acyclic chain. Empty or unavailable targets retain their missing weight and show a notice.</p>
-                </section>
-                <section id="rankings" class="bp-how-section" data-how-section>
-                    <h2>Scores and coverage</h2>
-                    <p>Both modes use the same qualifying measurements, converted using each test's score range and direction, then combined using your weights. Fallback is resolved first.</p>
+                    <p>Each topic or scene has its own Public Weights. Another topic contributes only through an explicit reference. Private topics and their weights never contribute to Public Weights.</p></div></details></div>
+                <div class="hi-community-art" aria-hidden="true"><svg viewBox="0 0 500 280" fill="none"><defs><linearGradient id="hi-flow-gradient"><stop stop-color="#e4b38a"/><stop offset=".5" stop-color="#b99eda"/><stop offset="1" stop-color="#87b5a8"/></linearGradient></defs><g stroke="url(#hi-flow-gradient)" stroke-width="2"><path d="M65 55C230 55 220 140 400 140"/><path d="M65 140H400"/><path d="M65 225C230 225 220 140 400 140"/></g><g class="hi-flow-light" stroke="#fff" stroke-width="4" stroke-dasharray="12 400"><path d="M65 55C230 55 220 140 400 140"/><path d="M65 140H400"/><path d="M65 225C230 225 220 140 400 140"/></g></svg><div class="hi-person hi-person-one"><i class="fa-regular fa-user"></i><span></span><span></span><span></span></div><div class="hi-person hi-person-two"><i class="fa-regular fa-user"></i><span></span><span></span><span></span></div><div class="hi-person hi-person-three"><i class="fa-regular fa-user"></i><span></span><span></span><span></span></div><div class="hi-community-target"><img src="/assets/benchpoll-mark.svg" alt="" width="40" height="40"><span>Public index</span></div></div>
+            </section>
+            <section id="rankings" class="bp-how-section hi-score-section" data-how-section data-reveal>
+                <div class="hi-section-copy"><span class="hi-eyebrow">04 / Read the evidence</span><h2>One number to compare.<br>More context to explore.</h2><p>Use Estimated score for a single ranking. Switch to Score range to see what missing results leave open.</p><details class="bp-how-rule-answer"><summary>How scores and coverage are calculated</summary><div class="hi-answer"><p>Both modes use the same qualifying measurements, converted using each test's score range and direction, then combined using your weights. Fallback is resolved first.</p>
                     <ul>
                         <li><strong>Estimated score:</strong> combines measured results with shared-test estimates. Isolated extreme results have less influence on estimates; incomplete measured coverage reduces the whole total.</li>
                         <li><strong>Score range:</strong> missing scores count as 0 at the lower end and 100 at the upper end; measured scores stay fixed. Models rank by the lower end.</li>
@@ -101,29 +96,26 @@
                     <p><strong>Coverage factor:</strong> f(c)=5c/(1+4c), with measured coverage c. Nonnegative totals use f(c), negatives 2-f(c); full coverage is unchanged.</p>
                     <p><strong>Test algorithm</strong> applies to this tab. Missing-only methods keep measured contributions fixed, bound predictions to 0–100, and use a fixed midpoint of 50 for unresolved gaps.</p>
                     <p><strong>Unadjusted</strong> keeps that missing contribution; <strong>Rational</strong> multiplies it by f(c); <strong>Linear</strong> by c; <strong>Square root</strong> by √c. <strong>Midpoint</strong> blends it toward 50 using c and 1−c, so scores can rise or fall. All five stay within Score range; full coverage is unchanged.</p>
-                    <p>Turn on effort or harness to rank settings separately; otherwise use each model's best qualifying score per test. Missing settings stay in an unknown group.</p>
-                </section>
-                <section id="fallback" class="bp-how-section" data-how-section>
-                    <h2>Versions and fallback</h2>
-                    <p>Added benchmarks <strong>follow the community</strong>. Open <strong>Know this benchmark? Help configure it</strong> to select a version, then choose a saved order or edit your own. Both are optional.</p>
+                    <p>Turn on effort or harness to rank settings separately; otherwise use each model's best qualifying score per test. Missing settings stay in an unknown group.</p></div></details></div>
+                <figure class="hi-score-art"><div class="hi-score-switch" role="group" aria-label="Score example"><button type="button" data-how-score="estimate" aria-pressed="true">Estimated score</button><button type="button" data-how-score="range" aria-pressed="false">Score range</button></div><div class="hi-score-number"><span id="how-score-number">60</span><span class="hi-score-out-of">/ 100</span></div><div class="hi-score-track" aria-hidden="true"><span class="hi-score-measured"></span><span class="hi-score-uncertain"></span><i class="hi-score-marker"></i></div><div class="hi-score-scale" aria-hidden="true"><span>0</span><span>100</span></div><div class="hi-coverage"><span><i class="fa-solid fa-circle-half-stroke" aria-hidden="true"></i> Measured coverage</span><strong>60%</strong></div><figcaption id="how-score-caption">An illustrative score after coverage adjustment.</figcaption><p class="hi-sr-only" id="how-score-status" role="status"></p></figure>
+            </section>
+            <div id="details" class="hi-details" data-how-section data-reveal>
+                <div class="hi-details-heading"><span class="hi-eyebrow">A closer look</span><h2>Follow your curiosity.</h2><p>The essentials are above. Open a question for the details.</p></div>
+                <div class="hi-detail-list"><section id="references"><details class="bp-how-rule-answer"><summary>Can I combine topics in one index?</summary><div class="hi-answer"><p>You can add another topic as a weight item, choosing a specific scene if it has scenes. References follow live weights and stay linked to the scene you selected.</p>
+                    <p>Public indices always follow public target weights. Personal indices prefer your saved target weights and otherwise follow public weights. Private topics may reference your other private topics; public-topic configurations cannot reference private topics.</p>
+                    <p>Weights multiply along reference paths and combine for each benchmark version. Different fallback choices retain their shares. Scores and coverage correction are calculated after expansion; child scores are never averaged.</p>
+                    <p>References combine capabilities. To evaluate a specific combination, such as real-time vector generation, use benchmarks that test those requirements together.</p>
+                    <p>References must form an acyclic chain. Empty or unavailable targets retain their missing weight and show a notice.</p></div></details></section><section id="fallback"><details class="bp-how-rule-answer"><summary>How do versions and fallback work?</summary><div class="hi-answer"><p>Added benchmarks <strong>follow the community</strong>. Open <strong>Know this benchmark? Help configure it</strong> to select a version, then choose a saved order or edit your own. Both are optional.</p>
                     <p>Explicit choices updated within 14 days shape version and fallback proportions per topic/scene, weighted by benchmark allocation. Following adds no vote.</p>
                     <p>Unselected versions follow community proportions; without votes, use the primary version. Changing versions clears fallback. If nobody has chosen, the index works normally without backups.</p>
                     <p>Try the chosen version first, then backups in order. The first available score counts, including zero and negative scores. No fallback uses the chosen version alone, with estimation still available; deselect your configuration to follow the community again.</p>
-                    <p>Backup versions are selected explicitly. New versions never join an existing order automatically.</p>
-                </section>
-                <section id="account" class="bp-how-section" data-how-section>
-                    <h2>Your account</h2>
-                    <p>Propose a configured private topic through the hall. Its scenes and saved weights become a snapshot. Anyone can preview and discuss it; the proposer controls weights while collecting support. Replacing the snapshot resets support.</p>
+                    <p>Backup versions are selected explicitly. New versions never join an existing order automatically.</p></div></details></section><section id="account"><details class="bp-how-rule-answer"><summary>How can I publish a topic?</summary><div class="hi-answer"><p>Propose a configured private topic through the hall. Its scenes and saved weights become a snapshot. Anyone can preview and discuss it; the proposer controls weights while collecting support. Replacing the snapshot resets support.</p>
                     <p>Support up to 3 collecting proposals and author 1. Collection lasts 14 days; 30 other supporters trigger administrator review. Private topics and scenes are immediate, editable, and visible only to you.</p>
-                    <p>Edit your display name and avatar in the account dialog. GitHub links are your choice.</p>
-                </section>
-                <section id="trust" class="bp-how-section" data-how-section>
-                    <h2>Check the evidence</h2>
-                    <p>Open a model for measured results and estimates. <strong>All scores</strong> includes other results and sources. Report errors with <strong>Change information</strong>.</p>
-                    <a class="bp-how-primary-link" href="/contribute/scores/new">Contribute sourced scores <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></a>
-                </section>
-            </article>
-        </main>
-    </div>
+                    <p>Edit your display name and avatar in the account dialog. GitHub links are your choice.</p></div></details></section></div>
+            </div>
+            <section id="trust" class="hi-finish" data-how-section data-reveal><span class="hi-eyebrow">Built in the open</span><h2>Your perspective<br>belongs here.</h2><p>Open a model for measured results and estimates. <strong>All scores</strong> includes other results and sources. Report errors with <strong>Change information</strong>.</p><div class="hi-finish-actions"><a class="hi-primary" href="/">Explore topics <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></a><a class="bp-how-primary-link" href="/contribute/scores/new">Contribute sourced scores <i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i></a></div></section>
+        </article>
+    </main>
+    <footer class="hi-footer"><a href="/" aria-label="BenchPoll home"><img src="/assets/benchpoll-logo.svg" alt="BenchPoll" width="130" height="27"></a><span>&copy; 2026 BenchPoll</span><nav aria-label="Legal and social links"><a href="/terms">Terms</a><a href="/privacy">Privacy</a><a href="/cookies">Cookies</a><a href="/community-guidelines">Community</a><a href="https://x.com/BenchPoll" target="_blank" rel="noopener" aria-label="BenchPoll on X">X</a></nav></footer>
 </body>
 </html>

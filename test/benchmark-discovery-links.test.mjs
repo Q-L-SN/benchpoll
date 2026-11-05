@@ -16,7 +16,7 @@ test('shared version links preserve identity, escape text and inspect only ordin
         const member = { conditionID: 7, benchmarkID: 101, name: '<Benchmark>', conditionName: 'v2 & offline' };
         const link = createBenchmarkInformationLink(member, { getURL: item => {
             assert.equal(item, member); return '/?discussion=1&benchmarkID=101&conditionID=7';
-        }, onInspect: () => { inspections++; } });
+        }, onInspect: () => { inspections++; }, showVersion: true });
         assert.equal(link.tag, 'a'); assert.equal(link.dataset.benchmarkControl, 'information');
         assert.equal(link.children[0].textContent, '<Benchmark>');
         assert.equal(link.children[1].textContent, 'v2 & offline');
@@ -27,6 +27,11 @@ test('shared version links preserve identity, escape text and inspect only ordin
         link.listeners.click({ button: 0 }); assert.equal(inspections, 1);
         const short = createBenchmarkInformationLink(member, { getURL: () => '/', label: 'v2' });
         assert.equal(short.textContent, 'v2'); assert.equal(short.children.length, 0);
+        const ordinary = createBenchmarkInformationLink(member, { getURL: () => '/?conditionID=7' });
+        assert.equal(ordinary.children.length, 1);
+        assert.equal(ordinary.children[0].textContent, '<Benchmark>');
+        assert.doesNotMatch(ordinary.attributes['aria-label'], /v2/);
+        assert.match(link.attributes['aria-label'], /v2 & offline/);
     } finally { globalThis.document = previous; }
 });
 

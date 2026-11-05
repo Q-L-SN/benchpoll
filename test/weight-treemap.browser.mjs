@@ -80,19 +80,27 @@ for (const [engine, width] of [['chromium', 1440], ['chromium', 390], ['webkit',
         const compact = await page.evaluate(() => {
             const stage = document.querySelector('.bp-pie-stage');
             stage.style.height = '28px';
-            window.treemapQA.set([10000], 'A long benchmark name that must keep its original fade treatment');
+            window.treemapQA.set([10000], 'A long benchmark name that must keep its original fade treatment '.repeat(2).trim());
             const group = document.querySelector('#weight-pie > g[data-object-id]');
             const label = group.querySelector('[data-label-kind="name"]');
             const clipID = group.querySelector('.bp-weight-tile-labels').getAttribute('clip-path').slice(5, -1);
             const clip = document.getElementById(clipID).querySelector('rect').getBBox();
             const text = label?.getBBox();
+            const weight = group.querySelector('[data-label-kind="percent"]');
+            const maskID = label.getAttribute('mask').slice(5, -1);
+            const mask = document.getElementById(maskID).querySelector('rect').getBBox();
             return { mode: group.dataset.labelMode, text: label?.textContent, masked: label?.hasAttribute('mask'),
                 size: label?.getAttribute('font-size'), top: text?.y, bottom: text && text.y + text.height,
-                clipTop: clip.y, clipBottom: clip.y + clip.height };
+                clipTop: clip.y, clipBottom: clip.y + clip.height, weight: weight?.textContent,
+                weightLeft: weight?.getBBox().x, nameRight: mask.x + mask.width,
+                sameBaseline: weight?.getAttribute('y') === label.getAttribute('y') };
         });
-        assert.equal(compact.mode, 'truncated');
+        assert.equal(compact.mode, 'inline');
+        assert.equal(compact.weight, '100%');
+        assert.equal(compact.sameBaseline, true);
+        assert.ok(compact.weightLeft - compact.nameRight >= 7, JSON.stringify(compact));
         assert.equal(compact.masked, true);
-        assert.equal(compact.text, 'A long benchmark name that must keep its original fade treatment');
+        assert.equal(compact.text, 'A long benchmark name that must keep its original fade treatment '.repeat(2).trim());
         assert.equal(compact.size, '13');
         assert.ok(compact.top >= compact.clipTop - .5 && compact.bottom <= compact.clipBottom + .5, JSON.stringify(compact));
         await page.screenshot({ path: `${output}/${engine}-${width}-compact-name.png` });

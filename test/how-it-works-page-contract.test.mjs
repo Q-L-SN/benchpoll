@@ -35,10 +35,12 @@ test('Back to topics belongs to the configuration page rather than the guide', (
     assert.match(context, /id="bp-breadcrumb"/);
 });
 
-test('guide is a short explanation, not a hidden implementation manual', () => {
-    assert.match(guide, /<h1>How BenchPoll works<\/h1>/);
+test('guide keeps the first read short with optional calculation details', () => {
+    assert.match(guide, /How BenchPoll works/);
+    assert.equal([...guide.matchAll(/<h1>/g)].length, 1);
     const article = guide.match(/<article[\s\S]*?<\/article>/)[0];
-    assert.ok(words(article) <= 850, `Guide has ${words(article)} words`);
+    assert.ok(words(article) <= 1150, `Guide has ${words(article)} words`);
+    assert.ok(words(article.replace(/<details[\s\S]*?<\/details>/g, '')) <= 400);
     assert.doesNotMatch(article, /<ol\b|<table\b|Expand all|Full calculation rules|&radic;|Public weight =/);
     assert.doesNotMatch(plain(article), /\b(?:overview|showcase|subcategories|descendants|import|themes)\b|View composition/i);
     assert.doesNotMatch(article, /72 hours|percentile|denominator|basis points|pairwise-anchored/);
@@ -138,13 +140,13 @@ test('account and evidence copy covers public/private creation and editable iden
     assert.match(section('trust'), /href="\/contribute\/scores\/new"/);
 });
 
-test('guide keeps the shared sidebar, quiet actions, focus and disclosure behavior', () => {
-    assert.match(guide, /class="bp-sidebar bp-how-sidebar"/);
+test('guide keeps branded navigation, quiet actions, focus and disclosure behavior', () => {
+    assert.match(guide, /class="hi-topbar"/);
     assert.match(guide, /class="bp-brand-lockup"[^>]*src="\/assets\/benchpoll-logo\.svg"/);
     for (const id of ['overview', 'topics', 'personal', 'public', 'rankings', 'fallback', 'account', 'trust']) {
         assert.match(guide, new RegExp(`id="${id}"`));
-        assert.match(guide, new RegExp(`href="#${id}"`));
     }
+    for (const id of ['overview', 'personal', 'rankings', 'details']) assert.match(guide, new RegExp(`href="#${id}"`));
     assert.match(styles, /\.bp-how-section\s*\{[^}]*border-top:\s*1px solid var\(--bp-line\)/s);
     assert.doesNotMatch(styles, /border-(?:left|right|bottom):|inset\s+.*var\(--bp-(?:accent|purple)/);
     assert.match(styles, /\.bp-how-primary-link:hover\s*\{[^}]*text-decoration:\s*none/s);
@@ -152,7 +154,8 @@ test('guide keeps the shared sidebar, quiet actions, focus and disclosure behavi
     assert.match(styles, /focus-visible/);
     assert.match(styles, /min-height:\s*44px/);
     assert.match(styles, /@media \(max-width:\s*760px\)/);
-    assert.match(script, /createTaxonomyDrawer\(taxonomyToggle, document\.querySelector\('\.bp-sidebar'\)\)/);
+    assert.match(guide, /id="how-motion"/);
+    assert.match(styles, /prefers-reduced-motion/);
     assert.match(script, /requestAnimationFrame\(updateActiveSection\)/);
     assert.match(script, /mountDisclosureMotion\(document\.querySelector\('\.bp-how-content'\), 'details'\)/);
     assert.match(script, /setDisclosureOpen\(details, true, \{ animate: false \}\)/);

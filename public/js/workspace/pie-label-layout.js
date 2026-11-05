@@ -32,6 +32,16 @@ export function createPieLabelLayout(measure) {
             const largePercent = innerHeight >= 44 && measure(percent, 18, 750, fontFamily).width <= innerWidth;
             const size = largePercent ? 18 : 15, lineHeight = largePercent ? 27 : 19;
             if (innerHeight < 17 + lineHeight || measure(percent, size, 750, fontFamily).width > innerWidth) {
+                const percentWidth = measure(percent, 15, 750, fontFamily).width;
+                const nameWidth = innerWidth - percentWidth - 8;
+                if (innerHeight >= 17 && nameWidth >= Math.min(32, measure(name, 13, 600, fontFamily).width)) {
+                    const y = (height - 17) / 2 + 15;
+                    return { mode: 'inline', rows: [
+                        { kind: 'name', text: name, size: 13, weight: 600, align: 'start', clipWidth: nameWidth,
+                            clipped: measure(name, 13, 600, fontFamily).width > nameWidth, y },
+                        { kind: 'percent', text: percent, size: 15, weight: 750, align: 'end', y }
+                    ] };
+                }
                 return { mode: 'truncated', rows: [{ kind: 'name', text: name, size: 13, weight: 600,
                     clipped: true, y: (height - 17) / 2 + 13 }] };
             }

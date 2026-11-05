@@ -229,7 +229,7 @@ async function initializeTopic({ fromURL = false } = {}) {
     }
     const url = new URL(window.location.href);
     if (url.searchParams.has('scene') || url.searchParams.has('context_scene')) throw new Error('Scenes use named URL paths.');
-    const requestedScene = privateMatch?.[2] ?? (publicMatch ? null : shortMatch?.[2]);
+    const requestedScene = privateMatch ? privateMatch[2] : publicMatch ? null : shortMatch?.[2];
     const scene = requestedScene ? topic.scenes?.find(item => (item.slug || topicSlug(item.name)) === requestedScene)
         : topic.scenes?.find(item => item.isDefault);
     if (requestedScene && !scene) throw new Error('This scene is unavailable.');

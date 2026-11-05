@@ -4,6 +4,7 @@ import { validateRankingPagePayload } from './contracts.js?v=review-evidence-202
 import { RANKING_PAGE_SIZE } from '../shared/ranking-resume.js';
 import { quickComparisonFields, readComparisonSettings, writeComparisonSettings } from './comparison-settings.js?v=comparison-experiment-20261007';
 import { runFieldKind } from '../shared/score-field-presets.js';
+import { modelWindowEdge } from './model-scroll-window.js';
 
 const HIGHLIGHT_MS = 1900;
 
@@ -125,6 +126,9 @@ export function createHomeModelFocus({ intent, state, rows, view, request, showR
     let highlightTimer = null;
     let automaticFocus = null;
     let stylesReady = intent ? loadStyles() : null;
+    let pageOperation = null;
+    let pageGeneration = 0;
+    let edgeFrame = null;
     const scope = () => JSON.stringify([state.loadSequence, state.categoryID, state.selectedContextValues,
         state.userID, state.mode, state.scoreMode, state.comparisonRequest, state.rankingPagination?.snapshotID]);
 
@@ -165,20 +169,29 @@ export function createHomeModelFocus({ intent, state, rows, view, request, showR
         operation = null;
         task = null;
         clearHighlight({ stopScroll: true });
+    }
+
+    function stopPaging({ clearPage = false } = {}) {
+        ++pageGeneration;
+        pageOperation?.abort();
+        pageOperation = null;
         const page = view.getFocusPage();
-        if (page?.loading) view.setFocusPage({ ...page, loading: false });
+        if (!clearPage && page?.loading) view.setFocusPage({ ...page, loading: false });
     }
 
     function cancel({ clearPage = false } = {}) {
         pending = false;
         invalidate();
+        stopPaging({ clearPage });
         if (clearPage) { view.setFocusPage(null); onMessage(''); }
     }
 
     const onAction = event => {
         if (event.type === 'keydown' && ['Shift', 'Control', 'Alt', 'Meta'].includes(event.key)) return;
         if (event.type === 'keydown') releaseAutomaticFocus();
-        cancel();
+        // Scrolling cancels a one-shot jump, never an adjacent segment download.
+        pending = false;
+        invalidate();
     };
     const actionEvents = ['pointerdown', 'click', 'keydown', 'wheel', 'touchstart', 'input'];
     for (const type of actionEvents) {
@@ -263,7 +276,7 @@ export function createHomeModelFocus({ intent, state, rows, view, request, showR
                 row.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'center', inline: 'center' });
                 row.classList.add('is-model-jump-focus');
                 highlighted = row;
-                highlightTimer = win.setTimeout(() => clearHighlight(), HIGHLIGHT_MS);
+                highlightTimer = win.setTimeout(() => { clearHighlight(); scheduleEdges(); }, HIGHLIGHT_MS);
             } catch (error) {
                 if (!isCurrent()) return;
                 pending = false;
@@ -281,53 +294,70 @@ export function createHomeModelFocus({ intent, state, rows, view, request, showR
 
     async function loadPage(offset) {
         const previous = view.getFocusPage();
-        if (!previous || state.loading || previous.loading || !Number.isSafeInteger(offset) || offset < 0
-            || offset >= previous.total || offset % RANKING_PAGE_SIZE[previous.list] !== 0) return;
-        cancel();
-        const token = generation;
+        if (!previous || state.loading || state.comparisonPending || previous.loading || !Number.isSafeInteger(offset) || offset < 0
+            || offset >= previous.total || offset % RANKING_PAGE_SIZE[previous.list] !== 0
+            || ![previous.offset - RANKING_PAGE_SIZE[previous.list], previous.nextOffset].includes(offset)) return;
+        const direction = offset < previous.offset ? 'previous' : 'next';
+        const token = ++pageGeneration;
         const current = scope();
         const controller = new globalThis.AbortController();
-        operation = controller;
-        view.setFocusPage({ ...previous, loading: true, error: '' });
+        pageOperation = controller;
+        view.setFocusPage({ ...previous, loading: direction, error: '', errorDirection: null });
         try {
             const page = validateRankingPagePayload(await request('/api/get_ranking_page', {
                 snapshotID: previous.snapshotID, list: previous.list, offset
             }, { signal: controller.signal, timeoutMs: 15000, requireJSON: true }),
             { list: previous.list, offset, scoreMode: state.scoreMode });
-            if (token !== generation || current !== scope()) return;
+            if (token !== pageGeneration || current !== scope() || controller.signal.aborted) return;
             if (page.items.length !== Math.min(RANKING_PAGE_SIZE[previous.list], previous.total - offset)
                 || page.total !== previous.total) throw new TypeError('Ranking page changed');
-            view.setFocusPage({ snapshotID: previous.snapshotID, list: previous.list, offset, ...page });
-            rows.scrollTo?.({ top: 0, behavior: 'auto' });
+            view.setFocusPage({ ...previous, loading: false, error: '', errorDirection: null,
+                offset: direction === 'previous' ? offset : previous.offset,
+                items: direction === 'previous' ? [...page.items, ...previous.items] : [...previous.items, ...page.items],
+                nextOffset: direction === 'next' ? page.nextOffset : previous.nextOffset,
+                hasMore: direction === 'next' ? page.hasMore : previous.hasMore });
+            scheduleEdges();
         } catch (error) {
-            if (token !== generation || current !== scope()) return;
-            view.setFocusPage({ ...previous, error: [403, 410].includes(error.status)
-                ? 'This ranking changed. Return to the top or refresh.' : 'Could not load this page. Try again.' });
-        } finally { if (token === generation) operation = null; }
+            if (token !== pageGeneration || current !== scope() || controller.signal.aborted) return;
+            view.setFocusPage({ ...previous, loading: false, errorDirection: direction,
+                expired: [403, 410].includes(error.status), error: [403, 410].includes(error.status)
+                    ? 'Refresh to continue this ranking.' : 'Could not load more models.' });
+        } finally { if (token === pageGeneration) pageOperation = null; }
     }
+
+    function checkEdges() {
+        const page = view.getFocusPage();
+        if (!page || pending || highlighted || state.loading || state.comparisonPending || page.loading || page.error) return;
+        const direction = modelWindowEdge(rows, page);
+        if (direction) void loadPage(direction === 'previous' ? page.offset - RANKING_PAGE_SIZE[page.list] : page.nextOffset);
+    }
+    function scheduleEdges() {
+        if (edgeFrame !== null || !rows.isConnected) return;
+        edgeFrame = win.requestAnimationFrame(() => { edgeFrame = null; checkEdges(); });
+    }
+    win.addEventListener('scroll', scheduleEdges, { capture: true, passive: true });
+    win.addEventListener('resize', scheduleEdges, { passive: true });
 
     return {
         reveal, cancel, loadPage,
         start(targetModel) {
-            cancel({ clearPage: true });
+            cancel();
             intent = { valid: true, targetModel, mode: state.mode, scoreMode: state.scoreMode, centered: true };
             pending = true;
             return reveal();
         },
         get pending() { return pending; },
         get blocksPaging() { return pending || highlighted !== null; },
-        suspend() { invalidate(); releaseAutomaticFocus({ blur: true }); view.setFocusPage(null, { render: false }); onMessage(''); },
-        backToTop() {
-            cancel({ clearPage: true });
-            focusAutomatically(rows.querySelector('[data-model-focus-id]'));
-            rows.scrollTo?.({ top: 0, behavior: 'auto' });
-        },
+        suspend() { invalidate(); stopPaging({ clearPage: true }); releaseAutomaticFocus({ blur: true }); view.setFocusPage(null, { render: false }); onMessage(''); },
         destroy() {
             cancel({ clearPage: true });
             releaseAutomaticFocus({ blur: true });
             for (const type of actionEvents) events.removeEventListener(type, onAction, true);
             win.removeEventListener('pagehide', onExit);
             win.removeEventListener('popstate', onExit);
+            win.removeEventListener('scroll', scheduleEdges, true);
+            win.removeEventListener('resize', scheduleEdges);
+            if (edgeFrame !== null) win.cancelAnimationFrame(edgeFrame);
         }
     };
 }

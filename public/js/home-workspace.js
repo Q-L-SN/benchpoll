@@ -19,7 +19,7 @@ import { createEstimationControl } from './workspace/estimation-control.js';
 import { validateWorkspacePayload, validateRankingPagePayload } from './workspace/contracts.js?v=review-evidence-20261008';
 import {
     cloneEntries, cloneFallbackRules, clonePersonalPieSnapshot,
-    clamp, benchmarkConditionLabel,
+    clamp,
     benchmarkAccessibleName, distributeToTarget
 } from './workspace/weights.js';
 import { postJSON, postWriteJSON } from './shared/http.js';
@@ -42,7 +42,7 @@ import { fallbackStatusLabel } from './shared/fallback-choice.js';
 import { initializeFallbackAppearance } from './workspace/fallback-appearance.js?v=fallback-appearance-20261014';
 import { createBenchmarkInformationLink } from './workspace/benchmark-link.js';
 import { contributionEditURL } from './workspace/links.js';
-import { createAction } from './shared/ui-components.js';
+import { createAction, mountSegmentedControl } from './shared/ui-components.js';
 import { createEvidenceCount, updateEvidenceCount } from './shared/evidence-count.js';
 import { bulkImportTemplate } from './shared/feedback-templates.js';
 import { comparisonProfileKey } from './shared/comparison-profile-key.js';
@@ -85,8 +85,6 @@ const headlineVariants = [...workspaceHeadline.querySelectorAll('[data-headline-
 const personalModeButton = document.getElementById('pie-mode-personal');
 const publicModeButton = document.getElementById('pie-mode-public');
 const personalPieCreate = document.getElementById('personal-pie-create');
-const personalEmptyMode = document.getElementById('personal-empty-mode');
-const personalEmptyPublicReturn = document.getElementById('personal-empty-public-return');
 const personalPieEmpty = document.getElementById('personal-pie-empty');
 const compactPieMessage = document.getElementById('pie-empty-compact-message');
 const compactPieAction = document.getElementById('pie-empty-compact-action');
@@ -231,8 +229,9 @@ const personalPieStart = createPersonalPieStart({
     getPublicStart: () => publicWeightStart(state.publicEntries, state.versionComposition, state.limits),
     isPrivate: () => state.contextIsPrivate,
     onApply: startPersonalPie,
-    onChange: () => renderModeState()
+    onChange: () => { renderModeState(); renderPie(); }
 });
+let personalStartContext = null;
 let benchmarkSearchTimer = null;
 let lowCoverageExpanded = false;
 let otherConditionsExpanded = false;
@@ -425,7 +424,7 @@ const modelListView = createModelListView({
         if (shouldLoadMore(modelRows)) void loadNextRankingPage(state.mode);
     },
     onFocusPageRequest: offset => { void modelFocus.loadPage(offset); },
-    onFocusPageClose: () => modelFocus.backToTop()
+    onFocusRefresh: () => { void loadWeightedWorkspace({ preserveUndo: true }); }
 });
 const { renderModels, clearRankingStatus } = modelListView;
 const modelFocusNotice = createModelFocusNotice(modelRows);
@@ -461,6 +460,7 @@ createModelSearch({ container: document.getElementById('ranking-model-search'),
 });
 const { renderPie: renderPieGraphic } = createPieRenderer({
     state, pieSvg, pieHoverTooltip, orderedPieEntries, currentPieEntries, selectedObjectIndex,
+    getPreview: () => personalPieStart.previewPublic ? state.publicEntries : null,
     renderInlineFallback, fallbackRuleFor, publicFallbackRuleFor,
     async onSelect(objectID) {
         if (!await finishPendingWeightAdjustments()) return;
@@ -1112,13 +1112,6 @@ function renderBenchmarkSummary() {
     const name = document.createElement('strong');
     name.textContent = object.name;
     title.append(name);
-    const conditionLabel = benchmarkConditionLabel(object);
-    if (conditionLabel) {
-        const condition = document.createElement('span');
-        condition.className = 'bp-benchmark-condition';
-        condition.textContent = conditionLabel;
-        title.append(condition);
-    }
     identity.append(eyebrow, title);
 
     const metric = document.createElement('div');
@@ -2019,7 +2012,6 @@ function renderModeState() {
         animateContent(workspaceHeadline, { translate: false });
     }
     document.body.classList.toggle('bp-private-category', state.contextIsPrivate);
-    personalEmptyPublicReturn.hidden = state.contextIsPrivate;
     const storageWarning = !state.guestDraftStorageAvailable && state.personalSavePending;
     guestDraftNotice.hidden = !state.usingGuestDraft && !state.legacyDraftAvailable
         && !state.personalRecoveryBlocked && !state.personalDraftUnavailable && !storageWarning;
@@ -2055,22 +2047,21 @@ function renderModeState() {
     publicPieSummary.hidden = personal || choosingStart;
     publicPieCount.textContent = `${state.publicParticipantCount.toLocaleString('en-US')} saved weight ${state.publicParticipantCount === 1 ? 'set' : 'sets'}`;
     const hasPersonalWeights = state.personalEntries.length > 0;
-    const emptyPie = !state.loading && currentPieEntries().length === 0;
+    const emptyPie = !state.loading && currentPieEntries().length === 0 && !personalPieStart.previewPublic;
     pieCard.classList.toggle('has-empty-pie', emptyPie);
-    pieCard.classList.toggle('has-mode-selector', hasPersonalWeights && !state.contextIsPrivate);
+    pieCard.classList.toggle('has-mode-selector', (hasPersonalWeights || personal || choosingStart) && !state.contextIsPrivate);
     compactPieMessage.textContent = personal ? 'Add a benchmark or topic to start your index.' : 'No public weights for this topic or scene yet.';
     compactPieAction.hidden = personal;
     compactPieAction.textContent = hasPersonalWeights ? 'View your personal weights' : 'Create personal weights';
     pieSvg.style.touchAction = personal && state.personalEntries.length > 1 ? 'pan-x' : 'pan-x pan-y';
     const showCreatePersonal = !state.loading && !hasPersonalWeights && !personal;
-    const showEmptyPersonal = !state.loading && !hasPersonalWeights && personal;
+    const showEmptyPersonal = !state.loading && !hasPersonalWeights && personal && !personalPieStart.previewPublic;
     pieSvg.toggleAttribute('hidden', showEmptyPersonal);
     personalPieEmpty.hidden = !showEmptyPersonal;
     pieCard.classList.toggle('has-empty-personal-pie', showEmptyPersonal);
     personalPieGuidance.hidden = emptyPie;
-    modeSwitch.hidden = !hasPersonalWeights || state.contextIsPrivate;
+    modeSwitch.hidden = state.contextIsPrivate || !hasPersonalWeights && !personal && !choosingStart;
     personalPieCreate.hidden = !showCreatePersonal || choosingStart;
-    personalEmptyMode.hidden = !showEmptyPersonal && !state.contextIsPrivate && !(choosingStart && !hasPersonalWeights);
     pieCard.classList.toggle('has-personal-create-cta', showCreatePersonal);
     modeSwitch?.classList.toggle('is-public', !personal);
     personalModeButton.classList.toggle('selected', personal);
@@ -2148,7 +2139,11 @@ async function setMode(mode) {
     if (personalPieStart.isOpen) personalPieStart.close({ restore: false });
     const sequence = ++modeSwitchSequence;
     const requestedMode = mode === 'public' && !state.contextIsPrivate ? 'public' : 'personal';
-    if (requestedMode === state.mode) { pendingPieMode = null; renderPendingPieMode(); return; }
+    if (requestedMode === state.mode) {
+        pendingPieMode = null; renderPendingPieMode();
+        if (requestedMode === 'personal' && needsPersonalStart()) await openPersonalStart(personalModeButton);
+        return;
+    }
     const contextFingerprint = state.pieContextFingerprint;
     pendingPieMode = requestedMode;
     renderPendingPieMode();
@@ -2165,7 +2160,8 @@ async function setMode(mode) {
         }
         await document.fonts.ready;
         if (sequence !== modeSwitchSequence || contextFingerprint && contextFingerprint !== state.pieContextFingerprint) return;
-        applyPieMode(requestedMode);
+        if (requestedMode === 'personal' && needsPersonalStart()) await openPersonalStart(personalModeButton);
+        else applyPieMode(requestedMode);
     } catch (error) {
         if (sequence === modeSwitchSequence) setStatus('Could not switch weights. Please try again.');
         console.error('[BenchPoll] Weight switch failed', error);
@@ -2173,7 +2169,7 @@ async function setMode(mode) {
         if (sequence === modeSwitchSequence) { pendingPieMode = null; renderPendingPieMode(); }
     }
 }
-function applyPieMode(mode) {
+function applyPieMode(mode, { animate = true } = {}) {
     const previousMode = state.mode;
     const previousPie = pieSvg.cloneNode(true);
     deactivateInlineFallbackTarget();
@@ -2192,7 +2188,7 @@ function applyPieMode(mode) {
     renderBenchmarks();
     renderBenchmarkSummary();
     renderModels();
-    if (state.mode !== previousMode) {
+    if (animate && state.mode !== previousMode) {
         void flipPie(pieSvg, previousPie, { from: previousMode, to: state.mode });
     }
 }
@@ -2223,6 +2219,12 @@ function renderAll() {
     modelCard?.setAttribute('aria-busy', String(state.loading || state.comparisonPending
         || state.mode === 'personal' && state.personalRankingDirty && !state.personalRankingError));
     notifyWorkspaceSettled();
+    if (!state.loading && state.categoryID !== null && state.rankingPagination) {
+        const startContext = `${workspaceContextFingerprint()}|${state.userID ?? 'guest'}`;
+        const enteredContext = startContext !== personalStartContext;
+        personalStartContext = startContext;
+        if (enteredContext && state.mode === 'personal' && needsPersonalStart()) void openPersonalStart(personalModeButton);
+    }
 }
 
 function applyServerWorkspace(payload, {
@@ -2870,13 +2872,30 @@ async function applyWorkspaceState(detail = {}) {
 
 personalModeButton.addEventListener('click', () => setMode('personal'));
 publicModeButton.addEventListener('click', () => setMode('public'));
+function needsPersonalStart() {
+    return !state.loading && !state.personalEntries.length && !state.hasSavedPersonalWeights
+        && !state.usingGuestDraft && !state.recoveredPersonalDraft && !state.personalDraftUnavailable && !state.legacyDraftAvailable;
+}
+
 async function openPersonalStart(trigger, reset = false) {
     const scope = workspaceContextFingerprint(), user = state.userID;
     if (state.loading || state.accountWriteBlocked || state.personalRecoveryBlocked || state.personalSaveConflict
         || !await prepareContextChange() || scope !== workspaceContextFingerprint() || user !== state.userID) return;
     if (reset && state.mode !== 'personal') return;
     fallbackPicker.close({ restore: false }); benchmarkSettings.close();
-    personalPieStart.open({ reset, trigger });
+    await personalPieStart.open({ reset, trigger, beforeReveal: !reset && state.mode !== 'personal' ? async isCurrent => {
+        const segmented = mountSegmentedControl(modeSwitch);
+        segmented.refresh();
+        // Paint the newly visible Public selection before moving its indicator.
+        if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+            await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        }
+        if (!isCurrent()) return;
+        applyPieMode('personal', { animate: false });
+        segmented.refresh();
+        getComputedStyle(modeSwitch, '::before').transform;
+        await Promise.allSettled(modeSwitch.getAnimations({ subtree: true }).map(animation => animation.finished));
+    } : null });
 }
 
 function startPersonalPie(entries, isCurrent) {
@@ -2902,7 +2921,6 @@ function startPersonalPie(entries, isCurrent) {
 
 personalPieCreate.addEventListener('click', () => { void openPersonalStart(personalPieCreate); });
 resetButton.addEventListener('click', () => { void openPersonalStart(resetButton, true); });
-personalEmptyPublicReturn.addEventListener('click', () => setMode('public'));
 compactPieAction.addEventListener('click', () => {
     if (state.personalEntries.length) void setMode('personal');
     else void openPersonalStart(compactPieAction);

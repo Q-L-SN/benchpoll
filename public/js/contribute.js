@@ -479,7 +479,7 @@ function existingConditionRows(existing) {
     return existing.conditions.map(profile => `<details name="benchmark-versions" class="condition-row condition-version locked" data-existing-condition="${escapeHTML(profile.ID)}" data-condition-key="locked-${escapeHTML(profile.ID)}"${expandedConditionKey === `locked-${profile.ID}` ? ' open' : ''}>
         <summary data-condition-toggle><span>${escapeHTML(profile.name)}</span><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></summary>
         <div class="condition-version-fields">
-            <label class="field condition-name"><span>Name</span><input readonly value="${escapeHTML(profile.name)}"></label>
+            <label class="field condition-name"><span id="locked-condition-name-${escapeHTML(profile.ID)}">Name</span><textarea readonly rows="1" aria-labelledby="locked-condition-name-${escapeHTML(profile.ID)}">${escapeHTML(profile.name)}</textarea></label>
             <label class="field condition-difference"><span id="locked-condition-description-${escapeHTML(profile.ID)}">Description</span><textarea readonly rows="2" aria-labelledby="locked-condition-description-${escapeHTML(profile.ID)}">${escapeHTML(profile.differenceExplanation)}</textarea></label>
             <div class="condition-version-actions">
                 <span>${profile.isPrimary ? 'Primary version' : 'Existing version'}</span>
@@ -494,8 +494,8 @@ function conditionRows(evaluation) {
         <summary data-condition-toggle><span data-condition-heading>${escapeHTML(profile.name || 'New version')}</span><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></summary>
         <div class="condition-version-fields">
         <label class="field condition-name">
-            <span>Name</span>
-            <input required maxlength="${Math.max(60, originalConditionName(profile)?.length ?? 0)}" data-bind="profile" data-condition-input data-evaluation-index="0" data-profile-index="${profileIndex}" data-field="name" value="${escapeHTML(profile.name)}" placeholder="e.g. v2 overall">
+            <span id="condition-name-${profileIndex}">Name</span>
+            <textarea required rows="1" aria-labelledby="condition-name-${profileIndex}" maxlength="${Math.max(60, originalConditionName(profile)?.length ?? 0)}" data-bind="profile" data-condition-input data-evaluation-index="0" data-profile-index="${profileIndex}" data-field="name" placeholder="e.g. v2 overall">${escapeHTML(profile.name)}</textarea>
         </label>
         <label class="field condition-difference"><span>Description <small>Optional</small></span>
             <textarea data-bind="profile" data-evaluation-index="0" data-profile-index="${profileIndex}" data-field="differenceExplanation" maxlength="10000" rows="2" placeholder="What this version measures and how it differs from the other versions">${escapeHTML(profile.differenceExplanation)}</textarea>
@@ -854,7 +854,7 @@ function clearExistingChoiceValidity(input) {
 }
 
 function showFieldError(input, message) {
-    if (input instanceof HTMLInputElement || input instanceof HTMLSelectElement) input.setCustomValidity(message);
+    input.setCustomValidity?.(message);
     input.setAttribute('aria-invalid', 'true');
     const field = input.closest('.field') || input.parentElement;
     let error = field.querySelector('.field-validation-error');

@@ -117,16 +117,23 @@ try {
             assert.equal(requests.filter(request => request.path === '/api/get_ranking_page' && request.body.list === 'public').length, 0);
             assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
             await page.screenshot({ path: resolve(output, `${name}-list-focus.png`), fullPage: true });
-            await page.getByRole('button', { name: 'Next models', exact: true }).click();
-            await page.locator('.bp-model-focus-pagination').getByText('51-66 / 66', { exact: true }).waitFor();
-            await page.getByRole('button', { name: 'Previous models', exact: true }).click();
-            await page.locator('.bp-model-focus-pagination').getByText('26-50 / 66', { exact: true }).waitFor();
-            await page.getByRole('button', { name: 'Top of ranking', exact: true }).click();
-            await page.locator('.bp-model-focus-pagination').waitFor({ state: 'detached' });
+            assert.equal(await page.locator('.bp-model-focus-pagination').count(), 0);
+            const scrollEdge = async direction => page.evaluate(async direction => {
+                const { modelScrollViewport } = await import('/js/workspace/model-scroll-window.js');
+                const rows = document.getElementById('model-rows'), viewport = modelScrollViewport(rows);
+                rows.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: direction === 'next' ? 20 : -20 }));
+                const models = rows.querySelectorAll('[data-model-key]');
+                viewport.root.scrollTop += direction === 'next' ? viewport.tail(models[models.length - 1]) - viewport.end + 40
+                    : viewport.position(models[0]) - viewport.start + 40;
+            }, direction);
+            await scrollEdge('next');
+            await page.locator('#model-rows [data-rank="66"]').waitFor();
+            await scrollEdge('previous');
+            await page.locator('#model-rows [data-rank="1"]').waitFor();
             assert.equal(await page.locator('#model-rows [data-model-focus-id]').first().getAttribute('data-rank'), '1');
-            assert.equal(await page.locator('#model-rows [data-model-focus-id]').count(), 25);
+            assert.equal(await page.locator('#model-rows [data-model-focus-id]').count(), 66);
             assert.deepEqual(errors, []);
-            console.log(`PASS ${name}: bounded deep page, exact rank, URL cleanup, unchanged preferences, page navigation`);
+            console.log(`PASS ${name}: bounded deep window, exact rank, URL cleanup, unchanged preferences, continuous scrolling`);
         } catch (error) {
             await page.screenshot({ path: resolve(output, `${name}-failure.png`), fullPage: true });
             console.error(JSON.stringify({ name, errors, messages: await page.locator('.bp-model-focus-status').allTextContents() }));
@@ -144,7 +151,7 @@ try {
         <link rel="stylesheet" href="/css/ui/tokens.css"><link rel="stylesheet" href="/css/ui/workspace.css">
         <link rel="stylesheet" href="/css/ui/chart-workspace.css">
         <style>body{margin:20px}#model-card{width:100%;max-width:1000px}#model-rows{height:650px;max-height:650px}.bp-model-chart-scroll{max-width:100%}</style>
-        <body data-current-view="composition"><div id="composition">Composition</div><main id="model-card" hidden><div class="bp-model-viewport"><div id="model-ranking-status" hidden></div><div id="model-rows"></div></div></main>` }));
+        <body data-current-view="composition"><div id="composition">Composition</div><main id="model-card" class="bp-right-workspace" hidden><div class="bp-model-viewport"><div id="model-ranking-status" hidden></div><div id="model-rows"></div></div></main>` }));
     try {
         await chartPage.goto(app.url + '/__model-focus-chart');
         const progress = await chartPage.evaluate(async () => {
@@ -235,6 +242,7 @@ try {
         });
         await context.route('**/api/get_topics', route => route.fulfill({ json: { topics: [topic], featuredTopicID: 1 } }));
         await context.route('**/api/get_private_category', route => route.fulfill({ json: topic }));
+        await context.route('**/api/get_topic', route => route.fulfill({ json: { ...topic, url: topic.url.split('?')[0] } }));
         await context.route('**/api/get_topic_preview', route => {
             const body = route.request().postDataJSON();
             const comparison = topicPreviewComparison(app.state.comparisonFields, { reasoning: body.reasoning, harness: body.harness });
@@ -251,8 +259,8 @@ try {
         page.setDefaultTimeout(10000);
         try {
             await page.goto(app.url + '/');
-            if (isPrivate) await page.locator('#topics-configured').click();
             await page.evaluate(() => scrollTo(0, document.getElementById('home-hero').getBoundingClientRect().bottom + scrollY + 24));
+            if (isPrivate) await page.locator('#topics-configured').click();
             await page.locator('#topics-score-toggle').click();
             await page.locator('[data-comparison="reasoning"]').click();
             await page.locator('[data-comparison="harness"]').click();

@@ -535,9 +535,8 @@ function maybeFillPage(state) {
 }
 
 function weightTooltip(tile) {
-    const name = entry => `${entry.name}${view !== 'weights' && entry.conditionName ? ` (${entry.conditionName})` : ''}`;
-    const label = `${name(tile)}: ${rankingNumber(tile.share * 100)}%`;
-    return tile.members ? `${label}\n${tile.members.map(member => `${name(member)}: ${Number((member.weightBasisPoints / tile.total * 100).toFixed(2))}%`).join('\n')}` : label;
+    const label = `${tile.name}: ${rankingNumber(tile.share * 100)}%`;
+    return tile.members ? `${label}\n${tile.members.map(member => `${member.name}: ${Number((member.weightBasisPoints / tile.total * 100).toFixed(2))}%`).join('\n')}` : label;
 }
 
 function renderWeights(container, weights, width, height, isPrivate = false) {

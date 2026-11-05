@@ -212,7 +212,7 @@
         <main class="bp-workspace" data-mobile-panel="mix">
             <noscript>
                 <style>
-                    body.bp-home{overflow:auto!important}
+                    html:has(>body.bp-home),body.bp-home{height:auto!important;overflow:auto!important}
                     .bp-home .bp-sidebar,.bp-home .bp-pie-card,.bp-home .bp-page-heading,.bp-home .bp-context-actions,.bp-home .bp-mobile-panels,.bp-home .bp-model-controls,.bp-home .bp-benchmark-toolbar-actions,.bp-home .bp-scoring-toolbar{display:none!important}
                     .bp-home .bp-shell{display:block!important;min-height:0}
                     .bp-home .bp-workspace{display:block!important;width:100%;height:auto!important;min-height:0;max-width:1200px;margin-inline:auto;padding:20px 16px!important;overflow:visible!important}
@@ -301,10 +301,6 @@
                                     </span>
                                     <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
                                 </button>
-                                <div id="personal-empty-mode" class="bp-personal-empty-mode" hidden>
-                                    <strong>Personal Weights</strong>
-                                    <button id="personal-empty-public-return" type="button">View public weights</button>
-                                </div>
                             </div>
                             <div id="guest-draft-notice" class="bp-guest-draft-notice" role="status" hidden>
                                 <i class="fa-regular fa-floppy-disk" aria-hidden="true"></i>
@@ -479,7 +475,7 @@
                     <section id="benchmark-information" class="benchmark-information" aria-label="Benchmark information" hidden>
                         <p id="benchmark-information-status" role="status"></p>
                         <h3 id="benchmark-information-name"></h3>
-                        <p id="benchmark-information-condition" class="benchmark-information-condition"></p>
+                        <p id="benchmark-information-condition" class="benchmark-information-condition" hidden></p>
                         <p id="benchmark-information-description" class="benchmark-information-description" hidden></p>
                         <details id="benchmark-information-differences" hidden><summary>Version differences</summary><p id="benchmark-information-difference-explanation" class="benchmark-information-description"></p></details>
                         <section id="benchmark-information-weights" class="benchmark-information-weights" aria-label="Weights in this context" hidden>

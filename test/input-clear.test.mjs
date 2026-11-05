@@ -16,10 +16,11 @@ test('input clear is a shared field behavior, including pages that only compose 
         const calls = [];
         vm.runInNewContext(code.slice(code.indexOf('// Some pages compose primitives')), {
             document: { readyState, addEventListener(name, callback) { assert.equal(name, 'DOMContentLoaded'); onReady = callback; } },
-            observeInputClears: () => calls.push('clear'), observeDisclosureChevrons: () => calls.push('disclosure')
+            observeInputClears: () => calls.push('clear'), observeDisclosureChevrons: () => calls.push('disclosure'),
+            observeTextareaAutosize: () => calls.push('autosize')
         });
         if (readyState === 'loading') { assert.deepEqual(calls, []); onReady(); }
-        assert.deepEqual(calls, ['clear', 'disclosure']);
+        assert.deepEqual(calls, ['clear', 'disclosure', 'autosize']);
     }
 });
 

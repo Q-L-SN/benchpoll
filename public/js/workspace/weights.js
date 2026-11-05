@@ -79,11 +79,11 @@ function benchmarkConditionLabel(object) {
     return conditionName.toLocaleLowerCase('en-US') === 'default' ? '' : conditionName;
 }
 
-function benchmarkAccessibleName(object) {
+function benchmarkAccessibleName(object, { showVersion = false } = {}) {
     if (!object) {
         return '';
     }
-    const conditionLabel = benchmarkConditionLabel(object);
+    const conditionLabel = showVersion ? benchmarkConditionLabel(object) : '';
     return conditionLabel ? `${object.name}, ${conditionLabel}` : object.name;
 }
 

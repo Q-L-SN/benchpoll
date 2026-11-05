@@ -47,10 +47,8 @@ export function createPersonalPieStart({ stage, getScope, getPublicStart, isPriv
     const confirm = createAction({ label: 'Start over', variant: 'primary' }); confirm.id = 'personal-pie-start-confirm';
     const keep = createAction({ label: 'Keep my weights', variant: 'secondary' });
     confirmation.append(confirm, keep);
-    const closeButton = createAction({ label: 'Cancel starting over', icon: 'fa-solid fa-xmark', iconOnly: true, variant: 'quiet' });
-    closeButton.classList.add('bp-pie-start-close');
     const status = document.createElement('p'); status.className = 'bp-pie-start-status'; status.setAttribute('role', 'status'); status.hidden = true;
-    panel.append(title, message, choices, confirmation, status); overlay.append(closeButton, panel); stage.append(overlay);
+    panel.append(title, message, choices, confirmation, status); overlay.append(panel); stage.append(overlay);
     let intent = null;
     function close({ restore = true } = {}) {
         const trigger = intent?.trigger;
@@ -75,7 +73,6 @@ export function createPersonalPieStart({ stage, getScope, getPublicStart, isPriv
         for (const button of overlay.querySelectorAll('button')) button.disabled = Boolean(intent.applying);
         fromPublic.disabled ||= !available;
         confirm.querySelector('span').textContent = intent.choice?.source === 'public' ? 'Use public weights' : 'Start from blank';
-        closeButton.setAttribute('aria-label', intent.reset ? 'Cancel starting over' : 'Cancel creating personal weights');
     }
     async function apply(choice) {
         const active = intent;
@@ -102,14 +99,27 @@ export function createPersonalPieStart({ stage, getScope, getPublicStart, isPriv
     fromPublic.addEventListener('click', () => choose('public'));
     blank.addEventListener('click', () => choose('blank'));
     confirm.addEventListener('click', () => { if (intent?.choice) void apply(intent.choice); });
-    keep.addEventListener('click', () => close()); closeButton.addEventListener('click', () => close());
+    keep.addEventListener('click', () => close());
     overlay.addEventListener('keydown', event => {
         if (event.key === 'Escape' && !intent?.applying) { event.preventDefault(); event.stopPropagation(); close(); }
     });
-    return { refresh, close, get isOpen() { return Boolean(intent); }, open({ reset = false, trigger }) {
-        intent = { reset, trigger, scope: getScope(), choice: null, applying: false };
-        overlay.hidden = false; status.hidden = true; background.inert = true;
+    return { refresh, close, get isOpen() { return Boolean(intent); },
+        get previewPublic() { return Boolean(intent && !intent.reset && !isPrivate() && getPublicStart().entries.length); },
+        async open({ reset = false, trigger, beforeReveal }) {
+        const active = { reset, trigger, scope: getScope(), choice: null, applying: false };
+        intent = active;
+        overlay.hidden = true; status.hidden = true; background.inert = true;
         stage.classList.add('has-weight-start'); refresh(); onChange();
+        const isCurrent = () => intent === active && active.scope === getScope();
+        if (beforeReveal) await beforeReveal(isCurrent);
+        if (!isCurrent()) return;
+        if (isPrivate() || !getPublicStart().entries.length) {
+            overlay.hidden = !reset;
+            if (reset) stage.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' });
+            choose('blank');
+            return;
+        }
+        overlay.hidden = false;
         stage.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' });
         (fromPublic.disabled ? blank : fromPublic).focus({ preventScroll: true });
     } };

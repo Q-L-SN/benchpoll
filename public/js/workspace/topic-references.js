@@ -204,7 +204,7 @@ export function renderTopicReferences(host, { entries, issues = [], effectiveEnt
             for (const entry of effectiveEntries) {
                 const row = node('li', '');
                 row.append(node('span', '', entry.conditionID < 0 ? `${entry.name || 'Unavailable topic'} (unresolved)`
-                    : [entry.name, entry.conditionName !== 'default' && entry.conditionName].filter(Boolean).join(' / ')),
+                    : entry.name),
                     node('strong', '', `${Number((Number(entry.weightBasisPoints ?? Number(entry.weight) * 100) / 100).toFixed(2))}%`));
                 list.append(row);
             }

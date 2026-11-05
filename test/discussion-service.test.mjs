@@ -129,7 +129,7 @@ test('report approval reads the complete target into the audit recorder before h
     assert.deepEqual(calls[1].args, [7]);
 });
 
-function listingDB({ rows = [], root = null, thread = [], total = rows.length, sceneRows = [] } = {}) {
+function listingDB({ rows = [], root = null, thread = [], total = rows.length, sceneRows = [], mentions = [] } = {}) {
     const queries = [];
     const fixture = fakeDB(async (sql, args = []) => {
         queries.push({ sql, args });
@@ -153,11 +153,19 @@ function listingDB({ rows = [], root = null, thread = [], total = rows.length, s
         if (sql === 'SELECT ID, NULL AS parentID, name FROM categories WHERE is_active = 1 AND owner_user_ID IS NULL ORDER BY ID') {
             return [[{ ID: 7, parentID: null, name: 'Language models' }]];
         }
-        if (sql.includes('FROM discussion_mentions m LEFT JOIN') || sql.startsWith('SELECT post_ID, value FROM discussion_votes')) return [[]];
+        if (sql.includes('FROM discussion_mentions m LEFT JOIN')) return [mentions];
+        if (sql.startsWith('SELECT post_ID, value FROM discussion_votes')) return [[]];
         throw new Error(`Unexpected listing query: ${sql}`);
     });
     return { ...fixture, queries };
 }
+
+test('discussion mention labels hide the version while retaining the benchmark name and exact target', async () => {
+    const { db } = listingDB({ rows: [{ ID: 1, author_ID: null, body: 'Discuss this benchmark.', context_values: '{}' }],
+        mentions: [{ post_ID: 1, benchmark_ID: 101, condition_ID: 901, benchmark_name: 'ARC-AGI-2', condition_name: 'Official harness 2026' }] });
+    const result = await listDiscussion(db, null, { categoryID: 7, contextValues: {}, contextID: 10 });
+    assert.deepEqual(result.posts[0].mentions, [{ benchmarkID: 101, conditionID: 901, label: 'ARC-AGI-2' }]);
+});
 
 test('discussion list applies category, context and version filters to both count and page queries', async () => {
     const { db, queries } = listingDB();

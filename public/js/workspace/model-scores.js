@@ -147,7 +147,7 @@ export function createModelScoresView({ state, modelScoresDialog, modelScoresTit
             && !modelScoresDialog.hidden && state.authenticated === authenticated
             && state.userID === userID && state.loadSequence === loadSequence;
     }
-    const informationLink = member => createBenchmarkInformationLink(member, { getURL: getMemberURL,
+    const informationLink = member => createBenchmarkInformationLink(member, { getURL: getMemberURL, showVersion: true,
         onInspect: event => {
             cancelAllScores();
             ++modelScoresRequestSequence;
@@ -486,7 +486,7 @@ export function createModelScoresView({ state, modelScoresDialog, modelScoresTit
                 const chain = document.createElement('ol'); chain.className = 'bp-model-fallback-path bp-fallback-chain'; chain.hidden = true;
                 chain.setAttribute('role', 'list');
                 chain.id = `model-fallback-path-${modelScoresRequestSequence}-${scores.indexOf(score)}`;
-                chain.setAttribute('aria-label', `Fallback steps for ${benchmark ? benchmarkAccessibleName(benchmark) : path[0]}`);
+                chain.setAttribute('aria-label', `Fallback steps for ${benchmark ? benchmarkAccessibleName(benchmark, { showVersion: true }) : path[0]}`);
                 toggle.setAttribute('aria-controls', chain.id);
                 path.slice(1).forEach((ID, index) => {
                     const member = benchmarkDetails(ID);
