@@ -45,9 +45,9 @@
     .bp-home .bp-pie-card.has-empty-pie .bp-pie-stage,
     .bp-home .bp-pie-card.has-empty-pie #personal-pie-guidance,
     .bp-home .bp-pie-card.has-empty-pie #public-pie-summary,
-    .bp-home .bp-pie-card.has-empty-pie #personal-pie-create,
     .bp-home .bp-pie-card.has-empty-pie #inline-fallback,
-    .bp-home .bp-pie-card.has-empty-pie:not(.has-mode-selector) .bp-pie-mode-row { display: none; }
+    .bp-home .bp-pie-card.has-empty-pie:not(.has-mode-selector):not(.has-personal-create-cta) .bp-pie-mode-row { display: none; }
+    .bp-home .bp-pie-card.has-personal-create-cta #pie-empty-compact-action { display: none; }
     .bp-home .bp-pie-card.has-empty-pie .bp-pie-empty-compact { display: flex; flex-wrap: wrap; align-items: baseline; gap: 5px 10px; padding: 0 16px; color: var(--bp-muted); font-size: 12px; line-height: 1.5; }
     .bp-pie-empty-compact p { margin: 0; }
     .bp-pie-empty-compact button { border: 0; background: transparent; padding: 0; color: var(--bp-accent); font: inherit; cursor: pointer; }

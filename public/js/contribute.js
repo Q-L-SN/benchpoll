@@ -564,7 +564,7 @@ function validateConditionNameLength(input, profile) {
 function changeOperationSelector() {
     return `<section class="change-operation-section">
         <div><strong>What would you like to do?</strong></div>
-        <div class="change-operation-switch" role="group" aria-label="Requested operation">
+        <div class="change-operation-switch" data-ui-component="segmented" role="group" aria-label="Requested operation">
             ${[['update', 'Change'], ['delete', 'Delete'], ['merge', 'Merge into another']].map(([value, label]) => `<button type="button" data-change-operation="${value}" aria-pressed="${draft.change.operation === value}" class="${draft.change.operation === value ? 'active' : ''}">${label}</button>`).join('')}
         </div>
     </section>`;

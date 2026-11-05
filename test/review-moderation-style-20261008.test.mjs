@@ -81,14 +81,14 @@ for (const [engine, launcher] of [['chromium', chromium], ['webkit', webkit]]) {
                         assert.ok(!unread.shadow.includes('inset'), 'Do not reintroduce the historical unread left inset');
                         assert.notEqual(unread.background, 'rgb(255, 255, 255)', 'Preserve the existing selected background');
 
-                        const dividers = await page.locator('.workspace-tabs, #editor-overlay .moderation-panel-header')
+                        const dividers = await page.locator('#editor-overlay .moderation-panel-header')
                             .evaluateAll(elements => elements.map(element => ({
                                 width: getComputedStyle(element).borderBottomWidth,
                                 color: getComputedStyle(element).borderBottomColor
                             })));
-                        assert.equal(dividers.length, 2);
+                        assert.equal(dividers.length, 1);
                         assert.ok(dividers.every(divider => divider.width === '1px' && divider.color === 'rgb(227, 230, 236)'),
-                            'Neutral navigation/panel separators are not part of the ornament removal');
+                            'The panel retains its neutral separator');
                         if ([1440, 390, 320].includes(width)) {
                             const lifecycle = await verifyMessageTabLifecycle(page, { url: app.url });
                             assert.equal(lifecycle.passed, true);

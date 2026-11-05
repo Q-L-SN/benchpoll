@@ -331,9 +331,6 @@
                                 <div id="personal-pie-empty" class="bp-personal-pie-empty" hidden>
                                     <strong>Add your first evaluation item</strong>
                                     <p>Choose a benchmark or topic from <strong>Evaluation items</strong>. Fallback follows the community unless you choose otherwise.</p>
-                                    <button id="personal-pie-find-benchmarks" class="bp-quiet-action" type="button" aria-controls="benchmark-card">
-                                        <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i><span>Find evaluation items</span>
-                                    </button>
                                 </div>
                             </div>
                             <div id="pie-empty-compact" class="bp-pie-empty-compact" role="status">
@@ -486,7 +483,7 @@
                         </section>
                         <div class="benchmark-information-meta"><span>Scores updated</span><span><time id="benchmark-information-updated"></time> <span id="benchmark-information-age"></span></span></div>
                         <div class="benchmark-information-actions">
-                            <div class="benchmark-view-tabs" role="tablist" aria-label="Benchmark views">
+                            <div class="benchmark-view-tabs" data-ui-component="segmented" role="tablist" aria-label="Benchmark views">
                                 <button id="benchmark-scores-back" type="button" role="tab" aria-selected="true" aria-controls="benchmark-discussion-view"><i class="fa-regular fa-comments" aria-hidden="true"></i><span>Discussion</span></button>
                                 <button id="benchmark-scores-open" type="button" role="tab" aria-selected="false" aria-controls="benchmark-scores-view" tabindex="-1" hidden><i class="fa-solid fa-list" aria-hidden="true"></i><span>All scores</span></button>
                             </div>
@@ -511,7 +508,7 @@
                         <div id="thread-root"></div>
                     </section>
                     <div class="discussion-filterbar">
-                        <div class="discussion-sort" role="group" aria-label="Sort discussions"><button type="button" data-sort="hot" aria-pressed="true">Hot</button><button type="button" data-sort="new" aria-pressed="false">Newest</button></div>
+                        <div class="discussion-sort" data-ui-component="segmented" role="group" aria-label="Sort discussions"><button type="button" data-sort="hot" aria-pressed="true">Hot</button><button type="button" data-sort="new" aria-pressed="false">Newest</button></div>
                         <button id="discussion-scope-toggle" class="discussion-scope-toggle" type="button" aria-label="Include all categories" aria-pressed="false" aria-controls="discussion-feed" hidden><i class="fa-solid fa-arrow-right-arrow-left" aria-hidden="true"></i><span id="discussion-scope-label">This category</span></button>
                         <div id="context-filter-label" hidden><div id="discussion-context" class="bp-scene-tabs" role="tablist" aria-label="Discussion scenes"></div><button id="discussion-all-scenes" class="bp-quiet-action" type="button" aria-label="Show all scenes" data-tooltip="Show all scenes" aria-pressed="false" aria-controls="discussion-feed">All</button></div>
                     </div>

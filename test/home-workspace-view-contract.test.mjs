@@ -154,8 +154,6 @@ test('empty Public uses the creation card and empty Personal retains the shared 
     assert.match(html, /Rank AI your way/);
     assert.doesNotMatch(html, /Choose what counts\. Set your weights\./);
     assert.doesNotMatch(html, /personal-empty-public-return|personal-empty-mode/);
-    assert.match(workspace, /modeSwitch\.hidden = state\.contextIsPrivate \|\| !hasPersonalWeights && !personal/);
-    assert.match(workspace, /personalPieCreate\.hidden = !showCreatePersonal/);
     assert.match(workspace, /personalPieEmpty.hidden = !showEmptyPersonal/);
     assert.doesNotMatch(workspace, /No weights in this context/);
 });

@@ -225,7 +225,7 @@ export function mountProposalHall() {
     const $ = selector => document.querySelector(selector);
     mountSiteActions($('#proposals-site-links'), { accountID: 'proposals-account', accountButton: true });
     const dialog = $('#proposal-dialog'), form = $('#proposal-form'), submit = $('#proposal-submit');
-    enhanceUI(form);
+    enhanceUI();
     const fields = { name: $('#proposal-name'), description: $('#proposal-description') };
     const targetStatus = $('#proposal-source-status');
     const source = $('#proposal-source');

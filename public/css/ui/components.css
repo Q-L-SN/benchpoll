@@ -121,6 +121,9 @@ body .bp-ui-segmented[data-ui-component="segmented"] > :is(button[aria-pressed],
 body .bp-ui-segmented[data-ui-tone="accent"]::before { background: var(--bp-fill); }
 body .bp-ui-segmented[data-ui-tone="accent"] > :is(button[aria-pressed="true"], button[aria-selected="true"]) { color: #fff; }
 
+body .bp-ui-segmented[data-ui-scrollable] { min-width: 0; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+body .bp-ui-segmented[data-ui-scrollable]::-webkit-scrollbar { display: none; }
+
 body .bp-ui-field {
     box-sizing: border-box;
     display: flex;

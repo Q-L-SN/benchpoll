@@ -94,7 +94,7 @@ body.th-home .bp-profile-editor input:focus { border-color: var(--bp-accent); ba
 .th-primary:hover { border-color: var(--bp-fill-hover); background: var(--bp-fill-hover); }
 .th-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; align-items: start; padding-top: 12px; }
 .th-topics { width: min(100%, calc(100vw - 2 * var(--th-page-inset))); max-width: var(--th-grid-max); min-height: 100vh; min-height: 100dvh; margin-inline: auto; }
-.th-card { display: grid; grid-template-rows: 52px minmax(0, 1fr); min-width: 0; height: 416px; padding: 18px; border: 1px solid #dce1e6; border-radius: 8px; background: #fff; }
+.th-card { position: relative; display: grid; grid-template-rows: 52px minmax(0, 1fr); min-width: 0; height: 416px; padding: 18px; border: 1px solid #dce1e6; border-radius: 8px; background: #fff; }
 .th-card:hover { border-color: #afb7c1; }
 .th-card.is-featured { grid-column: 1 / -1; height: 456px; }
 .th-card.is-clickable { cursor: pointer; }
@@ -111,10 +111,10 @@ body.th-home .bp-profile-editor input:focus { border-color: var(--bp-accent); ba
 .th-card-title > i { flex-shrink: 0; color: #7b8491; font-size: 12px; }
 .is-featured .th-card-title { font-size: 24px; line-height: 32px; }
 .th-creator { flex: 0 1 auto; min-width: 0; max-width: 110px; }
-.th-scene-toggle { display: inline-flex; justify-self: end; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 0 4px; border: 0; background: transparent; color: var(--bp-muted); font: inherit; font-size: 12px; cursor: pointer; }
+.th-scene-toggle { position: absolute; right: 14px; bottom: 4px; z-index: 2; display: inline-flex; max-width: calc(100% - 28px); align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 0 4px; border: 0; background: transparent; color: var(--bp-muted); font: inherit; font-size: 12px; cursor: pointer; }
 .th-scene-toggle:hover { color: var(--bp-accent); }
 .th-scene-toggle:focus-visible { outline: 2px solid var(--bp-accent); outline-offset: 2px; }
-.th-scene-toggle.has-matches { justify-self: stretch; justify-content: space-between; text-align: left; }
+.th-scene-toggle.has-matches { left: 14px; justify-content: space-between; text-align: left; }
 .th-scene-toggle > span { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-height: 18px; }
 .th-scene-toggle > i { flex-shrink: 0; }
 .th-visual { position: relative; min-width: 0; min-height: 0; isolation: isolate; }

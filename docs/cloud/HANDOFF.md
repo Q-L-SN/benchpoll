@@ -18,6 +18,14 @@ for the current 259-file guard, 49-file overlay, verification and rollback.
 Use that release's verifier, not earlier manifests. The deployment descriptions
 below are historical context and must not be replayed.
 
+Pending after the current deployment: personal-start animation/crossfade fixes,
+removal of the duplicate empty-view search button, consistent light segmented
+controls, floating homepage Scenes controls, and borderless desktop Refresh/Undo.
+Read
+[`../personal-start-polish-20261105.md`](../personal-start-polish-20261105.md) for
+the 17-source overlay and checks. This follow-up requires home and index rebuilds
+and has no migration or production-data change; it is not yet confirmed deployed.
+
 ## Earlier Deployment History
 
 The combined 2026-11-03 release is now deployed. The owner asked the local

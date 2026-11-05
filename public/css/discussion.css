@@ -19,14 +19,14 @@
 .benchmark-information-description { margin: 0 0 14px; font-size: 13px; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 180px; overflow-y: auto; }
 .benchmark-information-meta { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 6px; font-size: 12px; line-height: 1.6; color: var(--bp-muted); margin-bottom: 12px; }
 .benchmark-information-meta time { color: var(--bp-text); }
-.benchmark-information-actions { display: flex; align-items: stretch; overflow-x: auto; padding: 3px; border-radius: 6px; background: var(--bp-surface-soft); }
-.benchmark-view-tabs { display: flex; flex: 1 0 auto; }
-.benchmark-information-actions :is(button, .benchmark-view-link) { display: inline-flex; flex: 1 0 auto; min-height: 40px; align-items: center; justify-content: center; gap: 6px; padding: 6px 9px; border: 0; border-radius: 4px; background: transparent; color: var(--bp-muted); font-size: 12px; line-height: 1.25; text-decoration: none; white-space: nowrap; cursor: pointer; }
-.benchmark-information-actions button[aria-selected="true"] { background: var(--bp-surface); color: var(--bp-ink); font-weight: 700; box-shadow: 0 1px 3px #252d371c; }
-.benchmark-information-actions :is(button, .benchmark-view-link):hover { color: var(--bp-accent); }
-.benchmark-information-actions :is(button, .benchmark-view-link):focus-visible { outline: 2px solid var(--bp-accent); outline-offset: -2px; }
+/* View choices use the shared segmented control; editing remains a separate action. */
+.benchmark-information-actions { display: grid; gap: 6px; }
+.benchmark-view-tabs { width: 100%; }
+.benchmark-view-tabs > button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.benchmark-view-link { justify-self: end; display: inline-flex; min-height: 36px; align-items: center; gap: 6px; padding: 6px 0; color: var(--bp-muted); font-size: 12px; text-decoration: none; }
+.benchmark-view-link:hover { color: var(--bp-accent); }
+.benchmark-view-link:focus-visible { outline: 2px solid var(--bp-accent); outline-offset: -2px; }
 .benchmark-information-actions [hidden] { display: none; }
-@media (max-width: 400px) { .benchmark-information-actions :is(button, .benchmark-view-link) { padding-inline: 6px; } .benchmark-information-actions i { display: none; } }
 #benchmark-information-status { margin: 0; font-size: 12px; color: var(--bp-muted); }
 #benchmark-information-status:empty { display: none; }
 .benchmark-information-weights { display: flex; align-items: baseline; gap: 8px; margin: 0 0 14px; }
@@ -98,8 +98,7 @@
 .bp-home .discussion-main button.discussion-scope-toggle { display: inline-flex; align-items: center; justify-content: flex-start; gap: 7px; min-width: 136px; max-width: 100%; min-height: 32px; padding: 6px 4px; border: 0; background: none; color: var(--bp-muted); text-decoration: none; line-height: 1.4; }
 .discussion-scope-toggle span { min-width: 0; overflow-wrap: anywhere; }
 .bp-home .discussion-main button.discussion-scope-toggle:hover { background: none; color: var(--bp-accent); }
-.discussion-sort { display: flex; gap: 4px; }
-.discussion-sort button[aria-pressed="true"] { background: var(--bp-selected); color: var(--bp-accent); font-weight: 650; }
+.discussion-sort { flex: 0 0 auto; }
 .discussion-post { padding: 18px 0 14px; border-bottom: 1px solid var(--bp-line); }
 .discussion-post-meta { font-size: 12px; color: var(--bp-muted); gap: 8px; }
 .discussion-post-meta strong { font-size: 13px; font-weight: 650; color: var(--bp-text); }

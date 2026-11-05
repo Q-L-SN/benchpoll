@@ -124,7 +124,7 @@ test('resetting removes version/fallback choices only after confirmation and Und
 
 test('empty public weights start blank on mobile without a chooser or save', async t => {
     const { page, saves, overlay } = await setup(t, chromium, 320, { personalEntries: [], publicWeights: [] });
-    await page.locator('#pie-empty-compact-action').click();
+    await page.locator('#personal-pie-create').click();
     await page.waitForFunction(() => document.getElementById('pie-mode-personal').getAttribute('aria-selected') === 'true');
     assert.equal(await overlay.isVisible(), false);
     assert.equal(await page.locator('#pie-mode-personal').getAttribute('aria-selected'), 'true');
@@ -240,28 +240,83 @@ test('mobile Reset and Undo shrink together while the finger is still moving', a
 for (const engine of [chromium, webkit]) test(`${engine.name()}: reveal Public then slide to Personal before showing the chooser`, async t => {
     const { page, saves } = await setup(t, engine, 390, { personalEntries: [], motion: true });
     await page.evaluate(() => document.fonts.ready);
-    const frames = await page.evaluate(() => new Promise(resolve => {
-        const frames = [], start = performance.now(), control = document.querySelector('.bp-mode-switch');
-        document.getElementById('personal-pie-create').click();
-        const sample = () => {
-            frames.push({ visible: !control.hidden, personal: document.getElementById('pie-mode-personal').getAttribute('aria-selected') === 'true',
-                overlay: !document.getElementById('personal-pie-start').hidden,
-                x: new DOMMatrix(getComputedStyle(control, '::before').transform).m41,
-                publicX: document.getElementById('pie-mode-public').offsetLeft,
-                personalX: document.getElementById('pie-mode-personal').offsetLeft });
-            if (performance.now() - start < 800) requestAnimationFrame(sample); else resolve(frames);
-        };
-        requestAnimationFrame(sample);
-    }));
-    assert.ok(frames.some(frame => frame.visible && !frame.personal && !frame.overlay), JSON.stringify(frames));
-    assert.ok(frames.some(frame => frame.visible && frame.personal && !frame.overlay
-        && frame.x > frame.personalX + 1 && frame.x < frame.publicX - 1), 'The indicator crosses intermediate positions before revealing the choices');
-    assert.ok(frames.at(-1).overlay);
-    assert.equal(saves().length, 0);
-    await page.locator('#pie-mode-public').click();
-    await page.locator('#personal-pie-create').waitFor();
-    assert.equal(await page.locator('.bp-mode-switch').isVisible(), false);
+    for (let attempt = 0; attempt < 2; attempt++) {
+        const frames = await page.evaluate(() => new Promise(resolve => {
+            const frames = [], start = performance.now(), control = document.querySelector('.bp-mode-switch');
+            document.getElementById('personal-pie-create').click();
+            const sample = () => {
+                frames.push({ visible: !control.hidden, personal: document.getElementById('pie-mode-personal').getAttribute('aria-selected') === 'true',
+                    overlay: !document.getElementById('personal-pie-start').hidden,
+                    x: new DOMMatrix(getComputedStyle(control, '::before').transform).m41,
+                    publicX: document.getElementById('pie-mode-public').offsetLeft,
+                    personalX: document.getElementById('pie-mode-personal').offsetLeft });
+                if (performance.now() - start < 800) requestAnimationFrame(sample); else resolve(frames);
+            };
+            requestAnimationFrame(sample);
+        }));
+        const visible = frames.filter(frame => frame.visible);
+        assert.ok(Math.abs(visible[0].x - visible[0].publicX) < 1, `Opening ${attempt + 1} starts at Public: ${JSON.stringify(visible)}`);
+        for (let index = 1; index < visible.length; index++) {
+            assert.ok(visible[index].x <= visible[index - 1].x + .5, 'The indicator never reverses toward Public');
+        }
+        assert.ok(frames.some(frame => frame.visible && !frame.personal && !frame.overlay), JSON.stringify(frames));
+        assert.ok(frames.some(frame => frame.visible && frame.personal && !frame.overlay
+            && frame.x > frame.personalX + 1 && frame.x < frame.publicX - 1), 'The indicator crosses intermediate positions before revealing the choices');
+        assert.ok(frames.at(-1).overlay);
+        assert.ok(visible.filter(frame => frame.overlay).every(frame => Math.abs(frame.x - frame.personalX) < 1), 'Choices appear after the indicator reaches Personal');
+        assert.equal(saves().length, 0);
+        await page.locator('#pie-mode-public').click();
+        await page.locator('#personal-pie-create').waitFor();
+        await page.locator('.bp-mode-switch').waitFor({ state: 'hidden' });
+        assert.equal(await page.locator('.bp-mode-switch').isVisible(), false);
+    }
 });
+
+for (const [engine, width] of [[chromium, 1440], [webkit, 390]]) for (const emptyPublic of [false, true]) {
+    test(`${engine.name()} ${width}: empty Personal crossfades to the creation button${emptyPublic ? ' without public weights' : ''}`, async t => {
+        const { page, overlay, saves } = await setup(t, engine, width, { personalEntries: [], initialMode: 'personal', motion: true,
+            ...(emptyPublic ? { publicWeights: [] } : {}) });
+        if (!emptyPublic) await overlay.getByRole('button', { name: 'From blank', exact: true }).click();
+        await page.locator('#weight-add-benchmark').waitFor();
+        const frames = await page.evaluate(() => new Promise(resolve => {
+            const control = document.querySelector('.bp-mode-switch'), create = document.getElementById('personal-pie-create');
+            const frames = [], start = performance.now();
+            document.getElementById('pie-mode-public').click();
+            const sample = () => {
+                const a = control.getBoundingClientRect(), b = create.getBoundingClientRect();
+                frames.push({ visible: !control.hidden, createVisible: !create.hidden,
+                    opacity: Number(getComputedStyle(control).opacity), createOpacity: Number(getComputedStyle(create).opacity),
+                    overlap: Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top),
+                    x: new DOMMatrix(getComputedStyle(control, '::before').transform).m41,
+                    personalX: document.getElementById('pie-mode-personal').offsetLeft,
+                    publicX: document.getElementById('pie-mode-public').offsetLeft });
+                if (performance.now() - start < 650) requestAnimationFrame(sample); else resolve(frames);
+            };
+            requestAnimationFrame(sample);
+        }));
+        assert.ok(frames.some(frame => frame.visible && frame.createVisible && frame.opacity > .05 && frame.opacity < .95
+            && frame.createOpacity > .05 && frame.createOpacity < .95 && frame.overlap > 10
+            && frame.x > frame.personalX + 1 && frame.x < frame.publicX - 1), 'Both controls overlap and crossfade while the indicator slides');
+        assert.equal(frames.at(-1).visible, false);
+        assert.equal(frames.at(-1).createVisible, true);
+        assert.equal(frames.at(-1).createOpacity, 1);
+        await page.locator('#personal-pie-create').click();
+        if (!emptyPublic) await overlay.getByRole('button', { name: 'From blank', exact: true }).click();
+        await page.locator('#weight-add-benchmark').waitFor();
+        await page.locator('#pie-mode-public').evaluate(button => button.click());
+        await page.waitForFunction(() => {
+            const control = document.querySelector('.bp-mode-switch'), opacity = Number(getComputedStyle(control).opacity);
+            return !control.hidden && opacity > .05 && opacity < .95;
+        });
+        await page.locator('#personal-pie-create').evaluate(button => button.click());
+        await page.waitForFunction(() => document.getElementById('pie-mode-personal').getAttribute('aria-selected') === 'true');
+        await page.waitForTimeout(350);
+        assert.equal(await page.locator('.bp-mode-switch').isVisible(), true, 'An interrupted fade cannot hide the reopened selector');
+        assert.equal(await page.locator('.bp-mode-switch').evaluate(node => node.inert), false);
+        assert.equal(await page.locator('#personal-pie-create').isVisible(), false);
+        assert.equal(saves().length, 0);
+    });
+}
 
 for (const engine of [chromium, webkit]) test(`${engine.name()}: workspace scroll stays in its panels without a blank page below`, async t => {
     const { page } = await setup(t, engine, 1440);

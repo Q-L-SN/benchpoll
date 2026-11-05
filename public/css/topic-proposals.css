@@ -159,8 +159,4 @@ body.tp-page .bp-ui-action[data-ui-variant] { min-height: 44px; }
     #proposal-submit { grid-column: 1 / -1; }
     #proposal-editor-withdraw { grid-column: 1 / -1; justify-self: start; }
 }
-.tp-tabs { display: flex; gap: 8px; margin: 4px 0 16px; border-bottom: 1px solid var(--bp-line, #dfe3e8); }
-.tp-tabs button { min-height: 44px; padding: 0 12px; border: 0; background: transparent; color: var(--bp-muted, #728091); font: inherit; font-weight: 600; cursor: pointer; }
-.tp-tabs button[aria-selected="true"] { color: var(--bp-ink, #18222c); font-weight: 750; }
-.tp-tabs button:hover { color: var(--bp-accent, #b84b00); }
-.tp-tabs button:focus-visible { outline: 2px solid var(--bp-accent, #b84b00); outline-offset: -2px; }
+.tp-tabs { margin: 4px 0 16px; }

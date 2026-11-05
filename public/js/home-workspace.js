@@ -85,10 +85,11 @@ const headlineVariants = [...workspaceHeadline.querySelectorAll('[data-headline-
 const personalModeButton = document.getElementById('pie-mode-personal');
 const publicModeButton = document.getElementById('pie-mode-public');
 const personalPieCreate = document.getElementById('personal-pie-create');
+let weightSourcePresentation = null;
+let weightSourceTransition = null;
 const personalPieEmpty = document.getElementById('personal-pie-empty');
 const compactPieMessage = document.getElementById('pie-empty-compact-message');
 const compactPieAction = document.getElementById('pie-empty-compact-action');
-const personalPieFindBenchmarks = document.getElementById('personal-pie-find-benchmarks');
 const guestDraftNotice = document.getElementById('guest-draft-notice');
 const guestDraftMessage = document.getElementById('guest-draft-message');
 const guestDraftSave = document.getElementById('guest-draft-save');
@@ -2061,18 +2062,53 @@ function renderModeState() {
     personalPieEmpty.hidden = !showEmptyPersonal;
     pieCard.classList.toggle('has-empty-personal-pie', showEmptyPersonal);
     personalPieGuidance.hidden = emptyPie;
-    modeSwitch.hidden = state.contextIsPrivate || !hasPersonalWeights && !personal && !choosingStart;
-    personalPieCreate.hidden = !showCreatePersonal || choosingStart;
-    pieCard.classList.toggle('has-personal-create-cta', showCreatePersonal);
+    pieCard.classList.toggle('has-personal-create-cta', showCreatePersonal && !choosingStart);
     modeSwitch?.classList.toggle('is-public', !personal);
     personalModeButton.classList.toggle('selected', personal);
     publicModeButton.classList.toggle('selected', !personal);
     personalModeButton.setAttribute('aria-selected', String(personal));
     publicModeButton.setAttribute('aria-selected', String(!personal));
+    renderWeightSourcePresentation(!state.contextIsPrivate && (hasPersonalWeights || personal || choosingStart),
+        showCreatePersonal && !choosingStart);
     renderSelectedWeightHeading();
     updatePieAdjustmentStatus();
     updateUndoState();
     publishContextWeights();
+}
+
+function renderWeightSourcePresentation(showSwitch, showCreate) {
+    const next = showSwitch ? 'switch' : showCreate ? 'create' : 'none';
+    if (next === weightSourcePresentation) return;
+    const row = modeSwitch.parentElement;
+    const crossfade = weightSourcePresentation === 'switch' && next === 'create'
+        && !modeSwitch.hidden && modeSwitch.getClientRects().length > 0
+        && !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const startHeight = row.getBoundingClientRect().height;
+    const moveFocus = modeSwitch.contains(document.activeElement);
+    weightSourcePresentation = next;
+    weightSourceTransition?.forEach(animation => animation.cancel());
+    weightSourceTransition = null;
+    modeSwitch.hidden = !showSwitch && !crossfade;
+    modeSwitch.inert = !showSwitch;
+    personalPieCreate.hidden = !showCreate;
+    if (moveFocus && showCreate) personalPieCreate.focus({ preventScroll: true });
+    if (!crossfade) return;
+    if (!personalPieCreate.getClientRects().length) { modeSwitch.hidden = true; return; }
+    mountSegmentedControl(modeSwitch).refresh();
+    const endHeight = row.getBoundingClientRect().height;
+    const options = { duration: 240, easing: 'cubic-bezier(.22, 1, .36, 1)', fill: 'both' };
+    const animations = [
+        modeSwitch.animate([{ opacity: 1 }, { opacity: 0 }], options),
+        personalPieCreate.animate([{ opacity: 0 }, { opacity: 1 }], options),
+        row.animate([{ height: `${startHeight}px`, overflow: 'clip' }, { height: `${endHeight}px`, overflow: 'clip' }], options)
+    ];
+    weightSourceTransition = animations;
+    void Promise.allSettled(animations.map(animation => animation.finished)).then(() => {
+        if (weightSourceTransition !== animations) return;
+        modeSwitch.hidden = true;
+        weightSourceTransition = null;
+        animations.forEach(animation => animation.cancel());
+    });
 }
 
 function renderSelectedWeightHeading() {
@@ -2885,8 +2921,12 @@ async function openPersonalStart(trigger, reset = false) {
     if (reset && state.mode !== 'personal') return;
     fallbackPicker.close({ restore: false }); benchmarkSettings.close();
     await personalPieStart.open({ reset, trigger, beforeReveal: !reset && state.mode !== 'personal' ? async isCurrent => {
+        modeSwitch.classList.add('is-revealing');
         const segmented = mountSegmentedControl(modeSwitch);
         segmented.refresh();
+        // A hidden control may retain Personal's position. Place it at Public before painting.
+        getComputedStyle(modeSwitch, '::before').transform;
+        modeSwitch.classList.remove('is-revealing');
         // Paint the newly visible Public selection before moving its indicator.
         if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
             await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
@@ -2926,7 +2966,7 @@ compactPieAction.addEventListener('click', () => {
     if (state.personalEntries.length) void setMode('personal');
     else void openPersonalStart(compactPieAction);
 });
-personalPieFindBenchmarks.addEventListener('click', async () => {
+document.getElementById('weight-add-benchmark').addEventListener('click', async () => {
     const scope = workspaceContextFingerprint();
     if (state.mode !== 'personal' || state.loading || !await finishPendingWeightAdjustments()
         || scope !== workspaceContextFingerprint()) return;
@@ -2938,7 +2978,6 @@ personalPieFindBenchmarks.addEventListener('click', async () => {
     });
 });
 
-document.getElementById('weight-add-benchmark').addEventListener('click', () => personalPieFindBenchmarks.click());
 guestDraftSave.addEventListener('click', async () => {
     if (state.legacyDraftAvailable || state.personalDraftUnavailable) {
         await loadWeightedWorkspace({ preserveUndo: true, legacyClaim: state.legacyDraftAvailable });

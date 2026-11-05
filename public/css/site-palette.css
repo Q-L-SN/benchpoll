@@ -185,11 +185,11 @@ body.censor-page-body .tab-count { background: var(--bp-fill); color: #fff; }
 .bp-home .bp-welcome-weight-segment.is-teal { background: var(--bp-chart-1-end); }
 .bp-home .bp-welcome-weight-segment.is-yellow { background: var(--bp-chart-3-end); }
 .bp-home .discussion-main { background: var(--bp-surface); }
-.bp-home .discussion-main button:not(.bp-scene-tab) { color: var(--bp-purple); }
-.bp-home .discussion-main button:not(.bp-scene-tab):hover { background: var(--bp-hover); }
+.bp-home .discussion-main button:not(.bp-scene-tab, [data-ui-component="segmented"] > button) { color: var(--bp-purple); }
+.bp-home .discussion-main button:not(.bp-scene-tab, [data-ui-component="segmented"] > button):hover { background: var(--bp-hover); }
 .bp-home .discussion-main .discussion-primary { background: var(--bp-fill); color: var(--bp-fill-ink); }
 .bp-home .discussion-main .discussion-primary:hover { background: var(--bp-fill-hover); }
-.bp-home :is(.discussion-sort button, .discussion-post-actions button)[aria-pressed="true"], .bp-home .mention-suggestions button[aria-selected="true"] { background: var(--bp-selected); color: var(--bp-purple); }
+.bp-home .discussion-post-actions button[aria-pressed="true"], .bp-home .mention-suggestions button[aria-selected="true"] { background: var(--bp-selected); color: var(--bp-purple); }
 .bp-home :is(.discussion-mentions a, .discussion-mentions button, .discussion-context-badge) { background: var(--bp-purple-soft); color: var(--bp-purple); }
 .bp-home :is(.discussion-composer, .discussion-filterbar, .discussion-post, .discussion-main select, .discussion-composer textarea, .mention-suggestions) { border-color: var(--bp-line); }
 .bp-home :is(.discussion-post-meta, .discussion-empty, #posting-context, #composer-status, .discussion-heading #category-path, .discussion-post-actions a) { color: var(--bp-muted); }
