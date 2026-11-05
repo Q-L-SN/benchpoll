@@ -56,7 +56,7 @@ test('empty discovery actions use existing forms and preserve search and categor
     assert.match(actions, /bulkImportTemplate\(\{ query, categoryPath: state.categoryPath, contextValues: state.selectedContextValues \}/);
     assert.match(actions, /contributionEditURL\('new_benchmark', \{ benchmarkName: query/);
     assert.match(actions, /contributionEditURL\('feedback', \{ targetKind: 'bulk_import', details, pageURL: window.location.href \}/);
-    assert.match(home, /empty\.append\(retry\);\s*\} else appendBenchmarkDiscoveryActions\(empty\)/);
+    assert.match(home, /empty\.append\(retry\);\s*\} else if \(!expanded\) appendBenchmarkDiscoveryActions\(empty\)/);
     assert.doesNotMatch(actions, /postJSON|postWriteJSON|scheduleSave/);
 });
 

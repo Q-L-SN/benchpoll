@@ -5,7 +5,7 @@ import { createWeightTreemapLayout, treemapHoverTransform } from './weight-treem
 import '../shared/help-popover.js';
 import { isTopicReference, topicLabelText, topicLabelParts, renderTopicLabel, TOPIC_ICON_FONT } from '../shared/topic-label.js';
 
-export function createPieRenderer({ state, pieSvg, pieHoverTooltip, orderedPieEntries, currentPieEntries, selectedObjectIndex, renderInlineFallback, fallbackRuleFor, publicFallbackRuleFor, onSelect, getPreview = () => null }) {
+export function createPieRenderer({ state, pieSvg, pieHoverTooltip, orderedPieEntries, currentPieEntries, selectedObjectIndex, renderInlineFallback, fallbackRuleFor, publicFallbackRuleFor, onSelect, getPreview = () => null, autoSelect = () => true }) {
     const measure = document.createElement('canvas').getContext('2d');
     const labelMetrics = new Map();
     const labelLayout = createPieLabelLayout(metricsOf);
@@ -161,7 +161,7 @@ export function createPieRenderer({ state, pieSvg, pieHoverTooltip, orderedPieEn
         if (disposed) return;
         const preview = getPreview();
         const entries = orderedPieEntries(preview ?? currentPieEntries());
-        if (!preview && selectedObjectIndex(entries) < 0) state.selectedObjectID = entries[0]?.conditionID ?? null;
+        if (!preview && selectedObjectIndex(entries) < 0) state.selectedObjectID = autoSelect() ? entries[0]?.conditionID ?? null : null;
         if (!layoutOnly && !preview) renderInlineFallback();
         const bounds = pieSvg.getBoundingClientRect();
         if (bounds.width > 0 && bounds.height > 0) { width = bounds.width; height = bounds.height; }

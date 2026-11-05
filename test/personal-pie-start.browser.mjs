@@ -86,7 +86,9 @@ for (const [engine, width] of built ? [[chromium, 390], [webkit, 390]] : [[chrom
                 await page.waitForFunction(name => document.querySelector('.bp-workspace').dataset.mobilePanel === name
                     && [...document.querySelectorAll('#workspace-undo, #workspace-reset')].every(button => button.inert === (name !== 'mix')), name);
                 const controls = await page.locator('#workspace-undo, #workspace-reset').evaluateAll(nodes => nodes.map(node => ({
-                    width: node.getBoundingClientRect().width, opacity: getComputedStyle(node).opacity, visibility: getComputedStyle(node).visibility
+                    width: node.getBoundingClientRect().width,
+                    opacity: Number((Number(getComputedStyle(node).opacity) / (node.disabled ? .4 : 1)).toFixed(4)),
+                    visibility: getComputedStyle(node).visibility
                 })));
                 assert.deepEqual(controls[0], controls[1], 'Undo and Reset use the same collapse/opacity progress');
                 assert.equal(controls[0].width, name === 'mix' ? 44 : 0);
@@ -225,7 +227,8 @@ test('mobile Reset and Undo shrink together while the finger is still moving', a
         await send('touchMove', step * 34); await page.waitForTimeout(35);
         if (step === 4) {
             const controls = await page.locator('#workspace-undo, #workspace-reset').evaluateAll(nodes => nodes.map(node => ({
-                width: node.getBoundingClientRect().width, opacity: Number(getComputedStyle(node).opacity)
+                width: node.getBoundingClientRect().width,
+                opacity: Number((Number(getComputedStyle(node).opacity) / (node.disabled ? .4 : 1)).toFixed(4))
             })));
             assert.deepEqual(controls[0], controls[1]);
             assert.ok(controls[0].width > 0 && controls[0].width < 44 && controls[0].opacity > 0 && controls[0].opacity < 1, JSON.stringify(controls));

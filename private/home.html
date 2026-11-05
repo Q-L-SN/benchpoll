@@ -237,12 +237,7 @@
             <header class="bp-page-heading">
                 <button id="config-sidebar-toggle" class="bp-config-sidebar-toggle bp-quiet-action" type="button" aria-label="Hide topics sidebar" data-tooltip="Hide topics sidebar" aria-expanded="true" aria-controls="config-sidebar"><i class="fa-solid fa-table-columns" aria-hidden="true"></i><i class="fa-solid fa-chevron-left bp-sidebar-toggle-direction" aria-hidden="true"></i></button>
                 <div id="workspace-brand-slot" class="bp-workspace-brand-slot"></div>
-                <div class="bp-heading-copy">
-                <h1 id="workspace-headline" data-mode="public" aria-live="polite" aria-atomic="true">
-                    <span data-headline-mode="public">Which AI benchmarks <span class="bp-headline-emphasis">should count</span>?</span>
-                    <span data-headline-mode="personal" hidden>How would you <span class="bp-headline-emphasis">rank AI</span> for this task?</span>
-                </h1>
-                </div>
+                <!--bp:topic-identity--><h1 id="workspace-headline" class="bp-heading-copy"><span id="bp-breadcrumb" class="bp-breadcrumb"></span></h1><!--/bp:topic-identity-->
                 <div class="bp-config-header-account">
                     <button id="header-user-profile" class="bp-config-account bp-quiet-action" type="button" hidden aria-label="Your account" aria-haspopup="dialog" aria-controls="user-account-dialog"><span data-account-picture aria-hidden="true"><i class="fa-regular fa-user" aria-hidden="true"></i></span></button>
                     <button id="header-login-button" class="bp-config-account bp-quiet-action" type="button" aria-label="Sign in with GitHub" data-tooltip="Sign in with GitHub"><i class="fa-brands fa-github" aria-hidden="true"></i></button>
@@ -251,8 +246,7 @@
             <section class="bp-context-row" aria-label="Current ranking context">
                 <div class="bp-context-identity">
                     <a id="back-to-topics" class="bp-topic-directory-link bp-quiet-action" href="/"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i><span>Back to topics</span></a>
-                    <!--bp:topic-identity--><nav id="bp-breadcrumb" class="bp-breadcrumb" aria-label="Breadcrumb"></nav>
-                    <p id="workspace-topic-summary" class="bp-workspace-topic-summary" hidden></p><!--/bp:topic-identity-->
+                    <!--bp:topic-summary--><p id="workspace-topic-summary" class="bp-workspace-topic-summary" hidden></p><!--/bp:topic-summary-->
                 </div>
                 <div class="bp-context-actions">
                     <span id="workspace-topic-creator" class="bp-topic-creator-slot" hidden></span>
@@ -261,15 +255,6 @@
                     </a>
                     <button id="workspace-refresh" class="bp-square-button" type="button" aria-label="Refresh data" data-tooltip="Refresh data">
                         <i class="fa-solid fa-rotate" aria-hidden="true"></i>
-                    </button>
-                    <button id="workspace-undo" class="bp-square-button" type="button" disabled aria-label="Undo last weight change" data-tooltip="Undo">
-                        <i class="fa-solid fa-rotate-left" aria-hidden="true"></i>
-                    </button>
-                    <button id="workspace-reset" class="bp-square-button bp-weight-reset" type="button" hidden aria-label="Reset personal weights" data-tooltip="Start over" aria-haspopup="dialog" aria-controls="personal-pie-start">
-                        <i class="fa-solid fa-eraser" aria-hidden="true"></i>
-                    </button>
-                    <button id="workspace-redo" class="bp-square-button" type="button" hidden aria-label="Redo last change" data-tooltip="Redo">
-                        <i class="fa-solid fa-rotate-right" aria-hidden="true"></i>
                     </button>
                 </div>
             </section>
@@ -312,11 +297,26 @@
                                 <p id="pie-instruction"></p>
                                 <p id="pie-context-note"></p>
                             </div>
-                            <div id="public-pie-summary" class="bp-public-pie-summary" hidden>
-                                <span class="bp-public-count-group"><span id="public-pie-count"></span><button class="bp-public-pie-info bp-help-trigger" type="button" aria-label="How Public Weights are calculated" aria-describedby="public-pie-tooltip" data-help-content="public-pie-tooltip"><i class="fa-regular fa-circle-question" aria-hidden="true"></i></button></span>
-                                <span id="public-pie-tooltip" hidden><strong>Your saved weights help shape the public index.</strong><p>Recent saved configurations determine the mix. Each person contributes one configuration, updated with their edits.</p><a href="/how-it-works#calculation-details">How public weights are calculated</a></span>
+                            <div class="bp-pie-tools-row">
+                                <div id="public-pie-summary" class="bp-public-pie-summary" hidden>
+                                    <span class="bp-public-count-group"><span id="public-pie-count"></span><button class="bp-public-pie-info bp-help-trigger" type="button" aria-label="How Public Weights are calculated" aria-describedby="public-pie-tooltip" data-help-content="public-pie-tooltip"><i class="fa-regular fa-circle-question" aria-hidden="true"></i></button></span>
+                                    <span id="public-pie-tooltip" hidden><strong>Your saved weights help shape the public index.</strong><p>Recent saved configurations determine the mix. Each person contributes one configuration, updated with their edits.</p><a href="/how-it-works#calculation-details">How public weights are calculated</a></span>
+                                </div>
+                                <div class="bp-pie-tools" role="group" aria-label="Weight controls">
+                                    <button id="workspace-undo" class="bp-square-button" type="button" disabled aria-label="Undo last weight change" data-tooltip="Undo">
+                                        <i class="fa-solid fa-rotate-left" aria-hidden="true"></i>
+                                    </button>
+                                    <button id="workspace-reset" class="bp-square-button bp-weight-reset" type="button" hidden aria-label="Reset personal weights" data-tooltip="Start over" aria-haspopup="dialog" aria-controls="personal-pie-start">
+                                        <i class="fa-solid fa-eraser" aria-hidden="true"></i>
+                                    </button>
+                                    <button id="workspace-redo" class="bp-square-button" type="button" hidden aria-label="Redo last change" data-tooltip="Redo">
+                                        <i class="fa-solid fa-rotate-right" aria-hidden="true"></i>
+                                    </button>
+                                    <button id="weight-topic-view" class="bp-square-button" type="button" hidden aria-label="Expand topics into benchmarks" data-tooltip="Expand topics into benchmarks" aria-pressed="false"><i class="fa-solid fa-diagram-project" aria-hidden="true"></i></button>
+                                </div>
                             </div>
                             <div id="pie-adjustment-hint" class="bp-pie-adjustment-hint" role="status" hidden><i class="fa-solid fa-arrows-up-down" aria-hidden="true"></i><span></span></div>
+                            <p id="expanded-weight-note" class="bp-expanded-weight-note" hidden>Expanded benchmarks · Read-only</p>
                             <div class="bp-pie-stage">
                                 <svg id="weight-pie" viewBox="0 0 360 360" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Public index composition"></svg>
                                 <div id="personal-pie-empty" class="bp-personal-pie-empty" hidden>

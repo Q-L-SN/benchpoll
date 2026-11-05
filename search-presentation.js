@@ -98,7 +98,8 @@ export function renderPublicTopic(html, topic, scene, snapshot, origin) {
         { name: 'BenchPoll', path: '/' }, { name: topic.name, path: topic.url },
         ...(scene ? [{ name: scene.name, path: metadata.path }] : [])
     ], items: comparableModels(snapshot).map(item => ({ name: item.modelName || item.name })) }));
-    html = replaceSearchSlot(html, 'topic-identity', `<nav id="bp-breadcrumb" class="bp-breadcrumb" aria-label="Breadcrumb"><span class="bp-breadcrumb-current">${escapeHTML(metadata.name)}</span></nav><p id="workspace-topic-summary" class="bp-workspace-topic-summary">${escapeHTML(sceneSummary(topic, scene))}</p>`);
+    html = replaceSearchSlot(html, 'topic-identity', `<h1 id="workspace-headline" class="bp-heading-copy"><span id="bp-breadcrumb" class="bp-breadcrumb"><span class="bp-breadcrumb-current">${escapeHTML(topic.name)}</span></span></h1>`);
+    html = replaceSearchSlot(html, 'topic-summary', `<p id="workspace-topic-summary" class="bp-workspace-topic-summary">${escapeHTML(sceneSummary(topic, scene))}</p>`);
     html = replaceSearchSlot(html, 'scenes', `<section id="bp-template-strip" class="bp-scene-strip" aria-label="Topic scenes"${topic.scenes.length ? '' : ' hidden'}><nav class="bp-scene-tabs" aria-label="Scenes">${topic.scenes.map(item => `<a class="bp-scene-tab" href="${escapeHTML(topicSearchMetadata(topic, item.ID).path)}"${item.ID === scene?.ID ? ' aria-current="page"' : ''}>${escapeHTML(item.name)}</a>`).join('')}</nav></section>`);
     html = replaceSearchSlot(html, 'model-rows', content.models);
     return replaceSearchSlot(html, 'evaluation-rows', content.weights);

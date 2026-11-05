@@ -94,6 +94,7 @@ for (const [engine, width] of [[chromium, 1440], [chromium, 320], [webkit, 390]]
     test(`${engine.name()} ${width}: name-only inspection and chart-only weight scrolling ${built ? 'built' : 'source'}`, async t => {
         const { page, app } = await setup(t, engine, width);
         await page.locator('#pie-mode-personal').click();
+        await page.locator('#pie-mode-personal[aria-selected="true"][aria-busy="false"]').waitFor();
         await page.locator('#model-card[aria-busy="false"]').waitFor();
         const row = page.locator('.bp-benchmark-row[data-condition-id="1"]');
         await row.scrollIntoViewIfNeeded();

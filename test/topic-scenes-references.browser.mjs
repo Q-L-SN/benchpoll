@@ -12,7 +12,7 @@ import { buildBenchmarkList } from '../ranking-service.js';
 import { createRankingPager } from '../ranking-pagination.js';
 import { referenceCondition } from '../topic-reference-service.js';
 
-const output = 'artifacts/workspace-ui-20261101/scene-references';
+const output = process.env.BP_SCENE_REFERENCE_ARTIFACTS ?? '/tmp/benchpoll-scene-references';
 const localBrowserEnv = { ...process.env, HTTP_PROXY: '', HTTPS_PROXY: '', ALL_PROXY: '', http_proxy: '', https_proxy: '', all_proxy: '',
     NO_PROXY: '127.0.0.1,localhost', no_proxy: '127.0.0.1,localhost' };
 const sceneList = categoryID => [
@@ -77,6 +77,9 @@ async function mountWorkspaceFixture(page, app) {
         }));
         base.personalPie.referenceIssues = desired.some(entry => entry.conditionID < 0) ? issues : [];
         base.personalPie.effectiveEntries = weightedEntries([{ conditionID: 1, weightBasisPoints: 6000 }, { conditionID: 2, weightBasisPoints: 4000 }]);
+        base.personalPie.referenceCompositions = desired.filter(entry => entry.conditionID < 0).map(entry => ({
+            referenceContextID: -entry.conditionID, entries: base.personalPie.effectiveEntries, issues
+        }));
         base.benchmarks = buildBenchmarkList([...base.benchmarks,
             ...targets.filter(target => meta.isPrivate || !target.isPrivate).map(referenceCondition)], base.publicPie.entries, base.personalPie.entries);
         for (const mode of ['personal', 'public']) base.modelLeaderboards[mode] = [];
@@ -173,28 +176,30 @@ for (const width of [390, 1440]) test(`scenes and references: keyboard, search, 
     await page.locator('.bp-benchmark-row[data-context-id="16702"]').waitFor();
     const firstSave = page.waitForResponse(response => response.url().endsWith('/api/save_personal_pie'));
     await page.locator('.bp-benchmark-row[data-context-id="16702"] .bp-benchmark-add').click();
-    await page.waitForSelector('[data-reference-id="16702"]');
+    await page.waitForSelector('#weight-pie [data-object-id="-16702"]');
+    await page.locator('#weight-pie [data-object-id="-16702"]').click();
     await firstSave;
-    await page.waitForSelector('#topic-reference-weights summary');
+    await page.waitForSelector('#topic-reference-weights .bp-reference-composition');
     assert.ok(fixture.saves.some(save => save.entries.some(entry => entry.conditionID === -16702)));
     assert.equal(await page.getByText('Added to Personal Weights.', { exact: true }).isVisible(), false, 'Reference adjustment has no overlapping success toast');
     await page.locator('#weight-pie > g[data-object-id="-16702"]').click();
     assert.equal(await page.locator('#pie-instruction .fa-layer-group').count(), 1);
     assert.match(await page.locator('#pie-instruction').textContent(), /Research.*Photon experiments/);
     assert.equal(await page.locator('#inline-fallback').isVisible(), false);
-    await page.locator('#topic-reference-weights summary').click();
     assert.match(await page.locator('.bp-reference-composition').innerText(), /Advanced reasoning/);
     await page.screenshot({ path: `${output}/workspace-${width}.png` });
     await page.locator('#workspace-undo').click();
-    await page.waitForFunction(() => !document.querySelector('[data-reference-id="16702"]'));
+    await page.waitForFunction(() => !document.querySelector('#weight-pie [data-object-id="-16702"]'));
     const redoSave = page.waitForResponse(response => response.url().endsWith('/api/save_personal_pie')
         && response.request().postDataJSON().entries.some(entry => entry.conditionID === -16702));
     await page.locator('#workspace-redo').click();
-    await page.waitForSelector('[data-reference-id="16702"]');
+    await page.waitForSelector('#weight-pie [data-object-id="-16702"]');
+    await page.locator('#weight-pie [data-object-id="-16702"]').click();
     await redoSave;
-    await page.waitForSelector('#topic-reference-weights summary');
+    await page.waitForSelector('#topic-reference-weights .bp-reference-composition');
     await page.reload();
-    await page.waitForSelector('[data-reference-id="16702"]');
+    await page.waitForSelector('#weight-pie [data-object-id="-16702"]');
+    await page.locator('#weight-pie [data-object-id="-16702"]').click();
     await page.locator('#weight-add-benchmark').click();
     await page.locator('#benchmark-search').fill('Private');
     await page.waitForFunction(() => !document.querySelector('.bp-benchmark-row[data-context-id]'));
@@ -241,7 +246,8 @@ for (const width of [320, 390]) test(`benchmark search adds a concrete topic ref
     const row = page.locator('.bp-benchmark-row[data-context-id="16702"]');
     const saved = page.waitForResponse(response => response.url().endsWith('/api/save_personal_pie'));
     await row.locator('.bp-benchmark-add').click();
-    await page.waitForSelector('[data-reference-id="16702"]');
+    await page.waitForSelector('#weight-pie [data-object-id="-16702"]');
+    await page.locator('#weight-pie [data-object-id="-16702"]').click();
     await saved;
     assert.ok(fixture.saves.at(-1).entries.some(entry => entry.conditionID === -16702));
     assert.equal(await page.locator('#topic-reference-dialog').isVisible(), false);
@@ -296,14 +302,14 @@ test('guest references use read-only previews and retain independent scene draft
         const preview = page.waitForResponse(response => response.url().endsWith('/api/get_weighted_workspace')
             && response.request().postDataJSON().previewPersonalPie?.entries.some(entry => entry.conditionID < 0));
         await page.locator('.bp-benchmark-row[data-context-id] .bp-benchmark-add').click(); await preview;
-        await page.waitForSelector('#topic-reference-weights summary');
+        await page.waitForSelector('#topic-reference-weights .bp-reference-composition');
     }
     await page.locator('#weight-pie > g[data-object-id="-16702"]').click();
     const initial = fixture.reads.at(-1).previewPersonalPie.entries.find(entry => entry.conditionID === -16702).weightBasisPoints;
     const adjusted = page.waitForResponse(response => response.url().endsWith('/api/get_weighted_workspace')
         && response.request().postDataJSON().previewPersonalPie?.entries.some(entry => entry.conditionID === -16702 && entry.weightBasisPoints !== initial));
     await page.locator('#weight-pie').dispatchEvent('wheel', { deltaY: -100 }); await adjusted;
-    await page.waitForSelector('#topic-reference-weights summary');
+    await page.waitForSelector('#topic-reference-weights .bp-reference-composition');
     assert.equal(await page.locator('#inline-fallback').isVisible(), false);
     assert.equal(details.length, 0, 'references never request benchmark details or fallback APIs');
     assert.equal(fixture.saves.length, 0, 'guest weights never reach the save endpoint');
@@ -311,10 +317,12 @@ test('guest references use read-only previews and retain independent scene draft
     await page.waitForSelector('#scene-tab-5401[aria-selected="true"]');
     assert.equal(await page.locator('[data-reference-id]').count(), 0);
     await page.locator('#scene-tab-5402').click();
-    await page.waitForSelector('[data-reference-id="16702"]');
-    await page.waitForSelector('#topic-reference-weights summary');
+    await page.waitForSelector('#weight-pie [data-object-id="-16702"]');
+    await page.locator('#weight-pie [data-object-id="-16702"]').click();
+    await page.waitForSelector('#topic-reference-weights .bp-reference-composition');
     await page.reload();
-    await page.waitForSelector('[data-reference-id="16702"]');
+    await page.waitForSelector('#weight-pie [data-object-id="-16702"]');
+    await page.locator('#weight-pie [data-object-id="-16702"]').click();
     assert.equal(fixture.saves.length, 0);
     assert.deepEqual(fixture.reads.at(-1).contextValues, { scene: '5402' });
 });

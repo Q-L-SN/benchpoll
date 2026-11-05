@@ -16,12 +16,12 @@ test('historical recovery fixture changes only the parser boundary, not the curr
     assert.equal(assertPieRecoveryRepair(source, source).components, 18);
 });
 
-test('release transplantation preserves independent headline, fallback and other UI bytes', () => {
-    const headline = "const workspaceHeadline = document.getElementById('workspace-headline');";
+test('release transplantation preserves independent weight controls, fallback and other UI bytes', () => {
+    const headline = "const topicViewButton = document.getElementById('weight-topic-view');";
     const fallback = "const inlineFallbackChart = document.getElementById('inline-fallback-chart');";
-    assert.ok(source.includes(headline), 'Headline anchor is outside the owned recovery nodes');
+    assert.ok(source.includes(headline), 'View control anchor is outside the owned recovery nodes');
     assert.ok(source.includes(fallback), 'Fallback anchor is outside the owned recovery nodes');
-    const installed = source.replace(headline, `${headline}\n// Concurrent headline interface.`)
+    const installed = source.replace(headline, `${headline}\n// Concurrent weight controls.`)
         .replace(fallback, `${fallback}\n// Concurrent fallback interface.`);
     assert.notEqual(installed, source);
     const staged = transplantPieRecovery(source, source, installed);

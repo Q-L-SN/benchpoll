@@ -1,4 +1,5 @@
 import { setLoading } from '../shared/loading.js';
+import { mergeBenchmarkWeights, compositionPercentages } from './expanded-weights.js';
 import { createAction } from '../shared/ui-components.js';
 import { orderedScenes, sceneURL, searchTopicGroups } from '../navigation/scenes.js';
 import { isTopicReference, referenceLabel, topicLabelText, renderTopicLabel } from '../shared/topic-label.js';
@@ -162,54 +163,37 @@ export function createTopicReferencePicker({ request, getScope, getCurrentContex
     };
 }
 
-export function renderTopicReferences(host, { entries, issues = [], effectiveEntries, dirty = false, personal, selectedID, onSelect, onRemove }) {
-    const expanded = host.querySelector('details')?.open === true;
+export function renderTopicReferences(host, { entry, composition, versions, dirty = false }) {
     host.replaceChildren();
-    const references = entries.filter(isTopicReference);
-    host.hidden = !references.length && !issues.length;
-    for (const entry of references) {
-        const row = node('div', 'bp-reference-weight'); row.dataset.referenceId = String(entry.referenceContextID ?? -entry.conditionID);
-        row.classList.toggle('is-selected', Number(entry.conditionID) === Number(selectedID));
-        const select = createAction({ label: referenceLabel(entry), variant: 'quiet', className: 'bp-reference-select' });
-        select.setAttribute('aria-label', referenceLabel(entry));
-        renderTopicLabel(select.querySelector('span'), topicLabelText(entry));
-        select.setAttribute('aria-pressed', String(Number(entry.conditionID) === Number(selectedID)));
-        select.addEventListener('click', () => onSelect({ ...entry, ID: Number(entry.conditionID) }));
-        const weight = node('strong', 'bp-reference-weight-value', `${Number((entry.weightBasisPoints / 100).toFixed(2))}%`);
-        row.append(select, weight);
-        const href = sceneURL(entry.url);
-        if (href) {
-            const visit = createAction({ label: `Open ${referenceLabel(entry)}`, icon: 'fa-solid fa-arrow-up-right-from-square',
-                href, iconOnly: true, variant: 'quiet' });
-            visit.target = '_blank'; visit.rel = 'noopener'; row.append(visit);
-        }
-        if (personal) {
-            const remove = createAction({ label: `Remove ${referenceLabel(entry)}`, icon: 'fa-solid fa-xmark', iconOnly: true, variant: 'quiet' });
-            remove.addEventListener('click', () => onRemove({ ...entry, ID: Number(entry.conditionID) })); row.append(remove);
-        }
-        host.append(row);
-    }
-    if (dirty) {
-        const note = node('p', 'bp-reference-status', 'Reference composition will update with this preview.'); note.setAttribute('role', 'status'); host.append(note);
+    host.hidden = !entry;
+    if (!entry) { delete host.dataset.referenceId; return; }
+    host.dataset.referenceId = String(entry.referenceContextID ?? -entry.conditionID);
+    if (dirty || !composition) {
+        const status = node('p', 'bp-reference-status');
+        if (dirty) setLoading(status, 'Updating topic composition');
+        else status.textContent = 'Composition is unavailable. Refresh to try again.';
+        host.append(status);
     } else {
-        if (issues.length) {
+        const entries = mergeBenchmarkWeights(composition.entries, versions);
+        const percentages = compositionPercentages(entries);
+        const list = node('ul', 'bp-reference-composition');
+        list.setAttribute('aria-label', 'Selected topic composition');
+        entries.forEach((item, index) => {
+            const row = node('li', ''); row.dataset.benchmarkId = String(item.benchmarkID ?? '');
+            row.append(node('span', '', item.name), node('strong', '', percentages[index]));
+            list.append(row);
+        });
+        host.append(list);
+        if (composition.issues?.length) {
             const warnings = node('div', 'bp-reference-warnings'); warnings.setAttribute('role', 'status');
-            for (const issue of issues) warnings.append(node('p', '', referenceIssueMessage(issue)));
+            for (const issue of composition.issues) warnings.append(node('p', '', referenceIssueMessage(issue)));
             host.append(warnings);
         }
-        if (references.length && Array.isArray(effectiveEntries)) {
-            const details = node('details', 'bp-reference-composition'); details.open = expanded;
-            details.append(node('summary', '', 'Underlying benchmarks'));
-            const list = node('ul', '');
-            for (const entry of effectiveEntries) {
-                const row = node('li', '');
-                row.append(node('span', '', entry.conditionID < 0 ? `${entry.name || 'Unavailable topic'} (unresolved)`
-                    : entry.name),
-                    node('strong', '', `${Number((Number(entry.weightBasisPoints ?? Number(entry.weight) * 100) / 100).toFixed(2))}%`));
-                list.append(row);
-            }
-            if (!list.children.length) list.append(node('li', '', 'No resolved benchmarks.'));
-            details.append(list); host.append(details);
-        }
+    }
+    const href = sceneURL(entry.url);
+    if (href) {
+        const visit = createAction({ label: `Open ${referenceLabel(entry)}`, icon: 'fa-solid fa-arrow-up-right-from-square',
+            href, variant: 'quiet', className: 'bp-reference-visit' });
+        host.append(visit);
     }
 }

@@ -98,6 +98,21 @@ function validateVersionComposition(value) {
 }
 
 function validateReferenceStatus(pie, path) {
+    if (pie.referenceCompositions !== undefined) {
+        const seen = new Set();
+        requireWorkspaceArray(pie.referenceCompositions, `${path}.referenceCompositions`).forEach((item, index) => {
+            const location = `${path}.referenceCompositions[${index}]`;
+            if (!Number.isSafeInteger(item?.referenceContextID) || item.referenceContextID < 1 || seen.has(item.referenceContextID)) {
+                throw invalidWorkspaceResponse(location, 'must identify one referenced topic');
+            }
+            seen.add(item.referenceContextID);
+            requireWorkspaceArray(item.entries, `${location}.entries`);
+            validateReferenceStatus({ effectiveEntries: item.entries, referenceIssues: item.issues }, location);
+            if (Math.abs(item.entries.reduce((sum, entry) => sum + entry.weightBasisPoints, 0) - 10000) > 1e-5) {
+                throw invalidWorkspaceResponse(location, 'must describe the full referenced composition');
+            }
+        });
+    }
     if (pie.referenceIssues !== undefined) requireWorkspaceArray(pie.referenceIssues, `${path}.referenceIssues`).forEach((issue, index) => {
         if (!Number.isSafeInteger(issue?.targetContextID) || issue.targetContextID < 1 || typeof issue.reason !== 'string') {
             throw invalidWorkspaceResponse(`${path}.referenceIssues[${index}]`, 'must describe an unresolved reference');

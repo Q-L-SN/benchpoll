@@ -120,6 +120,7 @@ function compositionFor(node, conditionID) {
 export async function expandTopicReferences(root, { loadTarget, maxDepth = MAX_REFERENCE_DEPTH,
     maxNodes = MAX_REFERENCE_NODES } = {}) {
     const memo = new Map(), active = new Set(), targets = new Map([[root.contextID, root]]);
+    const referenceCompositions = [];
     const unavailable = (ID, reason, name = 'Unavailable topic') => ({
         entries: [{ conditionID: -ID, weightBasisPoints: 10000 }], familyComposition: [],
         issues: [{ targetContextID: ID, reason, name }]
@@ -164,6 +165,8 @@ export async function expandTopicReferences(root, { loadTarget, maxDepth = MAX_R
                     : !target.entries.some(entry => entry.weightBasisPoints > 0) ? unavailable(targetID, 'empty', target.name)
                         : await expand(target, depth + 1);
             }
+            if (depth === 0) referenceCompositions.push({ referenceContextID: targetID,
+                entries: child.entries.map(entry => ({ ...entry })), issues: [...child.issues] });
             for (const issue of child.issues) issues.set(`${issue.targetContextID}:${issue.reason}`, issue);
             for (const leaf of child.entries) add(leaf.conditionID,
                 entry.weightBasisPoints * leaf.weightBasisPoints / 10000, compositionFor(child, leaf.conditionID));
@@ -182,5 +185,5 @@ export async function expandTopicReferences(root, { loadTarget, maxDepth = MAX_R
         if (!result.issues.some(issue => issue.reason === 'cycle')) memo.set(memoKey, result);
         return result;
     }
-    return expand(root, 0);
+    return { ...await expand(root, 0), referenceCompositions };
 }

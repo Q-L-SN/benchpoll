@@ -3,7 +3,7 @@ export function createReferenceCoverage({ request, getScope }) {
     const cache = new Map(), waiting = new Map(), queue = [];
     let scope = getScope(), active = 0, generation = 0;
     const controllers = new Set();
-    const number = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 });
+    const number = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
     function paint(metric, result) {
         metric.querySelector('[data-coverage-value]').textContent = result.error ? '—' : number.format(result.value);
         metric.dataset.coverageState = result.error ? 'error' : 'loaded';

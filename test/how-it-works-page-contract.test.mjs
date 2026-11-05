@@ -32,7 +32,7 @@ test('Back to topics belongs to the configuration page rather than the guide', (
     assert.match(home, /<a id="back-to-topics"[\s\S]*?fa-arrow-left[\s\S]*?<span>Back to topics<\/span><\/a>/);
     const context = home.match(/<div class="bp-context-identity">([\s\S]*?)<\/div>/)[1];
     assert.match(context, /id="back-to-topics"/);
-    assert.match(context, /id="bp-breadcrumb"/);
+    assert.match(context, /id="workspace-topic-summary"/);
 });
 
 test('guide keeps the first read short with optional calculation details', () => {

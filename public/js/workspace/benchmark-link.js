@@ -1,10 +1,15 @@
 import { benchmarkAccessibleName, benchmarkConditionLabel } from './weights.js';
-import { isTopicReference, topicLabelText, renderTopicLabel, referenceLabel } from '../shared/topic-label.js';
+import { isTopicReference, topicLabelText, renderTopicLabel, referenceLabel, TOPIC_GLYPH } from '../shared/topic-label.js';
 
 export function appendBenchmarkIdentity(element, member, { showVersion = false } = {}) {
     const name = document.createElement('strong');
     name.className = 'bp-benchmark-link-name';
-    if (isTopicReference(member)) renderTopicLabel(name, topicLabelText(member));
+    if (isTopicReference(member)) {
+        const icon = document.createElement('i'); icon.className = 'fa-solid fa-layer-group'; icon.setAttribute('aria-hidden', 'true');
+        const label = document.createElement('span'); label.className = 'bp-topic-link-label';
+        renderTopicLabel(label, topicLabelText(member).replace(`${TOPIC_GLYPH} `, ''));
+        name.append(icon, document.createTextNode(' '), label);
+    }
     else name.textContent = member.name;
     element.append(name);
     const version = !showVersion || isTopicReference(member) || member.isBenchmarkGroup ? '' : benchmarkConditionLabel(member);

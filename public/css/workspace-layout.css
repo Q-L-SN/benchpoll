@@ -1,5 +1,7 @@
 .bp-page-heading h1 { flex: 1; min-width: 0; max-width: none; font-family: var(--font-headline); font-size: 36px; font-style: normal; font-weight: 800; line-height: 1.15; letter-spacing: 0; text-wrap: balance; }
-.bp-headline-emphasis { color: var(--bp-accent); }
+.bp-page-heading #bp-breadcrumb { align-items: center; flex-wrap: wrap; font: inherit; }
+.bp-home .bp-page-heading .bp-breadcrumb-current { color: var(--bp-ink); font: inherit; font-size: inherit; line-height: inherit; white-space: normal; overflow-wrap: anywhere; text-align: left; padding-inline-end: 0; -webkit-mask-image: none; mask-image: none; }
+.bp-page-heading #workspace-headline { margin: 0; }
 .bp-workspace-brand-slot:empty, #discussion-brand-slot:empty { display: none; }
 .bp-workspace-brand-slot { flex-shrink: 0; }
 .bp-workspace-brand-slot .bp-brand, #discussion-brand-slot .bp-brand { margin: 0; font-size: 22px; letter-spacing: 0; }

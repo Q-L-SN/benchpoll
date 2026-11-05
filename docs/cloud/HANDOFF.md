@@ -34,6 +34,15 @@ for the additional 14-source overlay and verification. It requires matching home
 and index builds plus an application restart for the reviewed startup CSP pin.
 It has no migration or production-data change and is not confirmed deployed.
 
+Also pending: selected-topic composition normalized to 100%, a read-only view
+that expands topics and merges benchmarks, rounded coverage indices, continuous
+topic/scene link underlines, relocated weight controls, and the topic name as the
+main workspace heading. Read
+[`../expanded-topic-weights-20261105.md`](../expanded-topic-weights-20261105.md)
+for the additional 18-source overlay and verification. It requires home/index
+rebuilds and an application restart for the workspace response and SSR changes.
+There is no migration or production-data change; deployment is not confirmed.
+
 ## Earlier Deployment History
 
 The combined 2026-11-03 release is now deployed. The owner asked the local

@@ -1752,6 +1752,8 @@ async function buildRankingWorkspace(db, {
             editable: true,
             entries: personalEntries,
             effectiveEntries: decoratePieEntries(personalEffectiveEntries, conditionsByID),
+            referenceCompositions: (personalExpanded?.referenceCompositions ?? []).map(item => ({ ...item,
+                entries: decoratePieEntries(item.entries, conditionsByID) })),
             referenceIssues: personalExpanded?.issues ?? [],
             fallbackRules: personalFallbackRules,
             communityFallbackComposition: personalCommunityComposition
@@ -1761,6 +1763,8 @@ async function buildRankingWorkspace(db, {
             isFallback: false,
             entries: publicEntries,
             effectiveEntries: decoratePieEntries(publicExpanded?.entries ?? publicReferenceWeights(publicPie), conditionsByID),
+            referenceCompositions: (publicExpanded?.referenceCompositions ?? []).map(item => ({ ...item,
+                entries: decoratePieEntries(item.entries, conditionsByID) })),
             referenceIssues: publicExpanded?.issues ?? [],
             familyComposition
         },

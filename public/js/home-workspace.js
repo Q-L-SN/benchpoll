@@ -50,6 +50,7 @@ import { animateContent, setVisible, flipPie } from './shared/motion.js?v=worksp
 import { createSceneControls } from './workspace/scenes.js';
 import { createPrivateTopicEditor } from './shared/private-topic-editor.js';
 import { renderTopicReferences, isTopicReference, topicReferenceError } from './workspace/topic-references.js';
+import { mergeBenchmarkWeights } from './workspace/expanded-weights.js';
 import { createReferenceCoverage } from './workspace/reference-coverage.js';
 import { topicLabelText, renderTopicLabel } from './shared/topic-label.js';
 import { BENCHMARK_GROUPS, benchmarkConditionGroup } from './shared/benchmark-condition-groups.js?v=fallback-discovery-20261005';
@@ -80,8 +81,6 @@ const modelRows = document.getElementById('model-rows');
 const scoreModeButtons = [...document.querySelectorAll('[data-score-mode]')];
 const scoringSwitch = document.querySelector('.bp-scoring-switch');
 const modeSwitch = document.querySelector('.bp-mode-switch');
-const workspaceHeadline = document.getElementById('workspace-headline');
-const headlineVariants = [...workspaceHeadline.querySelectorAll('[data-headline-mode]')];
 const personalModeButton = document.getElementById('pie-mode-personal');
 const publicModeButton = document.getElementById('pie-mode-public');
 const personalPieCreate = document.getElementById('personal-pie-create');
@@ -104,6 +103,7 @@ const publicPieCount = document.getElementById('public-pie-count');
 const undoButton = document.getElementById('workspace-undo');
 const redoButton = document.getElementById('workspace-redo');
 const resetButton = document.getElementById('workspace-reset');
+const topicViewButton = document.getElementById('weight-topic-view');
 const addFallbackBenchmarkButton = document.getElementById('inline-fallback-add-benchmark');
 const refreshButton = document.getElementById('workspace-refresh');
 const lastUpdated = document.getElementById('last-updated');
@@ -204,7 +204,7 @@ const benchmarkSettings = createBenchmarkSettings({
         const IDs = new Set(group.versions.map(version => version.conditionID));
         const entries = state.personalEntries.filter(entry => IDs.has(entry.conditionID));
         return { group, entries, isPrivate: state.contextIsPrivate, rule: entries.length === 1 ? fallbackRuleFor(entries[0].conditionID) : null,
-            editable: state.mode === 'personal' && entries.length > 0 && !state.loading && !state.gestureOpen,
+            editable: state.mode === 'personal' && !isExpandedWeightView() && entries.length > 0 && !state.loading && !state.gestureOpen,
             busy: state.loading || state.gestureOpen,
             allVersions: state.versionComposition.flatMap(item => item.versions) };
     },
@@ -274,6 +274,7 @@ function nextVisibleBenchmarkGroup() {
 }
 
 function loadVisibleBenchmarkPage() {
+    if (isExpandedWeightView()) return;
     const group = nextVisibleBenchmarkGroup();
     if (group && shouldLoadMore(benchmarkRows)) void loadNextRankingPage('benchmarks', group);
 }
@@ -458,8 +459,10 @@ createModelSearch({ container: document.getElementById('ranking-model-search'),
 const { renderPie: renderPieGraphic } = createPieRenderer({
     state, pieSvg, pieHoverTooltip, orderedPieEntries, currentPieEntries, selectedObjectIndex,
     getPreview: () => personalPieStart.previewPublic ? state.publicEntries : null,
+    autoSelect: () => !isExpandedWeightView(),
     renderInlineFallback, fallbackRuleFor, publicFallbackRuleFor,
     async onSelect(objectID) {
+        if (currentPieEntries().find(entry => entry.conditionID === objectID)?.isUnresolved) return;
         if (!await finishPendingWeightAdjustments()) return;
         deactivateInlineFallbackTarget();
         state.selectedObjectID = objectID;
@@ -477,6 +480,7 @@ const { renderPie: renderPieGraphic } = createPieRenderer({
 function renderPie(options) {
     renderPieGraphic(options);
     renderSelectedWeightHeading();
+    renderReferenceState();
 }
 
 function snapshotPersonalPie() {
@@ -544,7 +548,40 @@ function selectedObjectIndex(entries = currentPieEntries()) {
 }
 
 function currentPieEntries() {
-    return state.mode === 'personal' ? state.personalEntries : state.publicEntries;
+    return isExpandedWeightView() ? expandedEntries(state.mode) : rawPieEntries();
+}
+
+function rawPieEntries(mode = state.mode) {
+    return mode === 'personal' ? state.personalEntries : state.publicEntries;
+}
+
+function isExpandedWeightView() {
+    return state.topicsExpanded && rawPieEntries().some(isTopicReference);
+}
+
+const expandedWeightCache = new Map();
+function expandedEntries(mode) {
+    const entries = state.effectiveEntries[mode] ?? rawPieEntries(mode);
+    const cached = expandedWeightCache.get(mode);
+    if (cached?.entries === entries && cached.versions === state.versionComposition) return cached.result;
+    const result = mergeBenchmarkWeights(entries, state.versionComposition ?? []);
+    expandedWeightCache.set(mode, { entries, versions: state.versionComposition, result });
+    return result;
+}
+
+function expandedBenchmarkRows() {
+    const personal = new Map(expandedEntries('personal').map(entry => [entry.conditionID, entry.weight]));
+    const community = new Map(expandedEntries('public').map(entry => [entry.conditionID, entry.weight]));
+    const query = benchmarkSearch.value.trim().toLowerCase();
+    return expandedEntries(state.mode).filter(entry => !entry.isUnresolved).map((entry, index) => ({ ...entry,
+        rank: index + 1, publicWeight: community.get(entry.conditionID) ?? 0,
+        personalWeight: personal.get(entry.conditionID) ?? null
+    })).filter(entry => entry.name.toLowerCase().includes(query));
+}
+
+function objectHasWeight(object) {
+    return isExpandedWeightView() ? currentPieEntries().some(entry => entry.conditionID === Number(object.ID))
+        : state.mode === 'personal' ? objectInPersonalPie(object) : Number(object.publicWeight) > 0;
 }
 
 function workspaceContextFingerprint(categoryID = state.categoryID, contextValues = state.selectedContextValues) {
@@ -579,7 +616,7 @@ function updatePieAdjustmentStatus() {
     updateWeightAdjustmentCursor();
     const entry = state.personalEntries.find(item => Number(item.conditionID) === Number(state.selectedObjectID));
     const single = state.personalEntries.length === 1;
-    const visible = !personalPieStart.isOpen && state.mode === 'personal' && Boolean(entry)
+    const visible = !isExpandedWeightView() && !personalPieStart.isOpen && state.mode === 'personal' && Boolean(entry)
         && (state.workspaceView === 'focus' || pieCard?.classList.contains('is-adjusting-weight'));
     pieAdjustmentHint.hidden = !visible;
     if (!visible) return;
@@ -752,14 +789,21 @@ function renderTemplateControls() {
 }
 
 function updateUndoState() {
-    undoButton.disabled = personalPieStart.isOpen || state.gestureOpen
+    const readOnly = isExpandedWeightView();
+    undoButton.disabled = readOnly || personalPieStart.isOpen || state.gestureOpen
         || wheelWeightCommitTimer !== null
         || !state.editHistory.canUndo;
-    redoButton.hidden = !state.editHistory.canRedo;
-    redoButton.disabled = personalPieStart.isOpen || state.gestureOpen || wheelWeightCommitTimer !== null || !state.editHistory.canRedo;
+    redoButton.hidden = readOnly || !state.editHistory.canRedo;
+    redoButton.disabled = readOnly || personalPieStart.isOpen || state.gestureOpen || wheelWeightCommitTimer !== null || !state.editHistory.canRedo;
     resetButton.hidden = state.mode !== 'personal';
-    resetButton.disabled = personalPieStart.isOpen || state.loading || state.gestureOpen || wheelWeightCommitTimer !== null
+    resetButton.disabled = readOnly || personalPieStart.isOpen || state.loading || state.gestureOpen || wheelWeightCommitTimer !== null
         || state.accountWriteBlocked || state.personalRecoveryBlocked || state.personalSaveConflict;
+    topicViewButton.hidden = !rawPieEntries().some(isTopicReference) || personalPieStart.isOpen;
+    topicViewButton.disabled = state.loading || state.gestureOpen || wheelWeightCommitTimer !== null
+        || state.mode === 'personal' && state.personalRankingDirty;
+    topicViewButton.setAttribute('aria-pressed', String(isExpandedWeightView()));
+    const label = isExpandedWeightView() ? 'Show topics as blocks' : 'Expand topics into benchmarks';
+    topicViewButton.setAttribute('aria-label', label); topicViewButton.dataset.tooltip = label;
 }
 
 function requestLogin() {
@@ -767,7 +811,7 @@ function requestLogin() {
 }
 
 function beginMutation(isGesture = false) {
-    if (state.loading) {
+    if (state.loading || isExpandedWeightView()) {
         return false;
     }
     if (isGesture) {
@@ -927,6 +971,7 @@ function scheduleWheelPreview() {
 const WORKSPACE_VIEWS = new Set(['overview', 'leaderboard', 'focus']);
 
 function selectedBenchmark() {
+    if (isExpandedWeightView()) return currentPieEntries().find(entry => entry.conditionID === state.selectedObjectID) ?? null;
     return state.benchmarks.find(object => !object.isFamily && Number(object.ID) === Number(state.selectedObjectID))
         ?? state.benchmarkDetailsByID.get(Number(state.selectedObjectID))
         ?? (() => {
@@ -1160,7 +1205,7 @@ function appendBenchmarkDiscoveryActions(empty) {
 
 function onBenchmarkActivation(event, object) {
     if ((event.button !== undefined && event.button !== 0) || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
-    const hasWeight = state.mode === 'personal' ? objectInPersonalPie(object) : Number(object.publicWeight) > 0;
+    const hasWeight = objectHasWeight(object);
     if (!hasWeight) return;
     event.preventDefault();
     void selectWeightedBenchmark(object, { toggle: true });
@@ -1170,7 +1215,7 @@ async function selectWeightedBenchmark(object, { toggle = false } = {}) {
     const context = workspaceContextFingerprint();
     if (state.loading || !await finishPendingWeightAdjustments()) return;
     if (state.loading || context !== workspaceContextFingerprint()
-        || !(state.mode === 'personal' ? objectInPersonalPie(object) : Number(object.publicWeight) > 0)) return;
+        || !objectHasWeight(object)) return;
     const selected = state.workspaceView === 'focus' && Number(state.selectedObjectID) === Number(object.ID)
         && (object.isFamily ? state.selectedFamilyKey === object.familyKey : state.selectedFamilyKey === null);
     deactivateInlineFallbackTarget();
@@ -1296,6 +1341,11 @@ function activateInlineFallbackTarget() {
 }
 
 function renderInlineFallback() {
+    if (isExpandedWeightView()) {
+        fallbackPicker.close({ restore: false }); benchmarkSettings.close();
+        inlineFallback.hidden = true; pieCard.classList.remove('has-inline-fallback');
+        return;
+    }
     fallbackPicker.refresh();
     if (state.versionComposition) {
         const primary = state.mode === 'personal' ? selectedInlineFallbackPrimary() : selectedPublicFallbackPrimary();
@@ -1305,8 +1355,8 @@ function renderInlineFallback() {
         inlineFallbackPersonalControl.hidden = state.mode !== 'personal';
         publicFallbackToggle.hidden = state.mode === 'personal';
         for (const control of [inlineFallbackToggle, publicFallbackToggle]) {
-            (control.querySelector('span') ?? control).textContent = state.contextIsPrivate
-                ? 'Configure this benchmark' : 'Contribute your expertise';
+            (control.querySelector('span') ?? control).textContent = state.mode === 'public' ? 'Benchmark settings'
+                : state.contextIsPrivate ? 'Configure this benchmark' : 'Contribute your expertise';
             control.removeAttribute('aria-haspopup'); control.setAttribute('aria-controls', 'benchmark-settings');
             control.setAttribute('aria-expanded', String(Boolean(primary) && state.benchmarkSettingsExpanded)); control.disabled = state.loading;
         }
@@ -1672,7 +1722,8 @@ function renderBenchmarks() {
         ?? (document.activeElement === document.body ? pendingBenchmarkFocus : null);
     benchmarkRows.replaceChildren();
     referenceCoverage.begin();
-    const personalControlsActive = state.mode === 'personal';
+    const expanded = isExpandedWeightView();
+    const personalControlsActive = state.mode === 'personal' && !expanded;
     benchmarkCard?.classList.toggle('has-personal-controls', personalControlsActive);
     const fallbackTargetActive = isInlineFallbackTargetActive();
     const fallbackPrimary = fallbackTargetActive ? selectedInlineFallbackPrimary() : null;
@@ -1703,7 +1754,7 @@ function renderBenchmarks() {
         benchmarkRows.append(loading);
         return;
     }
-    if (state.benchmarks.length === 0 && state.rankingPageLoading.benchmarks) {
+    if (!expanded && state.benchmarks.length === 0 && state.rankingPageLoading.benchmarks) {
         const loading = document.createElement('div');
         loading.className = 'bp-loading-state';
         setLoading(loading, 'Loading benchmarks…');
@@ -1721,7 +1772,7 @@ function renderBenchmarks() {
     const availableObjects = state.mode === 'personal'
         ? state.benchmarks.filter(object => !hiddenPersonalBenchmarkIDs.has(Number(object.ID)))
         : state.benchmarks;
-    const objects = (fallbackTargetActive ? availableObjects.filter(object => !isTopicReference(object)) : availableObjects).map(object => {
+    const objects = expanded ? expandedBenchmarkRows() : (fallbackTargetActive ? availableObjects.filter(object => !isTopicReference(object)) : availableObjects).map(object => {
         if (!object.isBenchmarkGroup) return object;
         const entries = (state.mode === 'personal' ? state.personalEntries : state.publicEntries)
             .filter(entry => entry.benchmarkID === object.benchmarkID);
@@ -1731,9 +1782,9 @@ function renderBenchmarks() {
         return { ...object, ...(current ? { ID: current.conditionID, conditionID: current.conditionID } : {}),
             personalWeight: personal.length ? total / 100 : null, personalWeightBasisPoints: personal.length ? total : null };
     });
-    if (objects.length === 0 && !state.rankingPagination?.benchmarks.other.total
-        && !state.rankingPagination?.benchmarks.lowCoverage.total) {
-        if (state.benchmarks.length > 0 && state.rankingPagination?.benchmarks.primary.hasMore
+    if (objects.length === 0 && (expanded || !state.rankingPagination?.benchmarks.other.total
+        && !state.rankingPagination?.benchmarks.lowCoverage.total)) {
+        if (!expanded && state.benchmarks.length > 0 && state.rankingPagination?.benchmarks.primary.hasMore
             && !state.rankingPageError.benchmarks) {
             const loading = document.createElement('div');
             loading.className = 'bp-loading-state';
@@ -1748,16 +1799,16 @@ function renderBenchmarks() {
             ? 'No other benchmarks in this view.'
             : 'No benchmarks found');
         benchmarkRows.append(empty);
-        if (state.rankingPageError.benchmarks) {
+        if (!expanded && state.rankingPageError.benchmarks) {
             const retry = document.createElement('button');
             retry.type = 'button';
             retry.textContent = 'Retry';
             retry.addEventListener('click', () => { void loadNextRankingPage('benchmarks'); });
             empty.append(retry);
-        } else appendBenchmarkDiscoveryActions(empty);
+        } else if (!expanded) appendBenchmarkDiscoveryActions(empty);
     }
 
-    const groupPages = currentBenchmarkPages();
+    const groupPages = expanded ? null : currentBenchmarkPages();
     const hasOtherVersions = (groupPages?.other.total ?? 0) > 0;
     const lowCoverageRows = document.createElement('div');
     lowCoverageRows.id = 'benchmark-low-rows';
@@ -1772,7 +1823,7 @@ function renderBenchmarks() {
             && objectInPersonalPie(object));
     let encounteredUnpinnedRow = false;
     const createRow = object => {
-        const inPersonalPie = objectInPersonalPie(object);
+        const inPersonalPie = expanded ? Number(object.personalWeight) > 0 : objectInPersonalPie(object);
         const pinned = !object.isFamily && state.pinPersonalBenchmarks && inPersonalPie;
         const row = document.createElement('div');
         row.className = 'bp-benchmark-row';
@@ -1797,7 +1848,7 @@ function renderBenchmarks() {
             ? [benchmarkAccessibleName(object), ...object.familyEntries.map(benchmarkAccessibleName)].join(' → ')
             : benchmarkAccessibleName(object);
         row.setAttribute('aria-label', object.isFamily ? `Fallback configuration for ${accessibleName}` : `${isTopicReference(object) ? 'Topic' : 'Benchmark'} ${accessibleName}`);
-        const hasWeight = state.mode === 'personal' ? inPersonalPie : Number(object.publicWeight) > 0;
+        const hasWeight = objectHasWeight(object);
         if (hasWeight) {
             row.tabIndex = 0;
             row.dataset.benchmarkControl = 'selection';
@@ -1917,12 +1968,13 @@ function renderBenchmarks() {
     objects.forEach(object => {
         const entry = document.createElement('div'); entry.className = 'bp-benchmark-entry';
         entry.append(createRow(object));
-        const group = currentBenchmarkGroup(object);
+        const group = expanded ? 'primary' : currentBenchmarkGroup(object);
         if (group === 'lowCoverage') lowCoverageRows.append(entry);
         else if (group === 'other') otherRows.append(entry);
         else benchmarkRows.append(entry);
     });
     const appendPageFooter = (container, group) => {
+        if (expanded) return;
         const page = groupPages?.[group];
         const key = benchmarkPageKey(group);
         if (!page?.hasMore && !state.rankingPageError[key]) return;
@@ -2010,11 +2062,8 @@ function renderModeState() {
     modelIndexHeading.textContent = indexTitle;
     modelIndexTab.textContent = 'AI Index';
     modelIndexTab.setAttribute('aria-label', indexTitle);
-    if (workspaceHeadline.dataset.mode !== state.mode) {
-        workspaceHeadline.dataset.mode = state.mode;
-        headlineVariants.forEach(variant => { variant.hidden = variant.dataset.headlineMode !== state.mode; });
-        animateContent(workspaceHeadline, { translate: false });
-    }
+    pieCard.classList.toggle('is-expanded-weight-view', isExpandedWeightView());
+    document.getElementById('expanded-weight-note').hidden = !isExpandedWeightView();
     document.body.classList.toggle('bp-private-category', state.contextIsPrivate);
     const storageWarning = !state.guestDraftStorageAvailable && state.personalSavePending;
     guestDraftNotice.hidden = !state.usingGuestDraft && !state.legacyDraftAvailable
@@ -2115,7 +2164,8 @@ function renderWeightSourcePresentation(showSwitch, showCreate) {
 
 function renderSelectedWeightHeading() {
     const entries = currentPieEntries();
-    const selected = entries.find(entry => Number(entry.conditionID) === Number(state.selectedObjectID)) ?? entries[0];
+    const selected = entries.find(entry => Number(entry.conditionID) === Number(state.selectedObjectID))
+        ?? (isExpandedWeightView() ? null : entries[0]);
     personalPieGuidance.hidden = !selected || personalPieStart.isOpen;
     if (isTopicReference(selected)) renderTopicLabel(pieInstruction, topicLabelText(selected));
     else pieInstruction.textContent = selected ? benchmarkAccessibleName(selected) : '';
@@ -2128,17 +2178,14 @@ function renderSelectedWeightHeading() {
 function renderReferenceState() {
     const personal = state.mode === 'personal';
     const actions = document.getElementById('weight-add-actions');
-    actions.hidden = !personal;
+    actions.hidden = !personal || isExpandedWeightView();
     for (const button of actions.querySelectorAll('button')) button.disabled = state.loading;
+    const selected = !isExpandedWeightView() && rawPieEntries().find(entry => isTopicReference(entry)
+        && entry.conditionID === state.selectedObjectID);
     renderTopicReferences(document.getElementById('topic-reference-weights'), {
-        entries: currentPieEntries(), issues: state.referenceIssues[state.mode], effectiveEntries: state.effectiveEntries[state.mode],
-        dirty: personal && state.personalRankingDirty, personal, selectedID: state.selectedObjectID,
-        onSelect: object => selectWeightedBenchmark({ ...object, publicWeight: object.weightBasisPoints / 100 }, { toggle: true }),
-        onRemove: async object => {
-            const scope = workspaceContextFingerprint();
-            if (state.loading || !await finishPendingWeightAdjustments() || scope !== workspaceContextFingerprint()) return;
-            removeObjectFromPersonalPie(object);
-        }
+        entry: selected, versions: state.versionComposition ?? [],
+        composition: state.referenceCompositions[state.mode].find(item => item.referenceContextID === -selected?.conditionID),
+        dirty: personal && state.personalRankingDirty
     });
 }
 
@@ -2326,6 +2373,7 @@ function applyServerWorkspace(payload, {
     state.publicEntries = cloneEntries(payload.publicPie.entries);
     state.referenceIssues = { personal: structuredClone(payload.personalPie.referenceIssues ?? []), public: structuredClone(payload.publicPie.referenceIssues ?? []) };
     state.effectiveEntries = { personal: structuredClone(payload.personalPie.effectiveEntries ?? null), public: structuredClone(payload.publicPie.effectiveEntries ?? null) };
+    state.referenceCompositions = { personal: structuredClone(payload.personalPie.referenceCompositions ?? []), public: structuredClone(payload.publicPie.referenceCompositions ?? []) };
     state.publicFamilyComposition = structuredClone(payload.publicPie.familyComposition);
     state.personalCommunityComposition = structuredClone(payload.personalPie.communityFallbackComposition ?? []);
     state.versionComposition = payload.versionComposition ? structuredClone(payload.versionComposition) : null;
@@ -2917,6 +2965,7 @@ function needsPersonalStart() {
 }
 
 async function openPersonalStart(trigger, reset = false) {
+    if (isExpandedWeightView()) return;
     const scope = workspaceContextFingerprint(), user = state.userID;
     if (state.loading || state.accountWriteBlocked || state.personalRecoveryBlocked || state.personalSaveConflict
         || !await prepareContextChange() || scope !== workspaceContextFingerprint() || user !== state.userID) return;
@@ -2952,7 +3001,7 @@ function startPersonalPie(entries, isCurrent) {
     resetPieVisualState(); hiddenPersonalBenchmarkIDs.clear();
     state.personalEntries = cloneEntries(entries); state.personalFallbackRules = [];
     state.personalCommunityComposition = [];
-    state.referenceIssues.personal = []; state.effectiveEntries.personal = null;
+    state.referenceIssues.personal = []; state.effectiveEntries.personal = null; state.referenceCompositions.personal = [];
     state.selectedObjectID = entries[0]?.conditionID ?? null; state.selectedFamilyKey = null;
     state.workspaceView = 'overview'; state.personalFallbackExpanded = false;
     registerPieEntries(state.personalEntries);
@@ -2964,6 +3013,21 @@ function startPersonalPie(entries, isCurrent) {
 
 personalPieCreate.addEventListener('click', () => { void openPersonalStart(personalPieCreate); });
 resetButton.addEventListener('click', () => { void openPersonalStart(resetButton, true); });
+topicViewButton.addEventListener('click', async () => {
+    if (topicViewButton.disabled) return;
+    const scope = workspaceContextFingerprint(), mode = state.mode;
+    if (!await finishPendingWeightAdjustments() || !await flushPendingPersonalPieSave()
+        || scope !== workspaceContextFingerprint() || mode !== state.mode) return;
+    const selected = currentPieEntries().find(entry => entry.conditionID === state.selectedObjectID);
+    state.topicsExpanded = !isExpandedWeightView();
+    if (isTopicReference(selected) || !currentPieEntries().some(entry => entry.conditionID === state.selectedObjectID)) {
+        state.selectedObjectID = null; state.selectedFamilyKey = null; state.workspaceView = 'overview';
+    }
+    deactivateInlineFallbackTarget();
+    window.clearTimeout(benchmarkSearchTimer);
+    renderAll();
+    if (!isExpandedWeightView()) reloadBenchmarkPage();
+});
 compactPieAction.addEventListener('click', () => {
     if (state.personalEntries.length) void setMode('personal');
     else void openPersonalStart(compactPieAction);
@@ -3015,7 +3079,7 @@ function isPersonalBenchmarkFocus() {
 }
 
 function isWeightAdjustmentMode() {
-    return state.mode === 'personal' && state.personalEntries.length > 1
+    return !isExpandedWeightView() && state.mode === 'personal' && state.personalEntries.length > 1
         && selectedObjectIndex(state.personalEntries) >= 0
         && (isPersonalBenchmarkFocus() || pieCard.classList.contains('is-adjusting-weight'));
 }
@@ -3081,7 +3145,7 @@ pieSvg.addEventListener('pointerdown', event => {
         return;
     }
     const slice = event.target.closest('[data-object-id]');
-    if (state.mode !== 'personal' || state.personalEntries.length < 2) {
+    if (isExpandedWeightView() || state.mode !== 'personal' || state.personalEntries.length < 2) {
         return;
     }
     if (wheelWeightCommitTimer !== null) {
@@ -3202,7 +3266,7 @@ pieSvg.addEventListener('pointercancel', event => endTouchPieGesture(event, true
 
 
 function restoreHistory(direction) {
-    if (state.gestureOpen
+    if (isExpandedWeightView() || state.gestureOpen
         || wheelWeightCommitTimer !== null) {
         return;
     }
@@ -3270,6 +3334,7 @@ document.addEventListener('visibilitychange', () => {
 benchmarkSearch.addEventListener('input', () => {
     hiddenPersonalBenchmarkIDs.clear();
     window.clearTimeout(benchmarkSearchTimer);
+    if (isExpandedWeightView()) { renderBenchmarks(); return; }
     if (!state.rankingPagination || state.loading || workspaceLoadFailed) return;
     state.rankingPageSequence.benchmarks += 1;
     state.rankingPageLoading.benchmarks = true;

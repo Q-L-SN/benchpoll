@@ -126,6 +126,7 @@ async function createHarness(version = before ? 'before' : 'current') {
         FALLBACK_CONFIGURATION_VERSION, FALLBACK_RULE_MODE: 'ordered', WORKSPACE_LOAD_RETRY_DELAYS_MS: [], invalidSavedComparison: () => false,
         undoButton: { disabled: false }, redoButton: { disabled: false, hidden: true }, resetButton: { disabled: false, hidden: true },
         personalPieStart: { isOpen: false },
+        topicViewButton: new Element('button'), isTopicReference: entry => entry.conditionID < 0,
         setStatus(message) { state.statusMessage = message; }, renderLoadError(error) { loadErrors.push(error); state.loading = false; },
         postJSON(route, body) {
             if (route === '/api/get_ranking_page') return Promise.resolve(getPage(body));

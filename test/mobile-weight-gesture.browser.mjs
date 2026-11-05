@@ -35,7 +35,7 @@ for (const [engine, width] of built ? [[chromium, 390], [webkit, 390]] : [[chrom
             return webkitInput.send('Input.dispatchTouchEvent', { ...params, touchPoints: params.touchPoints.length ? params.touchPoints : lastTouch });
         };
         const box = await page.locator('#weight-pie').boundingBox();
-        const x = box.x + box.width * .7, y = box.y + box.height * .6;
+        let x = box.x + box.width * .7, y = box.y + box.height * .6;
         const send = (type, dx = 0, dy = 0) => dispatch({
             type, touchPoints: ['touchEnd', 'touchCancel'].includes(type) ? [] : [{ x: x + dx, y: y + dy, id: 1 }]
         });
@@ -84,6 +84,11 @@ for (const [engine, width] of built ? [[chromium, 390], [webkit, 390]] : [[chrom
         await settled();
         assert.equal(await weight(), initial, 'One undo restores the whole drag');
         assert.equal(savedWeight(), initial);
+
+        // Undo now sits above the chart; clicking it can scroll the mobile viewport.
+        await page.locator('#weight-pie').evaluate(node => node.scrollIntoView({ block: 'start' }));
+        const restoredBox = await page.locator('#weight-pie').boundingBox();
+        x = restoredBox.x + restoredBox.width * .7; y = restoredBox.y + restoredBox.height * .6;
 
         // An actual system cancellation still rolls back instead of saving a partial edit.
         const beforeCancel = saves();
