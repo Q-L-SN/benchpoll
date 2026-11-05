@@ -535,8 +535,9 @@ function maybeFillPage(state) {
 }
 
 function weightTooltip(tile) {
-    const label = `${tile.name}${tile.conditionName ? ` (${tile.conditionName})` : ''}: ${rankingNumber(tile.share * 100)}%`;
-    return tile.members ? `${label}\n${tile.members.map(member => `${member.name}${member.conditionName ? ` (${member.conditionName})` : ''}: ${Number((member.weightBasisPoints / tile.total * 100).toFixed(2))}%`).join('\n')}` : label;
+    const name = entry => `${entry.name}${view !== 'weights' && entry.conditionName ? ` (${entry.conditionName})` : ''}`;
+    const label = `${name(tile)}: ${rankingNumber(tile.share * 100)}%`;
+    return tile.members ? `${label}\n${tile.members.map(member => `${name(member)}: ${Number((member.weightBasisPoints / tile.total * 100).toFixed(2))}%`).join('\n')}` : label;
 }
 
 function renderWeights(container, weights, width, height, isPrivate = false) {
@@ -556,8 +557,8 @@ function renderWeights(container, weights, width, height, isPrivate = false) {
         node.dataset.share = String(tile.share);
         node.dataset.tooltip = weightTooltip(tile);
         // Foreground bars must not cover the priority labels in the exposed band.
-        const labelTile = view === 'default' ? { ...tile, conditionName: '',
-            height: Math.min(tile.height, Math.max(0, height * Math.min(TREEMAP_FADE.start, 1 - MAX_BAR_RATIO) - tile.y)) } : tile;
+        const labelTile = { ...tile, conditionName: '', height: view === 'default'
+            ? Math.min(tile.height, Math.max(0, height * Math.min(TREEMAP_FADE.start, 1 - MAX_BAR_RATIO) - tile.y)) : tile.height };
         const fit = fitWeightLabel(isTopicReference(tile) ? { ...labelTile, name: topicLabelText(tile) } : labelTile, measure);
         node.dataset.labelKind = fit.kind;
         const label = element('div', 'th-tile-label'); label.setAttribute('aria-hidden', 'true');
@@ -1033,7 +1034,7 @@ function syncHeader() {
     const restingHeight = headerPlaceholder.getBoundingClientRect().height;
     const threshold = document.body.classList.contains('is-scrolled')
         ? Math.max(restingHeight, header.getBoundingClientRect().height) : restingHeight;
-    const passed = $('#home-hero').getBoundingClientRect().bottom <= threshold + 96;
+    const passed = $('#home-hero').getBoundingClientRect().bottom <= threshold + 160;
     setHeaderVisible(passed);
     if (!passed) topicSearchLayer.close({ reason: 'header-hidden' });
     document.documentElement.style.setProperty('--th-header-height', `${Math.ceil(header.getBoundingClientRect().height)}px`);

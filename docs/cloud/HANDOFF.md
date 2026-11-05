@@ -101,6 +101,13 @@ This remains a reconciled overlay, not permission to replace production with a
 whole repository checkout. Production-only `db.js`, `navigation-service.js` and
 `public/css/ui/navigation.css` were preserved.
 
+A pending homepage follow-up moves the header/settings-island transition
+another 64 px earlier and removes separate version names from the full-weight
+view and its tooltips. Read
+[`../home-header-weight-labels-20261105.md`](../home-header-weight-labels-20261105.md)
+for the one-source runtime scope, index rebuild and completed checks. It has
+no schema or data changes and is not yet confirmed deployed.
+
 ## Repositories And Starting Point
 
 - Source: <https://github.com/Q-L-SN/benchpoll>, branch `codex/cloud-handoff-20261101`.

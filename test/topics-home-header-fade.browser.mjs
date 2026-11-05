@@ -43,7 +43,7 @@ async function transition(page, visible, fraction = .5) {
         const hero = document.getElementById('home-hero'), placeholder = document.querySelector('.th-header-placeholder');
         const top = () => document.getElementById('topics').getBoundingClientRect().top + scrollY;
         const before = top();
-        const threshold = hero.getBoundingClientRect().bottom + scrollY - Math.max(placeholder.offsetHeight, header.offsetHeight) - 96;
+        const threshold = hero.getBoundingClientRect().bottom + scrollY - Math.max(placeholder.offsetHeight, header.offsetHeight) - 160;
         scrollTo(0, threshold + (visible ? 30 : -30));
         dispatchEvent(new Event('scroll'));
         const motions = [header, filters].flatMap(node => node.getAnimations());
