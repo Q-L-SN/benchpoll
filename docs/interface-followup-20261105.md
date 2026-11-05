@@ -47,6 +47,8 @@ also carries the existing pending homepage changes in `topics-home.js`.
   visibility and width changes. Manual resize handles are disabled globally.
   Field-specific minimums remain; bounded composers scroll when reaching their
   existing maximum. Email review notices share the feedback-template tip styling.
+- The control to the right of discussion scenes now reads `All` instead of using
+  a layer icon. Its all-scenes toggle and selected-scene return behavior remain.
 
 ## Runtime allowlist
 
@@ -123,5 +125,7 @@ All write journeys use disposable local fixtures. No production writes are used.
   include shallow labels with reserved percentage space.
 - Existing score-field refresh fixtures include the new shared autosize module;
   their four real-browser cases pass together with the affected unit contracts.
+- The later `All` label follow-up passes the home build and both existing
+  discussion-scene browser journeys at 390 / 1440 px; mobile layout was reviewed.
 
 Browser-engine emulation is not a physical iPhone/Safari-device test.
