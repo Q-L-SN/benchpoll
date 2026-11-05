@@ -98,6 +98,43 @@ for (const [engine, width] of built ? [[chromium, 390], [webkit, 390]] : [[chrom
     });
 }
 
+for (const [engine, width] of [[chromium, 1440], [webkit, 390]]) {
+    test(`${engine.name()}: the eraser becomes a cancel button throughout reset ${built ? 'built' : 'source'}`, async t => {
+        const { fixture, page, saves, overlay } = await setup(t, engine, width, { fallbackRules: [
+            { primaryConditionID: 1, mode: 'ordered', entries: familyEntries([{ conditionID: 2 }]) }
+        ] });
+        await page.locator('#pie-mode-personal').click();
+        await page.locator('#pie-mode-personal[aria-selected="true"][aria-busy="false"]').waitFor();
+        const reset = page.locator('#workspace-reset');
+        const before = structuredClone({ entries: fixture.state.personalEntries, rules: fixture.state.fallbackRules });
+        const checkCancel = async step => {
+            await overlay.waitFor();
+            assert.equal(await overlay.getAttribute('data-step'), step);
+            assert.equal(await reset.getAttribute('aria-label'), 'Cancel reset');
+            assert.equal(await reset.getAttribute('aria-expanded'), 'true');
+            assert.equal(await reset.locator('.fa-xmark').count(), 1);
+            assert.equal(await reset.isEnabled(), true);
+            await reset.click();
+            assert.equal(await overlay.isVisible(), false);
+            assert.equal(await reset.locator('.fa-eraser').count(), 1);
+            assert.equal(await reset.getAttribute('aria-label'), 'Reset personal weights');
+            assert.equal(await reset.getAttribute('aria-expanded'), 'false');
+            assert.equal(await reset.evaluate(node => document.activeElement === node), true);
+            assert.equal(saves().length, 0);
+            assert.deepEqual({ entries: fixture.state.personalEntries, rules: fixture.state.fallbackRules }, before);
+            assert.deepEqual(await page.locator('#weight-pie [data-object-id]').evaluateAll(nodes => nodes.map(node =>
+                [Number(node.dataset.objectId), Number(node.dataset.weight)]).sort((a, b) => a[0] - b[0])),
+            before.entries.map(entry => [entry.conditionID, entry.weightBasisPoints]).sort((a, b) => a[0] - b[0]));
+        };
+        await reset.click(); await checkCancel('choose');
+        await reset.click(); await overlay.locator('#personal-pie-start-blank').click(); await checkCancel('confirm');
+        fixture.state.publicWeights = [];
+        await page.locator('#workspace-refresh').click();
+        await page.locator('#benchmark-card[aria-busy="false"]').waitFor();
+        await reset.click(); await checkCancel('confirm');
+    });
+}
+
 test('resetting removes version/fallback choices only after confirmation and Undo restores them', async t => {
     const rules = [{ primaryConditionID: 1, mode: 'ordered', selectionSource: 'custom', entries: familyEntries([{ conditionID: 2 }, { conditionID: 3 }]) }];
     const { fixture, page, save, saves, overlay } = await setup(t, chromium, 1440, { fallbackRules: rules });

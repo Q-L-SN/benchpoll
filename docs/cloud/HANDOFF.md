@@ -31,6 +31,15 @@ The preceding `dbab95c` release is recorded in
 [`../releases/20261105-github-merge-rollout.md`](../releases/20261105-github-merge-rollout.md).
 Descriptions below are historical context and must not be replayed.
 
+Pending after this deployment: stable version/fallback positions during a
+settings visit, reset cancellation through the eraser/X control, a left-aligned
+and more visible discussion All control, restoration of the original custom
+fallback editor, and removal of evaluation-row dimming on selection. Read
+[`../settings-interactions-followup-20261105.md`](../settings-interactions-followup-20261105.md)
+for the nine-source frontend overlay and checks. It requires home/index
+rebuilds, with no dependency, server, migration or production-data changes.
+This follow-up is not yet confirmed deployed.
+
 ## Earlier Deployment History
 
 The combined 2026-11-03 release is now deployed. The owner asked the local

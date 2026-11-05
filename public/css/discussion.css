@@ -92,8 +92,8 @@
 .discussion-filterbar #discussion-context { font-size: 13px; }
 #discussion-context.is-all-scenes { opacity: .5; filter: grayscale(1); }
 #discussion-context.is-all-scenes button { cursor: default; }
-.bp-home .discussion-main #discussion-all-scenes { flex: 0 0 40px; min-height: 40px; padding: 8px; color: var(--bp-muted); background: none; }
-.bp-home .discussion-main #discussion-all-scenes[aria-pressed="true"] { color: var(--bp-ink); }
+.bp-home .discussion-main #discussion-all-scenes { flex: 0 0 44px; min-height: 44px; padding: 8px; border-radius: 6px; color: var(--bp-muted); background: none; }
+.bp-home .discussion-main #discussion-all-scenes[aria-pressed="true"] { color: #fff; background: var(--bp-accent); font-weight: 700; }
 .discussion-filterbar select { width: 100%; min-height: 30px; }
 .bp-home .discussion-main button.discussion-scope-toggle { display: inline-flex; align-items: center; justify-content: flex-start; gap: 7px; min-width: 136px; max-width: 100%; min-height: 32px; padding: 6px 4px; border: 0; background: none; color: var(--bp-muted); text-decoration: none; line-height: 1.4; }
 .discussion-scope-toggle span { min-width: 0; overflow-wrap: anywhere; }

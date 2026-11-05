@@ -27,7 +27,7 @@ test('homepage keeps pie, benchmark leaderboard, and model leaderboard in three 
     assert.match(styles, /\.bp-workspace-grid\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1\.62fr\) minmax\(340px, 1fr\)/s);
     assert.match(styles, /\.bp-left-workspace\s*\{[^}]*grid-template-columns:\s*minmax\(240px, \.88fr\) minmax\(285px, 1\.12fr\)/s);
     assert.match(workspace, /function onBenchmarkInspection\(event\)/);
-    assert.match(workspace, /row\.classList\.toggle\('is-muted'/);
+    assert.doesNotMatch(workspace, /row\.classList\.toggle\('is-muted'/);
     assert.doesNotMatch(html, /id="pie-focus-close"/);
     assert.doesNotMatch(workspace, /pieFocusClose/);
 });

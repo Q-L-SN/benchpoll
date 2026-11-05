@@ -77,15 +77,15 @@ export function createPersonalPieStart({ stage, getScope, getPublicStart, isPriv
     async function apply(choice) {
         const active = intent;
         if (!active || active.applying || active.scope !== getScope()) return;
-        active.applying = true; status.hidden = false; setLoading(status, 'Starting personal weights'); refresh();
+        active.applying = true; status.hidden = false; setLoading(status, 'Starting personal weights'); refresh(); onChange();
         try {
             const applied = await onApply(choice.entries, () => intent === active && active.scope === getScope());
             if (intent !== active) return;
             if (applied) close({ restore: false });
-            else { active.applying = false; status.textContent = 'Could not start over. Your weights are kept. Please try again.'; refresh(); }
+            else { active.applying = false; status.textContent = 'Could not start over. Your weights are kept. Please try again.'; refresh(); onChange(); }
         } catch {
             if (intent !== active) return;
-            active.applying = false; status.textContent = 'Could not start over. Your weights are kept. Please try again.'; refresh();
+            active.applying = false; status.textContent = 'Could not start over. Your weights are kept. Please try again.'; refresh(); onChange();
         }
     }
     function choose(source) {
@@ -104,6 +104,8 @@ export function createPersonalPieStart({ stage, getScope, getPublicStart, isPriv
         if (event.key === 'Escape' && !intent?.applying) { event.preventDefault(); event.stopPropagation(); close(); }
     });
     return { refresh, close, get isOpen() { return Boolean(intent); },
+        get isResetting() { return Boolean(intent?.reset); },
+        get isApplying() { return Boolean(intent?.applying); },
         get previewPublic() { return Boolean(intent && !intent.reset && !isPrivate() && getPublicStart().entries.length); },
         async open({ reset = false, trigger, beforeReveal }) {
         const active = { reset, trigger, scope: getScope(), choice: null, applying: false };

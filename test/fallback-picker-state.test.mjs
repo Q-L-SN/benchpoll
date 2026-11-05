@@ -158,6 +158,24 @@ test('pagination, retry and custom deduplication preserve the selected order unt
     assert.equal(h.dialog.hidden, false);
 });
 
+test('newly loaded popular configurations append until the chooser is reopened', async t => {
+    const h = pickerHarness(t, { current: null, composition: { families: [
+        { entries: [member(2)], weightBasisPoints: 10000 }
+    ] } });
+    h.picker.open(primary, { action: 'replace' });
+    const keys = () => h.columns().map(column => column.dataset.familyKey);
+    assert.deepEqual(keys(), ['[1,2]', '[1]']);
+    h.state.composition.families = [
+        { entries: [member(3)], weightBasisPoints: 9000 }, { entries: [member(2)], weightBasisPoints: 1000 }
+    ];
+    h.state.view.items.push(order(11, 3)); h.picker.refresh();
+    assert.deepEqual(keys(), ['[1,2]', '[1]', '[1,3]']);
+    h.toggle('[1,3]'); await settle();
+    assert.deepEqual(keys(), ['[1,2]', '[1]', '[1,3]']);
+    h.picker.close(); h.picker.open(primary, { action: 'replace' });
+    assert.deepEqual(keys(), ['[1,3]', '[1,2]', '[1]']);
+});
+
 test('old apply completions cannot close or show errors in a newly opened picker', async t => {
     const h = pickerHarness(t);
     for (const result of ['success', 'reject']) {

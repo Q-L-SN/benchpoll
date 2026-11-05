@@ -197,7 +197,7 @@ const fallbackPicker = createFallbackPicker(fallbackPickerOptions);
 const benchmarkSettings = createBenchmarkSettings({
     host: document.getElementById('benchmark-settings'),
     fallbackPickerOptions,
-    getScope: () => `${workspaceContextFingerprint()}|${state.userID ?? 'guest'}`,
+    getScope: () => `${workspaceContextFingerprint()}|${state.mode}|${state.userID ?? 'guest'}`,
     getData(benchmarkID) {
         const group = state.versionComposition?.find(item => item.benchmarkID === benchmarkID);
         if (!group) return null;
@@ -205,8 +205,7 @@ const benchmarkSettings = createBenchmarkSettings({
         const entries = state.personalEntries.filter(entry => IDs.has(entry.conditionID));
         return { group, entries, isPrivate: state.contextIsPrivate, rule: entries.length === 1 ? fallbackRuleFor(entries[0].conditionID) : null,
             editable: state.mode === 'personal' && !isExpandedWeightView() && entries.length > 0 && !state.loading && !state.gestureOpen,
-            busy: state.loading || state.gestureOpen,
-            allVersions: state.versionComposition.flatMap(item => item.versions) };
+            busy: state.loading || state.gestureOpen, editing: isInlineFallbackEditing() };
     },
     onVersion: chooseBenchmarkVersion,
     async onContribute(group) {
@@ -216,8 +215,7 @@ const benchmarkSettings = createBenchmarkSettings({
         const primary = group.versions.find(version => version.conditionID === group.primaryConditionID);
         if (!state.personalEntries.some(entry => entry.benchmarkID === group.benchmarkID)) addObjectToPersonalPie(primary);
     },
-    onCustom: (primary, entries) => applyFallbackConfiguration(primary,
-        { community: entries === null, entries: entries ?? [], selectionSource: 'custom' }, 'replace')
+    editor: inlineFallbackSettings, onEdit: beginInlineFallbackEditing
 });
 initializeFallbackAppearance();
 const personalPieStart = createPersonalPieStart({
@@ -274,7 +272,7 @@ function nextVisibleBenchmarkGroup() {
 }
 
 function loadVisibleBenchmarkPage() {
-    if (isExpandedWeightView()) return;
+    if (isExpandedWeightView() || state.versionComposition && isInlineFallbackTargetActive()) return;
     const group = nextVisibleBenchmarkGroup();
     if (group && shouldLoadMore(benchmarkRows)) void loadNextRankingPage('benchmarks', group);
 }
@@ -579,6 +577,15 @@ function expandedBenchmarkRows() {
     })).filter(entry => entry.name.toLowerCase().includes(query));
 }
 
+function fallbackVersionRows() {
+    const query = benchmarkSearch.value.trim().toLowerCase();
+    const personal = new Map(state.personalEntries.map(entry => [entry.conditionID, entry.weight]));
+    return state.versionComposition.flatMap(group => group.versions).map((version, index) => ({ ...version,
+        ID: version.conditionID, isBenchmarkGroup: false, rank: index + 1,
+        personalWeight: personal.get(version.conditionID) ?? null
+    })).filter(version => `${version.name} ${version.conditionName}`.toLowerCase().includes(query));
+}
+
 function objectHasWeight(object) {
     return isExpandedWeightView() ? currentPieEntries().some(entry => entry.conditionID === Number(object.ID))
         : state.mode === 'personal' ? objectInPersonalPie(object) : Number(object.publicWeight) > 0;
@@ -795,9 +802,14 @@ function updateUndoState() {
         || !state.editHistory.canUndo;
     redoButton.hidden = readOnly || !state.editHistory.canRedo;
     redoButton.disabled = readOnly || personalPieStart.isOpen || state.gestureOpen || wheelWeightCommitTimer !== null || !state.editHistory.canRedo;
+    const resetting = personalPieStart.isResetting;
     resetButton.hidden = state.mode !== 'personal';
-    resetButton.disabled = readOnly || personalPieStart.isOpen || state.loading || state.gestureOpen || wheelWeightCommitTimer !== null
+    resetButton.disabled = resetting ? personalPieStart.isApplying : readOnly || personalPieStart.isOpen || state.loading || state.gestureOpen || wheelWeightCommitTimer !== null
         || state.accountWriteBlocked || state.personalRecoveryBlocked || state.personalSaveConflict;
+    resetButton.querySelector('i').className = resetting ? 'fa-solid fa-xmark' : 'fa-solid fa-eraser';
+    resetButton.setAttribute('aria-label', resetting ? 'Cancel reset' : 'Reset personal weights');
+    resetButton.setAttribute('aria-expanded', String(Boolean(resetting)));
+    resetButton.dataset.tooltip = resetting ? 'Cancel reset' : 'Start over';
     topicViewButton.hidden = !rawPieEntries().some(isTopicReference) || personalPieStart.isOpen;
     topicViewButton.disabled = state.loading || state.gestureOpen || wheelWeightCommitTimer !== null
         || state.mode === 'personal' && state.personalRankingDirty;
@@ -1276,6 +1288,7 @@ function inlineFallbackScope(primaryID) {
 }
 
 function isInlineFallbackEditing() {
+    if (isExpandedWeightView()) return false;
     const primary = selectedInlineFallbackPrimary();
     return Boolean(primary) && state.personalFallbackExpanded
         && fallbackEditorScope === inlineFallbackScope(primary.ID);
@@ -1306,8 +1319,11 @@ function finishInlineFallbackEditing() {
     fallbackEditorScope = null;
     deactivateInlineFallbackTarget();
     renderInlineFallback(); renderBenchmarks();
+    if (state.versionComposition) reloadBenchmarkPage();
     requestAnimationFrame(() => {
-        if (!inlineFallbackEdit.closest('[hidden], [inert]')) inlineFallbackEdit.focus({ preventScroll: true });
+        const edit = state.versionComposition
+            ? document.querySelector('#benchmark-settings .bp-fallback-picker-customize') : inlineFallbackEdit;
+        if (edit && !edit.closest('[hidden], [inert]')) edit.focus({ preventScroll: true });
     });
 }
 
@@ -1341,6 +1357,10 @@ function activateInlineFallbackTarget() {
 }
 
 function renderInlineFallback() {
+    if (!isInlineFallbackEditing() || state.versionComposition && !state.benchmarkSettingsExpanded) {
+        fallbackEditorScope = null;
+        deactivateInlineFallbackTarget();
+    }
     if (isExpandedWeightView()) {
         fallbackPicker.close({ restore: false }); benchmarkSettings.close();
         inlineFallback.hidden = true; pieCard.classList.remove('has-inline-fallback');
@@ -1360,9 +1380,9 @@ function renderInlineFallback() {
             control.removeAttribute('aria-haspopup'); control.setAttribute('aria-controls', 'benchmark-settings');
             control.setAttribute('aria-expanded', String(Boolean(primary) && state.benchmarkSettingsExpanded)); control.disabled = state.loading;
         }
-        inlineFallbackGuide.hidden = true;
-        inlineFallbackSaveError.hidden = !fallbackSaveFailed;
-        void setVisible(inlineFallbackSettings, false, { collapse: true });
+        const editing = Boolean(primary) && state.benchmarkSettingsExpanded && isInlineFallbackEditing();
+        renderFallbackConfiguration(primary, primary ? fallbackRuleFor(primary.ID) : null,
+            { personal: state.mode === 'personal', enabled: editing, editing });
         return;
     }
     benchmarkSettings.close();
@@ -1395,6 +1415,10 @@ function renderInlineFallback() {
         inlineFallbackToggle.removeAttribute('aria-expanded');
     }
     inlineFallbackToggle.disabled = state.loading;
+    renderFallbackConfiguration(primary, rule, { personal, enabled, editing });
+}
+
+function renderFallbackConfiguration(primary, rule, { personal, enabled, editing }) {
     inlineFallbackSaveError.hidden = !personal || !fallbackSaveFailed;
     inlineFallbackSaveRetry.disabled = state.saving || state.loading;
     inlineFallbackGuide.hidden = !primary;
@@ -1594,11 +1618,13 @@ function toggleBenchmarkSettings() {
     state.benchmarkSettingsExpanded = !state.benchmarkSettingsExpanded;
     writeWorkspacePreferences(state);
     renderInlineFallback();
+    renderBenchmarks();
+    if (!state.benchmarkSettingsExpanded) reloadBenchmarkPage();
 }
 
 inlineFallbackConfigurations.addEventListener('click', () => {
     if (isInlineFallbackEditing()) finishInlineFallbackEditing();
-    openInlineFallbackPicker();
+    if (!state.versionComposition) openInlineFallbackPicker();
 });
 
 inlineFallbackEdit.addEventListener('click', () => beginInlineFallbackEditing());
@@ -1726,6 +1752,7 @@ function renderBenchmarks() {
     const personalControlsActive = state.mode === 'personal' && !expanded;
     benchmarkCard?.classList.toggle('has-personal-controls', personalControlsActive);
     const fallbackTargetActive = isInlineFallbackTargetActive();
+    const fallbackVersions = fallbackTargetActive && Boolean(state.versionComposition);
     const fallbackPrimary = fallbackTargetActive ? selectedInlineFallbackPrimary() : null;
     const activeFallbackRule = fallbackPrimary ? fallbackRuleFor(fallbackPrimary.ID) : null;
     const activeFallbackConditionIDs = new Set((activeFallbackRule?.entries ?? []).map(entry => (
@@ -1772,7 +1799,8 @@ function renderBenchmarks() {
     const availableObjects = state.mode === 'personal'
         ? state.benchmarks.filter(object => !hiddenPersonalBenchmarkIDs.has(Number(object.ID)))
         : state.benchmarks;
-    const objects = expanded ? expandedBenchmarkRows() : (fallbackTargetActive ? availableObjects.filter(object => !isTopicReference(object)) : availableObjects).map(object => {
+    const objects = expanded ? expandedBenchmarkRows() : fallbackVersions ? fallbackVersionRows()
+        : (fallbackTargetActive ? availableObjects.filter(object => !isTopicReference(object)) : availableObjects).map(object => {
         if (!object.isBenchmarkGroup) return object;
         const entries = (state.mode === 'personal' ? state.personalEntries : state.publicEntries)
             .filter(entry => entry.benchmarkID === object.benchmarkID);
@@ -1808,7 +1836,7 @@ function renderBenchmarks() {
         } else if (!expanded) appendBenchmarkDiscoveryActions(empty);
     }
 
-    const groupPages = expanded ? null : currentBenchmarkPages();
+    const groupPages = expanded || fallbackVersions ? null : currentBenchmarkPages();
     const hasOtherVersions = (groupPages?.other.total ?? 0) > 0;
     const lowCoverageRows = document.createElement('div');
     lowCoverageRows.id = 'benchmark-low-rows';
@@ -1842,7 +1870,6 @@ function renderBenchmarks() {
             row.classList.add('after-personal-pinned');
             encounteredUnpinnedRow = true;
         }
-        row.classList.toggle('is-muted', state.workspaceView === 'focus' && state.mode === 'personal' && !selected);
         row.setAttribute('role', 'group');
         const accessibleName = object.isFamily
             ? [benchmarkAccessibleName(object), ...object.familyEntries.map(benchmarkAccessibleName)].join(' → ')
@@ -1861,7 +1888,7 @@ function renderBenchmarks() {
         let identity = document.createElement('span');
         identity.className = 'bp-benchmark-identity';
         const name = createBenchmarkInformationLink(object, { getURL: getBenchmarkMemberURL,
-            onInspect: onBenchmarkInspection, className: 'bp-benchmark-name' });
+            onInspect: onBenchmarkInspection, className: 'bp-benchmark-name', showVersion: fallbackTargetActive });
         identity.append(name);
         const scoreCount = isTopicReference(object) ? referenceCoverage.create(object)
             : createEvidenceCount(object.scoreCount, { modelCount: object.isBenchmarkGroup ? undefined : object.scoredModelCount });
@@ -1968,7 +1995,7 @@ function renderBenchmarks() {
     objects.forEach(object => {
         const entry = document.createElement('div'); entry.className = 'bp-benchmark-entry';
         entry.append(createRow(object));
-        const group = expanded ? 'primary' : currentBenchmarkGroup(object);
+        const group = expanded || fallbackVersions ? 'primary' : currentBenchmarkGroup(object);
         if (group === 'lowCoverage') lowCoverageRows.append(entry);
         else if (group === 'other') otherRows.append(entry);
         else benchmarkRows.append(entry);
@@ -3012,7 +3039,11 @@ function startPersonalPie(entries, isCurrent) {
 }
 
 personalPieCreate.addEventListener('click', () => { void openPersonalStart(personalPieCreate); });
-resetButton.addEventListener('click', () => { void openPersonalStart(resetButton, true); });
+resetButton.addEventListener('click', () => {
+    if (personalPieStart.isResetting) {
+        if (!personalPieStart.isApplying) personalPieStart.close();
+    } else void openPersonalStart(resetButton, true);
+});
 topicViewButton.addEventListener('click', async () => {
     if (topicViewButton.disabled) return;
     const scope = workspaceContextFingerprint(), mode = state.mode;
@@ -3334,7 +3365,7 @@ document.addEventListener('visibilitychange', () => {
 benchmarkSearch.addEventListener('input', () => {
     hiddenPersonalBenchmarkIDs.clear();
     window.clearTimeout(benchmarkSearchTimer);
-    if (isExpandedWeightView()) { renderBenchmarks(); return; }
+    if (isExpandedWeightView() || state.versionComposition && isInlineFallbackTargetActive()) { renderBenchmarks(); return; }
     if (!state.rankingPagination || state.loading || workspaceLoadFailed) return;
     state.rankingPageSequence.benchmarks += 1;
     state.rankingPageLoading.benchmarks = true;

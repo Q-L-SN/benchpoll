@@ -26,12 +26,6 @@
 .bp-benchmark-settings-fallback { flex: 1; padding-top: 12px; border-top: 1px solid var(--bp-line); }
 .bp-benchmark-settings-placeholder { margin: auto; padding: 16px; text-align: center; color: var(--bp-muted); font-size: 13px; }
 .bp-benchmark-settings-editor { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; }
-.bp-custom-fallback-editor ol { padding-left: 24px; font-size: 13px; }
-.bp-custom-fallback-editor li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 8px 0; }
-.bp-custom-fallback-editor li > span { flex: 1 1 140px; min-width: 0; overflow-wrap: anywhere; }
-.bp-custom-fallback-editor input { box-sizing: border-box; width: 100%; padding: 10px; border: 1px solid var(--bp-line-strong); border-radius: 6px; font: inherit; }
-.bp-custom-fallback-results { display: grid; max-height: 200px; overflow: auto; margin: 8px 0 16px; }
-.bp-custom-fallback-results button { justify-content: flex-start; text-align: left; white-space: normal; }
 @media (max-width: 760px) {
     .bp-benchmark-settings-body { gap: 8px; }
     .bp-version-choices { max-height: min(20dvh, 160px); gap: 6px; }

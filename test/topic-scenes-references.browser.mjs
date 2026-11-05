@@ -327,17 +327,26 @@ test('guest references use read-only previews and retain independent scene draft
     assert.deepEqual(fixture.reads.at(-1).contextValues, { scene: '5402' });
 });
 
-for (const width of [390, 1440]) test(`discussion scenes share the workspace selector and all-scenes preserves drafts at ${width}`, async t => {
+for (const width of [390, 1440]) test(`discussion scenes share the workspace selector and all-scenes preserves drafts at ${width} ${process.env.BP_TEST_BUILT === '1' ? 'built' : 'source'}`, async t => {
     const app = await startConfigSidebarPreview(), browser = await chromium.launch({ headless: true });
     const page = await browser.newPage({ viewport: { width, height: 900 }, reducedMotion: 'no-preference' });
     const errors = []; page.on('pageerror', error => errors.push(error.message));
     t.after(async () => { await browser.close(); await app.close(); assert.deepEqual(errors, []); });
     const fixture = await mountWorkspaceFixture(page, app);
+    if (process.env.BP_TEST_BUILT === '1') await page.route(url => url.origin === app.url && url.pathname === '/intelligence/vector-images',
+        async route => route.fulfill({ contentType: 'text/html', body: await readFile(new URL('../private/home-built.html', import.meta.url), 'utf8') }));
     await page.goto(app.url + '/intelligence/vector-images?discussion=1&categoryID=54');
     await page.waitForSelector('#discussion-context [data-scene-id="5402"][aria-selected="true"]');
     assert.ok(fixture.discussions.every(body => body.contextValues.scene === '5402'));
     assert.equal(await page.locator('#posting-context').textContent(), 'Vector images');
     await page.waitForSelector('#discussion-context[data-ui-ready="true"]');
+    const allButton = page.locator('#discussion-all-scenes');
+    const placement = await page.locator('#context-filter-label').evaluate(root => ({
+        allRight: root.querySelector('#discussion-all-scenes').getBoundingClientRect().right,
+        scenesLeft: root.querySelector('#discussion-context').getBoundingClientRect().left
+    }));
+    assert.ok(placement.allRight <= placement.scenesLeft, `All precedes the scene slider: ${JSON.stringify(placement)}`);
+    const allBackground = await allButton.evaluate(node => getComputedStyle(node).backgroundColor);
     const tabStyle = selector => page.locator(selector).evaluate(node => {
         const css = getComputedStyle(node);
         return { color: css.color, background: css.backgroundColor, fontSize: css.fontSize, fontWeight: css.fontWeight,
@@ -359,11 +368,19 @@ for (const width of [390, 1440]) test(`discussion scenes share the workspace sel
     assert.equal(fixture.discussions.at(-1).contextValues.scene, '5402');
     assert.equal(await page.locator('#discussion-context button:enabled').count(), 0);
     assert.equal(await page.locator('#discussion-context').evaluate(node => getComputedStyle(node).opacity), '0.5');
+    await allButton.evaluate(node => Promise.allSettled(node.getAnimations().map(animation => animation.finished)));
+    const selectedAll = await allButton.evaluate(node => ({ background: getComputedStyle(node).backgroundColor,
+        color: getComputedStyle(node).color, weight: getComputedStyle(node).fontWeight }));
+    assert.notEqual(selectedAll.background, allBackground);
+    assert.equal(selectedAll.color, 'rgb(255, 255, 255)');
+    assert.equal(selectedAll.weight, '700');
     assert.equal(await page.locator('#discussion-text').inputValue(), 'Vector-only draft');
     await page.screenshot({ path: `${output}/discussion-all-scenes-${width}.png` });
     await page.locator('#discussion-all-scenes').click();
     await page.waitForFunction(() => document.querySelector('#discussion-feed').getAttribute('aria-busy') === 'false');
     assert.equal(fixture.discussions.at(-1).allScenes, false);
+    await allButton.evaluate(node => Promise.allSettled(node.getAnimations().map(animation => animation.finished)));
+    assert.equal(await allButton.evaluate(node => getComputedStyle(node).backgroundColor), allBackground);
     assert.equal(await page.locator('#discussion-context [data-scene-id="5402"]').getAttribute('aria-selected'), 'true');
     await page.locator('#discussion-text').fill('');
     if (width <= 760) await page.locator('.bp-mobile-panels [data-mobile-panel="mix"]').click();

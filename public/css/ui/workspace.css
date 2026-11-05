@@ -822,10 +822,6 @@ g[data-object-id]:hover .bp-pie-slice-lift  {
     background: var(--bp-purple-soft);
 }
 
-.bp-benchmark-row.is-muted  {
-    opacity: .55;
-}
-
 .bp-benchmark-row.is-personal-pinned  {
     background: var(--bp-hover);
 }

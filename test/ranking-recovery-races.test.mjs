@@ -124,7 +124,7 @@ async function createHarness(version = before ? 'before' : 'current') {
         renderModeState() {}, updateUndoState() {}, updateLastUpdated() {}, renderInlineFallback() {}, revealBenchmarkRow() {}, loadVisibleBenchmarkPage() {},
         waitForGestureToSettle: async () => {}, portableFamilyEntry: entry => ({ conditionID: entry.conditionID }),
         FALLBACK_CONFIGURATION_VERSION, FALLBACK_RULE_MODE: 'ordered', WORKSPACE_LOAD_RETRY_DELAYS_MS: [], invalidSavedComparison: () => false,
-        undoButton: { disabled: false }, redoButton: { disabled: false, hidden: true }, resetButton: { disabled: false, hidden: true },
+        undoButton: { disabled: false }, redoButton: { disabled: false, hidden: true }, resetButton: new Element('button'),
         personalPieStart: { isOpen: false },
         topicViewButton: new Element('button'), isTopicReference: entry => entry.conditionID < 0,
         setStatus(message) { state.statusMessage = message; }, renderLoadError(error) { loadErrors.push(error); state.loading = false; },

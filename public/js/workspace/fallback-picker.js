@@ -113,12 +113,11 @@ export function createFallbackPicker({ catalogue, getScope, getPrimary, getCompo
         const choices = fallbackPickerChoices(primary, { catalogue: catalogue.view(primary), composition: getComposition(primary.ID),
             current: getCurrent(primary.ID), action: intent.action });
         if (intent.action !== 'replace') return choices;
-        // Keep cards in place, including a custom order after its selection is cleared.
+        // Map insertion order keeps this visit stable through saves and later pages,
+        // including a custom order after its selection is cleared.
         for (const choice of choices) sessionChoices.set(choice.key, { ...choice,
-            initialShare: sessionChoices.get(choice.key)?.initialShare ?? choice.shareBasisPoints ?? 0,
             selectionSource: sessionChoices.get(choice.key)?.selectionSource === 'custom' ? 'custom' : choice.selectionSource });
-        return [...sessionChoices.values()].sort((a, b) => Number(b.key === intent.openingChoice) - Number(a.key === intent.openingChoice)
-            || b.initialShare - a.initialShare);
+        return [...sessionChoices.values()];
     }
     function updateSelection() {
         const primary = validPrimary();
@@ -258,8 +257,7 @@ export function createFallbackPicker({ catalogue, getScope, getPrimary, getCompo
 
     function open(primary, { action = 'add', getReturnFocus } = {}) {
         returnFocus = getReturnFocus ?? (() => document.getElementById('inline-fallback-configurations'));
-        const current = getCurrent(primary.ID);
-        intent = { primary, action, scope: getScope(), openingChoice: current ? familyKey(primary.ID, current.entries) : null };
+        intent = { primary, action, scope: getScope() };
         sessionChoices.clear();
         renderedKey = ''; applying = false; applyError = '';
         dialog.dataset.conditionId = String(primary.ID);

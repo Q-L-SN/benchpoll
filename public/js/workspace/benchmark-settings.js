@@ -12,7 +12,7 @@ const node = (tag, className = '', text) => {
 const versionName = version => version.conditionName?.toLowerCase() === 'default' ? 'Default evaluation' : version.conditionName;
 const shareLabel = points => points > 0 && points < 1 ? '<0.01%' : `${Number(((points ?? 0) / 100).toFixed(2))}%`;
 
-export function createBenchmarkSettings({ host, getScope, getData, onVersion, onContribute, onCustom, fallbackPickerOptions }) {
+export function createBenchmarkSettings({ host, getScope, getData, onVersion, onContribute, onEdit, editor, fallbackPickerOptions }) {
     const panel = host;
     const title = node('h3', 'bp-benchmark-settings-title');
     const body = node('div', 'bp-benchmark-settings-body');
@@ -36,19 +36,23 @@ export function createBenchmarkSettings({ host, getScope, getData, onVersion, on
     const actions = node('div', 'bp-benchmark-settings-actions');
     const pickerActions = node('div'); actions.append(pickerActions);
     panel.append(title, body, actions);
-    let intent = null, signature = '', customEntries = null, customPrimaryID = null, pickerKey = '';
+    const editorHome = editor.parentElement, editorNext = editor.nextSibling;
+    let intent = null, signature = '', pickerKey = '';
+    const versionOrder = new Map();
     const picker = createFallbackPicker({ ...fallbackPickerOptions, host: pickerHost, actionsHost: pickerActions,
         onInspectVersion(event) { pickerKey = ''; fallbackPickerOptions.onInspectVersion?.(event); refresh(); },
         onCustomize(primary) {
             const current = data();
             if (!current?.editable) return false;
-            customEntries = structuredClone(current.rule?.entries ?? []); customPrimaryID = primary.conditionID ?? primary.ID;
+            if (!onEdit(primary)) return false;
             signature = ''; refresh(); return true;
         }
     });
     function close() {
         picker.close({ restore: false }); pickerKey = '';
-        panel.hidden = true; intent = null; signature = ''; customEntries = null; customPrimaryID = null;
+        versionOrder.clear();
+        if (editor.parentElement === editorHost) editorHome.insertBefore(editor, editorNext);
+        panel.hidden = true; intent = null; signature = '';
     }
     contribute.addEventListener('click', async () => {
         const current = data(); if (!current || current.busy) return;
@@ -72,7 +76,16 @@ export function createBenchmarkSettings({ host, getScope, getData, onVersion, on
     function choose(conditionID) {
         const current = data();
         if (!current?.editable || !onVersion(current.group, conditionID)) return;
-        customEntries = null; signature = ''; refresh();
+        signature = ''; refresh();
+    }
+    function orderedVersions(versions) {
+        const ordered = [...versions].sort(versionChoiceOrder);
+        // Keep this visit's positions while shares and selection update after saves.
+        // Newly available versions append; reopening starts with a fresh ranking.
+        for (const version of ordered) {
+            if (!versionOrder.has(version.conditionID)) versionOrder.set(version.conditionID, versionOrder.size);
+        }
+        return ordered.sort((a, b) => versionOrder.get(a.conditionID) - versionOrder.get(b.conditionID));
     }
     function refresh(primary, expanded) {
         if (primary !== undefined) {
@@ -81,9 +94,8 @@ export function createBenchmarkSettings({ host, getScope, getData, onVersion, on
         }
         const current = data();
         if (!current) { close(); return; }
-        const { group, entries, rule, editable } = current;
+        const { group, entries, rule, editable, editing } = current;
         const selected = entries.length === 1 && entries[0].followCommunityVersion !== true ? entries[0].conditionID : null;
-        if (customEntries && selected !== customPrimaryID) customEntries = null;
         title.textContent = group.name;
         status.textContent = entries.length > 1 ? 'Choose a version to replace your saved mix.'
             : selected === null ? current.isPrivate ? 'Using the default version and fallback.' : 'Versions and fallback follow community.'
@@ -91,12 +103,12 @@ export function createBenchmarkSettings({ host, getScope, getData, onVersion, on
                     : 'Select an option again to deselect it.';
         status.dataset.selection = selected === null ? 'community' : !rule ? 'version' : 'manual';
         contribute.hidden = editable || current.busy; contribute.disabled = current.busy;
-        const nextSignature = JSON.stringify([group, entries, rule, editable, customEntries]);
+        const nextSignature = JSON.stringify([group, entries, rule, editable, editing]);
         if (signature !== nextSignature) {
             const focusKey = body.contains(document.activeElement) ? document.activeElement.dataset.focusKey : null;
             const scroll = list.scrollTop;
             signature = nextSignature;
-            list.replaceChildren(...[...group.versions].sort(versionChoiceOrder).map(version => {
+            list.replaceChildren(...orderedVersions(group.versions).map(version => {
                 const choice = node('button', 'bp-version-choice'); choice.type = 'button';
                 choice.dataset.conditionId = String(version.conditionID); choice.dataset.focusKey = `version-${version.conditionID}`;
                 choice.disabled = !editable; choice.setAttribute('aria-pressed', String(selected === version.conditionID));
@@ -111,14 +123,13 @@ export function createBenchmarkSettings({ host, getScope, getData, onVersion, on
                 return choice;
             }));
             list.scrollTop = scroll;
-            editorHost.replaceChildren();
-            if (customEntries) renderCustom(editorHost, current, group.versions.find(version => version.conditionID === selected));
             if (focusKey) [...body.querySelectorAll('[data-focus-key]')].find(item => item.dataset.focusKey === focusKey)?.focus({ preventScroll: true });
         }
         const selectedVersion = group.versions.find(version => version.conditionID === selected);
         placeholder.hidden = Boolean(selectedVersion);
-        editorHost.hidden = !customEntries;
-        if (!selectedVersion || customEntries) { picker.close({ restore: false }); pickerKey = ''; return; }
+        editorHost.hidden = !editing;
+        if (editing && editor.parentElement !== editorHost) editorHost.append(editor);
+        if (!selectedVersion || editing) { picker.close({ restore: false }); pickerKey = ''; return; }
         const action = editable || current.busy ? 'replace' : 'view';
         const key = `${selectedVersion.conditionID}:${action}`;
         if (pickerKey !== key) {
@@ -126,57 +137,11 @@ export function createBenchmarkSettings({ host, getScope, getData, onVersion, on
             picker.open({ ...selectedVersion, ID: selectedVersion.conditionID }, { action });
         } else picker.refresh();
     }
-    function renderCustom(host, current, primary) {
-        const editor = node('div', 'bp-custom-fallback-editor');
-        const back = createAction({ label: 'Back to configurations', icon: 'fa-solid fa-arrow-left', variant: 'quiet' });
-        back.addEventListener('click', () => { customEntries = null; signature = ''; refresh(); });
-        editor.append(back, node('p', 'bp-benchmark-settings-hint', 'Try these backups in order after the selected version.'));
-        const ordered = node('ol', 'bp-fallback-chain');
-        ordered.append(node('li', '', `${current.group.name} · ${versionName(primary)}`));
-        customEntries.forEach((entry, index) => {
-            const item = node('li'); item.append(node('span', '', `${entry.name} · ${versionName(entry)}`));
-            for (const [label, delta, icon] of [['Move up', -1, 'arrow-up'], ['Move down', 1, 'arrow-down'], ['Remove', 0, 'xmark']]) {
-                const action = createAction({ label, icon: `fa-solid fa-${icon}`, iconOnly: true, variant: 'quiet' });
-                action.disabled = !current.editable || delta < 0 && index === 0 || delta > 0 && index === customEntries.length - 1;
-                action.addEventListener('click', () => {
-                    if (!data()?.editable) return;
-                    if (!delta) customEntries.splice(index, 1);
-                    else [customEntries[index], customEntries[index + delta]] = [customEntries[index + delta], customEntries[index]];
-                    signature = ''; refresh();
-                });
-                item.append(action);
-            }
-            ordered.append(item);
-        });
-        const search = node('input'); search.type = 'search'; search.placeholder = 'Find a backup benchmark or version';
-        search.setAttribute('aria-label', 'Find fallback versions');
-        const results = node('div', 'bp-custom-fallback-results');
-        function searchVersions() {
-            const query = search.value.trim().toLowerCase();
-            const candidates = current.allVersions.filter(version => version.conditionID !== primary.conditionID
-                && !customEntries.some(entry => entry.conditionID === version.conditionID)
-                && `${version.name} ${version.conditionName}`.toLowerCase().includes(query)).slice(0, 30);
-            results.replaceChildren(...candidates.map(version => {
-                const add = createAction({ label: `${version.name} · ${versionName(version)}`, icon: 'fa-solid fa-plus', variant: 'quiet' });
-                add.disabled = !current.editable;
-                add.addEventListener('click', () => { if (!data()?.editable) return; customEntries.push({ ...version }); signature = ''; refresh(); });
-                return add;
-            }));
-        }
-        search.addEventListener('input', searchVersions); searchVersions();
-        const save = createAction({ label: 'Use this fallback order', variant: 'primary' }); save.disabled = !current.editable;
-        save.addEventListener('click', () => {
-            if (!data()?.editable || !onCustom(primary, customEntries)) return;
-            customEntries = null; signature = ''; refresh();
-        });
-        editor.append(ordered, search, results, save); host.append(editor);
-    }
     return { refresh, close, open(primary, { custom = false } = {}) {
         retarget(primary); signature = '';
         const current = data();
         if (!current) { close(); return; }
-        customEntries = custom ? structuredClone(current.rule?.entries ?? []) : null;
-        customPrimaryID = custom ? primary.conditionID ?? primary.ID : null;
+        if (custom && (!current.editable || !onEdit(primary))) return false;
         refresh(); return true;
     } };
 }

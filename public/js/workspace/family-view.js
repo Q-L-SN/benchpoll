@@ -131,7 +131,7 @@ export function createFamilyView({ container, onMove, onRemove, getMemberURL, on
             const row = document.createElement('li'); row.className = 'bp-family-member bp-fallback-chain-step';
             row.dataset.conditionId = String(key);
             const identity = document.createElement('span'); identity.className = 'bp-family-member-name';
-            appendBenchmarkIdentity(identity, entry);
+            appendBenchmarkIdentity(identity, entry, { showVersion: true });
             if (editing) {
                 const handle = iconButton('grip-vertical', 'Drag to reorder this fallback', () => {});
                 handle.classList.add('bp-family-drag'); handle.disabled = disabled; handle.dataset.familyFocus = `drag-${key}`;

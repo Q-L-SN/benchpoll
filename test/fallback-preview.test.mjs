@@ -13,6 +13,7 @@ test('fallback editing is temporary, scoped to the account, context and selected
     let focused = 0, renders = 0, targetClears = 0;
     let rule = null, saves = 0;
     const context = vm.createContext({ state, fallbackEditorScope: null, isTopicReference,
+        isExpandedWeightView: () => state.weightView === 'expanded',
         selectedInlineFallbackPrimary: () => state.mode === 'personal' && state.personalEntries.some(entry => entry.conditionID === state.selectedObjectID)
             ? { ID: state.selectedObjectID } : null,
         workspaceContextFingerprint: () => String(state.categoryID),
@@ -31,6 +32,8 @@ test('fallback editing is temporary, scoped to the account, context and selected
     assert.equal(context.isInlineFallbackEditing(), false, 'Persisted expansion is not editing permission');
     assert.equal(context.beginInlineFallbackEditing(primary), true);
     assert.equal(context.isInlineFallbackEditing(), true);
+    state.weightView = 'expanded'; assert.equal(context.isInlineFallbackEditing(), false);
+    state.weightView = 'topics'; assert.equal(context.isInlineFallbackEditing(), true);
     assert.deepEqual(structuredClone(rule), { primaryConditionID: 1, entries: [], selectionSource: 'custom' });
     assert.equal(saves, 1, 'An empty custom choice immediately opts out of community following');
     assert.deepEqual(state.personalEntries, before);
@@ -74,7 +77,7 @@ test('preview and Customize reuse existing UI without nested action controls or 
     assert.match(preview, /createPersonalList\(\{ primary, entries, editing: false \}\)/);
     assert.doesNotMatch(preview, /fa-chevron-right|bp-fallback-preview-connector/);
     const list = view.slice(view.indexOf('function createPersonalList('), view.indexOf('function renderPersonal('));
-    assert.match(list, /appendBenchmarkIdentity\(identity, entry\)/);
+    assert.match(list, /appendBenchmarkIdentity\(identity, entry, \{ showVersion: true \}\)/);
     assert.doesNotMatch(list, /informationLink\(entry\)/);
     assert.match(workspace, /inlineFallbackEntrance\.textContent = benchmarkAccessibleName\(primary\)/);
     assert.doesNotMatch(list, /bp-family-order/);

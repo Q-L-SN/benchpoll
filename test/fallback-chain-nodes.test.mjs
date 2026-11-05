@@ -25,7 +25,7 @@ test('fallback chains have only explicit identities and retain edit controls', a
     const picker = await source('public/js/workspace/fallback-picker.js');
     assert.doesNotMatch(family + picker, /createAutomaticVersionButton|isOtherVersions|onInspectGroup/);
     assert.match(family, /row\.append\(handle, identity, actions\)/);
-    assert.match(family, /appendBenchmarkIdentity\(identity, entry\)/);
+    assert.match(family, /appendBenchmarkIdentity\(identity, entry, \{ showVersion: true \}\)/);
 });
 
 test('the chain uses neutral continuous lines and hollow nodes without per-step frames', async () => {

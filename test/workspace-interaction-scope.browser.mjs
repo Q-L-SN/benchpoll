@@ -118,6 +118,8 @@ for (const [engine, width] of [[chromium, 1440], [chromium, 320], [webkit, 390]]
         await page.locator('#benchmark-scores-back').focus(); await page.keyboard.press('Escape');
         const tile = page.locator('#weight-pie [data-object-id="1"]');
         await tile.click();
+        assert.ok(await page.locator('.bp-benchmark-row').evaluateAll(rows => rows.every(row => getComputedStyle(row).opacity === '1')),
+            'Selecting an evaluation item does not fade the other rows');
         const hint = page.locator('#pie-adjustment-hint'); await hint.waitFor();
         assert.match(await hint.textContent(), width < 760 ? /Drag up or down on the chart/ : /Scroll on the chart/);
         const geometry = await hint.evaluate(node => ({ bottom: node.getBoundingClientRect().bottom,

@@ -5,7 +5,7 @@ import { chromium, webkit } from 'playwright';
 import { startPreview } from '../scripts/frontend/server.mjs';
 import { weightedEntries } from '../scripts/frontend/fixtures.mjs';
 
-const output = 'artifacts/community-versions-20261103';
+const output = process.env.BP_COMMUNITY_ARTIFACTS ?? '/tmp/benchpoll-community-versions';
 const built = process.env.BP_TEST_BUILT === '1';
 await mkdir(output, { recursive: true });
 for (const [engine, width] of built ? [[chromium, 390]] : [[chromium, 1440], [chromium, 390], [webkit, 390], [chromium, 320]]) {
@@ -74,18 +74,33 @@ for (const [engine, width] of built ? [[chromium, 390]] : [[chromium, 1440], [ch
         await page.locator('#workspace-undo').click();
         await page.locator('#inline-fallback-toggle').click(); await settings.waitFor();
         assert.equal(await settings.locator('.bp-version-choice[data-condition-id="1"]').getAttribute('aria-pressed'), 'true');
-        if (width === 1440) {
+        {
             await settings.getByRole('button', { name: 'Create my own', exact: true }).click();
-            await settings.locator('.bp-custom-fallback-editor').waitFor();
+            await settings.locator('#inline-fallback-editor').waitFor();
             await chooser.waitFor({ state: 'hidden' });
-            await settings.getByRole('searchbox', { name: 'Find fallback versions' }).fill('Advanced reasoning');
-            await settings.locator('.bp-custom-fallback-results button').click();
-            await settings.getByRole('button', { name: 'Use this fallback order', exact: true }).click();
+            assert.equal(await settings.locator('.bp-custom-fallback-editor').count(), 0);
+            const addBackup = settings.locator('#inline-fallback-add-benchmark');
+            const shape = await addBackup.evaluate(node => ({ button: node.getBoundingClientRect().toJSON(),
+                frame: node.closest('.bp-inline-fallback-frame').getBoundingClientRect().toJSON() }));
+            assert.ok(shape.button.height >= 44 && Math.abs(shape.button.width - shape.frame.width) < 2, JSON.stringify(shape));
+            await addBackup.click();
+            await page.locator('#benchmark-search').fill('Advanced reasoning');
+            await page.locator('.bp-benchmark-row[data-condition-id="2"] .bp-benchmark-add').click();
+            await page.locator('#benchmark-search').fill('Code generation');
+            await page.locator('.bp-benchmark-row[data-condition-id="3"] .bp-benchmark-add').click();
+            await page.locator('#benchmark-search').fill('Extended');
+            assert.equal(await page.locator('.bp-benchmark-row[data-condition-id="901"] .bp-benchmark-condition').innerText(), 'Extended');
+            await page.locator('.bp-benchmark-row[data-condition-id="901"] .bp-benchmark-add').click();
+            await settings.locator('[data-family-focus^="up-"]').nth(1).click();
+            await settings.locator('#inline-fallback-done').click();
             await settings.getByRole('button', { name: 'Edit my order', exact: true }).click();
-            assert.equal(await settings.locator('.bp-custom-fallback-editor li').count(), 2);
-            assert.match(await settings.locator('.bp-custom-fallback-editor li').nth(1).textContent(), /Advanced reasoning/);
-            await settings.getByRole('button', { name: 'Remove', exact: true }).click();
-            await settings.getByRole('button', { name: 'Use this fallback order', exact: true }).click();
+            assert.equal(await settings.locator('#inline-fallback-chart .bp-family-member').count(), 3);
+            assert.match(await settings.locator('#inline-fallback-chart .bp-family-member').first().textContent(), /Code generation/);
+            assert.match(await settings.locator('#inline-fallback-chart').textContent(), /Advanced reasoning/);
+            await addBackup.scrollIntoViewIfNeeded();
+            await page.screenshot({ path: `${output}/${engine.name()}-${width}${built ? '-built' : ''}-custom-fallback.png` });
+            for (let i = 0; i < 3; i++) await settings.locator('[data-family-focus^="remove-"]').first().click();
+            await settings.locator('#inline-fallback-done').click();
             await chooser.locator('[data-family-key="[1]"] .bp-fallback-picker-card-toggle[aria-pressed="true"]').click();
             assert.match(await settings.locator('.bp-benchmark-settings-status').textContent(), /Fallback follows community/);
             assert.equal(await settings.locator('.bp-version-choice[data-condition-id="1"]').getAttribute('aria-pressed'), 'true');
