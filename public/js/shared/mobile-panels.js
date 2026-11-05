@@ -12,7 +12,6 @@ export function initializeMobilePanels(workspace) {
     let lastAnnounced = null, previewingDiscussion = false;
     let frame = null, settleTimer = null;
     const identity = workspace.querySelector('.bp-context-identity');
-    const adjustmentNotice = workspace.querySelector('#pie-adjustment-status');
     const progress = () => enabled() && pager.clientWidth ? Math.max(0, Math.min(names.length - 1, pager.scrollLeft / pager.clientWidth)) : names.indexOf(current);
 
     function paint() {
@@ -100,15 +99,6 @@ export function initializeMobilePanels(workspace) {
     sizing.observe(pager); sizing.observe(dock);
     if (identity) sizing.observe(identity);
     mobile.addEventListener('change', resize);
-
-    // The fixed notice must not cover the last evaluation item's controls.
-    if (adjustmentNotice) {
-        const reserveNotice = () => workspace.style.setProperty('--bp-mobile-notice-height',
-            `${adjustmentNotice.hidden ? 0 : Math.ceil(adjustmentNotice.getBoundingClientRect().height)}px`);
-        new window.ResizeObserver(reserveNotice).observe(adjustmentNotice);
-        new MutationObserver(reserveNotice).observe(adjustmentNotice, { attributes: true, attributeFilter: ['hidden'] });
-        reserveNotice();
-    }
 
     const toolbar = workspace.querySelector('.bp-model-controls');
     const updateEdges = () => {

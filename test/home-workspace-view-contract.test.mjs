@@ -76,28 +76,6 @@ test('category creation actions are absent while legal links stay in the sidebar
     assert.match(html, /https:\/\/x\.com\/BenchPoll/);
 });
 
-test('personal benchmark focus captures wheel input only in the pie and benchmark workspace', () => {
-    assert.match(workspace, /function isPersonalBenchmarkFocus\(\)/);
-    assert.match(workspace, /document\.addEventListener\('wheel'/);
-    assert.match(workspace, /isWeightWheelTarget\(event\.target\)/);
-    assert.match(workspace, /queueSelectedWeightWheel\(event\)/);
-    assert.match(workspace, /renderSelectedWeightHeading\(\)/);
-    assert.doesNotMatch(workspace, /Scroll to adjust \$\{focusedName\}/);
-    assert.doesNotMatch(workspace, /Scroll anywhere outside the sidebar/);
-    assert.doesNotMatch(workspace, /These weights belong only to the selected category and context/);
-});
-
-test('focused weight adjustment leaves the sidebar, context controls, and model ranking scrollable', () => {
-    const wheelListener = workspace.slice(
-        workspace.indexOf("document.addEventListener('wheel'"),
-        workspace.indexOf("pieSvg.addEventListener('wheel'")
-    );
-    assert.match(wheelListener, /isWeightWheelTarget\(event\.target\)/);
-    assert.doesNotMatch(wheelListener, /preventDefault\(\)/);
-    assert.doesNotMatch(wheelListener, /bp-sidebar|bp-context-row|bp-model-card/);
-    assert.match(wheelListener, /queueSelectedWeightWheel\(event\)/);
-});
-
 test('benchmark names inspect information while the rest of a row selects its weight target', () => {
     assert.match(workspace, /const name = createBenchmarkInformationLink\(object/);
     assert.match(workspace, /onInspect: onBenchmarkInspection, className: 'bp-benchmark-name'/);

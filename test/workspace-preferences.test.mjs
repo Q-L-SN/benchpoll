@@ -4,7 +4,7 @@ import { readWorkspacePreferences, writeWorkspacePreferences } from '../public/j
 import { createWorkspaceState } from '../public/js/workspace/state.js';
 
 const storageKey = 'benchpoll-workspace-preferences-v1';
-const defaults = { mode: 'public', personalFallbackExpanded: false, scoreMode: 'available' };
+const defaults = { mode: 'public', personalFallbackExpanded: false, benchmarkSettingsExpanded: false, scoreMode: 'available' };
 
 function memoryStorage(initialValue = null) {
     const values = new Map(initialValue === null ? [] : [[storageKey, initialValue]]);
@@ -53,6 +53,16 @@ test('workspace preferences preserve personal fallback expansion while switching
     assert.deepEqual(readWorkspacePreferences(storage), {
         ...preferences, mode: 'public'
     });
+});
+
+test('benchmark configuration expansion survives navigation and mode changes without depending on the selected benchmark', () => {
+    const storage = memoryStorage();
+    for (const expanded of [true, false]) for (const mode of ['personal', 'public']) {
+        assert.equal(writeWorkspacePreferences({ ...defaults, mode, benchmarkSettingsExpanded: expanded }, storage), true);
+        const preferences = readWorkspacePreferences(storage);
+        assert.equal(preferences.benchmarkSettingsExpanded, expanded);
+        assert.equal(preferences.mode, mode);
+    }
 });
 
 test('absent, malformed, and non-object stored values use the default preferences', () => {
@@ -107,7 +117,7 @@ test('invalid modes and non-boolean visibility values never become active prefer
     }
     for (const invalidValue of ['true', 'false', 0, 1, null, [], {}]) {
         const storage = memoryStorage(JSON.stringify({
-            mode: 'personal', publicFallbackVisible: invalidValue, personalFallbackExpanded: invalidValue, fallbackVisible: { public: invalidValue }
+            mode: 'personal', publicFallbackVisible: invalidValue, personalFallbackExpanded: invalidValue, benchmarkSettingsExpanded: invalidValue, fallbackVisible: { public: invalidValue }
         }));
         assert.deepEqual(readWorkspacePreferences(storage), {
             ...defaults, mode: 'personal'

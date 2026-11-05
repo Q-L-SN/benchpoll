@@ -524,51 +524,10 @@ body .bp-pie-start-choices > .bp-ui-action[data-ui-variant] { width: 100%; min-h
 .bp-public-count-group { display: inline-flex; align-items: center; gap: 7px; }
 .bp-public-pie-info { position: static; }
 
-.bp-pie-adjustment-status {
-    position: fixed;
-    z-index: 60;
-    left: 0;
-    right: 0;
-    bottom: calc(18px + env(safe-area-inset-bottom));
-    display: block;
-    box-sizing: border-box;
-    width: min(400px, calc(100vw - 24px));
-    margin-inline: auto;
-    padding: 0;
-    border: 1px solid #41464f;
-    border-radius: 8px;
-    background: #282d35;
-    color: #fff;
-    box-shadow: 0 8px 24px rgba(20, 24, 30, .18);
-}
-.bp-pie-adjustment-status[hidden] { display: none; }
+.bp-pie-adjustment-hint { display: flex; align-items: center; gap: 8px; margin: 12px 16px 0; padding: 10px 12px; border-radius: 4px; background: var(--bp-fill); color: #fff; font-size: 12px; line-height: 1.5; }
+.bp-pie-adjustment-hint > i { flex: 0 0 auto; }
+.bp-pie-adjustment-hint[hidden] { display: none; }
 .bp-weight-wheel-target { cursor: url('/assets/cursors/weight-scroll.svg') 16 16, ns-resize !important; }
-.bp-pie-adjustment-dismiss {
-    display: flex;
-    align-items: flex-start;
-    gap: 12px;
-    width: 100%;
-    min-width: 0;
-    padding: 13px 16px;
-    border: 0;
-    border-radius: inherit;
-    background: transparent;
-    color: inherit;
-    font: inherit;
-    text-align: left;
-    cursor: pointer;
-    transition: background-color 160ms ease;
-}
-.bp-pie-adjustment-dismiss:hover:not(:disabled) { background: rgba(255, 255, 255, .06); }
-.bp-pie-adjustment-dismiss:focus-visible { outline: 2px solid #fff; outline-offset: -4px; }
-.bp-pie-adjustment-dismiss:disabled { cursor: default; }
-.bp-pie-adjustment-dismiss > i { flex: 0 0 16px; padding-top: 2px; color: #d7dce4; font-size: 16px; }
-.bp-pie-adjustment-copy { min-width: 0; flex: 1; }
-.bp-pie-adjustment-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
-.bp-pie-adjustment-heading > span { color: #c4cbd6; font-size: 11px; font-weight: 500; }
-.bp-pie-adjustment-heading > strong { color: #fff; font-size: 16px; font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
-#pie-adjustment-name { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; font-size: 13px; font-weight: 600; line-height: 1.4; }
-.bp-pie-adjustment-status small { display: block; margin-top: 6px; color: #c4cbd6; font-size: 11px; line-height: 1.45; }
 
 .bp-pie-hover-tooltip {
     position: fixed;
@@ -899,19 +858,11 @@ g[data-object-id]:hover .bp-pie-slice-lift  {
 }
 
 .bp-benchmark-row > .bp-benchmark-identity > .bp-benchmark-information-link {
-    grid-area: 1 / 1 / 3 / -1;
-    grid-template-columns: subgrid;
-    grid-template-rows: subgrid;
-    align-items: center;
-}
-
-.bp-benchmark-identity > .bp-benchmark-information-link > .bp-benchmark-link-name {
     grid-area: 1 / 1;
-}
-
-.bp-benchmark-identity > .bp-benchmark-information-link > .bp-benchmark-condition {
-    grid-area: 2 / 1 / 3 / -1;
-    min-width: 0;
+    display: block;
+    align-self: center;
+    justify-self: start;
+    width: fit-content;
 }
 
 .bp-benchmark-identity > .bp-benchmark-score-count {

@@ -1,8 +1,6 @@
 .bp-fallback-picker { --dialog-width: 1140px; --dialog-padding: 24px; --dialog-gap: 18px; }
-.bp-benchmark-settings { --dialog-width: 980px; --dialog-padding: 20px; --dialog-gap: 12px; }
-.bp-benchmark-settings::part(content) { width: 980px; height: min(90dvh, 760px); overflow: hidden; }
-.bp-benchmark-settings::part(title), .bp-benchmark-settings::part(actions) { flex: 0 0 auto; }
-.bp-benchmark-settings::part(body) { display: flex; flex: 1; min-height: 0; overflow: hidden; }
+.bp-benchmark-settings { display: grid; width: 100%; min-width: 0; gap: 12px; padding-top: 8px; container-type: inline-size; }
+.bp-benchmark-settings-title { margin: 0; color: var(--bp-ink); font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
 .bp-benchmark-settings-body { display: flex; flex-direction: column; flex: 1; gap: 12px; min-height: 0; min-width: 0; color: var(--bp-ink); }
 .bp-benchmark-settings-status { flex: 0 0 auto; margin: 0; color: var(--bp-muted); font-size: 12px; line-height: 1.5; }
 .bp-benchmark-settings-contribute { align-self: flex-start; }
@@ -10,6 +8,7 @@
 .bp-benchmark-settings-actions > div { flex: 1; min-width: 0; }
 .bp-benchmark-settings-actions > button { flex: 0 0 auto; }
 .bp-benchmark-settings-actions .bp-fallback-picker-actions { display: flex; }
+.bp-benchmark-settings .bp-fallback-picker-embedded { flex: none; height: clamp(300px, 55dvh, 420px); }
 .bp-benchmark-settings-hint { color: var(--bp-muted); font-size: 12px; line-height: 1.5; }
 .bp-benchmark-settings-section { display: flex; flex-direction: column; min-height: 0; min-width: 0; gap: 8px; }
 .bp-benchmark-settings-section h3 { flex: 0 0 auto; font-size: 14px; margin: 0; }
@@ -34,19 +33,14 @@
 .bp-custom-fallback-results { display: grid; max-height: 200px; overflow: auto; margin: 8px 0 16px; }
 .bp-custom-fallback-results button { justify-content: flex-start; text-align: left; white-space: normal; }
 @media (max-width: 760px) {
-    .bp-benchmark-settings { --dialog-padding: 12px; --dialog-gap: 8px; }
-    .bp-benchmark-settings::part(stage) { padding: 8px; }
-    .bp-benchmark-settings::part(content) { width: calc(100vw - 16px); max-width: calc(100vw - 16px); height: calc(100dvh - 16px); max-height: calc(100dvh - 16px); padding: 12px; }
-    .bp-benchmark-settings .bp-fallback-picker-heading { font-size: 18px; }
     .bp-benchmark-settings-body { gap: 8px; }
     .bp-version-choices { max-height: min(20dvh, 160px); gap: 6px; }
     .bp-version-choice { min-height: 44px; padding: 6px 8px; gap: 6px; }
     .bp-version-choice-name { font-size: 12px; }
 }
-@media (max-width: 760px) and (max-height: 650px) {
-    .bp-version-choices { max-height: 64px; }
-    .bp-benchmark-settings-section { gap: 4px; }
-    .bp-benchmark-settings-fallback { padding-top: 8px; }
+@container (max-width: 760px) {
+    .bp-benchmark-settings .bp-fallback-picker-columns { gap: 10px; }
+    .bp-benchmark-settings .bp-fallback-picker-column { flex-basis: calc((100% - 10px) / 1.5); scroll-snap-align: start; }
 }
 .bp-fallback-picker::part(content) { width: 1140px; height: min(86dvh, 760px); overflow: hidden; }
 .bp-fallback-picker::part(title) { display: block; min-width: 0; flex: 0 0 auto; }

@@ -20,6 +20,7 @@ export function createWorkspaceState() {
         estimationAlgorithm: 'current',
         availableInferenceVersion: AVAILABLE_INFERENCE_VERSION,
         personalFallbackExpanded: false,
+        benchmarkSettingsExpanded: false,
         pinPersonalBenchmarks: false,
         personalRankingDirty: false,
         personalRankingError: '',

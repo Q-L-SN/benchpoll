@@ -97,12 +97,7 @@ const guestDraftDiscard = document.getElementById('guest-draft-discard');
 const pieInstruction = document.getElementById('pie-instruction');
 const pieContextNote = document.getElementById('pie-context-note');
 const pieModelCount = createEvidenceCount(0, { kind: 'models' });
-const pieAdjustmentStatus = document.getElementById('pie-adjustment-status');
-const pieAdjustmentDismiss = document.getElementById('pie-adjustment-dismiss');
-const pieAdjustmentName = document.getElementById('pie-adjustment-name');
-const pieAdjustmentValue = document.getElementById('pie-adjustment-value');
-const pieAdjustmentLabel = document.getElementById('pie-adjustment-label');
-const pieAdjustmentInstruction = document.getElementById('pie-adjustment-instruction');
+const pieAdjustmentHint = document.getElementById('pie-adjustment-hint');
 const personalPieGuidance = document.getElementById('personal-pie-guidance');
 const publicPieSummary = document.getElementById('public-pie-summary');
 const publicPieCount = document.getElementById('public-pie-count');
@@ -173,7 +168,7 @@ const privateTopicEditor = createPrivateTopicEditor({
 const referenceCoverage = createReferenceCoverage({
     request: (body, options) => postJSON('/api/get_topic_preview', body, options),
     getScope: () => String(state.userID ?? 'guest') });
-const additionToast = createToast({ avoid: pieAdjustmentStatus });
+const additionToast = createToast();
 const guestDrafts = createGuestDraftStore();
 const pieRecovery = createPersonalPieRecovery({ state, guestDrafts, snapshot: portablePersonalPie });
 const hiddenPersonalBenchmarkIDs = new Set();
@@ -195,11 +190,12 @@ const fallbackPickerOptions = { catalogue: benchmarkFallbackCatalogue,
             ? state.personalEntries.some(entry => Number(entry.conditionID) === Number(ID) && entry.followCommunityVersion !== true)
             : !state.personalEntries.some(entry => Number(entry.conditionID) === Number(ID))),
     onApply: applyFallbackConfiguration, onCustomize: primary => state.versionComposition
-        ? benchmarkSettings.open(primary, { custom: true }) : beginInlineFallbackEditing(primary),
+        ? openBenchmarkSettings(primary, { custom: true }) : beginInlineFallbackEditing(primary),
     getMemberURL: getBenchmarkMemberURL, onInspectVersion: onBenchmarkInspection
 };
 const fallbackPicker = createFallbackPicker(fallbackPickerOptions);
 const benchmarkSettings = createBenchmarkSettings({
+    host: document.getElementById('benchmark-settings'),
     fallbackPickerOptions,
     getScope: () => `${workspaceContextFingerprint()}|${state.userID ?? 'guest'}`,
     getData(benchmarkID) {
@@ -584,25 +580,14 @@ function updatePieAdjustmentStatus() {
     const entry = state.personalEntries.find(item => Number(item.conditionID) === Number(state.selectedObjectID));
     const single = state.personalEntries.length === 1;
     const visible = !personalPieStart.isOpen && state.mode === 'personal' && Boolean(entry)
-        && (single || state.workspaceView === 'focus' || pieCard?.classList.contains('is-adjusting-weight'));
-    if (!visible) {
-        if (pieAdjustmentStatus.getAttribute('aria-hidden') !== 'true') void setVisible(pieAdjustmentStatus, false);
-        return;
-    }
-    pieAdjustmentName.textContent = benchmarkAccessibleName(entry);
-    pieAdjustmentName.dataset.tooltip = pieAdjustmentName.textContent;
-    pieAdjustmentValue.textContent = `${Math.round(entry.weightBasisPoints / 100)}%`;
-    pieAdjustmentLabel.textContent = single ? 'One benchmark' : 'Adjusting weight';
-    pieAdjustmentStatus.classList.toggle('is-single-benchmark', single);
-    pieAdjustmentDismiss.disabled = single;
-    pieAdjustmentDismiss.setAttribute('aria-label', single ? 'One benchmark stays at 100%' : 'Stop adjusting weight');
-    pieAdjustmentStatus.querySelector('i').className = single ? 'fa-solid fa-plus' : 'fa-solid fa-arrows-up-down';
-    pieAdjustmentInstruction.textContent = single
-        ? 'Add another benchmark to adjust weights. One benchmark stays at 100%.'
+        && (state.workspaceView === 'focus' || pieCard?.classList.contains('is-adjusting-weight'));
+    pieAdjustmentHint.hidden = !visible;
+    if (!visible) return;
+    pieAdjustmentHint.querySelector('span').textContent = single
+        ? 'Add another evaluation item to adjust weights.'
         : window.matchMedia('(pointer: coarse)').matches
-        ? 'Swipe on the pie to adjust. Tap this prompt to stop adjusting.'
-        : 'Scroll on the pie or list. Right-click or click this prompt to stop adjusting.';
-    if (pieAdjustmentStatus.getAttribute('aria-hidden') !== 'false') void setVisible(pieAdjustmentStatus, true);
+        ? 'Drag up or down on the chart to adjust this weight.'
+        : 'Scroll on the chart to adjust this weight.';
 }
 
 let benchmarkRevealSequence = 0;
@@ -1140,7 +1125,6 @@ function applyWorkspaceView({ animate = false } = {}) {
     leftWorkspace.dataset.workspaceView = state.workspaceView;
     rightWorkspace.dataset.workspaceView = state.workspaceView;
     if (animate && window.matchMedia('(min-width: 761px)').matches) {
-        // A transformed workspace changes the containing block of its fixed adjustment prompt.
         animateContent(leftWorkspace, { translate: false });
         animateContent(rightWorkspace, { translate: false });
     }
@@ -1313,9 +1297,9 @@ function activateInlineFallbackTarget() {
 
 function renderInlineFallback() {
     fallbackPicker.refresh();
-    benchmarkSettings.refresh();
     if (state.versionComposition) {
         const primary = state.mode === 'personal' ? selectedInlineFallbackPrimary() : selectedPublicFallbackPrimary();
+        benchmarkSettings.refresh(primary, state.benchmarkSettingsExpanded);
         void setVisible(inlineFallback, Boolean(primary), { collapse: true });
         pieCard.classList.toggle('has-inline-fallback', Boolean(primary));
         inlineFallbackPersonalControl.hidden = state.mode !== 'personal';
@@ -1323,14 +1307,15 @@ function renderInlineFallback() {
         for (const control of [inlineFallbackToggle, publicFallbackToggle]) {
             (control.querySelector('span') ?? control).textContent = state.contextIsPrivate
                 ? 'Configure this benchmark' : 'Contribute your expertise';
-            control.setAttribute('aria-haspopup', 'dialog'); control.setAttribute('aria-controls', 'benchmark-settings');
-            control.removeAttribute('aria-expanded'); control.disabled = state.loading;
+            control.removeAttribute('aria-haspopup'); control.setAttribute('aria-controls', 'benchmark-settings');
+            control.setAttribute('aria-expanded', String(Boolean(primary) && state.benchmarkSettingsExpanded)); control.disabled = state.loading;
         }
         inlineFallbackGuide.hidden = true;
         inlineFallbackSaveError.hidden = !fallbackSaveFailed;
         void setVisible(inlineFallbackSettings, false, { collapse: true });
         return;
     }
+    benchmarkSettings.close();
     if (!isInlineFallbackEditing()) {
         fallbackEditorScope = null;
         deactivateInlineFallbackTarget();
@@ -1345,6 +1330,9 @@ function renderInlineFallback() {
     inlineFallback.classList.toggle('is-readonly', !personal);
     inlineFallbackPersonalControl.hidden = !personal;
     publicFallbackToggle.hidden = personal;
+    publicFallbackToggle.removeAttribute('aria-expanded');
+    publicFallbackToggle.setAttribute('aria-haspopup', 'dialog');
+    publicFallbackToggle.setAttribute('aria-controls', 'fallback-picker');
     publicFallbackToggle.disabled = state.loading;
     inlineFallbackToggle.querySelector('span').textContent = `Fallback: ${fallbackStatusLabel(rule)}`;
     if (rule) {
@@ -1513,7 +1501,7 @@ function applyFallbackConfiguration(primary, choice, action) {
     writeWorkspacePreferences(state);
     focusPersonalBenchmark(primary);
     if (choice.configureOwn) {
-        if (state.versionComposition) benchmarkSettings.open(primary, { custom: true });
+        if (state.versionComposition) openBenchmarkSettings(primary, { custom: true });
         else beginInlineFallbackEditing(primary);
     }
     return true;
@@ -1542,6 +1530,20 @@ function openInlineFallbackPicker() {
     const primary = selectedInlineFallbackPrimary();
     if (primary && !state.loading && !isInlineFallbackEditing()) fallbackPicker.open(primary, { action: 'replace',
         getReturnFocus: () => inlineFallbackToggle });
+}
+
+function openBenchmarkSettings(primary, options) {
+    state.benchmarkSettingsExpanded = true;
+    writeWorkspacePreferences(state);
+    benchmarkSettings.open(primary, options);
+    renderInlineFallback();
+    return true;
+}
+
+function toggleBenchmarkSettings() {
+    state.benchmarkSettingsExpanded = !state.benchmarkSettingsExpanded;
+    writeWorkspacePreferences(state);
+    renderInlineFallback();
 }
 
 inlineFallbackConfigurations.addEventListener('click', () => {
@@ -3019,9 +3021,7 @@ function isWeightAdjustmentMode() {
 }
 
 function isWeightWheelTarget(target) {
-    return target instanceof Element && Boolean(target.closest('.bp-left-workspace'))
-        && (isPersonalBenchmarkFocus() || Boolean(target.closest('#weight-pie')))
-        && !target.closest('.bp-inline-fallback, .bp-benchmark-fallbacks, input, textarea, select, button, a, [contenteditable="true"], global-dialog, [role="dialog"]');
+    return target instanceof Element && pieSvg.contains(target);
 }
 
 function updateWeightAdjustmentCursor() {
@@ -3074,53 +3074,7 @@ function queueSelectedWeightWheel(event) {
     updateUndoState();
 }
 
-function stopWeightAdjustment() {
-    if (!isWeightAdjustmentMode()) return;
-    const returnFocus = pieAdjustmentStatus.contains(document.activeElement);
-    if (touchPieGesture) {
-        const gesture = touchPieGesture;
-        touchPieGesture = null;
-        flushTouchPiePreview(gesture);
-        if (pieSvg.hasPointerCapture(gesture.pointerID)) pieSvg.releasePointerCapture(gesture.pointerID);
-    }
-    // Flush queued wheel input before leaving focus; saving continues independently.
-    if (wheelWeightCommitTimer !== null || pendingWheelBasisPoints !== 0) void commitPendingWheelAdjustment();
-    else if (state.gestureOpen) void finishWeightGesture();
-    setPieAdjustmentActive(false);
-    setWorkspaceView('leaderboard');
-    renderPie();
-    if (returnFocus) {
-        const row = benchmarkRows.querySelector(`.bp-benchmark-row[data-condition-id="${Number(state.selectedObjectID)}"][data-benchmark-control="selection"]`);
-        (row?.getClientRects().length ? row : personalModeButton).focus({ preventScroll: true });
-    }
-}
-
-pieAdjustmentDismiss.addEventListener('click', stopWeightAdjustment);
-document.addEventListener('contextmenu', event => {
-    if (!isWeightAdjustmentMode() || event.pointerType === 'touch' || touchPieGesture
-        || !(event.target instanceof Element)
-        || event.target.closest('input, textarea, select, [contenteditable="true"], global-dialog, [role="dialog"]')) return;
-    event.preventDefault();
-    stopWeightAdjustment();
-});
-
-
-document.addEventListener('wheel', event => {
-    if (!isPersonalBenchmarkFocus()) {
-        return;
-    }
-    if (!isWeightWheelTarget(event.target)) {
-        return;
-    }
-    queueSelectedWeightWheel(event);
-}, { passive: false, capture: true });
-
-pieSvg.addEventListener('wheel', event => {
-    if (isPersonalBenchmarkFocus()) {
-        return;
-    }
-    queueSelectedWeightWheel(event);
-}, { passive: false });
+pieSvg.addEventListener('wheel', queueSelectedWeightWheel, { passive: false });
 
 pieSvg.addEventListener('pointerdown', event => {
     if (event.pointerType !== 'touch' && event.pointerType !== 'pen') {
@@ -3346,7 +3300,7 @@ window.addEventListener('resize', loadVisibleRankingPages, { passive: true });
 inlineFallbackToggle.addEventListener('click', () => {
     const primary = selectedInlineFallbackPrimary();
     if (!primary || state.loading) return;
-    if (state.versionComposition) { benchmarkSettings.open(primary); return; }
+    if (state.versionComposition) { toggleBenchmarkSettings(); return; }
     if (!fallbackRuleFor(primary.ID)) { openInlineFallbackPicker(); return; }
     state.personalFallbackExpanded = !state.personalFallbackExpanded;
     if (!state.personalFallbackExpanded) {
@@ -3360,7 +3314,7 @@ inlineFallbackSaveRetry.addEventListener('click', () => { void persistPersonalPi
 publicFallbackToggle.addEventListener('click', () => {
     const primary = selectedPublicFallbackPrimary();
     if (state.mode !== 'public' || state.loading || !primary) return;
-    if (state.versionComposition) { benchmarkSettings.open(primary); return; }
+    if (state.versionComposition) { toggleBenchmarkSettings(); return; }
     fallbackPicker.open(primary, { action: 'view', getReturnFocus: () => publicFallbackToggle });
 });
 inlineFallbackChart.addEventListener('keydown', event => {

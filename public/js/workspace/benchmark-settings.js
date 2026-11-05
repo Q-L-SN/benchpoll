@@ -12,13 +12,10 @@ const node = (tag, className = '', text) => {
 const versionName = version => version.conditionName?.toLowerCase() === 'default' ? 'Default evaluation' : version.conditionName;
 const shareLabel = points => points > 0 && points < 1 ? '<0.01%' : `${Number(((points ?? 0) / 100).toFixed(2))}%`;
 
-export function createBenchmarkSettings({ getScope, getData, onVersion, onContribute, onCustom, fallbackPickerOptions }) {
-    const dialog = node('global-dialog', 'bp-benchmark-settings'); dialog.id = 'benchmark-settings'; dialog.hidden = true;
-    const heading = node('div', 'bp-fallback-picker-heading'); heading.slot = 'title';
-    const title = node('span'); heading.append(title);
-    const closeButton = createAction({ className: 'bp-fallback-picker-close', label: 'Close benchmark settings', icon: 'fa-solid fa-xmark', iconOnly: true });
-    heading.append(closeButton);
-    const body = node('div', 'bp-benchmark-settings-body'); body.slot = 'body';
+export function createBenchmarkSettings({ host, getScope, getData, onVersion, onContribute, onCustom, fallbackPickerOptions }) {
+    const panel = host;
+    const title = node('h3', 'bp-benchmark-settings-title');
+    const body = node('div', 'bp-benchmark-settings-body');
     const status = node('p', 'bp-benchmark-settings-status'); status.setAttribute('role', 'status');
     const contribute = createAction({ className: 'bp-benchmark-settings-contribute', label: 'Configure in Personal Weights', variant: 'primary' });
     const versions = node('section', 'bp-benchmark-settings-section bp-benchmark-settings-versions');
@@ -36,13 +33,12 @@ export function createBenchmarkSettings({ getScope, getData, onVersion, onContri
     const editorHost = node('div', 'bp-benchmark-settings-editor'); editorHost.hidden = true;
     fallback.append(placeholder, pickerHost, editorHost);
     body.append(status, contribute, versions, fallback);
-    const actions = node('div', 'bp-benchmark-settings-actions'); actions.slot = 'actions';
+    const actions = node('div', 'bp-benchmark-settings-actions');
     const pickerActions = node('div'); actions.append(pickerActions);
-    const done = createAction({ label: 'Done' }); actions.append(done);
-    dialog.append(heading, body, actions); document.body.append(dialog);
+    panel.append(title, body, actions);
     let intent = null, signature = '', customEntries = null, customPrimaryID = null, pickerKey = '';
     const picker = createFallbackPicker({ ...fallbackPickerOptions, host: pickerHost, actionsHost: pickerActions,
-        onInspectVersion(event) { close(); fallbackPickerOptions.onInspectVersion?.(event); },
+        onInspectVersion(event) { pickerKey = ''; fallbackPickerOptions.onInspectVersion?.(event); refresh(); },
         onCustomize(primary) {
             const current = data();
             if (!current?.editable) return false;
@@ -52,10 +48,8 @@ export function createBenchmarkSettings({ getScope, getData, onVersion, onContri
     });
     function close() {
         picker.close({ restore: false }); pickerKey = '';
-        dialog.hidden = true; intent = null; signature = ''; customEntries = null;
+        panel.hidden = true; intent = null; signature = ''; customEntries = null; customPrimaryID = null;
     }
-    closeButton.addEventListener('click', close); done.addEventListener('click', close);
-    dialog.addEventListener('cancel', close);
     contribute.addEventListener('click', async () => {
         const current = data(); if (!current || current.busy) return;
         contribute.disabled = true;
@@ -63,18 +57,30 @@ export function createBenchmarkSettings({ getScope, getData, onVersion, onContri
         finally { if (data()) { signature = ''; refresh(); } }
     });
     function data() {
-        if (!intent || dialog.hidden) return null;
+        if (!intent || panel.hidden) return null;
         if (intent.scope !== getScope()) { close(); return null; }
         return getData(intent.benchmarkID);
+    }
+    function retarget(primary) {
+        const scope = getScope();
+        if (intent?.scope !== scope || intent?.benchmarkID !== primary.benchmarkID) {
+            close();
+            intent = { benchmarkID: primary.benchmarkID, scope };
+        }
+        panel.hidden = false;
     }
     function choose(conditionID) {
         const current = data();
         if (!current?.editable || !onVersion(current.group, conditionID)) return;
         customEntries = null; signature = ''; refresh();
     }
-    function refresh() {
+    function refresh(primary, expanded) {
+        if (primary !== undefined) {
+            if (!primary || !expanded) { close(); return; }
+            retarget(primary);
+        }
         const current = data();
-        if (!current) return;
+        if (!current) { close(); return; }
         const { group, entries, rule, editable } = current;
         const selected = entries.length === 1 && entries[0].followCommunityVersion !== true ? entries[0].conditionID : null;
         if (customEntries && selected !== customPrimaryID) customEntries = null;
@@ -109,15 +115,15 @@ export function createBenchmarkSettings({ getScope, getData, onVersion, onContri
             if (customEntries) renderCustom(editorHost, current, group.versions.find(version => version.conditionID === selected));
             if (focusKey) [...body.querySelectorAll('[data-focus-key]')].find(item => item.dataset.focusKey === focusKey)?.focus({ preventScroll: true });
         }
-        const primary = group.versions.find(version => version.conditionID === selected);
-        placeholder.hidden = Boolean(primary);
+        const selectedVersion = group.versions.find(version => version.conditionID === selected);
+        placeholder.hidden = Boolean(selectedVersion);
         editorHost.hidden = !customEntries;
-        if (!primary || customEntries) { picker.close({ restore: false }); pickerKey = ''; return; }
+        if (!selectedVersion || customEntries) { picker.close({ restore: false }); pickerKey = ''; return; }
         const action = editable || current.busy ? 'replace' : 'view';
-        const key = `${primary.conditionID}:${action}`;
+        const key = `${selectedVersion.conditionID}:${action}`;
         if (pickerKey !== key) {
             pickerKey = key;
-            picker.open({ ...primary, ID: primary.conditionID }, { action });
+            picker.open({ ...selectedVersion, ID: selectedVersion.conditionID }, { action });
         } else picker.refresh();
     }
     function renderCustom(host, current, primary) {
@@ -166,8 +172,7 @@ export function createBenchmarkSettings({ getScope, getData, onVersion, onContri
         editor.append(ordered, search, results, save); host.append(editor);
     }
     return { refresh, close, open(primary, { custom = false } = {}) {
-        picker.close({ restore: false }); pickerKey = '';
-        intent = { benchmarkID: primary.benchmarkID, scope: getScope() }; dialog.hidden = false; signature = '';
+        retarget(primary); signature = '';
         const current = data();
         if (!current) { close(); return; }
         customEntries = custom ? structuredClone(current.rule?.entries ?? []) : null;

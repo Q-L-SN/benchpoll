@@ -45,7 +45,7 @@ test('Public composition stays retired while public fallback inspection and quie
     const html = read('private/home.html'), workspace = read('public/js/home-workspace.js');
     assert.doesNotMatch(html, /public-composition-(?:toggle|pie|list)/);
     assert.doesNotMatch(workspace, /createPublicComposition|publicComposition(?:Toggle|Visible|Svg|List)/);
-    assert.match(html, /id="public-fallback-toggle"[^>]+aria-controls="fallback-picker"/);
+    assert.match(html, /id="public-fallback-toggle"[^>]+aria-controls="benchmark-settings"/);
     assert.match(workspace, /createFallbackPicker/);
     assert.match(workspace, /publicFamilyComposition/);
     assert.doesNotMatch(read('public/css/ui/navigation.css'), /\.bp-beta-link:hover span\s*\{/);

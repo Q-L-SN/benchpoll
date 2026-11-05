@@ -63,7 +63,7 @@ for (const [engine, width] of built ? [[chromium, 390]] : [[chromium, 1440], [ch
         await settings.locator('.bp-version-choice[data-condition-id="1"][aria-pressed="true"]').click();
         assert.equal(await chooser.isVisible(), false);
         assert.match(await settings.locator('.bp-benchmark-settings-status').textContent(), /Versions and fallback follow community/);
-        await settings.getByRole('button', { name: 'Done', exact: true }).click();
+        await page.locator('#inline-fallback-toggle').click();
         await page.waitForFunction(() => !document.getElementById('workspace-undo').disabled);
         await new Promise(resolve => setTimeout(resolve, 1000));
         const saves = fixture.state.requests.filter(request => request.path === '/api/save_personal_pie');
@@ -90,7 +90,7 @@ for (const [engine, width] of built ? [[chromium, 390]] : [[chromium, 1440], [ch
             assert.match(await settings.locator('.bp-benchmark-settings-status').textContent(), /Fallback follows community/);
             assert.equal(await settings.locator('.bp-version-choice[data-condition-id="1"]').getAttribute('aria-pressed'), 'true');
         }
-        await settings.getByRole('button', { name: 'Done', exact: true }).click();
+        await page.locator('#inline-fallback-toggle').click();
         if (width < 760) {
             assert.equal(await page.locator('#discussion-entry').isVisible(), false);
             await page.locator('[data-mobile-panel="models"]').click();

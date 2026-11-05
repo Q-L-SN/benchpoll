@@ -63,7 +63,7 @@ test('short explanations name current navigation and preserve practical scoring 
     assert.deepEqual([...home.matchAll(/data-navigation-view="([^"]+)"/g)].map(match => match[1]),
         ['popular', 'recent', 'configured', 'search']);
     assert.match(home, /data-navigation-view="configured"[^>]*aria-label="Mine"/);
-    assert.match(guide, /choose a saved order or edit your own/);
+    assert.match(guide, /choose a saved (?:fallback )?order or edit your own/);
     assert.match(guide, /Another topic contributes only through an explicit reference/);
     assert.match(guide, /Private topics and their weights never contribute to Public Weights/);
     assert.match(guide, /effort or harness to rank settings separately/);

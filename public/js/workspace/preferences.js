@@ -42,6 +42,7 @@ function normalizeWorkspacePreferences(value) {
     return {
         mode: preferences.mode === 'personal' ? 'personal' : 'public',
         personalFallbackExpanded: preferences.personalFallbackExpanded === true,
+        benchmarkSettingsExpanded: preferences.benchmarkSettingsExpanded === true,
         scoreMode: preferences.scoreMode === 'range' ? 'range' : 'available'
     };
 }

@@ -26,6 +26,14 @@ Read
 the 17-source overlay and checks. This follow-up requires home and index rebuilds
 and has no migration or production-data change; it is not yet confirmed deployed.
 
+Also pending: inline benchmark version/fallback settings with retained expansion,
+name-only evaluation-item detail links, treemap-only wheel adjustment and an
+inline instruction banner, and a plain-language How it works page. Read
+[`../inline-settings-interactions-20261105.md`](../inline-settings-interactions-20261105.md)
+for the additional 14-source overlay and verification. It requires matching home
+and index builds plus an application restart for the reviewed startup CSP pin.
+It has no migration or production-data change and is not confirmed deployed.
+
 ## Earlier Deployment History
 
 The combined 2026-11-03 release is now deployed. The owner asked the local

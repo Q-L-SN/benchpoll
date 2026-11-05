@@ -70,12 +70,9 @@ test('Public viewing includes all active shares and paged configurations without
     assert.equal(unknown[0].shareBasisPoints, null);
 });
 
-test('Public opens the existing chooser as a read-only dialog instead of expanding an inline chart', async () => {
+test('the legacy fallback chooser preserves read-only Public inspection', async () => {
     const workspace = await readFile(new URL('../public/js/home-workspace.js', import.meta.url), 'utf8');
     const picker = await readFile(new URL('../public/js/workspace/fallback-picker.js', import.meta.url), 'utf8');
-    const home = await readFile(new URL('../private/home.html', import.meta.url), 'utf8');
-    assert.match(home, /id="public-fallback-toggle"[^>]*aria-haspopup="dialog"[^>]*aria-controls="fallback-picker"/);
-    assert.doesNotMatch(home, /id="public-fallback-toggle"[^>]*aria-expanded/);
     assert.match(workspace, /fallbackPicker\.open\(primary, \{ action: 'view', getReturnFocus: \(\) => publicFallbackToggle \}\)/);
     assert.doesNotMatch(workspace, /publicFallbackVisible|familyView\.renderPublic/);
     assert.doesNotMatch(picker, /fallback-picker-confirm|radiogroup|fallback-order/);

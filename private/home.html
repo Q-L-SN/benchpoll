@@ -312,20 +312,11 @@
                                 <p id="pie-instruction"></p>
                                 <p id="pie-context-note"></p>
                             </div>
-                            <div id="pie-adjustment-status" class="bp-pie-adjustment-status" role="status" hidden>
-                                <button id="pie-adjustment-dismiss" class="bp-pie-adjustment-dismiss" type="button" aria-label="Stop adjusting weight" aria-describedby="pie-adjustment-instruction">
-                                    <i class="fa-solid fa-arrows-up-down" aria-hidden="true"></i>
-                                    <span class="bp-pie-adjustment-copy">
-                                        <span class="bp-pie-adjustment-heading"><span id="pie-adjustment-label">Adjusting weight</span><strong id="pie-adjustment-value"></strong></span>
-                                        <strong id="pie-adjustment-name"></strong>
-                                        <small id="pie-adjustment-instruction"></small>
-                                    </span>
-                                </button>
-                            </div>
                             <div id="public-pie-summary" class="bp-public-pie-summary" hidden>
                                 <span class="bp-public-count-group"><span id="public-pie-count"></span><button class="bp-public-pie-info bp-help-trigger" type="button" aria-label="How Public Weights are calculated" aria-describedby="public-pie-tooltip" data-help-content="public-pie-tooltip"><i class="fa-regular fa-circle-question" aria-hidden="true"></i></button></span>
                                 <span id="public-pie-tooltip" hidden><strong>Your saved weights help shape the public index.</strong><p>Recent saved configurations determine the mix. Each person contributes one configuration, updated with their edits.</p><a href="/how-it-works#calculation-details">How public weights are calculated</a></span>
                             </div>
+                            <div id="pie-adjustment-hint" class="bp-pie-adjustment-hint" role="status" hidden><i class="fa-solid fa-arrows-up-down" aria-hidden="true"></i><span></span></div>
                             <div class="bp-pie-stage">
                                 <svg id="weight-pie" viewBox="0 0 360 360" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Public index composition"></svg>
                                 <div id="personal-pie-empty" class="bp-personal-pie-empty" hidden>
@@ -346,13 +337,14 @@
                                 <section id="inline-fallback" class="bp-inline-fallback" aria-label="Fallback" hidden>
                                     <div class="bp-inline-fallback-toolbar">
                                         <div id="inline-fallback-personal-control" class="bp-inline-fallback-personal-control">
-                                            <button id="inline-fallback-toggle" class="bp-inline-fallback-toggle" type="button" data-ui-disclosure aria-haspopup="dialog" aria-controls="fallback-picker">
+                                            <button id="inline-fallback-toggle" class="bp-inline-fallback-toggle" type="button" data-ui-disclosure aria-controls="benchmark-settings" aria-expanded="false">
                                                 <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
                                                 <span>Fallback: Follow community</span>
                                             </button>
                                         </div>
-                                        <button id="public-fallback-toggle" class="bp-public-fallback-toggle" type="button" aria-haspopup="dialog" aria-controls="fallback-picker" hidden>View fallback configurations</button>
+                                        <button id="public-fallback-toggle" class="bp-public-fallback-toggle" type="button" data-ui-disclosure aria-controls="benchmark-settings" aria-expanded="false" hidden><i class="fa-solid fa-chevron-right" aria-hidden="true"></i><span>View fallback configurations</span></button>
                                     </div>
+                                    <section id="benchmark-settings" class="bp-benchmark-settings" aria-label="Benchmark configuration" hidden></section>
                                     <div id="inline-fallback-settings" class="bp-inline-fallback-settings" hidden>
                                         <div class="bp-fallback-configuration-heading">
                                             <div class="bp-fallback-configuration-identity"><strong id="inline-fallback-configuration-label">Current fallback</strong><span id="inline-fallback-entrance"></span></div>

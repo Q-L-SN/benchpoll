@@ -111,7 +111,7 @@ test('score copy distinguishes normalized measurements, estimates and unresolved
 
 test('fallback copy preserves explicit order, community inheritance, and real zero and negative results', () => {
     const fallback = section('fallback');
-    assert.match(fallback, /choose a saved order or edit your own/);
+    assert.match(fallback, /choose a saved (?:fallback )?order or edit your own/);
     assert.match(fallback, /chosen version first, then backups in order/);
     assert.match(fallback, /first available score counts/);
     assert.match(fallback, /including zero and negative scores/);
