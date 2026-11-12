@@ -63,7 +63,7 @@ export function createDisclosureTrigger({ name, detail = '', className = '' }) {
 
 const segmentedControls = new WeakMap();
 
-export function mountSegmentedControl(root, { presentation = true } = {}) {
+export function mountSegmentedControl(root, { presentation = true, previewOnHover = false } = {}) {
     if (segmentedControls.has(root)) return segmentedControls.get(root);
     if (presentation) {
         root.classList.add('bp-ui-segmented');
@@ -71,14 +71,27 @@ export function mountSegmentedControl(root, { presentation = true } = {}) {
     }
     let queued = false;
     let disposed = false;
+    let hovered = null;
+    const previewTarget = target => {
+        const button = target?.closest?.('button');
+        return button?.parentElement === root && !button.disabled && !button.hidden
+            && button.getAttribute('aria-disabled') !== 'true' && root.getAttribute('aria-disabled') !== 'true'
+            && !button.closest('[inert]') ? button : null;
+    };
     const refresh = () => {
         queued = false;
         if (disposed) return;
+        if (!root.dataset.uiReady) {
+            hovered = null;
+            delete root.dataset.uiHoverAnimated;
+        }
+        if (hovered && previewTarget(hovered) !== hovered) hovered = null;
         const selected = [...root.children].find(child => child.matches('button')
             && (child.getAttribute('aria-selected') === 'true' || child.getAttribute('aria-pressed') === 'true'));
         if (!selected || !root.clientWidth) return;
-        root.style.setProperty('--ui-segment-x', `${selected.offsetLeft}px`);
-        root.style.setProperty('--ui-segment-width', `${selected.offsetWidth}px`);
+        const marker = hovered ?? selected;
+        root.style.setProperty('--ui-segment-x', `${marker.offsetLeft}px`);
+        root.style.setProperty('--ui-segment-width', `${marker.offsetWidth}px`);
         root.dataset.uiReady = 'true';
     };
     const queueRefresh = () => {
@@ -90,13 +103,30 @@ export function mountSegmentedControl(root, { presentation = true } = {}) {
     resize.observe(root);
     for (const child of root.children) if (child.matches('button')) resize.observe(child);
     const selection = new MutationObserver(queueRefresh);
-    selection.observe(root, { attributes: true, subtree: true, attributeFilter: ['aria-selected', 'aria-pressed', 'hidden'] });
+    selection.observe(root, { attributes: true, subtree: true,
+        attributeFilter: ['aria-selected', 'aria-pressed', 'aria-disabled', 'disabled', 'hidden', 'inert'] });
+    // Preview only moves the marker; activation and accessible selection stay with the caller.
+    const preview = event => {
+        if (event.pointerType !== 'mouse' || event.buttons) return;
+        const next = previewTarget(event.type === 'pointerout' ? event.relatedTarget : event.target);
+        if (next === hovered) return;
+        hovered = next;
+        if (root.dataset.uiReady) root.dataset.uiHoverAnimated = 'true';
+        refresh();
+    };
+    const clearPreview = () => { if (hovered) { hovered = null; refresh(); } };
+    const clearTouchPreview = event => { if (event.pointerType !== 'mouse') clearPreview(); };
+    const previewListeners = { pointerover: preview, pointermove: preview, pointerout: preview, pointerleave: clearPreview,
+        pointercancel: clearPreview, pointerdown: clearTouchPreview, keydown: clearPreview };
+    if (previewOnHover) for (const [type, listener] of Object.entries(previewListeners)) root.addEventListener(type, listener);
     const controller = {
         refresh,
         destroy() {
             disposed = true;
             resize.disconnect();
             selection.disconnect();
+            if (previewOnHover) for (const [type, listener] of Object.entries(previewListeners)) root.removeEventListener(type, listener);
+            delete root.dataset.uiHoverAnimated;
             segmentedControls.delete(root);
         }
     };

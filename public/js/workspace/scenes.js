@@ -15,7 +15,7 @@ export function createSceneControls({ host, getState, onSelect, beforeWrite, wri
     const edit = createAction({ label: 'Edit scene', icon: 'fa-regular fa-pen-to-square', variant: 'quiet' });
     const makeDefault = createAction({ label: 'Set as default', icon: 'fa-regular fa-star', variant: 'quiet' });
     actions.append(makeDefault, edit, create); host.replaceChildren(tabs, actions);
-    const segmented = mountSegmentedControl(tabs, { presentation: false });
+    const segmented = mountSegmentedControl(tabs, { presentation: false, previewOnHover: true });
     const tabNodes = new Map();
     let tabScope = null, selectedScene = null, pendingScene = null, revealedScene = null;
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');

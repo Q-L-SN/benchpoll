@@ -41,7 +41,7 @@ let feedLoaded = false;
 let showingScores = false;
 let discussionScenes = [];
 const sceneTabs = $('discussion-context');
-const sceneSegments = mountSegmentedControl(sceneTabs, { presentation: false });
+const sceneSegments = mountSegmentedControl(sceneTabs, { presentation: false, previewOnHover: true });
 let sceneTabScope = null;
 function refreshSceneTabs(reveal = false) {
     sceneSegments.refresh();

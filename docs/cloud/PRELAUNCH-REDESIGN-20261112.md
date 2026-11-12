@@ -103,3 +103,17 @@ reference expansion, catalogue transaction rollback/reapplication, unique profil
 IDs, collection privacy and account-scoped browsing history. All test data is
 synthetic and disposable; no live-data compatibility or production latency claim
 is implied by these checks.
+
+## Follow-up 40: scene hover
+
+Workspace and discussion scene markers now slide to the button under the mouse.
+Leaving the buttons restores the current scene; hovering does not navigate or
+request data. Click activation remains immediate, touch gestures keep their
+existing behavior, and the disabled All-scenes state and reduced-motion setting
+are respected. Other segmented controls retain their existing behavior.
+
+Both asset builds, ESLint, 74 focused unit/contract checks and eight existing
+Chromium/WebKit scene checks pass. Built-page previews also verify hover
+interpolation, selection preservation, return animation, click activation,
+disabled discussion scenes and reduced motion in both browsers. This follow-up
+requires no schema or data changes.

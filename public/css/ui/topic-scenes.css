@@ -70,7 +70,7 @@
 .bp-scene-tab:focus-visible { outline: 2px solid currentColor; outline-offset: -3px; }
 .bp-scene-tab:disabled { cursor: wait; }
 @media (prefers-reduced-motion: no-preference) {
-    .bp-scene-tabs[data-scene-animated="true"]::before { transition: transform 240ms cubic-bezier(.22, 1, .36, 1), width 240ms ease; }
+    .bp-scene-tabs:is([data-scene-animated="true"], [data-ui-hover-animated="true"])::before { transition: transform 240ms cubic-bezier(.22, 1, .36, 1), width 240ms ease; }
 }
 @media (forced-colors: active) {
     .bp-scene-tab[aria-selected="true"] { outline: 1px solid Highlight; outline-offset: -2px; }

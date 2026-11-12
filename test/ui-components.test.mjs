@@ -24,9 +24,10 @@ test('workspace switches retain measured segmented geometry while sidebar modes 
         assert.match(html, new RegExp(`data-navigation-view="${view}"[^>]+aria-label="${label}"[^>]+data-tooltip="${title}"[^>]+aria-pressed="${view === 'popular'}"[^>]*><i[^>]+aria-hidden="true"[^>]*><\\/i><\\/button>`));
     }
     const code = read('public/js/shared/ui-components.js');
-    assert.match(code, /selected\.offsetLeft/);
-    assert.match(code, /selected\.offsetWidth/);
-    assert.match(code, /attributeFilter: \['aria-selected', 'aria-pressed', 'hidden'\]/);
+    assert.match(code, /marker\.offsetLeft/);
+    assert.match(code, /marker\.offsetWidth/);
+    const observed = code.match(/attributeFilter:\s*\[([^\]]+)\]/)?.[1];
+    for (const attribute of ['aria-selected', 'aria-pressed', 'hidden']) assert.ok(observed?.includes(`'${attribute}'`));
     assert.doesNotMatch(code, /addEventListener\('click'/);
     assert.match(code, /resize\.disconnect\(\)/);
     assert.match(code, /selection\.disconnect\(\)/);
