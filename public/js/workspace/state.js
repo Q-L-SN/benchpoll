@@ -9,6 +9,8 @@ export function createWorkspaceState() {
         topicName: '',
         topicSummary: '',
         topicCreator: null,
+        topicMetadata: null,
+        coverageIndex: { personal: null, public: null },
         contextIsPrivate: false,
         selectedContextValues: {},
         dimensions: [],

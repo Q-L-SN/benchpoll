@@ -24,7 +24,7 @@ function contextDB(owner) {
         calls.push({ sql, parameters });
         if (sql.includes('FROM categories c') && sql.includes('WHERE c.ID = ? AND c.is_active = 1')) {
             assert.deepEqual(parameters, [500]);
-            return [[{ ID: 500, name: 'My mix', position: 0, owner_user_ID: owner }]];
+            return [[{ ID: 500, public_ID: 20, private_ID: 'AbCdEf123456', name: 'My mix', position: 0, owner_user_ID: owner }]];
         }
         if (sql.includes('LEFT JOIN topic_scenes')) {
             assert.equal(parameters[0], 500);
@@ -44,7 +44,7 @@ test('private ranking contexts reject guests and other users before reading any 
     const context = await resolveRankingContext(contextDB('1'), { categoryID: 500, userID: '1' });
     assert.equal(context.isPrivate, true); assert.deepEqual(context.dimensions, []);
     assert.deepEqual(context.contextValues, {});
-    assert.equal(context.categoryPath, 'personal/500');
+    assert.equal(context.categoryPath, 'private/AbCdEf123456');
     assert.deepEqual(context.lineage, [{ ID: 500, name: 'My mix', position: 0 }]);
     await assert.rejects(resolveRankingContext(contextDB('1'), { categoryID: 500, userID: '1', contextValues: { web: 'allowed' } }),
         e => e.status === 404 && e.body.error === 'topic_scene_not_found');
@@ -67,26 +67,30 @@ test('private category reads return the personal ranking first; writes return on
     assert.doesNotMatch(save, /rankingPager|getRankingWorkspace|initialMode/);
 });
 test('empty private topics leave Configured but remain owner-addressable after removing the final slice', async () => {
-    const categories = [{ ID: 500, parent_ID: null, name: 'My mix', position: 0, is_active: 1, owner_user_ID: 1 }];
+    const categories = [{ ID: 500, public_ID: 20, private_ID: 'AbCdEf123456', parent_ID: null, name: 'My mix', position: 0, is_active: 1, owner_user_ID: 1 }];
     const items = buildPersonalNavigation([{ categoryID: 500, contextID: 10, contextValues: {}, weightCount: 0,
         totalBasisPoints: null, unavailableConditions: 0 }], categories, [], []);
     assert.deepEqual(items, []);
     const configured = buildPersonalNavigation([{ categoryID: 500, contextID: 10, contextValues: {}, weightCount: 1,
         totalBasisPoints: 10000, unavailableConditions: 0 }], categories, [], []);
     assert.equal(configured.length, 1); assert.equal(configured[0].available, true); assert.equal(configured[0].isPrivate, true);
-    assert.equal(locationURL(configured[0]), '/personal/500');
-    const empty = await getPrivateCategory({ execute: async (_sql, parameters) => {
-        assert.deepEqual(parameters, [500, '1']);
-        return [[{ ID: 500, name: 'My mix', position: 0 }]];
+    assert.equal(locationURL(configured[0]), '/private/AbCdEf123456');
+    const empty = await getPrivateCategory({ execute: async (sql, parameters) => {
+        if (sql.includes('LEFT JOIN topic_scenes')) return [[{ contextID: 10, category_ID: 500,
+            scene_context_ID: null, context_hash: parameters.at(-1) }]];
+        assert.deepEqual(parameters, ['1', '1', 500, '1']);
+        return [categories];
     } }, '1', 500);
-    assert.equal(locationURL(empty), '/personal/500');
+    assert.equal(locationURL(empty), '/private/AbCdEf123456');
 });
 test('private category lookups bind both ID and owner and mask missing/foreign categories', async () => {
     await assert.rejects(getPrivateCategory({}, null, 1), e => e.status === 401);
     await assert.rejects(getPrivateCategory({ execute: async () => [[]] }, 1, 500), e => e.status === 404);
     const entry = await getPrivateCategory({ async execute(sql, parameters) {
-        assert.match(sql, /owner_user_ID = \?/); assert.deepEqual(parameters, [500, 1]);
-        return [[{ ID: 500, name: 'My mix', position: 0 }]];
+        if (sql.includes('LEFT JOIN topic_scenes')) return [[{ contextID: 10, category_ID: 500,
+            scene_context_ID: null, context_hash: parameters.at(-1) }]];
+        assert.match(sql, /owner_user_ID = \?/); assert.deepEqual(parameters, ['1', '1', 500, '1']);
+        return [[{ ID: 500, public_ID: 20, private_ID: 'AbCdEf123456', owner_user_ID: 1, name: 'My mix', position: 0 }]];
     } }, 1, 500);
     assert.equal(entry.isPrivate, true);
 });

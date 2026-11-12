@@ -58,7 +58,7 @@ export function createCoveragePie(coverage) {
 }
 
 export function createModelListView({ state, modelRows, openApprovedModelResults, onNeedMore, onRetrySave,
-    onFocusPageRequest, onFocusRefresh, onUpdateStatus }) {
+    onFocusPageRequest, onFocusRefresh, onUpdateStatus, onBindModelRow }) {
     const status = document.getElementById('model-ranking-status');
     const notice = createRankingNotice({ status, rows: modelRows });
     let renderedScope = '';
@@ -68,6 +68,7 @@ export function createModelListView({ state, modelRows, openApprovedModelResults
     let renderedContentSignature = '';
     let renderedRows = new Map();
     let renderedChartModels = [];
+    const rowBindings = new Map();
     let focusPage = null;
     function getFocusPage() {
         return focusPage && focusPage.snapshotID === state.rankingPagination?.snapshotID && focusPage.list === state.mode ? focusPage : null;
@@ -137,7 +138,11 @@ export function createModelListView({ state, modelRows, openApprovedModelResults
         renderedContentSignature = contentSignature;
         const scrollTop = sameScope ? modelRows.scrollTop : 0;
         const scrollLeft = sameScope ? modelRows.querySelector('.bp-model-chart-scroll')?.scrollLeft ?? 0 : 0;
-        if (!reusable) { notice.resetRows(); renderedRows = new Map(); renderedChartModels = []; }
+        if (!reusable) {
+            for (const cleanup of rowBindings.values()) cleanup?.();
+            rowBindings.clear();
+            notice.resetRows(); renderedRows = new Map(); renderedChartModels = [];
+        }
         else if (!focused) modelRows.querySelector('.bp-ranking-page-footer')?.remove();
         if (state.mode === 'personal' && (state.personalSaveError || state.personalRankingRefreshNeeded && state.personalRankingError)) {
             const error = document.createElement('div');
@@ -225,11 +230,6 @@ export function createModelListView({ state, modelRows, openApprovedModelResults
             row.dataset.rank = String(model.rank ?? 0);
             row.classList.toggle('is-incomparable', !comparable);
             row.classList.toggle('has-inline-score', comparable);
-            row.dataset.tooltip = !comparable
-                ? 'No comparable recorded scores for the weighted benchmarks.'
-                : state.scoreMode === 'available'
-                    ? `${rankingNumber(model.lower)}, ${rankingNumber(model.coverage)}% benchmark coverage`
-                    : `${rankingNumber(model.lower)}–${rankingNumber(model.upper)}, ${rankingNumber(model.coverage)}% benchmark coverage`;
             row.tabIndex = 0;
             row.setAttribute('role', 'button');
             row.setAttribute('aria-label', `View approved scores for ${model.name}`);
@@ -245,10 +245,6 @@ export function createModelListView({ state, modelRows, openApprovedModelResults
                 identity.append(createOrganizationMark(model, 'bp-vendor-mark'));
             }
             identity.append(name);
-            if (Number(model.fallbackUsageCount) > 0) {
-                row.dataset.tooltip += `, Fallback used for ${model.fallbackUsageCount} benchmark${Number(model.fallbackUsageCount) === 1 ? '' : 's'}`;
-            }
-
             const track = document.createElement('span');
             track.className = 'bp-score-track';
             track.style.setProperty('--score-vendor-color', modelBarColor(model));
@@ -313,14 +309,20 @@ export function createModelListView({ state, modelRows, openApprovedModelResults
             row.addEventListener('click', activate);
             row.addEventListener('keydown', activate);
             row.append(rank, identity, track);
-            if (comparable) mountBarEndpointLabel(track, score, Math.max(startPosition, lowerPosition), Math.min(startPosition, lowerPosition));
+            if (comparable) {
+                mountBarEndpointLabel(track, score, Math.max(startPosition, lowerPosition), Math.min(startPosition, lowerPosition));
+                track.removeAttribute('data-tooltip');
+            }
             else row.append(score);
             modelRows.insertBefore(row, previousRow ? previousRow.nextSibling : modelRows.querySelector('.bp-model-row'));
             previousRow = row;
             renderedRows.set(key, { model, row });
         });
         }
-        [...modelRows.querySelectorAll('[data-model-key]')].forEach((row, index) => markModelFocusTarget(row, models[index]));
+        [...modelRows.querySelectorAll('[data-model-key]')].forEach((row, index) => {
+            markModelFocusTarget(row, models[index]);
+            if (!rowBindings.has(row)) rowBindings.set(row, onBindModelRow?.(row, models[index]));
+        });
         if (focused) renderWindowEdges(focused, charts);
         if (!focused && ((!charts && page?.hasMore) || state.rankingPageLoading[state.mode] || state.rankingPageError[state.mode])) {
             const footer = document.createElement('div');

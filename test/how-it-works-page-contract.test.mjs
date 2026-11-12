@@ -26,13 +26,13 @@ test('homepage How it works control navigates to a page instead of opening a dia
     assert.doesNotMatch(workspace, /howItWorksDialog|howItWorksButton/);
 });
 
-test('Back to topics belongs to the configuration page rather than the guide', () => {
+test('Home navigation belongs to the configuration page rather than the guide', () => {
     assert.doesNotMatch(guide, /Back to topics/i);
     assert.match(home, /id="back-to-topics"[^>]*class="[^"]*bp-quiet-action[^\"]*"[^>]*href="\/"/);
-    assert.match(home, /<a id="back-to-topics"[\s\S]*?fa-arrow-left[\s\S]*?<span>Back to topics<\/span><\/a>/);
-    const context = home.match(/<div class="bp-context-identity">([\s\S]*?)<\/div>/)[1];
+    assert.match(home, /<a id="back-to-topics"[\s\S]*?fa-house[\s\S]*?<span>Home<\/span><\/a>/);
+    const context = home.match(/<section class="bp-context-row"[\s\S]*?<\/section>/)[0];
     assert.match(context, /id="back-to-topics"/);
-    assert.match(context, /id="workspace-topic-summary"/);
+    assert.match(home, /id="workspace-topic-summary"/);
 });
 
 test('guide keeps the first read short with optional calculation details', () => {
@@ -52,6 +52,8 @@ test('guide keeps the first read short with optional calculation details', () =>
 test('Topics introduction leads to the public index, evidence and personal weights', () => {
     const topics = section('topics');
     assert.match(topics, /Browse Popular, Recent, or Mine/);
+    assert.match(topics, /Favorite topics to find them from your profile/);
+    assert.match(topics, /Popular reflects favorites, with recent favorites carrying more weight/);
     assert.match(topics, /Open a topic for its public index/);
     assert.match(topics, /a model for its results and sources/);
     assert.match(topics, /Personal weights let you build your own index/);
@@ -85,7 +87,10 @@ test('guide explains concrete scene identity and dynamic weight resolution witho
     assert.match(section('references'), /Personal indices prefer your saved target weights/);
     assert.match(section('references'), /coverage correction are calculated after expansion/);
     assert.match(section('references'), /Empty or unavailable targets retain their missing weight/);
-    assert.match(section('account'), /Propose a configured private topic through the hall/);
+    assert.match(section('references'), /Topics can reference one another in a loop/);
+    assert.match(section('references'), /no path to benchmarks adds no measured score or coverage/);
+    assert.doesNotMatch(section('references'), /acyclic|depth limit/);
+    assert.match(section('account'), /<strong>Make public<\/strong> in its editor/);
 });
 
 test('score copy distinguishes normalized measurements, estimates and unresolved gaps', () => {
@@ -127,13 +132,15 @@ test('fallback copy preserves explicit order, community inheritance, and real ze
 });
 
 test('account and evidence copy covers public/private creation and editable identity', () => {
-    assert.match(section('account'), /Support up to 3 collecting proposals and author 1/);
-    assert.match(section('account'), /Collection lasts 14 days/);
-    assert.match(section('account'), /30 other supporters trigger administrator review/);
-    assert.doesNotMatch(guide, /topic-proposals|Created by me|Configured by me/);
-    assert.match(section('account'), /Private topics and scenes are immediate, editable, and visible only to you/);
-    assert.match(section('account'), /display name and avatar in the account dialog/);
-    assert.match(section('account'), /GitHub links are your choice/);
+    assert.match(section('account'), /Publication is immediate/);
+    assert.match(section('account'), /up to three public topics at a time/);
+    assert.match(section('account'), /make it private before deleting it/);
+    assert.doesNotMatch(guide, /topic-proposals|collecting proposals|supporters|administrator review|proposal hall|Created by me|Configured by me/);
+    assert.match(section('account'), /Private topics and scenes are visible only to you/);
+    assert.match(section('account'), /href="\/me"/);
+    assert.match(section('account'), /href="\/settings"/);
+    assert.match(section('account'), /edit your details and privacy choices/);
+    assert.match(section('account'), /Showing a GitHub link is optional/);
     assert.match(section('trust'), /measured results and estimates/);
     assert.match(section('trust'), /All scores/);
     assert.match(section('trust'), /Change information/);

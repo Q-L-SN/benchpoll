@@ -65,6 +65,19 @@ body.bp-home .bp-navigation-views > button[aria-pressed="true"] { color: var(--b
 /* Only the roots of the saved forest receive an extra gap. No internal dividers. */
 .bp-configured-row.is-group-start { margin-top: 14px; }
 .bp-configured-copy { display: grid; gap: 2px; flex: 1; min-width: 0; }
+.bp-topic-navigation-link { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; color: inherit; text-decoration: none; }
+.bp-topic-navigation-link:focus-visible { outline: 2px solid var(--bp-purple); outline-offset: 3px; border-radius: 3px; }
+.bp-topic-navigation-link > .bp-topic-copy { flex: 1; min-width: 0; }
+.bp-topic-row-heading { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.bp-topic-configured-dot { display: inline-block; flex: 0 0 6px; width: 6px; height: 6px; border-radius: 50%; background: var(--bp-purple, #566c85); }
+.bp-topic-configured-dot[hidden] { display: none; }
+.bp-topic-favorite { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-width: 36px; min-height: 36px; padding: 4px; flex: 0 0 auto; border: 0; border-radius: 5px; background: transparent; color: var(--bp-muted); font: inherit; font-size: 11px; cursor: pointer; }
+.bp-topic-favorite[aria-pressed="true"], .bp-topic-favorite:hover { color: var(--bp-purple); }
+.bp-topic-favorite:focus-visible { outline: 2px solid var(--bp-purple); outline-offset: 2px; }
+.bp-topic-favorite[hidden] { display: none; }
+.bp-topic-report { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; min-width: 32px; min-height: 32px; padding: 4px; border: 0; background: transparent; color: var(--bp-muted); font: inherit; text-decoration: none; cursor: pointer; }
+.bp-topic-report:hover { color: var(--bp-purple); }
+.bp-topic-report:focus-visible { outline: 2px solid var(--bp-purple); outline-offset: 2px; border-radius: 4px; }
 .bp-configured-name, .bp-configured-context, .bp-configured-path { overflow-wrap: anywhere; }
 .bp-configured-context, .bp-configured-path { color: var(--bp-muted); font-size: 11px; line-height: 1.4; }
 .bp-configured-row.is-unavailable { cursor: not-allowed; }

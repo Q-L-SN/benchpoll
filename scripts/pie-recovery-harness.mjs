@@ -6,6 +6,7 @@ import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
 import { createFixtureState, workspace, weightedEntries } from './frontend/fixtures.mjs';
+import { recoveryScene, withRecoveryScenes } from '../test/helpers/workspace-scene-fixture.mjs';
 
 export function createRecoveryMemoryStorage() {
     const values = new Map();
@@ -29,13 +30,15 @@ export async function createPieRecoveryHarness({ sourceRoot = '.', ownerID = '7'
     const { comparisonProfileKey } = await module('public/js/shared/comparison-profile-key.js');
     const { readRankingContext } = await module('public/js/shared/ranking-url.js');
     const { topicReferenceError } = await module('public/js/workspace/topic-references.js');
+    const { isTopicReference } = await module('public/js/shared/topic-label.js');
+    const { mergeBenchmarkWeights } = await module('public/js/workspace/expanded-weights.js');
     const identity = await module('public/js/shared/account-identity.js');
     const block = (start, end) => {
         const left = source.indexOf(start), right = source.indexOf(end, left + start.length);
         assert.ok(left >= 0 && right > left, start); return source.slice(left, right);
     };
-    const state = Object.assign(createWorkspaceState(), { categoryID: 1, categoryPath: 'Language-models', mode: 'personal',
-        selectedContextValues: { budget: 'standard' }, comparisonRequest: { mode: 'best', keys: ['model'], filters: [] } });
+    const state = Object.assign(createWorkspaceState(), { categoryID: 1, categoryPath: '1/1', mode: 'personal',
+        selectedContextValues: { scene: recoveryScene.standard }, comparisonRequest: { mode: 'best', keys: ['model'], filters: [] } });
     const reads = [], writes = [], errors = [], applied = [], timers = new Map(), tasks = new Set();
     let api, nextTimer = 0, readHook = null;
     const setTimeout = callback => { const ID = ++nextTimer; timers.set(ID, callback); return ID; };
@@ -45,6 +48,7 @@ export async function createPieRecoveryHarness({ sourceRoot = '.', ownerID = '7'
     const saveButton = { listeners: {}, addEventListener: (type, callback) => { saveButton.listeners[type] = callback; } };
     const discardButton = { listeners: {}, addEventListener: (type, callback) => { discardButton.listeners[type] = callback; } };
     const globals = { estimationRequest, normalizeEstimationAlgorithm, state, ...weights, ...identity, portableFamilyEntry, comparisonProfileKey, readRankingContext, chartWeightMode, topicReferenceError,
+        isTopicReference, mergeBenchmarkWeights, recordProfileVisit() {},
         guestDrafts, pieRecovery: recovery, Number, Date, Map, Set, structuredClone, console: { error() {}, warn() {} },
         validateWorkspacePayload, validatePersonalPieSave, FALLBACK_CONFIGURATION_VERSION, FALLBACK_RULE_MODE: 'ordered', SAVE_DEBOUNCE_MS: 100,
         WORKSPACE_LOAD_RETRY_DELAYS_MS: [], workspaceLoadFailed: false, pendingFallbackSave: false, fallbackSaveFailed: false,
@@ -52,7 +56,7 @@ export async function createPieRecoveryHarness({ sourceRoot = '.', ownerID = '7'
         lowCoverageExpanded: false, otherConditionsExpanded: false, hiddenPersonalBenchmarkIDs: new Set(),
         benchmarkFallbackCatalogue: { invalidate() {}, setSnapshot() {} }, benchmarkSearch: { value: '' },
         benchmarkRows: { scrollTop: 0 }, modelRows: { scrollTop: 0 }, guestDraftSave: saveButton, guestDraftDiscard: discardButton,
-        window: { setTimeout, clearTimeout, queueMicrotask() {}, location: { search: '' } },
+        window: { setTimeout, clearTimeout, queueMicrotask() {}, location: { search: '', pathname: '/1/1' } },
         comparisonControls: { render() {} }, navigationChannel: { publish() { applied.push(structuredClone(state.personalEntries)); } },
         invalidSavedComparison: () => false, invalidateRankingPages() {}, rankingRecoveryScope: () => '',
         finishPendingWeightAdjustments: async () => true, waitForGestureToSettle: async () => {},
@@ -65,7 +69,7 @@ export async function createPieRecoveryHarness({ sourceRoot = '.', ownerID = '7'
         postJSON: async (route, body) => {
             assert.equal(route, '/api/get_weighted_workspace'); reads.push(structuredClone(body));
             if (readHook) await readHook(body);
-            return workspace(fixture, body);
+            return withRecoveryScenes(workspace(fixture, body), body.contextValues);
         }
     };
     globals.postWriteJSON = createRetryableWrite((_route, body, options) => {

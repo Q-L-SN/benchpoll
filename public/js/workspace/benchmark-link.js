@@ -27,7 +27,7 @@ export function createBenchmarkInformationLink(member, { getURL, onInspect, labe
     const reference = isTopicReference(member);
     link.href = reference ? member.url : getURL(member);
     link.dataset.benchmarkControl = 'information';
-    link.setAttribute('aria-label', reference ? `Open ${referenceLabel(member)}` : `Information and discussion for ${benchmarkAccessibleName(member, { showVersion })}`);
+    link.setAttribute('aria-label', reference ? `Visit ${referenceLabel(member)}` : `Information and discussion for ${benchmarkAccessibleName(member, { showVersion })}`);
     if (label !== undefined) link.textContent = label;
     else appendBenchmarkIdentity(link, member, { showVersion });
     link.addEventListener('click', event => {

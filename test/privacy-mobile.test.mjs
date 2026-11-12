@@ -53,7 +53,8 @@ test('private topics remain usable, are not researched for public topics, and ha
         assert.match(document, /do not use private-category names or configurations for research[^.]*research to develop public topics/i);
         assert.match(document, /even if you previously opted in/i);
         assert.match(document, /There is no research opt-in/i);
-        assert.match(document, /proposal hall/i);
+        assert.match(document, /publish a private topic/i);
+        assert.doesNotMatch(document, /proposal hall/i);
         assert.doesNotMatch(document, /href="\/topic-proposals"/i);
         assert.match(document, /(?:operating, supporting and securing|operate, support and secure)/i);
         assert.match(document, /(?:past research records[^.]*not automatically erased|does not undo research already completed or automatically erase past choices, inputs or results)/i);
@@ -192,11 +193,12 @@ test('privacy and account prompts explain the real soft-deactivation and reactiv
     assert.match(accountRoute, /DELETE FROM user_comparison_profiles/);
     assert.doesNotMatch(accountRoute, /DELETE FROM personal_pies|DELETE FROM users/);
     assert.match(privacy, /Signing in with GitHub again reactivates the account/);
-    for (const document of [read('private/home.html'), read('private/contribute.html')]) {
-        assert.match(document, /Deactivate/);
-        assert.match(document, /reactivates the account/);
-        assert.doesNotMatch(document, /This action cannot be undone|Account successfully deleted/);
-    }
+    const settings = read('public/js/profile-settings.js');
+    assert.match(settings, /Delete account/);
+    assert.match(settings, /weights, private topics and review records are retained/);
+    assert.match(settings, /reactivates the account/);
+    assert.match(settings, /Request data erasure/);
+    assert.doesNotMatch(settings, /This action cannot be undone|Account successfully deleted/);
 });
 
 test('legal links and private-category disclosure are accessible before signing in', () => {

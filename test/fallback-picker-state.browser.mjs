@@ -62,12 +62,13 @@ before(async () => {
                     { familyID: 13, familyEntries: [member(4), member(2)] });
                 picker.refresh();
             };
+            state.refreshShares = () => { composition.families[1].weightBasisPoints = 4000; picker.refresh(); };
             state.render = change => family.renderPersonal({ primary, entries: [member(2), member(3)], active: true, disabled: false, ...change });
             globalThis.review = state;
         };
     ` }, bundle: true, format: 'iife', write: false, logLevel: 'silent' });
     bundle = result.outputFiles[0].text;
-    browser = await chromium.launch({ headless: true });
+    browser = await chromium.launch({ headless: true, executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH });
 });
 after(async () => { await browser?.close(); });
 
@@ -80,7 +81,7 @@ async function pageFor(t) {
     await page.route('**/*', route => route.abort());
     await page.setContent('<button id="inline-fallback-toggle">Fallback</button><div id="chain"></div>');
     await page.addStyleTag({ content: await read('public/css/global.css') });
-    for (const path of ['tokens', 'components', 'tooltip', 'fallback', 'fallback-picker']) {
+    for (const path of ['tokens', 'components', 'tooltip', 'disclosure', 'fallback', 'choice-pager', 'fallback-picker']) {
         await page.addStyleTag({ content: await read(`public/css/ui/${path}.css`) });
     }
     await page.addScriptTag({ content: bundle });
@@ -103,13 +104,13 @@ test('reopening moves the chosen configuration first and keeps remaining communi
     await page.locator('.bp-fallback-picker-cancel').click();
     await page.locator('#inline-fallback-toggle').click();
     assert.deepEqual(await keys(), ['[1,4,2]', '[1,2,3]', '[1]']);
-    assert.equal(await page.locator('.bp-fallback-picker-viewport').evaluate(node => node.scrollLeft), 0);
+    assert.equal(await page.locator('.bp-choice-pager').getAttribute('data-page'), '1');
 });
 
 test('concrete fallback chains are ordered, deduplicated, and applied directly from their cards', async t => {
     const page = await pageFor(t);
     await page.getByRole('button', { name: 'Fallback', exact: true }).click();
-    assert.equal(await page.getByRole('list', { name: 'Fallback orders', exact: true }).count(), 1);
+    assert.equal(await page.getByRole('list', { name: 'Fallback configurations', exact: true }).count(), 1);
     assert.equal(await page.getByRole('radio').count(), 0);
     assert.equal(await page.locator('.bp-fallback-picker-column').count(), 3);
     const current = page.locator('.bp-fallback-picker-column[data-family-key="[1,2,3]"]');
@@ -134,6 +135,7 @@ test('following community and explicitly choosing no fallback remain distinct ch
     const page = await pageFor(t);
     await page.evaluate(() => { review.current = null; });
     await page.getByRole('button', { name: 'Fallback', exact: true }).click();
+    await page.getByRole('button', { name: 'Next fallback configurations page' }).click();
     const summary = page.locator('.bp-fallback-picker-selection-status');
     const noneColumn = page.locator('.bp-fallback-picker-column[data-family-key="[1]"]');
     const none = noneColumn.getByRole('button');
@@ -183,9 +185,12 @@ test('catalogue refresh preserves card focus and selection while closing does no
     await alternative.focus();
     await page.evaluate(() => { review.previousButton = document.activeElement; review.refreshCatalogue(); });
     assert.equal(await page.locator('.bp-fallback-picker-column').count(), 4, 'A duplicate catalogue chain must not create another choice');
-    assert.equal(await page.evaluate(() => review.previousButton.isConnected), false, 'The refresh must really replace the focused node');
+    assert.equal(await page.evaluate(() => review.previousButton.isConnected), true, 'An unchanged configuration retains its focused control');
     assert.equal(await alternative.evaluate(node => node === document.activeElement), true);
     assert.equal(await alternative.getAttribute('aria-pressed'), 'false');
+    await page.evaluate(() => review.refreshShares());
+    assert.equal(await page.evaluate(() => review.previousButton.isConnected), false, 'A changed share updates the card contents');
+    assert.equal(await alternative.evaluate(node => node === document.activeElement), true, 'A share refresh preserves keyboard focus on the same choice');
     await page.getByRole('button', { name: 'Close', exact: true }).click();
     await waitForReturnFocus(page);
     assert.deepEqual(await page.evaluate(() => ({ mutations: review.mutations, current: review.current.entries.map(entry => entry.conditionID) })),

@@ -169,7 +169,7 @@ async function discussion({ enabled = 0, active = 1, deleted = false, thread = f
     const post = { ID: 11, parent_ID: null, category_ID: 7, context_ID: 10, category_name: 'Topic',
         context_values: '{}', body: 'Message', created_at: '2026-10-27T00:00:00Z', author_ID: owner,
         author_name: 'Custom display name', author_avatar_url: null, deleted_at: deleted ? '2026-10-27' : null,
-        author_github_username: username, author_show_github_profile: enabled, author_profile_active: active };
+        author_github_username: username, author_show_github_profile: enabled, author_profile_active: active, author_public_id: 'member' };
     const connection = {
         beginTransaction: async () => {}, commit: async () => {}, rollback: async () => {}, release() {},
         async execute(sql, args = []) {
@@ -179,7 +179,7 @@ async function discussion({ enabled = 0, active = 1, deleted = false, thread = f
                 return [[{ contextID: 10, category_ID: 7, scene_context_ID: null, context_hash: args.at(-1) }]];
             }
             if (sql.includes('FROM categories c') && sql.includes('WHERE c.ID = ?')) return [[{
-                ID: 7, name: 'Topic', slug: 'topic', description: '', owner_user_ID: null, created_by_user_ID: owner
+                ID: 7, public_ID: 7, private_ID: null, name: 'Topic', slug: 'topic', description: '', owner_user_ID: null, created_by_user_ID: owner
             }]];
             if (sql.includes('FROM ranking_dimensions')) return [[]];
             if (/SELECT ID\s+FROM ranking_contexts/.test(sql)) return [[{ ID: 10 }]];
@@ -196,11 +196,12 @@ async function discussion({ enabled = 0, active = 1, deleted = false, thread = f
         { categoryID: 7, contextValues: {}, ...(thread ? { threadID: 11 } : {}) }) };
 }
 
-test('discussion roots and replies expose only opted-in active authors, never private identity columns', async () => {
+test('discussion roots and replies link active authors internally and never disclose provider identity columns', async () => {
     for (const thread of [false, true]) for (const enabled of [0, 1]) for (const active of [0, 1]) for (const deleted of [false, true]) {
         const { result, calls } = await discussion({ enabled, active, deleted, thread });
         for (const post of [result.posts[0], ...(result.root ? [result.root] : [])]) {
-            assert.equal(Object.hasOwn(post, 'githubURL'), enabled === 1 && active === 1 && !deleted);
+            assert.equal(Object.hasOwn(post, 'githubURL'), false);
+            assert.equal(post.authorPublicID, active === 1 && !deleted ? 'member' : null);
             assert.equal(Object.hasOwn(post, 'author_ID'), false);
             assert.equal(Object.keys(post).some(key => /username|profile_active|show_github/.test(key)), false);
             if (post.githubURL) assert.equal(post.githubURL, 'https://github.com/Verified-Login');

@@ -6,7 +6,8 @@ import crypto from 'node:crypto';
 import { claimWriteIntent, completeWriteIntent } from './write-idempotency.js';
 import { ownsCategory } from './private-category-service.js';
 import { topicCreator } from './topic-service.js';
-import { FEATURED_TOPIC_ID, topicURL, sceneSummary } from './public/js/shared/topics.js';
+import { loadGlobalConditionWeights } from './global-topic-weights.js';
+import { topicURL, sceneSummary } from './public/js/shared/topics.js';
 import { currentScoreSQL } from './score-aggregation.js';
 import { scoreEvidenceHash } from './score-evidence.js';
 import { FALLBACK_RULE_MODE, familyKey, resolvedFamilyConditionIDs } from './public/js/shared/benchmark-families.js';
@@ -16,7 +17,7 @@ import { availableResultInference, normalizeAvailableInferenceVersion,
     AVAILABLE_INFERENCE_VERSION } from './public/js/shared/available-score.js';
 import { createPairwiseReference } from './pairwise-score.js';
 import { DEFAULT_ESTIMATION_ALGORITHM, normalizeEstimationAlgorithm } from './public/js/shared/estimation-algorithms.js';
-import { benchmarkVersionTieOrder } from './public/js/shared/benchmark-version-order.js';
+import { benchmarkVersionTieOrder, benchmarkEvaluationOrder } from './public/js/shared/benchmark-version-order.js';
 import { communityVersionComposition, expandCommunityVersions } from './public/js/shared/benchmark-version-choice.js';
 import { isAACondition, AA_DISPLAY_RESTRICTION } from './public/js/shared/aa-ranking-policy.js';
 import { aaResultReason } from './aa-archive-policy.js';
@@ -117,27 +118,33 @@ function normalizeWeights(entries) {
 }
 
 async function resolveCategory(connection, requestedCategoryID, userID = null) {
-    const categoryID = requestedCategoryID == null ? FEATURED_TOPIC_ID
-        : parseSafeInteger(requestedCategoryID, { minimum: 1 });
-    if (categoryID === null) throw requestError(400, 'invalid_category_id');
-    const [rows] = await connection.execute(`SELECT c.ID, c.name, c.slug, c.description, c.position, c.owner_user_ID,
-        c.created_by_user_ID, COALESCE(NULLIF(p.display_name, ''), creator.name) AS creator_name,
+    const requestedID = requestedCategoryID == null ? null : parseSafeInteger(requestedCategoryID, { minimum: 1 });
+    if (requestedCategoryID != null && requestedID === null) throw requestError(400, 'invalid_category_id');
+    const identityFilter = requestedCategoryID == null
+        ? 'c.is_official = 1 AND c.name = ? AND c.owner_user_ID IS NULL' : 'c.ID = ?';
+    const [rows] = await connection.execute(`SELECT c.ID, c.name, c.slug, c.public_ID, c.private_ID, c.is_official, c.description, c.position, c.owner_user_ID,
+        c.created_by_user_ID, p.public_id AS creator_public_id, COALESCE(NULLIF(p.display_name, ''), creator.name) AS creator_name,
         COALESCE(p.avatar_data_url, creator.profile_picture_URL) AS creator_avatar
         FROM categories c LEFT JOIN users creator ON creator.ID = c.created_by_user_ID AND creator.deleted_at IS NULL
-        LEFT JOIN user_public_profiles p ON p.user_ID = creator.ID WHERE c.ID = ? AND c.is_active = 1`, [categoryID]);
+        LEFT JOIN user_public_profiles p ON p.user_ID = creator.ID WHERE ${identityFilter} AND c.is_active = 1`,
+    [requestedCategoryID == null ? 'Intelligence' : requestedID]);
     if (!rows.length || rows[0].owner_user_ID != null && !ownsCategory(rows[0], userID)) {
         throw requestError(404, 'category_not_found');
     }
     const category = rows[0];
+    const categoryID = Number(category.ID);
     const isPrivate = category.owner_user_ID != null;
     const lineage = [{ ID: categoryID, name: category.name, position: Number(category.position ?? 0) }];
     return {
         ID: categoryID,
+        publicID: Number(category.public_ID),
+        privateID: isPrivate || String(category.created_by_user_ID ?? '') === String(userID ?? '') ? category.private_ID ?? null : null,
         description: category.description ?? '',
         creator: topicCreator(category),
-        path: topicURL(categoryID, category.name, isPrivate, category.slug).slice(1),
+        path: topicURL({ ...category, isPrivate }).slice(1),
         lineage,
         isPrivate,
+        isOfficial: Boolean(Number(category.is_official)),
         isLeaf: true
     };
 }
@@ -832,7 +839,7 @@ function decorateFallbackRules(rules, conditionsByID) {
     }));
 }
 
-export function buildBenchmarkList(conditions, publicEntries, personalEntries, families = [], familyComposition = [], personalRules = []) {
+export function buildBenchmarkList(conditions, publicEntries, personalEntries, families = [], familyComposition = [], personalRules = [], globalWeights = new Map()) {
     const measured = new Map(conditionCoverage(conditions.filter(condition => condition.type !== 'topic'))
         .map(condition => [condition.conditionID, condition]));
     conditions = conditions.map(condition => condition.type === 'topic' ? condition : measured.get(condition.conditionID));
@@ -854,6 +861,7 @@ export function buildBenchmarkList(conditions, publicEntries, personalEntries, f
         ...condition,
         publicWeightBasisPoints: publicWeights.get(condition.conditionID) ?? 0,
         publicWeight: roundTo((publicWeights.get(condition.conditionID) ?? 0) / 100),
+        globalWeightBasisPoints: globalWeights.get(condition.conditionID) ?? 0,
         personalWeightBasisPoints: personalWeights.get(condition.conditionID) ?? null,
         personalWeight: personalWeights.has(condition.conditionID)
             ? roundTo(personalWeights.get(condition.conditionID) / 100)
@@ -874,8 +882,7 @@ export function buildBenchmarkList(conditions, publicEntries, personalEntries, f
             familyEntries: family.entries, publicWeightBasisPoints, publicWeight: roundTo(publicWeightBasisPoints / 100),
             personalWeightBasisPoints, personalWeight: personalWeightBasisPoints === null ? null : roundTo(personalWeightBasisPoints / 100) });
     }
-    rows.sort((a, b) => b.publicWeightBasisPoints - a.publicWeightBasisPoints
-        || benchmarkVersionTieOrder(a, b) || Number(a.isFamily ?? false) - Number(b.isFamily ?? false)
+    rows.sort((a, b) => benchmarkEvaluationOrder(a, b) || Number(a.isFamily ?? false) - Number(b.isFamily ?? false)
         || (a.familyKey ?? '').localeCompare(b.familyKey ?? ''));
     let previousWeight = null;
     let previousRank = 0;
@@ -952,6 +959,7 @@ export async function resolveRankingContext(connection, {
     const scene = await resolveTopicScene(connection, category, contextValues, { create, requireAllDimensions });
     if (scene) return {
         ...scene, categoryID: category.ID, categoryPath: category.path,
+        publicID: category.publicID, privateID: category.privateID, isOfficial: category.isOfficial,
         categoryName: category.lineage.at(-1).name, description: sceneSummary({
             name: category.lineage.at(-1).name, description: category.description }, scene.scene),
         topicDescription: category.description, creator: category.creator,
@@ -970,6 +978,7 @@ export async function resolveRankingContext(connection, {
     return {
         ID: context.ID,
         categoryID: category.ID,
+        publicID: category.publicID, privateID: category.privateID, isOfficial: category.isOfficial,
         categoryPath: category.path,
         categoryName: category.lineage.at(-1).name,
         description: category.description,
@@ -1058,6 +1067,12 @@ function deferComparisonMetadata(response, comparisonScores) {
     deferRankingMetadata(response, 'comparisonScores', () => cloneRankingMetadata(comparisonScores));
 }
 
+function measuredFraction(weight, total) {
+    const fraction = weight / total;
+    // Expanded paths can add a few rounding bits to a fully measured pie.
+    return Math.abs(fraction - 1) <= 32 * Number.EPSILON ? 1 : Math.min(1, Math.max(0, fraction));
+}
+
 export function scoreModels(models, weightedEntries, totalBasisPoints, { fallbackRules = [], familyComposition = [], fallbackScope = 'personal', scoreMode = 'range', availableInferenceVersion = AVAILABLE_INFERENCE_VERSION, estimationAlgorithm = DEFAULT_ESTIMATION_ALGORITHM, percentileReference = null, comparisonScoreIndexes = null, deferMetadata = false, excludedConditionIDs = new Set() } = {}) {
     currentInferenceVersion(availableInferenceVersion);
     currentEstimationAlgorithm(estimationAlgorithm);
@@ -1091,6 +1106,7 @@ export function scoreModels(models, weightedEntries, totalBasisPoints, { fallbac
         const resultKeys = new Set();
         const fallbackResolutions = [];
         const calculationScores = [];
+        const coverageEntries = [];
         const inferredScores = [];
         const estimate = reference?.estimate(model);
         let inferredBasisPoints = 0;
@@ -1108,6 +1124,7 @@ export function scoreModels(models, weightedEntries, totalBasisPoints, { fallbac
         };
         for (const { entry, families } of plans) {
             const entryFraction = entry.weightBasisPoints / totalBasisPoints;
+            let measuredWeight = 0, measuredContribution = 0;
             for (const { family, fraction, chain } of families) {
                 let conditionID = null, normalizedScore = null, attemptedCount = chain.length;
                 for (let index = 0; index < chain.length; index++) {
@@ -1133,6 +1150,8 @@ export function scoreModels(models, weightedEntries, totalBasisPoints, { fallbac
                     upper += entryFraction * fraction * resolved.normalizedScore;
                     const weight = entry.weightBasisPoints * fraction;
                     coveredBasisPoints += weight;
+                    measuredWeight += weight;
+                    measuredContribution += weight * resolved.normalizedScore;
                     resultKeys.add(resultKey(resolved.conditionID));
                     const isFallback = resolved.conditionID !== entry.conditionID;
                     if (isFallback) fallbackCoveredBasisPoints += weight;
@@ -1146,8 +1165,11 @@ export function scoreModels(models, weightedEntries, totalBasisPoints, { fallbac
                     weightBasisPoints: entry.weightBasisPoints * fraction
                 });
             }
+            coverageEntries.push({ conditionID: entry.conditionID, weightBasisPoints: entry.weightBasisPoints,
+                coveredWeightBasisPoints: Math.min(entry.weightBasisPoints, measuredWeight), coverage: measuredFraction(measuredWeight, entry.weightBasisPoints) * 100,
+                normalizedScore: measuredWeight > 0 ? measuredContribution / measuredWeight : null });
         }
-        const observedFraction = coveredBasisPoints / totalBasisPoints;
+        const observedFraction = measuredFraction(coveredBasisPoints, totalBasisPoints);
         const availableInference = scoreMode === 'available' && coveredBasisPoints > 0
             ? availableResultInference(calculationScores.reduce((sum, score) => sum
                 + score.normalizedScore * (score.weightBasisPoints / coveredBasisPoints), 0), observedFraction,
@@ -1169,6 +1191,8 @@ export function scoreModels(models, weightedEntries, totalBasisPoints, { fallbac
             lower: scoreMode === 'available' ? availableScore : roundTo(lower),
             upper: scoreMode === 'available' ? availableScore : roundTo(upper),
             coverage: roundTo(observedFraction * 100),
+            coverageFraction: observedFraction,
+            coverageEntries,
             availableInference,
             inferredScores: coveredBasisPoints > 0 ? inferredScores.map(weightedScore) : [],
             resultCount: resultKeys.size,
@@ -1184,6 +1208,12 @@ export function scoreModels(models, weightedEntries, totalBasisPoints, { fallbac
         }
         return response;
     });
+}
+
+// One fully measured model contributes one unit. Keep precision until the UI
+// floors the aggregate; rounded per-model percentages lose small partitions.
+export function aggregateCoverageIndex(models) {
+    return models.reduce((sum, model) => sum + (model.coverageFraction ?? model.coverage / 100), 0);
 }
 
 export function scoreComparison(models, entries, total, rules, options, preparedGroups = null) {
@@ -1564,7 +1594,7 @@ async function buildRankingWorkspace(db, {
     }
     const conditions = cloneRankingMetadata(availableConditions);
     const conditionsByID = new Map(conditionCoverage(conditions).map(condition => [condition.conditionID, condition]));
-    const referenceTargets = await loadTopicReferenceTargets(db, userID);
+    const referenceTargets = await loadTopicReferenceTargets(db, userID, { includeMetadata: true });
     const referencesByID = new Map(referenceTargets.map(target => [target.contextID, target]));
     for (const target of referenceTargets) conditionsByID.set(-target.contextID, referenceCondition(target));
     const publicPie = proposalName === null ? await loadPublicPie(db, context, conditionsByID)
@@ -1658,10 +1688,11 @@ async function buildRankingWorkspace(db, {
     const publicEffectiveEntries = publicExpanded?.entries ?? publicPie.scoringEntries;
     const personalEffectiveComposition = personalExpanded?.familyComposition ?? personalCommunityComposition;
     const publicEffectiveComposition = publicExpanded?.familyComposition ?? familyComposition;
-    const evaluationConditions = [...conditions, ...referenceTargets.filter(target => target.contextID !== context.ID
-        && (context.isPrivate || !target.isPrivate)).map(referenceCondition)];
+    const evaluationConditions = [...conditions, ...referenceTargets.filter(target =>
+        context.isPrivate || !target.isPrivate).map(referenceCondition)];
+    const globalWeights = await loadGlobalConditionWeights(db);
     const benchmarkList = buildBenchmarkList(evaluationConditions, publicEntries, personalEntries, familyCatalogue,
-        familyComposition, personalFallbackRules);
+        familyComposition, personalFallbackRules, globalWeights);
     const fields = await loadScoreFieldCatalog(db);
     const scoringConditionIDs = [...new Set([
         ...personalEffectiveEntries.map(entry => entry.conditionID),
@@ -1736,6 +1767,14 @@ async function buildRankingWorkspace(db, {
         { familyComposition: publicEffectiveComposition, fallbackScope: 'public', scoreMode, availableInferenceVersion, estimationAlgorithm,
             percentileReference, comparisonScoreIndexes, jsonMemberMetadata, excludedConditionIDs });
 
+    const decorateReferenceComposition = item => {
+        const ranked = scoreComparison(models, item.entries, PIE_TOTAL_BASIS_POINTS,
+            { scoreMode: 'range', familyComposition: item.familyComposition, fallbackScope: 'public',
+                excludedConditionIDs, jsonMemberMetadata: true }, compareOptions, preparedGroups);
+        return { ...item, entries: decoratePieEntries(item.entries, conditionsByID),
+            coverageIndex: aggregateCoverageIndex(ranked) };
+    };
+
     return {
         scoreMode,
         estimationAlgorithm,
@@ -1747,24 +1786,24 @@ async function buildRankingWorkspace(db, {
             families: group.families.map(family => ({ ...family,
                 entries: decorateFallbackRules([{ ...family, mode: FALLBACK_RULE_MODE }], conditionsByID)[0].entries })) })),
         personalPie: {
+            coverageIndex: aggregateCoverageIndex(personalRanking),
             revision: storedPersonalPie?.revision ?? 0,
             isDraft: Boolean(previewPersonalPie) || !storedPersonalPie,
             editable: true,
             entries: personalEntries,
             effectiveEntries: decoratePieEntries(personalEffectiveEntries, conditionsByID),
-            referenceCompositions: (personalExpanded?.referenceCompositions ?? []).map(item => ({ ...item,
-                entries: decoratePieEntries(item.entries, conditionsByID) })),
+            referenceCompositions: (personalExpanded?.referenceCompositions ?? []).map(decorateReferenceComposition),
             referenceIssues: personalExpanded?.issues ?? [],
             fallbackRules: personalFallbackRules,
             communityFallbackComposition: personalCommunityComposition
         },
         publicPie: {
+            coverageIndex: aggregateCoverageIndex(publicRanking),
             participantCount: publicPie.participantCount,
             isFallback: false,
             entries: publicEntries,
             effectiveEntries: decoratePieEntries(publicExpanded?.entries ?? publicReferenceWeights(publicPie), conditionsByID),
-            referenceCompositions: (publicExpanded?.referenceCompositions ?? []).map(item => ({ ...item,
-                entries: decoratePieEntries(item.entries, conditionsByID) })),
+            referenceCompositions: (publicExpanded?.referenceCompositions ?? []).map(decorateReferenceComposition),
             referenceIssues: publicExpanded?.issues ?? [],
             familyComposition
         },

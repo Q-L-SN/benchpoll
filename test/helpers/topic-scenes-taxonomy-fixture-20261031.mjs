@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { topicSlug } from '../../public/js/shared/topics.js';
-import { legacyTopicRouteKey } from '../../topic-service.js';
+import { legacyTopicRouteKey } from '../../scripts/historical-topic-route-key.mjs';
 import { sceneContext, EMPTY_TOPIC_CONTEXT_HASH } from '../../topic-scenes-service.js';
 import { planTopicScenes, TOPIC_SCENES_MIGRATION } from '../../scripts/migrate-topic-scenes-20261031.mjs';
 import { sceneSchemaDatabase } from './topic-scenes-schema-fixture-20261031.mjs';

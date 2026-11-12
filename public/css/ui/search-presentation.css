@@ -1,5 +1,5 @@
 .th-server-card .th-visual { display: grid; place-items: center; }
-.th-server-card { grid-template-rows: 52px minmax(0, 1fr) auto; }
+.th-server-card { grid-template-rows: 62px minmax(0, 1fr) auto; }
 .th-server-card:has(details[open]) { height: auto; min-height: 416px; }
 .th-server-index-link { color: var(--bp-muted, #657080); font-size: 13px; text-decoration: none; }
 .th-server-index-link:hover { color: var(--bp-accent, #c45000); }

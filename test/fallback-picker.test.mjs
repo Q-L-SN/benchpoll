@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 import { fallbackPickerChoices } from '../public/js/workspace/fallback-picker.js';
-import { fallbackScrollEdges, sequentialScrollStep } from '../public/js/workspace/fallback-picker-scroll.js';
+import { choicePageWindow } from '../public/js/shared/choice-pager.js';
 import { createBenchmarkFallbackCatalogue } from '../public/js/workspace/benchmark-fallback-catalogue.js';
 import { familyKey } from '../public/js/shared/benchmark-families.js';
 import { excludedFromRanking } from '../public/js/shared/aa-ranking-policy.js';
@@ -70,7 +70,7 @@ test('Public viewing includes all active shares and paged configurations without
     assert.equal(unknown[0].shareBasisPoints, null);
 });
 
-test('the legacy fallback chooser preserves read-only Public inspection', async () => {
+test('the standalone fallback chooser preserves read-only Public inspection', async () => {
     const workspace = await readFile(new URL('../public/js/home-workspace.js', import.meta.url), 'utf8');
     const picker = await readFile(new URL('../public/js/workspace/fallback-picker.js', import.meta.url), 'utf8');
     assert.match(workspace, /fallbackPicker\.open\(primary, \{ action: 'view', getReturnFocus: \(\) => publicFallbackToggle \}\)/);
@@ -99,33 +99,25 @@ test('no public composition never invents percentages and explicit chains retain
     assert.deepEqual(choices[0].entries, current.entries);
 });
 
-test('edge fades follow actual clipping, not a padded scroll offset at the first snap point', () => {
-    assert.deepEqual(fallbackScrollEdges({ firstLeft: 2, lastRight: 800, left: 0, right: 400 }), { left: false, right: true });
-    assert.deepEqual(fallbackScrollEdges({ firstLeft: -.5, lastRight: 400.5, left: 0, right: 400 }), { left: false, right: false });
-    assert.deepEqual(fallbackScrollEdges({ firstLeft: -100, lastRight: 400, left: 0, right: 400 }), { left: true, right: false });
+test('vertical choice pages preload three neighboring pages and clamp boundary navigation', () => {
+    assert.deepEqual(choicePageWindow({ count: 60, pageSize: 6 }),
+        { current: 0, pages: 10, first: 0, last: 3, preloadThrough: 24 });
+    assert.deepEqual(choicePageWindow({ count: 60, pageSize: 6, index: 5 }),
+        { current: 5, pages: 10, first: 2, last: 8, preloadThrough: 54 });
+    assert.deepEqual(choicePageWindow({ count: 7, pageSize: 2, index: 100 }),
+        { current: 3, pages: 4, first: 0, last: 3, preloadThrough: 14 });
+    assert.equal(choicePageWindow({ count: 0, pageSize: 2, index: -1 }).current, 0);
 });
 
-test('every chooser uses the same horizontal cards without a grid or layout preference', async () => {
+test('fallback cards use intrinsic vertical stacks with the shared page controller', async () => {
     const picker = await readFile(new URL('../public/js/workspace/fallback-picker.js', import.meta.url), 'utf8');
     const css = await readFile(new URL('../public/css/ui/fallback-picker.css', import.meta.url), 'utf8');
-    assert.doesNotMatch(picker, /layoutButtons|layoutGroup|setLayout|writeFallbackPickerLayout/);
-    assert.doesNotMatch(css, /data-layout|bp-fallback-picker-layout/);
-    assert.match(css, /\.bp-fallback-picker-columns \{ display: flex;/);
-    assert.match(css, /\.bp-fallback-picker-steps \{[^}]*overflow-y: auto/);
+    assert.match(picker, /createChoicePager\(/);
+    assert.doesNotMatch(picker, /createFallbackPickerScroll|explicit \$\{|Community share'|Your configuration|`Order /);
+    assert.match(css, /choice-pager.css/);
+    assert.doesNotMatch(css, /\.bp-fallback-picker-steps \{[^}]*overflow-y: auto/);
     assert.match(css, /\.bp-fallback-picker-column \{[^}]*border: 1px solid var\(--bp-line-strong\)/);
     assert.match(css, /\.bp-fallback-picker-column\.is-selected \{[^}]*border-color: var\(--bp-accent\)/);
-});
-
-test('sequential scroll finishes vertical content before moving to the adjacent order, including reverse and bounds', () => {
-    const base = { delta: 100, top: 0, height: 600, visible: 200, index: 1, count: 3 };
-    assert.deepEqual(sequentialScrollStep(base), { kind: 'vertical', top: 100 });
-    assert.deepEqual(sequentialScrollStep({ ...base, top: 390 }), { kind: 'vertical', top: 400 });
-    assert.deepEqual(sequentialScrollStep({ ...base, top: 400 }), { kind: 'column', index: 2 });
-    assert.deepEqual(sequentialScrollStep({ ...base, top: 0, delta: -100 }), { kind: 'column', index: 0 });
-    assert.deepEqual(sequentialScrollStep({ ...base, top: 10, delta: -100 }), { kind: 'vertical', top: 0 });
-    assert.deepEqual(sequentialScrollStep({ ...base, top: 400, index: 2 }), { kind: 'boundary' });
-    assert.deepEqual(sequentialScrollStep({ ...base, top: 0, delta: -100, index: 0 }), { kind: 'boundary' });
-    assert.deepEqual(sequentialScrollStep({ ...base, height: 50 }), { kind: 'column', index: 2 });
 });
 
 test('catalogue exposes data, not benchmark DOM, and an unknown entrance has a safe empty view', () => {

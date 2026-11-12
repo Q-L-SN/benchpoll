@@ -2,7 +2,7 @@ const normalized = value => String(value).normalize('NFKC').trim().toLowerCase()
 
 export const RESERVED_CATEGORY_PATHS = Object.freeze([
     'api', 'assets', 'css', 'js', 'fonts', 'contribute', 'how-it-works', 'personal', 'privacy', 'terms', 'cookies', 'community-guidelines', 'account',
-    'login', 'github-login', 'github-callback', 'adminlogin', 'censor', 'topic-proposals',
+    'login', 'github-login', 'github-callback', 'adminlogin', 'censor',
     'dialogpage', 'discussions', 'rankings', 'favicon.ico', 'apple-touch-icon.png',
     'robots.txt', 'sitemap.xml', '.well-known'
 ]);

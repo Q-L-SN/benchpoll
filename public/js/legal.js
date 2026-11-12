@@ -2,6 +2,10 @@ import { createTaxonomyDrawer } from './shared/taxonomy-drawer.js?v=privacy-mobi
 import { enhanceUI } from './shared/ui-components.js';
 
 enhanceUI();
+document.querySelectorAll('[data-history-back]').forEach(link => link.addEventListener('click', event => {
+    if (event.button || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || history.length < 2) return;
+    event.preventDefault(); history.back();
+}));
 
 const toggle = document.getElementById('taxonomy-toggle');
 const sidebar = document.querySelector('.bp-sidebar');

@@ -80,6 +80,8 @@ export function groupBenchmarkRows(rows) {
             memberConditionIDs: versions.map(row => row.conditionID),
             scoreCount: versions.reduce((sum, row) => sum + row.scoreCount, 0),
             publicWeightBasisPoints, publicWeight: publicWeightBasisPoints / 100,
+            ...(versions.some(row => row.globalWeightBasisPoints !== undefined)
+                ? { globalWeightBasisPoints: versions.reduce((sum, row) => sum + (row.globalWeightBasisPoints ?? 0), 0) } : {}),
             personalWeightBasisPoints, personalWeight: personalWeightBasisPoints === null ? null : personalWeightBasisPoints / 100 };
     })].sort((a, b) => b.publicWeightBasisPoints - a.publicWeightBasisPoints || a.conditionID - b.conditionID);
     let rank = 0, previousWeight = null;

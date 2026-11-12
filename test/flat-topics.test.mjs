@@ -1,15 +1,16 @@
+import { legacyTopicRouteKey } from '../scripts/historical-topic-route-key.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { FEATURED_TOPIC_ID, topicURL } from '../public/js/shared/topics.js';
-import { normalizeTopicRequest, serializeTopic, legacyTopicRouteKey, getTopic, listTopics } from '../topic-service.js';
+import { normalizeTopicRequest, serializeTopic, getTopic, listTopics } from '../topic-service.js';
 import { buildCategoryNavigation, buildPersonalNavigation } from '../navigation-service.js';
 import { flatTopicsPlan } from '../scripts/migrate-flat-topics-20261022.mjs';
 
 test('topic identity is numeric and independent of the old taxonomy name', () => {
-    assert.equal(FEATURED_TOPIC_ID, 54);
-    assert.equal(topicURL(54, 'Renamed General Intelligence'), '/renamed-general-intelligence');
-    assert.equal(topicURL(3, 'My mix', true), '/personal/3');
+    assert.equal(FEATURED_TOPIC_ID, 1);
+    assert.equal(topicURL(54, 'Renamed General Intelligence'), '/54');
+    assert.equal(topicURL('PrivateToken3', 'My mix', true), '/private/PrivateToken3');
     assert.throws(() => topicURL(-1, 'Invalid'));
 });
 
@@ -24,12 +25,13 @@ test('topic requests accept explicit visibility and bounded plain text only', ()
 });
 
 test('creator credits expose the public profile, never account IDs or an owner-only default', () => {
-    const topic = serializeTopic({ ID: 55, name: 'Software', created_by_user_ID: '123',
+    const topic = serializeTopic({ ID: 55, public_ID: 55, name: 'Software', created_by_user_ID: '123', creator_public_id: 'writer',
         creator_name: 'A contributor', creator_avatar: 'data:image/png;base64,test', owner_user_ID: null });
-    assert.equal(topic.creator, null);
+    assert.equal(topic.creator.handle, 'writer');
+    assert.equal(topic.creator.url, '/@writer');
     assert.equal(topic.isPrivate, false);
     assert.equal(JSON.stringify(topic).includes('123'), false);
-    assert.equal(serializeTopic({ ID: 54, name: 'Intelligence' }).creator, null);
+    assert.equal(serializeTopic({ ID: 54, public_ID: 1, is_official: 1, name: 'Intelligence' }).creator, null);
 });
 
 test('topic reads filter private access in SQL and do not rely on creator ownership', async () => {
@@ -37,35 +39,35 @@ test('topic reads filter private access in SQL and do not rely on creator owners
     const db = { execute: async (sql, args) => { queries.push({ sql, args }); return [[]]; } };
     await assert.rejects(getTopic(db, null, 56), error => error.status === 404);
     assert.match(queries[0].sql, /c\.owner_user_ID IS NULL OR c\.owner_user_ID = \?/);
-    assert.deepEqual(queries[0].args, [56, null]);
+    assert.deepEqual(queries[0].args, [null, null, 56, null]);
     assert.doesNotMatch(queries[0].sql, /created_by_user_ID = \?/);
-    assert.deepEqual(await listTopics(db, '42'), { topics: [], featuredTopicID: 54 });
-    assert.match(queries[1].sql, /ORDER BY c\.ID = \? DESC/);
+    assert.deepEqual(await listTopics(db, '42'), { topics: [], featuredTopicID: null });
+    assert.match(queries[1].sql, /topic_favorites/);
 });
 
 test('navigation is flat, including topics that previously had inactive or missing ancestors', () => {
     const items = buildCategoryNavigation([
-        { ID: 2, name: 'Software', is_active: 1, position: 0, parent_ID: 999 },
-        { ID: 54, name: 'Renamed flagship', is_active: 1, position: 99, parent_ID: null },
+        { ID: 2, public_ID: 2, name: 'Software', is_active: 1, position: 0, parent_ID: 999 },
+        { ID: 54, public_ID: 54, name: 'Renamed flagship', is_active: 1, position: 99, parent_ID: null },
         { ID: 3, name: 'Private', is_active: 1, owner_user_ID: '123' }
     ]);
-    assert.deepEqual(items.map(item => item.categoryID), [54, 2]);
+    assert.deepEqual(items.map(item => item.categoryID), [2, 54]);
     assert.ok(items.every(item => item.lineage.length === 1));
     const personal = buildPersonalNavigation([{ contextID: 1, categoryID: 2, contextValues: {},
         weightCount: 1, totalBasisPoints: 10000, unavailableConditions: 0 }],
-    [{ ID: 2, name: 'Software', is_active: 1, parent_ID: 999 }], [], []);
+    [{ ID: 2, public_ID: 2, name: 'Software', is_active: 1, parent_ID: 999 }], [], []);
     assert.equal(personal[0].available, true);
     assert.equal(personal[0].lineage.length, 1);
 });
 
-test('Popular uses distinct-contributor heat with a fixed featured ID, while empty private pies stay unconfigured', () => {
+test('Popular uses favorites without featured pinning, while empty private pies stay unconfigured', () => {
     const items = buildCategoryNavigation([
-        { ID: 2, name: 'Software', is_active: 1, popularity: 100 },
-        { ID: 54, name: 'Renamed flagship', is_active: 1, popularity: 0 },
-        { ID: 3, name: 'Writing', is_active: 1, popularity: 30 }
+        { ID: 2, public_ID: 2, name: 'Software', is_active: 1, favorite_count: 100 },
+        { ID: 54, public_ID: 54, name: 'Renamed flagship', is_active: 1, favorite_count: 0 },
+        { ID: 3, public_ID: 3, name: 'Writing', is_active: 1, favorite_count: 30 }
     ]);
-    assert.deepEqual(items.map(item => item.categoryID), [54, 2, 3]);
-    assert.equal(items[1].popularity, 100);
+    assert.deepEqual(items.map(item => item.categoryID), [2, 3, 54]);
+    assert.equal(items[0].favoriteCount, 100);
     assert.deepEqual(buildPersonalNavigation([{ categoryID: 4, contextValues: {}, weightCount: 0 }],
         [{ ID: 4, name: 'Empty private', is_active: 1, owner_user_ID: '123' }], [], []), []);
 });

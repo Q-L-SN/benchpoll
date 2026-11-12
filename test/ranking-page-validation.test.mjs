@@ -18,6 +18,8 @@ const server = await readFile(process.env.RANKING_PAGE_BASELINE
     ? resolve(process.env.RANKING_PAGE_BASELINE, 'server.js') : new URL('../server.js', import.meta.url), 'utf8');
 const start = server.indexOf("API.post('/get_ranking_page'");
 const end = server.indexOf("API.post('/get_model_score_configurations'", start);
+const authorizationStart = server.indexOf('async function authorizeRankingSnapshot(');
+const authorizationEnd = server.indexOf("API.post('/get_weighted_workspace'", authorizationStart);
 assert.ok(start > 0 && end > start);
 function fixture() {
     const conditions = [1, 2].map(ID => ({ ID, conditionID: ID, benchmarkID: 1, name: 'Review benchmark', tags: [],
@@ -28,7 +30,7 @@ function fixture() {
         missingWeight: 0, availableInference: null, inferredScores: [], calculationScores: [{ conditionID: 1,
             normalizedScore: 50, effectiveWeight: 100, contribution: 50, fallbackFor: null, memberIDs: [1],
             memberWeights: [{ ID: 1, weight: 1 }], memberEvidence: [{ ID: 1, hash: 'a'.repeat(64) }] }] };
-    return { scoreMode: 'range', benchmarks: buildBenchmarkList(conditions, [], [], [{ primaryConditionID: 1,
+    return { context: { categoryID: 1 }, scoreMode: 'range', benchmarks: buildBenchmarkList(conditions, [], [], [{ primaryConditionID: 1,
         familyID: 11, mode: 'ordered', entries: [conditions[1]] }]), personalPie: { entries: [], fallbackRules: [] },
     modelLeaderboards: { personal: [model], public: [model] } };
 }
@@ -38,9 +40,12 @@ async function harness() {
     const snapshotID = pager.create(fixture(), { userID: '7' }).rankingPagination.snapshotID;
     const app = express(), API = express.Router(); app.use(express.json());
     const context = vm.createContext({ API, db: {}, rankingPager: pager,
+        async assertTopicAccess(_db, userID, IDs) { assert.equal(userID, '7'); assert.deepEqual(Array.from(IDs), [1]); },
         activeSessionUserID: async req => req.get('x-review-owner') ?? '7',
         loadReferencedBenchmarkFamilyIDs: async () => [11] });
-    vm.runInContext(server.slice(start, end), context);
+    const authorization = authorizationStart >= 0 && authorizationEnd > authorizationStart
+        ? server.slice(authorizationStart, authorizationEnd) : '';
+    vm.runInContext(authorization + server.slice(start, end), context);
     app.use('/api', API);
     app.use((error, _req, res, _next) => res.status(error.status ?? 500).json(error.body ?? { error: 'internal_server_error' }));
     let http;

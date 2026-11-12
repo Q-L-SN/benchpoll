@@ -4,6 +4,7 @@ import test from 'node:test';
 
 import {
     buildBenchmarkList,
+    aggregateCoverageIndex,
     PIE_MIN_ITEM_BASIS_POINTS,
     PIE_TOTAL_BASIS_POINTS,
     decoratePieEntries,
@@ -43,6 +44,37 @@ test('zero-weight benchmarks put broader model evidence first without changing p
     const rows = buildBenchmarkList(conditions, [{ conditionID: 3, weightBasisPoints: 1000 }], []);
     assert.deepEqual(rows.map(row => row.conditionID), [3, 2, 1]);
     assert.deepEqual(rows.map(row => row.rank), [1, 2, 2]);
+});
+
+test('zero-current-weight discovery follows total site allocation and keeps positive-weight ties unchanged', () => {
+    const conditions = [1, 2, 3, 4, 5].map(conditionID => ({ conditionID, benchmarkID: conditionID,
+        name: `Benchmark ${conditionID}`, scoreCount: 10, isPrimaryCondition: true }));
+    const rows = buildBenchmarkList(conditions, [{ conditionID: 1, weightBasisPoints: 5000 },
+        { conditionID: 2, weightBasisPoints: 5000 }], [], [], [], [], new Map([[2, 100000], [4, 6000], [5, 6000], [3, 2000]]));
+    assert.deepEqual(rows.map(row => row.conditionID), [1, 2, 4, 5, 3]);
+    assert.deepEqual(rows.map(row => row.rank), [1, 1, 3, 3, 3]);
+});
+
+test('model coverage partitions retain adopted scores, fallback shares, and unresolved graph weight', () => {
+    const models = [{ ID: 1, name: 'A', results: new Map([['12', { normalizedScore: 80 }], ['20', { normalizedScore: 0 }]]) }];
+    const entries = [{ conditionID: 10, weightBasisPoints: 6000 }, { conditionID: 20, weightBasisPoints: 2000 },
+        { conditionID: -30, weightBasisPoints: 2000 }];
+    const familyComposition = [{ primaryConditionID: 10, families: [
+        { primaryConditionID: 10, familyID: 1, entries: [{ conditionID: 12 }], weightBasisPoints: 2500 },
+        { primaryConditionID: 10, familyID: 2, entries: [{ conditionID: 13 }], weightBasisPoints: 7500 }
+    ] }];
+    const [model] = scoreModels(models, entries, 10000, { fallbackScope: 'public', familyComposition });
+    assert.deepEqual(model.coverageEntries, [
+        { conditionID: 10, weightBasisPoints: 6000, coveredWeightBasisPoints: 1500, coverage: 25, normalizedScore: 80 },
+        { conditionID: 20, weightBasisPoints: 2000, coveredWeightBasisPoints: 2000, coverage: 100, normalizedScore: 0 },
+        { conditionID: -30, weightBasisPoints: 2000, coveredWeightBasisPoints: 0, coverage: 0, normalizedScore: null }
+    ]);
+    assert.equal(model.coverageFraction, .35);
+    assert.equal(aggregateCoverageIndex([model, model]), .7);
+    const [tiny] = scoreModels(models, [{ conditionID: 20, weightBasisPoints: .1 },
+        { conditionID: -30, weightBasisPoints: 9999.9 }], 10000);
+    assert.equal(tiny.coverage, 0);
+    assert.equal(aggregateCoverageIndex([tiny]), .00001);
 });
 
 test('zero-weight conditions rotate benchmark families before listing another variant', () => {
@@ -620,20 +652,20 @@ function topicContextRows(sql, params, rows) {
 const webDimensions = [{ key: 'web', options: [{ key: 'any', isNeutral: true },
     { key: 'allowed', isNeutral: false }, { key: 'disallowed', isNeutral: false }] }];
 
-test('topic resolution uses only the requested active ID and defaults to featured topic 54 by ID', async () => {
-    for (const [requested, ID, name, slug] of [[undefined, 54, 'Renamed featured', 'renamed-featured'], [2, 2, 'Coding', 'coding']]) {
+test('topic resolution finds official Intelligence independently of internal and public IDs', async () => {
+    for (const [requested, ID, name, slug] of [[undefined, 54, 'Intelligence', 'intelligence'], [2, 2, 'Coding', 'coding']]) {
         const calls = [];
         const connection = { async execute(sql, params) {
             calls.push(params);
             if (sql.includes('LEFT JOIN topic_scenes')) return [[], []];
-            if (sql.includes('FROM categories c LEFT JOIN users creator') && sql.endsWith('WHERE c.ID = ? AND c.is_active = 1')) {
-                assert.equal(sql.replace(/\s+/g, ' ').trim(), 'SELECT c.ID, c.name, c.slug, c.description, c.position, c.owner_user_ID, '
-                    + "c.created_by_user_ID, COALESCE(NULLIF(p.display_name, ''), creator.name) AS creator_name, "
+            if (sql.includes('FROM categories c LEFT JOIN users creator') && sql.endsWith('AND c.is_active = 1')) {
+                assert.equal(sql.replace(/\s+/g, ' ').trim(), 'SELECT c.ID, c.name, c.slug, c.public_ID, c.private_ID, c.is_official, c.description, c.position, c.owner_user_ID, '
+                    + "c.created_by_user_ID, p.public_id AS creator_public_id, COALESCE(NULLIF(p.display_name, ''), creator.name) AS creator_name, "
                     + 'COALESCE(p.avatar_data_url, creator.profile_picture_URL) AS creator_avatar '
                     + 'FROM categories c LEFT JOIN users creator ON creator.ID = c.created_by_user_ID AND creator.deleted_at IS NULL '
-                    + 'LEFT JOIN user_public_profiles p ON p.user_ID = creator.ID WHERE c.ID = ? AND c.is_active = 1');
-                assert.deepEqual(params, [ID]);
-                return [[{ ID, name, slug, description: `Compare benchmarks for ${name}.`, position: 3, owner_user_ID: null, parent_ID: 999,
+                    + `LEFT JOIN user_public_profiles p ON p.user_ID = creator.ID WHERE ${requested === undefined ? 'c.is_official = 1 AND c.name = ? AND c.owner_user_ID IS NULL' : 'c.ID = ?'} AND c.is_active = 1`);
+                assert.deepEqual(params, [requested === undefined ? 'Intelligence' : ID]);
+                return [[{ ID, public_ID: requested === undefined ? 3 : ID, is_official: Number(requested === undefined), name, slug, description: `Compare benchmarks for ${name}.`, position: 3, owner_user_ID: null, parent_ID: 999,
                     created_by_user_ID: '17', creator_name: 'Fixture curator', creator_avatar: '/assets/benchpoll-mark.svg' }], []];
             }
             if (sql.includes('FROM ranking_dimensions')) {
@@ -649,13 +681,14 @@ test('topic resolution uses only the requested active ID and defaults to feature
         } };
         const context = await resolveRankingContext(connection, { categoryID: requested });
         assert.equal(context.categoryID, ID);
-        assert.equal(context.categoryPath, slug);
+        assert.equal(context.categoryPath, String(requested === undefined ? 3 : ID));
         assert.equal(context.ID, 100 + ID);
         assert.deepEqual(context.lineage, [{ ID, name, position: 3 }]);
         assert.equal(context.isLeafCategory, true);
         assert.equal(context.isPrivate, false);
         assert.equal(context.description, `Compare benchmarks for ${name}.`);
-        assert.equal(context.creator, null);
+        if (requested === undefined) { assert.equal(context.creator, null); assert.equal(context.isOfficial, true); }
+        else assert.equal(context.creator.name, 'Fixture curator');
         assert.doesNotMatch(JSON.stringify(context), /owner_user_ID|created_by_user_ID|ownerUserID|creatorUserID/);
         assert.equal(calls.length, 3, 'No ancestor or child lookup is permitted');
     }
@@ -679,18 +712,18 @@ test('dimension selection excludes legacy parents, global defaults and other top
 test('resolved scenes keep their identity and reject invented dimension combinations', async () => {
     const connection = { async execute(sql, params) {
         if (sql.includes('FROM categories c LEFT JOIN users creator') && sql.endsWith('WHERE c.ID = ? AND c.is_active = 1')) return [[{
-            ID: 2, name: 'Coding', slug: 'coding', description: 'Compare coding benchmarks.', position: 0, owner_user_ID: null, parent_ID: 1,
+            ID: 2, public_ID: 2, name: 'Coding', slug: 'coding', description: 'Compare coding benchmarks.', position: 0, owner_user_ID: null, parent_ID: 1,
             created_by_user_ID: null, creator_name: null, creator_avatar: null }], []];
         if (sql.includes('LEFT JOIN topic_scenes')) {
             assert.equal(params[0], 2);
-            return [[{ contextID: 10, category_ID: 2, scene_context_ID: 10, name: 'With web access',
+            return [[{ contextID: 10, category_ID: 2, scene_context_ID: 10, scene_number: 1, name: 'With web access',
                 slug: 'with-web-access', description: 'Coding with access to the web.', position: 0, is_default: 1,
                 is_active: 1, legacy_context_values: { web: 'allowed' }, category_name: 'Coding',
-                category_slug: 'coding', owner_user_ID: null }], []];
+                category_slug: 'coding', public_ID: 2, owner_user_ID: null }], []];
         }
         throw new Error('Unexpected dimension query: ' + sql);
     } };
-    const context = await resolveRankingContext(connection, { categoryID: 2, contextValues: { web: 'allowed' } });
+    const context = await resolveRankingContext(connection, { categoryID: 2, contextValues: { scene: '10' } });
     assert.deepEqual(context.contextValues, { scene: '10' });
     assert.equal(context.sceneID, 10);
     assert.deepEqual(context.dimensions, []);
@@ -703,7 +736,7 @@ test('private topics resolve only for their owner and never load public dimensio
         if (sql.includes('LEFT JOIN topic_scenes')) return [[], []];
         if (sql.includes('FROM categories c LEFT JOIN users creator') && sql.endsWith('WHERE c.ID = ? AND c.is_active = 1')) {
             assert.deepEqual(params, [8]);
-            return [[{ ID: 8, name: 'My mix', slug: 'my-mix', description: 'My personal benchmark comparison.', position: 0,
+            return [[{ ID: 8, public_ID: 8, private_ID: 'fixtureTopic0008', name: 'My mix', slug: 'my-mix', description: 'My personal benchmark comparison.', position: 0,
                 owner_user_ID: 7, parent_ID: 1, created_by_user_ID: 7, creator_name: 'Fixture owner', creator_avatar: null }], []];
         }
         if (sql.includes('FROM ranking_contexts')) {
@@ -714,7 +747,7 @@ test('private topics resolve only for their owner and never load public dimensio
     } };
     const owned = await resolveRankingContext(connection, { categoryID: 8, userID: 7 });
     assert.equal(owned.isPrivate, true);
-    assert.equal(owned.categoryPath, 'personal/8');
+    assert.equal(owned.categoryPath, 'private/fixtureTopic0008');
     assert.deepEqual(owned.dimensions, []);
     for (const userID of [null, 6]) {
         await assert.rejects(resolveRankingContext(connection, { categoryID: 8, userID }),
@@ -1076,7 +1109,7 @@ test('personal pie save rejects an unscored condition before writing a new pie',
             if (sql.includes('FROM write_requests')) return [[intent], []];
             if (/SELECT ID\s+FROM users/.test(sql)) return [[{ ID: 1 }], []];
             if (sql.includes('FROM categories c LEFT JOIN users creator') && sql.endsWith('WHERE c.ID = ? AND c.is_active = 1')) return [[{
-                ID: 1, parent_ID: null, name: 'Root', slug: 'root', description: 'Compare root topic benchmarks.', position: 0,
+                ID: 1, public_ID: 1, parent_ID: null, name: 'Root', slug: 'root', description: 'Compare root topic benchmarks.', position: 0,
                 owner_user_ID: null, created_by_user_ID: null, creator_name: null, creator_avatar: null }], []];
             if (sql.includes('FROM ranking_dimensions')) {
                 assert.deepEqual(params, [1]);

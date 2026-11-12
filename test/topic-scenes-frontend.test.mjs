@@ -9,25 +9,23 @@ import { createWorkspaceState } from '../public/js/workspace/state.js';
 import { createPersonalPieRecovery } from '../public/js/workspace/pie-recovery.js';
 import { validateWorkspacePayload } from '../public/js/workspace/contracts.js';
 import { createFixtureState, workspace } from '../scripts/frontend/fixtures.mjs';
-import { parseProposal, validateProposalDraft, validatePublishedProposal, validateEditedProposal } from '../public/js/topic-proposals.js';
-import { fixtureProposal } from './fixtures/topic-proposals-server.mjs';
 
-const scenes = [{ ID: 20, name: 'Vector', description: 'Editable image output', isDefault: false },
-    { ID: 10, name: 'General', description: 'General image generation', isDefault: true }];
-const topic = { ID: 54, name: 'Images', categoryID: 54, categoryName: 'Images', url: '/images', scenes, contextValues: {} };
+const scenes = [{ ID: 20, sceneNumber: 2, name: 'Vector', description: 'Editable image output', isDefault: false },
+    { ID: 10, sceneNumber: 1, name: 'General', description: 'General image generation', isDefault: true }];
+const topic = { ID: 54, name: 'Images', categoryID: 54, categoryName: 'Images', publicID: 11, url: '/11', scenes, contextValues: {} };
 const targets = [{ contextID: 10, categoryID: 54, sceneID: 10, name: 'Images / General', topicName: 'Images', sceneName: 'General',
-    url: '/images/general', description: 'General images', isPrivate: false, hasWeights: true },
+    publicID: 11, sceneNumber: 1, url: '/11/1', description: 'General images', isPrivate: false, hasWeights: true },
 { contextID: 20, categoryID: 54, sceneID: 20, name: 'Images / Vector', topicName: 'Images', sceneName: 'Vector',
-    url: '/images/vector', description: 'Editable output', isPrivate: false, hasWeights: true },
+    publicID: 11, sceneNumber: 2, url: '/11/2', description: 'Editable output', isPrivate: false, hasWeights: true },
 { contextID: 30, categoryID: 55, sceneID: null, name: 'Coding', topicName: 'Coding', sceneName: null,
-    url: '/coding', description: 'Software development', isPrivate: false, hasWeights: true }];
+    publicID: 2, url: '/2', description: 'Software development', isPrivate: false, hasWeights: true }];
 
-test('scene URLs use named paths and preserve focus while old scene queries are rejected', () => {
+test('scene URLs use numeric paths and preserve focus while old scene queries are rejected', () => {
     assert.deepEqual(readRankingContext('?focusModel=91', []), {});
-    const url = rankingContextURL('https://benchpoll.com/images/general?focusModel=91', [], { scene: '20' }, scenes);
-    assert.equal(url.pathname, '/images/vector'); assert.equal(url.search, '?focusModel=91');
+    const url = rankingContextURL('https://benchpoll.com/11/1?focusModel=91', [], { scene: '20' }, scenes);
+    assert.equal(url.pathname, '/11/2'); assert.equal(url.search, '?focusModel=91');
     for (const search of ['?scene=20', '?scene=0', '?scene=-10', '?scene=abc', '?scene=9007199254740992', '?scene=10&scene=20', '?context_scene=10']) {
-        assert.throws(() => rankingContextURL('https://benchpoll.com/images' + search, [], { scene: '20' }, scenes));
+        assert.throws(() => rankingContextURL('https://benchpoll.com/11' + search, [], { scene: '20' }, scenes));
         assert.throws(() => readRankingContext(search, []), search);
     }
     assert.throws(() => rankingContextURL(url.href, [], { scene: '999' }, scenes));
@@ -39,9 +37,9 @@ test('default scene leads stable tabs; scene search uses names and descriptions'
     assert.deepEqual(matchingScenes(topic, 'editable').map(scene => scene.ID), [20]);
     const entries = sceneNavigationEntries([entryFromContext(topic)]);
     assert.equal(entries.length, 3);
-    assert.equal(locationURL(entries[2]), '/images/vector');
+    assert.equal(locationURL(entries[2]), '/11/2');
     assert.equal(entries[2].contextLabel, 'Vector');
-    assert.equal(locationURL(entries[0]), '/images/general');
+    assert.equal(locationURL(entries[0]), '/11/1');
 });
 
 test('parent-only searches keep all scenes available without treating inherited names or summaries as matches', () => {
@@ -86,10 +84,10 @@ test('a language name expands neither all 184 sibling languages nor other topic 
 });
 
 test('private scene navigation remains scoped and has readable scene labels', () => {
-    const entry = entryFromContext({ ...topic, isPrivate: true, ID: 20, url: '/personal/54', sceneID: 20, contextValues: { scene: '20' } });
+    const entry = entryFromContext({ ...topic, isPrivate: true, ID: 20, url: '/private/AbCdEf123456', sceneID: 20, contextValues: { scene: '20' } });
     assert.equal(entry.contextID, 20);
     assert.equal(entry.contextLabel, 'Vector');
-    assert.equal(locationURL(entry), '/personal/54/vector');
+    assert.equal(locationURL(entry), '/private/AbCdEf123456/2');
     assert.equal(validateNavigationPayload({ userID: '1', items: [entry] }).items.length, 1);
 });
 
@@ -143,21 +141,4 @@ test('workspace mixed entries validate independently of benchmark fallback ident
     assert.equal(validateWorkspacePayload(value), value);
     value.personalPie.fallbackRules.push({ primaryConditionID: -20, mode: 'ordered', entries: [] });
     assert.throws(() => validateWorkspacePayload(value), /invalid primary/);
-});
-
-test('scene proposals bind parent identity and validate their approved scene URL', () => {
-    const proposal = fixtureProposal({ kind: 'scene', parentTopicID: 190, parentTopicName: 'Coding', sceneID: null,
-        name: 'Embedded firmware', supportCount: 0, isMine: true, canEdit: true, canWithdraw: true, canSupport: false });
-    const body = { name: proposal.name, description: proposal.description, parentTopicID: 190 };
-    assert.equal(validatePublishedProposal(proposal, body).parentTopicID, 190);
-    assert.throws(() => validatePublishedProposal(proposal, { ...body, parentTopicID: 191 }));
-    assert.equal(Object.keys(validateProposalDraft({ ...body, name: 'Settings' }).errors).length, 0, 'Scene names do not reserve root routes');
-    assert.ok(validateProposalDraft({ ...body, name: 'Settings', parentTopicID: null }).errors.name);
-    const approved = { ...proposal, status: 'approved', supportCount: 30, submissionID: 100, sceneID: 19001,
-        canEdit: false, canWithdraw: false, url: '/coding/embedded-firmware' };
-    assert.equal(parseProposal(approved).url, '/coding/embedded-firmware');
-    for (const url of ['/coding/other-scene', '/research/embedded-firmware', '//example.com/coding/embedded-firmware', '/coding/embedded-firmware&scene=19002']) {
-        assert.throws(() => parseProposal({ ...approved, url }));
-    }
-    assert.throws(() => validateEditedProposal({ ...proposal, parentTopicID: 191 }, proposal, body));
 });

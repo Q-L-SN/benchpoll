@@ -6,7 +6,7 @@ import { readSidebarPreferences, writeSidebarPreferences } from '../public/js/na
 import { buildPersonalNavigation, getPersonalNavigation } from '../navigation-service.js';
 
 const entry = (ID, values = {}, position = 0) => ({
-    categoryID: ID, categoryName: `Topic ${ID}`, slug: `topic-${ID}-stored`, url: `/topic-${ID}-stored`, weightCount: 1,
+    categoryID: ID, categoryName: `Topic ${ID}`, publicID: ID, url: `/${ID}`, weightCount: 1,
     lineage: [{ ID, name: `Topic ${ID}`, position }], contextValues: values,
     contextLabel: Object.values(values).join(' · '), contextOrder: [], available: true
 });
@@ -72,12 +72,12 @@ test('browsing an unconfigured topic leaves the configured list unchanged', () =
 });
 
 test('Mine merges owned private topics without Pies, deduplicates saved Pies and excludes other authors', () => {
-    const privateTopic = ID => entryFromContext({ categoryID: ID, name: `Private ${ID}`, isPrivate: true, isMine: true });
+    const privateTopic = ID => entryFromContext({ categoryID: ID, name: `Private ${ID}`, privateID: `PrivateToken${ID}`, isPrivate: true, isMine: true });
     const empty = privateTopic(8), saved = { ...privateTopic(9), weightCount: 2 };
     const catalog = [empty, saved, { ...privateTopic(10), isMine: false }, { ...entry(11), isMine: true }];
     const rows = configuredRows([entry(2), saved], empty, '', catalog);
     assert.deepEqual(rows.map(row => [row.categoryID, row.configured, row.current]), [[2, true, false], [8, false, true], [9, true, false]]);
-    assert.equal(locationURL(rows[1]), '/personal/8');
+    assert.equal(locationURL(rows[1]), '/private/PrivateToken8');
     assert.deepEqual(configuredRows([], null, 'Private 8', catalog).map(row => row.categoryID), [8]);
     assert.deepEqual(configuredRows([], null), []);
 });
@@ -109,23 +109,14 @@ test('duplicate topic labels reveal stable topic IDs without inventing parent pa
     assert.notEqual(rows[0].key, rows[1].key);
 });
 
-test('navigation links carry full context and stored slugs without injecting URLs or exposing private names', () => {
-    const value = { ...entry(2, { tools: 'allowed&other=1' }), categoryName: '<script> Two words', slug: 'script-two-words',
-        url: '/script-two-words', lineage: [{ ID: 2, name: '<script> Two words' }] };
-    const url = new URL(locationURL(value), 'https://example.com');
-    assert.equal(url.origin, 'https://example.com');
-    assert.equal(url.pathname, '/script-two-words');
-    assert.equal(url.searchParams.get('context_tools'), 'allowed&other=1');
-    assert.equal(url.searchParams.size, 1);
-    value.categoryName = 'Part/Other';
-    value.slug = 'part-other'; value.url = '/part-other';
-    assert.equal(new URL(locationURL(value), url).pathname, '/part-other');
-    delete value.url;
-    assert.equal(new URL(locationURL(value), url).pathname, '/part-other');
-    delete value.slug;
-    assert.equal(new URL(locationURL(value), url).pathname, '/part-other');
-    value.isPrivate = true;
-    assert.equal(new URL(locationURL(value), url).pathname, '/personal/2');
+test('navigation uses durable numeric URLs and rejects query contexts or foreign origins', () => {
+    const value = { ...entry(2), categoryName: '<script> Two words', publicID: 2 };
+    assert.equal(locationURL(value), '/2');
+    delete value.url; assert.equal(locationURL(value), '/2');
+    value.isPrivate = true; value.privateID = 'PrivateToken2';
+    assert.equal(locationURL(value), '/private/PrivateToken2');
+    assert.throws(() => locationURL({ ...value, contextValues: { tools: 'allowed' } }), /Unsupported topic context/);
+    assert.throws(() => locationURL({ ...value, url: '/old-name' }), /Invalid topic URL/);
     assert.throws(() => locationURL({ ...value, categoryID: '../2' }), /Invalid topic ID/);
 });
 
@@ -147,10 +138,10 @@ test('index payload validation rejects malformed data and duplicate canonical lo
 });
 
 const categories = [
-    { ID: 1, name: 'General', position: 0, is_active: 1 },
-    { ID: 2, name: 'Code', position: 1, is_active: 1 },
-    { ID: 3, name: 'Generation', position: 2, is_active: 1 },
-    { ID: 4, name: 'Inactive', position: 3, is_active: 0 }
+    { ID: 1, public_ID: 1, name: 'General', position: 0, is_active: 1 },
+    { ID: 2, public_ID: 2, name: 'Code', position: 1, is_active: 1 },
+    { ID: 3, public_ID: 3, name: 'Generation', position: 2, is_active: 1 },
+    { ID: 4, public_ID: 4, name: 'Inactive', position: 3, is_active: 0 }
 ];
 const dimensions = [
     { ID: 1, scope_category_ID: 0, dimension_key: 'tools', name: 'Global tools', position: 0 },
@@ -192,7 +183,7 @@ test('empty pies are excluded while nonempty configurations without fallback rem
 });
 
 test('legacy ancestry cannot hide an independent topic, while a missing topic remains unavailable', () => {
-    const cyclic = [...categories, { ID: 7, parent_ID: 8, name: 'A', is_active: 1 }, { ID: 8, parent_ID: 7, name: 'B', is_active: 1 }];
+    const cyclic = [...categories, { ID: 7, public_ID: 7, parent_ID: 8, name: 'A', is_active: 1 }, { ID: 8, public_ID: 8, parent_ID: 7, name: 'B', is_active: 1 }];
     const [item] = buildPersonalNavigation([stored(7)], cyclic, [], []);
     assert.equal(item.available, true);
     assert.deepEqual(item.lineage, [{ ID: 7, name: 'A', position: 0 }]);
@@ -211,11 +202,12 @@ function database({ fail = false, active = true } = {}) {
             if (sql.includes('SELECT ID FROM users')) return [active ? [{ ID: args[0] }] : []];
             if (fail) throw new Error('Database failed');
             if (sql.includes('AS scene_context_ID')) return [[{
-                contextID: 102, category_ID: 2, scene_context_ID: 102,
+                contextID: 102, category_ID: 2, scene_context_ID: 102, scene_number: 1,
                 name: 'General', slug: 'general', description: 'General coding tasks.',
                 position: 0, is_default: 1, is_active: 1, legacy_context_values: '{"tools":"any"}',
-                category_name: 'Code', category_slug: 'code', owner_user_ID: null
+                category_name: 'Code', category_slug: 'code', owner_user_ID: null, public_ID: 2
             }]];
+            if (sql.trim().startsWith('SELECT c.ID')) return [categories];
             if (sql.includes('FROM ranking_contexts rc')) return [[stored(2, '{"tools":"any"}')]];
             if (sql.includes('FROM categories')) return [categories];
             throw new Error(`Unexpected navigation SQL: ${sql}`);
@@ -235,8 +227,8 @@ test('account index uses a parameter-bound owner in a read-only consistent snaps
     assert.deepEqual(pies[2], [owner, owner, owner]);
     assert.match(pies[1], /pp\.user_ID = \?/);
     assert.match(pies[1], /cat\.owner_user_ID = \?/);
-    const topics = db.calls.find(call => call[0] === 'execute' && call[1].includes('FROM categories'));
-    assert.deepEqual(topics[2], [owner]);
+    const topics = db.calls.find(call => call[0] === 'execute' && call[1].trim().startsWith('SELECT c.ID'));
+    assert.deepEqual(topics[2], [owner, owner, owner]);
     assert.match(topics[1], /WHERE c\.owner_user_ID IS NULL OR c\.owner_user_ID = \?/);
     assert.doesNotMatch(topics[1], /parent_ID/);
     assert.ok(payload.items.every(item => item.lineage.length === 1));
@@ -244,7 +236,7 @@ test('account index uses a parameter-bound owner in a read-only consistent snaps
     assert.equal(payload.items[0].sceneID, 102);
     assert.equal(payload.items[0].contextLabel, 'General');
     assert.deepEqual(payload.items[0].contextValues, { scene: '102' });
-    assert.equal(payload.items[0].url, '/code/general');
+    assert.equal(payload.items[0].url, '/2/1');
     assert.equal(payload.items[0].available, true);
     assert.ok(db.calls.some(call => call[1]?.includes('READ ONLY')));
     assert.deepEqual(db.calls.slice(-2).map(call => call[0]), ['commit', 'release']);
@@ -303,7 +295,7 @@ test('sidebar preferences store presentation only and tolerate unavailable or ma
 });
 
 test('workspace-to-index metadata contains exact context identity but no UI-mode or weight payload', () => {
-    const value = entryFromContext({ ID: 101, categoryID: 2, lineage: [{ ID: 2, name: 'Code' }], contextValues: { tools: 'yes' },
+    const value = entryFromContext({ ID: 101, categoryID: 2, lineage: [{ ID: 2, public_ID: 2, name: 'Code' }], contextValues: { tools: 'yes' },
         dimensions: [{ key: 'tools', name: 'Tools', options: [{ key: 'yes', name: 'Allowed' }] }] });
     assert.equal(value.contextLabel, 'Tools: Allowed');
     assert.deepEqual(value.contextOrder, [0]);

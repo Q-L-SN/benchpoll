@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex"><title>History · BenchPoll</title>
+    <link rel="icon" href="/favicon.ico" sizes="any"><link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
+    <link rel="stylesheet" href="/css/ui/tokens.css"><link rel="stylesheet" href="/css/ui/site-header.css">
+    <link rel="stylesheet" href="/css/typography.css"><link rel="stylesheet" href="/css/profile.css">
+    <script type="module" src="/js/profile-history.js"></script>
+</head>
+<body class="bp-profile-page">
+    <a class="pf-skip" href="#history-content">Skip to history</a>
+    <header class="bp-site-header"><div class="bp-site-header-inner"><a class="bp-site-brand" href="/" aria-label="BenchPoll home"><img src="/assets/benchpoll-logo.svg" alt="BenchPoll" width="150" height="31"></a><nav id="profile-site-links"></nav></div></header>
+    <main id="history-content" class="pf-main pf-history" tabindex="-1">
+        <a class="pf-back" href="/me"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i> Your profile</a>
+        <div class="pf-heading"><h1>History</h1><span class="pf-private-note"><i class="fa-solid fa-lock" aria-hidden="true"></i> Only you</span></div>
+        <p class="pf-muted">Topics and scenes you visited while signed in, most recent first.</p>
+        <button id="history-clear" class="pf-button" type="button" hidden>Clear browsing history</button>
+        <p id="history-status" class="pf-status" role="status">Loading history…</p>
+        <ol id="history-list" class="pf-history-list"></ol><button id="history-more" class="pf-button" type="button" hidden>Load more</button>
+    </main>
+</body>
+</html>

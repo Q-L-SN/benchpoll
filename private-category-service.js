@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
-import { topicSlug, isReservedTopicSlug, topicURL, normalizeTopicSummary } from './public/js/shared/topics.js';
-import { topicCreator } from './topic-service.js';
+import { topicSlug, normalizeTopicSummary } from './public/js/shared/topics.js';
+import { getTopic } from './topic-service.js';
+import { allocateTopicIdentity } from './topic-platform-schema.js';
 import { startTransactionConnection, commitTransactionConnection, rollbackTransactionConnection,
     releaseTransactionConnection } from './db-transaction.js';
 
@@ -21,28 +22,17 @@ export function ownsCategory(category, userID) {
 export async function getPrivateCategory(db, userID, categoryID) {
     if (userID == null) fail(401, 'authentication_required');
     if (!/^[1-9]\d*$/.test(String(categoryID))) fail(404, 'category_not_found');
-    const [rows] = await db.execute(`SELECT c.ID, c.name, c.slug, c.description, c.position, c.created_by_user_ID,
-        COALESCE(NULLIF(p.display_name, ''), creator.name) AS creator_name,
-        COALESCE(p.avatar_data_url, creator.profile_picture_URL) AS creator_avatar FROM categories c
-        JOIN users u ON u.ID = c.owner_user_ID
-        LEFT JOIN users creator ON creator.ID = c.created_by_user_ID AND creator.deleted_at IS NULL
-        LEFT JOIN user_public_profiles p ON p.user_ID = creator.ID
-        WHERE c.ID = ? AND c.owner_user_ID = ? AND c.is_active = 1
-          AND u.deleted_at IS NULL AND (u.banned_at IS NULL OR (u.banned_until IS NOT NULL AND u.banned_until <= NOW()))`,
-    [categoryID, userID]);
-    if (rows.length !== 1) fail(404, 'category_not_found');
-    return { categoryID: Number(rows[0].ID), categoryName: rows[0].name, description: rows[0].description ?? '',
-        creator: topicCreator(rows[0]), isPrivate: true, slug: rows[0].slug,
-        url: topicURL(rows[0].ID, rows[0].name, true, rows[0].slug || topicSlug(rows[0].name)),
-        lineage: [{ ID: Number(rows[0].ID), name: rows[0].name, position: Number(rows[0].position) }],
-        contextValues: {}, dimensions: [], available: true };
+    const topic = await getTopic(db, userID, Number(categoryID));
+    if (!topic.isPrivate) fail(404, 'category_not_found');
+    return { ...topic, dimensions: [], available: true };
 }
 
 export async function insertPrivateCategory(connection, userID, name, notes = null, description = null) {
     const summary = normalizeTopicSummary(description ?? `Personal benchmark weights for ${name}.`);
+    const { publicID, privateID } = await allocateTopicIdentity(connection);
     const [result] = await connection.execute(`INSERT INTO categories
-        (owner_user_ID, created_by_user_ID, name, slug, description, position, notes) VALUES (?, ?, ?, ?, ?, 0, ?)`,
-    [userID, userID, privateCategoryName(name), topicSlug(name), summary, notes]);
+        (owner_user_ID, created_by_user_ID, name, slug, description, public_ID, private_ID, is_official, position, notes) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, ?)`,
+    [userID, userID, privateCategoryName(name), topicSlug(name), summary, publicID, privateID, notes]);
     const categoryID = Number(result.insertId);
     const [context] = await connection.execute(`INSERT INTO ranking_contexts
         (category_ID, context_values, context_hash) VALUES (?, '{}', ?)`, [categoryID, emptyContextHash]);
@@ -53,7 +43,6 @@ export function normalizePrivateCategoryRequest(input) {
     if (!input || typeof input !== 'object' || Array.isArray(input)
         || Object.keys(input).some(key => !['name', 'description'].includes(key))) fail(400, 'invalid_private_category_request');
     const name = privateCategoryName(input.name);
-    if (isReservedTopicSlug(name)) fail(400, 'reserved_topic_name');
     let description;
     try { description = normalizeTopicSummary(input.description); }
     catch { fail(400, 'invalid_topic_description'); }

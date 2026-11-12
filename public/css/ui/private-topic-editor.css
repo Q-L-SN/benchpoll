@@ -7,6 +7,7 @@
 .bp-topic-editor label { display: grid; gap: 7px; font-size: 13px; font-weight: 600; }
 .bp-topic-editor input:not([type="radio"]) { width: 100%; min-width: 0; box-sizing: border-box; padding: 10px 12px; border: 1px solid #cfd5de; border-radius: 5px; background: #fff; color: inherit; font: inherit; }
 .bp-topic-editor button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 8px; border: 0; background: transparent; color: inherit; cursor: pointer; font: inherit; font-size: 13px; }
+.bp-topic-editor [hidden] { display: none !important; }
 .bp-topic-editor button:hover, .bp-topic-editor a:hover { color: var(--bp-accent, #c45000); }
 .bp-topic-editor button:disabled { opacity: .5; cursor: default; }
 .bp-topic-editor .bp-topic-editor-primary { padding-inline: 16px; border-radius: 6px; background: #29333e; color: #fff; }

@@ -21,6 +21,8 @@ import { BENCHMARK_GROUPS } from '../public/js/shared/benchmark-condition-groups
 import { readRankingContext } from '../public/js/shared/ranking-url.js';
 import { FALLBACK_CONFIGURATION_VERSION } from '../public/js/shared/benchmark-families.js';
 import { createFixtureState, workspace, weightedEntries } from '../scripts/frontend/fixtures.mjs';
+import { mergeBenchmarkWeights } from '../public/js/workspace/expanded-weights.js';
+import { recoveryScene, withRecoveryScenes } from './helpers/workspace-scene-fixture.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const before = process.env.RANKING_RECOVERY_REVIEW_SOURCE_DIR;
@@ -81,7 +83,7 @@ async function createHarness(version = before ? 'before' : 'current') {
     const requests = [], applied = [], pending = [], fallbackRequests = [], expiredCallbacks = [], loadErrors = [];
     let api, catalogue;
     function response(body) {
-        const data = workspace(fixture, body, { paginate: false });
+        const data = withRecoveryScenes(workspace(fixture, body, { paginate: false }), body.contextValues);
         return pager.create(data, { userID: fixture.userID, initialMode: body.initialMode ?? 'public',
             query: body.benchmarkQuery ?? '', pinPersonal: body.pinPersonal ?? false,
             groupVersions: body.groupVersions ?? false, resume: body.rankingResume });
@@ -121,6 +123,7 @@ async function createHarness(version = before ? 'before' : 'current') {
         finishPendingWeightAdjustments: async () => true, flushPendingPersonalPieSave: async () => true,
         registerPieEntries() {}, resetPieVisualState() {}, syncContextValuesToURL() {}, updateDiscussionEntry() {},
         renderAll() {}, renderScoringControls() {}, renderBenchmarks() {}, renderModels() {}, renderBenchmarkSummary() {},
+        recordProfileVisit() {}, mergeBenchmarkWeights,
         renderModeState() {}, updateUndoState() {}, updateLastUpdated() {}, renderInlineFallback() {}, revealBenchmarkRow() {}, loadVisibleBenchmarkPage() {},
         waitForGestureToSettle: async () => {}, portableFamilyEntry: entry => ({ conditionID: entry.conditionID }),
         FALLBACK_CONFIGURATION_VERSION, FALLBACK_RULE_MODE: 'ordered', WORKSPACE_LOAD_RETRY_DELAYS_MS: [], invalidSavedComparison: () => false,
@@ -180,7 +183,9 @@ async function createHarness(version = before ? 'before' : 'current') {
             (version === 'current' ? 'recover: recoverRankingPages, coordinator: () => rankingRecovery' : 'recover: null, coordinator: () => null') + ' })'
     ].join('\n');
     api = vm.runInNewContext(code, globals);
-    api.apply(response({ categoryID: 1, contextValues: { budget: 'standard' }, scoreMode: 'range' }));
+    api.apply(response({ categoryID: 1, contextValues: { scene: recoveryScene.standard }, scoreMode: 'range' }));
+    assert.equal(state.selectedObjectID, null, 'Applying a ranking does not select the first evaluation item');
+    assert.equal(state.workspaceView, 'overview');
     return { api, state, requests, applied, pending, fallbackRequests, expiredCallbacks, loadErrors, catalogue, fixture, search: globals.benchmarkSearch, page: getPage,
         expire() { clock = 900001; }, hold() { holdFallback = true; }, live() { holdFallback = false; },
         getHeld: () => heldFallback, failHeld() { try { getPage(heldFallback.body); assert.fail('Expected expired old snapshot'); }
@@ -255,8 +260,8 @@ test('abandoned fallback 410 cannot create any recovery or resume after context 
         await openFallback(h);
         h.expire(); h.hold(); more(h);
         assert.equal(h.getHeld().body.offset, 5);
-        const transition = h.api.switchContext({ currentCategoryID: 2, categoryPath: 'Language models/Reasoning',
-            contextValues: { budget: 'extended' } });
+        const transition = h.api.switchContext({ currentCategoryID: 2, categoryPath: '2/2',
+            contextValues: { scene: recoveryScene.extended } });
         await waitFor(() => h.requests.length === 1);
         h.failHeld(); await settle();
         assert.equal(h.expiredCallbacks.length, 0, 'Abandoned actual catalogue request is retired');
@@ -266,7 +271,7 @@ test('abandoned fallback 410 cannot create any recovery or resume after context 
         assert.ok(h.requests.every(request => request.body.rankingResume === undefined));
         h.requests[0].resolve(h.requests[0].payload); await transition;
         assert.equal(h.state.categoryID, 2);
-        assert.equal(h.state.selectedContextValues.budget, 'extended');
+        assert.equal(h.state.selectedContextValues.scene, recoveryScene.extended);
         assert.equal(h.state.benchmarks.length, 40);
         assert.equal(h.state.modelLeaderboards.public.length, 25);
         assert.equal(h.state.rankingPagination.fallbacks, undefined);
@@ -309,7 +314,7 @@ for (const kind of ['context', 'score-mode', 'comparison']) {
             const recovery = h.api.coordinator()?.promise;
             let newer;
             if (kind === 'context') newer = h.api.switchContext({ currentCategoryID: 2,
-                categoryPath: 'Language models/Reasoning', contextValues: { budget: 'standard' } });
+                categoryPath: '2/1', contextValues: { scene: recoveryScene.standard } });
             else {
                 if (kind === 'score-mode') h.state.scoreMode = 'available';
                 else h.state.comparisonRequest = { mode: 'best', keys: ['model'],

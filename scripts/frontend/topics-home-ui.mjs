@@ -954,37 +954,14 @@ async function interactions(browser, engine) {
         assert.equal(await page.locator('.th-card').first().getAttribute('data-topic-id'), '54');
         await page.waitForFunction(expected => JSON.stringify([...document.querySelectorAll('.th-card')].map(node => Number(node.dataset.topicId))) === JSON.stringify(expected),
             [54, ...app.state.topics.filter(topic => topic.ID !== 54).map(topic => topic.ID)]);
+        assert.equal(await page.locator('#topics-account').getAttribute('href'), '/me');
+        await page.route('**/me', route => route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>Profile route fixture</title>' }));
         await page.locator('#topics-account').click();
-        await page.getByRole('dialog', { name: 'Your account', exact: true }).waitFor();
-        await page.getByRole('button', { name: 'Edit profile', exact: true }).click();
-        await page.getByRole('dialog', { name: 'Public profile', exact: true }).waitFor();
-        await inputHasNoFrame(page.getByRole('textbox', { name: 'Display name', exact: true }));
-        await page.getByRole('textbox', { name: 'Display name', exact: true }).fill('Updated profile');
-        await page.getByLabel('Avatar', { exact: true }).setInputFiles(fileURLToPath(new URL('../../public/assets/apple-touch-icon.png', import.meta.url)));
-        await page.getByRole('button', { name: 'Save', exact: true }).click();
-        await page.waitForFunction(() => document.querySelector('#topics-account').textContent.includes('Updated profile'));
-        assert.match(await page.locator('#topics-account').textContent(), /Updated profile/);
-        await page.waitForFunction(() => document.querySelector('[data-topic-id="54"] .bp-topic-byline-name').textContent === 'Updated profile');
-        assert.ok((await page.locator('#topics-account img').getAttribute('src')).startsWith('data:image/png;base64,'));
-        assert.ok((await page.locator('[data-topic-id="54"] .th-creator img').getAttribute('src')).startsWith('data:image/png;base64,'));
-        await page.waitForFunction(() => ['#topics-account img', '[data-topic-id="54"] .th-creator img'].every(selector => {
-            const image = document.querySelector(selector); return image?.complete && image.naturalWidth > 0;
-        }));
-        assert.equal(app.state.requests.find(request => request.path === '/api/save_user_profile').body.expectedUserID, '42');
-        await page.getByRole('dialog', { name: 'Your account', exact: true }).waitFor();
-        assert.match(await page.locator('#account-dialog-name').textContent(), /Updated profile/);
-        await page.screenshot({ path: join(output, `${engine}-390-account-center.png`), animations: 'disabled' });
-        await page.getByRole('button', { name: 'Log out', exact: true }).click();
-        await page.getByRole('button', { name: 'Log out on this device', exact: true }).click();
-        await page.waitForFunction(() => document.querySelector('#topics-account').getAttribute('href') === '/login'
-            && !document.querySelector('[data-topic-id="15"]') && !document.querySelector('[data-topic-id="200"]'));
-        assert.equal(app.state.requests.find(request => request.path === '/api/logout').body.expectedUserID, '42');
-        await page.getByRole('button', { name: 'Close', exact: true }).click();
-        await page.getByRole('tab', { name: 'Mine', exact: true }).click();
-        await page.locator('#topics-status a[href="/login"]').waitFor();
+        await page.waitForURL('**/me');
+        assert.equal(await page.title(), 'Profile route fixture');
         report.interactions.push({ engine, keyboard: true, nativeHorizontalScroll: true, touch: engine === 'chrome' ? 'native pan' : 'native tap/navigation',
             paginationRetryPreservesMetadataAndScroll: true, resizeSnap: true, localSearch: true, emptyStates: true, expectedUserID: true, legalDraftRetention: true,
-            inputFocusNoExternalFrame: true, serverHeatOrderPreservedAfterCreation: true, sharedAccountCenterProfileSaveCreatorRefreshAndSignOut: true });
+            inputFocusNoExternalFrame: true, serverHeatOrderPreservedAfterCreation: true, profilePageNavigation: true });
         console.log(`PASS interactions ${engine}`);
     } finally { await context.close(); await app.close(); }
 

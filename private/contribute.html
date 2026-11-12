@@ -70,51 +70,6 @@
         </div>
         <div slot="actions"><global-dialog-action class="dialog-close-button main">Back to form</global-dialog-action></div>
     </global-dialog>
-    <global-dialog id="contribution-account-dialog" class="bp-account-dialog" hidden>
-        <div slot="title">Your account</div>
-        <div slot="body" class="bp-account-dialog-body">
-            <div class="bp-account-summary">
-                <span id="contribution-account-picture" class="bp-account-dialog-picture" aria-hidden="true"></span>
-                <span class="bp-account-copy">
-                    <strong id="contribution-account-name"></strong>
-                    <small>Signed in with GitHub</small>
-                </span>
-            </div>
-            <div class="bp-account-operations">
-                <a class="bp-account-action bp-quiet-action" href="/account/privacy" target="_blank" rel="noopener">
-                    <i class="fa-solid fa-shield-halved" aria-hidden="true"></i><span>Privacy &amp; account choices</span>
-                </a>
-                <button id="contribution-account-logout" class="bp-account-action" type="button">
-                    <i class="fa-solid fa-arrow-right-from-bracket" aria-hidden="true"></i>
-                    <span>Log out</span>
-                </button>
-                <button id="contribution-account-delete" class="bp-account-action danger" type="button">
-                    <i class="fa-solid fa-user-xmark" aria-hidden="true"></i>
-                    <span>Deactivate account</span>
-                </button>
-            </div>
-        </div>
-        <div slot="actions">
-            <global-dialog-action class="dialog-close-button">Close</global-dialog-action>
-        </div>
-    </global-dialog>
-    <global-dialog id="contribution-logout-confirm-dialog" hidden>
-        <div slot="title">Log out of BenchPoll?</div>
-        <div slot="body">This will end the current session on this device.</div>
-        <div slot="actions">
-            <global-dialog-action class="dialog-close-button">Cancel</global-dialog-action>
-            <global-dialog-action id="contribution-logout-confirm" class="main">Log out</global-dialog-action>
-        </div>
-    </global-dialog>
-    <global-dialog id="contribution-delete-confirm-dialog" hidden>
-        <div slot="title">Deactivate your BenchPoll account?</div>
-        <div slot="body">This ends all sessions and removes saved comparison profiles, but retains weights, private categories and review records. Signing in again reactivates the account. For a data-erasure request, see the <a href="/privacy#rights" target="_blank" rel="noopener">Privacy Policy</a>.</div>
-        <div slot="actions">
-            <global-dialog-action class="dialog-close-button">Cancel</global-dialog-action>
-            <global-dialog-action id="contribution-delete-confirm" class="danger">Deactivate</global-dialog-action>
-        </div>
-    </global-dialog>
-
     <div class="bp-shell">
         <aside class="bp-sidebar contribution-sidebar" aria-label="Contribution navigation">
             <a class="bp-brand" href="/" aria-label="BenchPoll home">
@@ -147,10 +102,10 @@
             </div>
 
             <div class="bp-sidebar-account contribution-account">
-                <button id="contribution-user" class="bp-user-profile" type="button" hidden aria-haspopup="dialog" aria-controls="contribution-account-dialog">
+                <a id="contribution-user" class="bp-user-profile" href="/me" hidden>
                     <span id="contribution-user-picture" aria-hidden="true"></span>
                     <span id="contribution-user-name"></span>
-                </button>
+                </a>
                 <button id="contribution-login" class="bp-login-button" type="button" hidden>
                     <i class="fa-brands fa-github" aria-hidden="true"></i>
                     <span>Sign in with GitHub</span>

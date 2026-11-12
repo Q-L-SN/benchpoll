@@ -35,7 +35,10 @@ test('homepage keeps pie, benchmark leaderboard, and model leaderboard in three 
 test('the workspace breadcrumb shows the flat topic name instead of URL segments or ancestors', () => {
     const breadcrumb = workspace.slice(workspace.indexOf('function renderBreadcrumb('), workspace.indexOf('async function prepareContextChange('));
     assert.match(breadcrumb, /currentCategoryNode\(state\.topicName \|\| 'Topics'\)/);
-    assert.match(breadcrumb, /breadcrumb\.append\(name, updateIndicator\.element\)/);
+    assert.match(breadcrumb, /breadcrumb\.append\(name\)/);
+    assert.match(breadcrumb, /if \(state\.authenticated && state\.hasSavedPersonalWeights\) breadcrumb\.append\(createConfiguredIndicator\(\{ configured: true \}\)\)/);
+    assert.match(breadcrumb, /if \(state\.categoryID && !state\.contextIsPrivate\) breadcrumb\.append\(createFavoriteButton/);
+    assert.match(breadcrumb, /breadcrumb\.append\(updateIndicator\.element\)/);
     assert.doesNotMatch(breadcrumb, /categoryPath|lineage|displayParts|rootOffset/);
 });
 
@@ -54,10 +57,15 @@ test('topic navigation preserves a flat identity and explicit selection without 
     assert.match(topicSelection, /lineage: \[\{ ID: categoryID, name: categoryName \}\]/);
     assert.match(topicSelection, /sidebarNavigation\.setCurrentTopic\(topic\)/);
     assert.doesNotMatch(topicSelection, /parent_ID|children|currentTree/);
-    assert.match(home, /requestJSON\('\/api\/get_topic', \{ categoryID: Number\(publicMatch\[1\]\) \}\)/);
+    assert.match(home, /const identity = parseTopicPath\(window\.location\.pathname \+ window\.location\.search\)/);
+    assert.match(home, /if \(!identity\) throw new Error\('This topic address is unavailable\.'\)/);
+    assert.match(home, /requestJSON\('\/api\/get_topic', identity\)/);
+    assert.match(home, /Number\(item\.sceneNumber\) === identity\.sceneNumber/);
+    assert.match(home, /if \(identity\.sceneNumber != null && !scene\) throw new Error\('This scene is unavailable\.'\)/);
+    assert.match(home, /url\.pathname = response\.canonicalPath \?\? \(scene \? scenePath\(base, scene\) : base\)/);
     assert.doesNotMatch(home, /currentTree\[0\]/);
-    assert.match(home, /if \(!selected\) throw new Error\('Current topic is missing'\)/);
-    assert.match(home, /if \(topic\.categoryID !== Number\(publicMatch\[1\]\)\) throw new Error\('Topic identity changed'\)/);
+    assert.match(home, /requestJSON\('\/api\/get_topic', \{ categoryID: entry\.categoryID \}\)/);
+    assert.match(home, /if \(topic\.categoryID !== Number\(entry\.categoryID\)\) throw new Error\('Topic identity changed'\)/);
     assert.match(html, /\/js\/home\.js\?v=[^"']+/);
 });
 

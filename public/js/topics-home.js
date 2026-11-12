@@ -17,12 +17,13 @@ import { normalizeModelFocusTarget } from './workspace/model-focus-target.js';
 import { topicURL } from './shared/topics.js';
 import { createPrivateTopicEditor } from './shared/private-topic-editor.js';
 import { createIdentityAvatar as avatar, createTopicCreator } from './shared/topic-identity.js';
+import { createFavoriteButton, createConfiguredIndicator, createTopicReportButton } from './shared/topic-actions.js';
 import { AVAILABLE_INFERENCE_VERSION } from './shared/available-score.js';
 import { buildContributionURL } from './shared/contribution-navigation.js?v=taxonomy-20260929';
 import { betaFeedbackTemplate } from './shared/feedback-templates.js';
 import { installSignInLinks, listenAccountChange } from './shared/sign-in.js';
 import { mountSiteActions } from './shared/site-header.js';
-import { FEATURED_TOPIC_ID, TREEMAP_FADE, MAX_BAR_RATIO, WEIGHT_LABEL_METRICS, MODEL_LABEL_ANGLE, MODEL_IDENTITY_HEIGHT, HOME_WEIGHT_THEME, topicCollection, modelTargetURL,
+import { TREEMAP_FADE, MAX_BAR_RATIO, WEIGHT_LABEL_METRICS, MODEL_LABEL_ANGLE, MODEL_IDENTITY_HEIGHT, HOME_WEIGHT_THEME, topicCollection, modelTargetURL,
     scoreLabelLayout, orderTopics, modelKey, mergePreview, weightLayout, fitWeightLabel, columnLayout, modelColumnOpacity, modelLabelLayout, modelBarScale, barGeometry } from './topics-home/layout.js';
 
 const $ = selector => document.querySelector(selector);
@@ -62,6 +63,7 @@ let topicsLoading = false;
 let topicsRead = null;
 let topicsRefreshQueued = false;
 let topicsReadFailed = false;
+let featuredTopicID = null;
 let directoryView = 'popular';
 let previousDirectoryView = 'popular';
 let accountEpoch = 0;
@@ -99,7 +101,7 @@ function safeURL(value, sameOrigin = false) {
 
 function canonicalTopicURL(topic) {
     if (topic.url) return safeURL(topic.url, true);
-    try { return safeURL(topicURL(topic.ID, topic.name, topic.isPrivate, topic.slug), true); }
+    try { return safeURL(topicURL(topic), true); }
     catch { return null; }
 }
 
@@ -123,7 +125,8 @@ function modelColumns(preview, width, count = preview.models.length, total = Mat
         const label = modelLabelLayout(comparisonDisplayParts(model, preview.comparison), measureModelLabel);
         slot = Math.max(slot, label.height / Math.sin(MODEL_LABEL_ANGLE * Math.PI / 180) + 4);
     }
-    return columnLayout(width, count, total, Math.ceil(slot), parameters ? 36 : 32);
+    const compact = window.matchMedia('(max-width: 640px)').matches;
+    return columnLayout(width, count, total, Math.ceil(slot), parameters ? 30 : compact ? 20 : 32, compact);
 }
 
 const visibility = 'IntersectionObserver' in window ? new globalThis.IntersectionObserver(entries => {
@@ -160,7 +163,7 @@ function createCard(topic) {
     card.dataset.cardKey = cardKey(topic);
     card.id = `topic-card-${cardKey(topic).replaceAll(':', '-')}`;
     if (topic.sceneID != null) card.dataset.sceneId = String(topic.sceneID);
-    card.classList.toggle('is-featured', Number(topic.ID) === FEATURED_TOPIC_ID && topic.sceneID == null);
+    card.classList.toggle('is-featured', directoryView === 'popular' && Number(topic.ID) === featuredTopicID && topic.sceneID == null);
     const heading = element('header', 'th-card-header');
     const identity = element('div', 'th-card-identity');
     const title = element('h3', 'th-card-title');
@@ -172,11 +175,12 @@ function createCard(topic) {
     link.dataset.tooltip = topic.description || topic.name;
     title.append(link);
     if (topic.isPrivate) { const lock = icon('lock'); lock.dataset.tooltip = 'Private topic'; lock.setAttribute('aria-label', 'Private topic'); title.append(lock); }
-    const creator = topic.creator ? createTopicCreator(topic.creator, 'th-creator') : element('span', 'th-creator');
-    creator.hidden = !topic.creator;
+    const creator = createTopicCreator(topic.isOfficial ? { isOfficial: true } : topic.creator, 'th-creator');
+    if (topic.sceneID != null) creator.hidden = true;
     const summary = element('p', 'th-topic-summary', topic.description);
     summary.dataset.tooltip = topic.description || '';
     identity.append(title);
+    if (topic.sceneID == null) identity.append(summary);
     const sceneToggle = button('Show scenes', 'arrow-up-right-from-square', 'th-scene-toggle');
     sceneToggle.prepend(element('span'));
     sceneToggle.hidden = true;
@@ -184,15 +188,29 @@ function createCard(topic) {
     sceneToggle.setAttribute('aria-controls', 'topic-scenes-dialog');
     delete sceneToggle.dataset.tooltip;
     heading.append(identity);
-    if (topic.sceneID == null) heading.append(summary, creator);
-    if (topic.isPrivate && topic.sceneID == null) {
-        const edit = button('Edit private topic', 'pen-to-square', 'th-quiet th-topic-edit');
+    if (topic.isMine && topic.sceneID == null) {
+        const edit = button('Edit topic', 'pen-to-square', 'th-quiet th-topic-edit');
         edit.addEventListener('click', event => { event.stopPropagation(); void privateTopicEditor.open(topic.ID, edit); });
         heading.append(edit);
     }
     const visual = element('div', 'th-visual'); visual.dataset.view = view;
     visual.setAttribute('aria-label', `${topic.name} preview`);
     const meta = element('span', 'th-card-notice th-sr-only'); meta.setAttribute('role', 'status');
+    const footer = element('footer', 'th-card-footer');
+    const author = element('div', 'th-card-author');
+    author.append(creator, createCardReport(topic));
+    const topicMeta = element('div', 'th-topic-meta');
+    const configured = createConfiguredIndicator(topic);
+    const coverage = element('span', 'th-topic-coverage');
+    coverage.append(icon('chart-pie'), element('span'));
+    coverage.hidden = true;
+    const favorite = topic.sceneID == null ? createFavoriteButton(topic, {
+        onChange(updated) { const current = cards.get(cardKey(topic)); if (current) current.topic = { ...current.topic, isFavorited: updated.isFavorited, favoriteCount: updated.favoriteCount }; },
+        onError(_error, message) { announcement.textContent = message; }
+    }) : null;
+    topicMeta.append(configured, coverage);
+    if (favorite) topicMeta.append(favorite);
+    footer.append(author, topicMeta, sceneToggle);
     const referenceNotice = element('div', 'th-reference-notice'); referenceNotice.hidden = true; referenceNotice.setAttribute('role', 'status');
     const pagination = element('div', 'th-pagination');
     const retryPage = button('Retry more models', 'rotate-right'); retryPage.hidden = true;
@@ -202,8 +220,8 @@ function createCard(topic) {
     previous.classList.add('th-pagination-previous'); next.classList.add('th-pagination-next');
     previous.disabled = true; previous.hidden = true; next.disabled = true; next.hidden = true;
     pagination.append(retryPage, previous, next);
-    card.append(heading, visual, meta, referenceNotice, sceneToggle);
-    const state = { topic, card, visual, meta, referenceNotice, pagination, retryPage, previous, next, sceneToggle,
+    card.append(heading, visual, footer, meta, referenceNotice);
+    const state = { topic, card, visual, meta, footer, topicMeta, coverage, favorite, referenceNotice, pagination, retryPage, previous, next, sceneToggle,
         visible: !visibility, loadedEpoch: -1, status: 'idle', preview: null,
         queued: false, job: null, geometry: null, scrollLeft: 0, pageError: null, refreshAnchor: null, snapshotNotice: '',
         windowStart: 0, locateSequence: 0, locateQueued: false, locateController: null, loadingEarlier: false };
@@ -262,12 +280,32 @@ function updateCardMetadata(state, topic) {
         const href = value && modelTargetURL(canonicalTopicURL(topic), value, filters, topic.isPrivate);
         if (href) model.href = href; else model.removeAttribute('href');
     }
-    const creator = topic.creator ? createTopicCreator(topic.creator, 'th-creator') : element('span', 'th-creator');
-    creator.hidden = !topic.creator;
+    const creator = createTopicCreator(topic.isOfficial ? { isOfficial: true } : topic.creator, 'th-creator');
+    if (topic.sceneID != null) creator.hidden = true;
     state.card.querySelector('.th-creator')?.replaceWith(creator);
+    state.card.querySelector('.th-topic-report')?.replaceWith(createCardReport(topic));
+    state.topicMeta.querySelector('.bp-topic-configured-dot')?.replaceWith(createConfiguredIndicator(topic));
+    state.favorite?.updateTopic(topic);
+    renderTopicCoverage(state, topic.coverageIndex);
     const summary = state.card.querySelector('.th-topic-summary');
     if (summary) { summary.textContent = topic.description || ''; summary.dataset.tooltip = topic.description || ''; }
     state.visual.setAttribute('aria-label', `${topic.name} preview`);
+}
+
+function createCardReport(topic) {
+    return createTopicReportButton(topic.sceneID == null ? topic : { ...topic, name: topic.topicName }, {
+        className: 'th-topic-report', ...(topic.sceneID == null ? {} : { scene: { url: topic.url } })
+    });
+}
+
+function renderTopicCoverage(state, value) {
+    const coverage = Number(value);
+    state.coverage.hidden = value == null || !Number.isFinite(coverage);
+    if (state.coverage.hidden) return;
+    const label = String(Math.floor(coverage));
+    state.coverage.lastElementChild.textContent = label;
+    state.coverage.dataset.tooltip = `Coverage index: ${label}`;
+    state.coverage.setAttribute('aria-label', state.coverage.dataset.tooltip);
 }
 
 function renderScenes() {
@@ -631,7 +669,7 @@ function renderModel(model, preview, geometry, plotHeight, scoreScale, topicHref
     identity.append(mark, name);
     const scoreText = !bar.comparable ? 'No comparable score' : filters.scoreMode === 'range'
         ? `Score range ${label} to ${rankingNumber(model.upper)}` : `Score ${label}`;
-    const description = `${model.modelName || model.name}\n${scoreText}\n${rankingNumber(model.coverage ?? 0)}% benchmark coverage`;
+    const description = `${model.modelName || model.name}\n${scoreText}\n${Math.floor(model.coverage ?? 0)}% benchmark coverage`;
     if (!href) column.setAttribute('role', 'img');
     column.setAttribute('aria-label', `${href ? 'Open ' : ''}${description.replaceAll('\n', '. ')}`);
     column.append(plot, identity);
@@ -677,6 +715,7 @@ function syncModelEdges(state) {
 function renderChart(state) {
     const preview = state.preview;
     if (!preview || !state.visual.clientWidth || !state.visual.clientHeight) return;
+    renderTopicCoverage(state, preview.coverageIndex ?? preview.totalCoverageIndex ?? state.topic.coverageIndex);
     state.referenceNotice.hidden = !preview.referenceIssues?.length;
     state.referenceNotice.replaceChildren(...(preview.referenceIssues ?? []).map(issue => element('p', '', referenceIssueMessage(issue))));
     state.renderWidth = state.visual.clientWidth; state.renderHeight = state.visual.clientHeight;
@@ -824,9 +863,11 @@ function filterTopics() {
     const matches = groups.map(group => group.topic);
     const matchedScenes = new Map(groups.map(group => [cardKey(group.topic), group.scenes]));
     for (const state of cards.values()) {
+        state.card.classList.toggle('is-featured', directoryView === 'popular' && Number(state.topic.ID) === featuredTopicID && state.topic.sceneID == null);
         state.matchingScenes = matchedScenes.get(cardKey(state.topic)) ?? [];
         const summary = sceneMatchSummary(state.matchingScenes);
         state.sceneToggle.hidden = !state.topic.scenes?.length;
+        state.sceneToggle.dataset.sceneCount = String(state.topic.scenes?.length ?? 0);
         state.sceneToggle.querySelector('span').textContent = summary || `Scenes (${state.topic.scenes?.length ?? 0})`;
         state.sceneToggle.classList.toggle('has-matches', Boolean(summary));
         state.sceneToggle.setAttribute('aria-label', `Show scenes in ${state.topic.name}${summary ? '. ' + summary : ''}`);
@@ -916,7 +957,6 @@ function selectDirectoryView(next, reveal = false) {
     directoryView = next;
     const searching = next === 'search';
     if (!searching) topicSearchLayer.close();
-    $('#mine-actions').hidden = next !== 'configured';
     for (const tab of document.querySelectorAll('[data-topics-view]')) {
         const selected = tab.dataset.topicsView === next;
         tab.setAttribute('aria-selected', String(selected)); tab.tabIndex = selected ? 0 : -1;
@@ -964,7 +1004,37 @@ $('#topic-search-close').addEventListener('click', () => {
 });
 for (const control of document.querySelectorAll('[data-open-mine]')) control.addEventListener('click', () => selectDirectoryView('mine', true));
 const filterBar = $('#topics-filters');
-createModelSearch({ container: $('#home-model-search'),
+const filterControls = $('#topics-filter-controls');
+const filterToggle = $('#topics-filters-toggle');
+let filtersExpanded = false;
+function refreshFilterOverflow() {
+    const end = filterControls.scrollWidth - filterControls.clientWidth;
+    filterControls.classList.toggle('has-overflow-start', filterControls.scrollLeft > 1);
+    filterControls.classList.toggle('has-overflow-end', end > 1 && filterControls.scrollLeft < end - 1);
+}
+function resizeFilterIsland() {
+    const contentWidth = [...filterControls.children].reduce((width, child) => width + (child.hidden ? 0 : child.getBoundingClientRect().width), 0);
+    const width = filtersExpanded ? Math.min(window.innerWidth - 32, contentWidth + 54) : 50;
+    filterBar.style.setProperty('--th-filter-width', `${Math.ceil(width)}px`);
+    refreshFilterOverflow();
+}
+filterToggle.addEventListener('click', () => {
+    filtersExpanded = !filtersExpanded;
+    if (!filtersExpanded) modelSearch.close();
+    if (!filtersExpanded && filterControls.contains(document.activeElement)) filterToggle.focus({ preventScroll: true });
+    filterBar.classList.toggle('is-collapsed', !filtersExpanded);
+    filterControls.inert = !filtersExpanded;
+    filterToggle.setAttribute('aria-expanded', String(filtersExpanded));
+    const label = filtersExpanded ? 'Collapse preview settings' : 'Open preview settings';
+    filterToggle.setAttribute('aria-label', label); filterToggle.dataset.tooltip = label;
+    filterToggle.firstElementChild.className = `fa-solid fa-${filtersExpanded ? 'chevron-left' : 'sliders'}`;
+    resizeFilterIsland();
+});
+filterControls.addEventListener('scroll', refreshFilterOverflow, { passive: true });
+new ResizeObserver(resizeFilterIsland).observe(filterControls);
+window.addEventListener('resize', resizeFilterIsland);
+document.fonts?.ready.then(resizeFilterIsland);
+const modelSearch = createModelSearch({ container: $('#home-model-search'),
     async search(query, { signal }) {
         const { reasoning, harness } = filters;
         const result = await postJSON('/api/search_home_models', { query, reasoning, harness },
@@ -993,6 +1063,9 @@ function setHeaderVisible(visible) {
     if (visible === headerVisible) return;
     const floating = document.body.classList.contains('is-scrolled');
     const opacity = floating ? Number.parseFloat(getComputedStyle(header).opacity) : 0;
+    const bodyStyle = getComputedStyle(document.body);
+    const backgroundColor = bodyStyle.backgroundColor;
+    const backgroundTarget = visible ? bodyStyle.getPropertyValue('--bg-body').trim() : '#fff';
     const revision = ++headerMotionRevision;
     headerVisible = visible;
     headerMotion.forEach(animation => animation.cancel());
@@ -1000,6 +1073,7 @@ function setHeaderVisible(visible) {
         document.body.classList.add('is-scrolled');
         filterBar.hidden = false;
     } else {
+        modelSearch.close();
         const active = document.activeElement;
         headerFocusOrigin = active;
         headerReturnFocus = header.contains(active) ? active : filterBar.contains(active) ? $('.th-brand') : null;
@@ -1026,6 +1100,8 @@ function setHeaderVisible(visible) {
     };
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { finish(); return; }
     headerMotion = [header, filterBar].map(node => node.animate([{ opacity }, { opacity: visible ? 1 : 0 }],
+        { duration: 220, easing: 'ease-in-out', fill: 'both' }));
+    headerMotion.push(document.body.animate([{ backgroundColor }, { backgroundColor: backgroundTarget }],
         { duration: 220, easing: 'ease-in-out', fill: 'both' }));
     Promise.all(headerMotion.map(animation => animation.finished)).then(finish, () => {});
 }
@@ -1065,6 +1141,7 @@ async function readTopics() {
         const data = await postJSON('/api/get_topics', {}, { timeoutMs: 20000, requireJSON: true });
         if (requestAccount !== accountEpoch) { topicsRefreshQueued = true; return; }
         if (!Array.isArray(data?.topics)) throw new TypeError('Invalid topics.');
+        featuredTopicID = Number.isSafeInteger(data.featuredTopicID) && data.featuredTopicID > 0 ? data.featuredTopicID : null;
         const fragment = document.createDocumentFragment();
         const discovered = topicsWithScenes(orderTopics(data.topics));
         for (const topic of discovered) {
@@ -1081,7 +1158,7 @@ async function readTopics() {
         for (const [key, state] of cards) if (!returned.has(key)) {
             state.visible = false;
             state.job?.controller.abort(); visibility?.unobserve(state.card); resize.unobserve(state.visual);
-            state.card.remove(); cards.delete(key);
+            state.favorite?.dispose(); state.card.remove(); cards.delete(key);
         }
         for (const state of cards.values()) {
             if (state.scroll) state.scroll.scrollLeft = state.scrollLeft;
@@ -1105,11 +1182,11 @@ function renderAccount() {
         account.removeAttribute('aria-haspopup'); account.setAttribute('aria-label', 'Sign in');
         return;
     }
-    account.href = '/account/privacy';
-    account.setAttribute('aria-haspopup', 'dialog');
+    account.href = '/me';
+    account.removeAttribute('aria-haspopup');
     const name = profile.userName || 'Your account';
     account.replaceChildren(avatar(name, profile.userProfilePictureURL), element('span', '', name));
-    account.setAttribute('aria-label', `Open account center: ${name}`);
+    account.setAttribute('aria-label', `Open your profile: ${name}`);
 }
 
 async function loadProfile() {
@@ -1156,7 +1233,7 @@ async function accountSignedOut({ signedOut = true } = {}) {
     accountEpoch++; profile = null; profileLoading = false;
     for (const [key, state] of cards) if (state.topic.isPrivate) {
         state.visible = false; state.job?.controller.abort();
-        visibility?.unobserve(state.card); resize.unobserve(state.visual); state.card.remove(); cards.delete(key);
+        visibility?.unobserve(state.card); resize.unobserve(state.visual); state.favorite?.dispose(); state.card.remove(); cards.delete(key);
     }
     renderAccount(); filterTopics(); await loadProfile(); await loadTopics();
 }
@@ -1172,21 +1249,6 @@ function prepareBetaFeedback() {
 }
 prepareBetaFeedback();
 betaFeedbackLink.addEventListener('click', prepareBetaFeedback);
-$('#topics-account').addEventListener('click', async event => {
-    if (!profile) return;
-    event.preventDefault();
-    event.currentTarget.focus({ preventScroll: true });
-    try {
-        const { openAccountCenter } = await import('./shared/account-center.js');
-        await openAccountCenter({ profile, onProfileSaved: async saved => {
-            profile = { ...profile, ...saved }; renderAccount(); await loadProfile(); await loadTopics();
-        }, onSignedOut: accountSignedOut });
-    } catch {
-        const status = $('#account-status'); status.hidden = false;
-        status.replaceChildren(element('span', '', 'Account center is unavailable. '));
-        const link = element('a', 'th-quiet', 'Privacy & account choices'); link.href = '/account/privacy'; status.append(link);
-    }
-});
 
 const privateTopicEditor = createPrivateTopicEditor({
     async beforeOpen() { await profileReady; if (profileReadFailed) await loadProfile(); return true; },
@@ -1209,6 +1271,7 @@ $('#topics-score-toggle').addEventListener('click', event => {
     event.currentTarget.dataset.tooltip = range ? 'Switch to estimated score' : 'Switch to score range';
     event.currentTarget.setAttribute('aria-label', event.currentTarget.dataset.tooltip);
     event.currentTarget.querySelector('span').textContent = range ? 'Score range' : 'Estimated score';
+    resizeFilterIsland();
     resetFilters();
 });
 for (const control of document.querySelectorAll('[data-comparison]')) control.addEventListener('click', () => {
@@ -1224,6 +1287,7 @@ $('#topics-view-toggle').addEventListener('click', event => {
     event.currentTarget.setAttribute('aria-label', event.currentTarget.dataset.tooltip);
     event.currentTarget.querySelector('span').textContent = weights ? 'Weights' : 'Models';
     event.currentTarget.querySelector('.th-view-indicator').className = `fa-solid fa-${weights ? 'table-cells-large' : 'chart-column'} th-view-indicator`;
+    resizeFilterIsland();
     for (const state of cards.values()) if (state.status === 'loaded') { renderChart(state); maybeFillPage(state); }
 });
 $('#topic-search').addEventListener('input', filterTopics);

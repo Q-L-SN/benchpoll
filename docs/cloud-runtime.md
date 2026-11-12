@@ -175,3 +175,12 @@ separate handoff workflow. These scripts do not stage, commit, push, switch bran
 configure remotes, decrypt secrets or claim that the complete project is already
 published. The receiving environment must contain the current application sources,
 fixtures, public assets and matching `package-lock.json`, not just these new scripts.
+
+## 2026-11-12 prelaunch redesign verification
+
+The current prelaunch implementation and migration boundary are recorded in
+[PRELAUNCH-REDESIGN-20261112.md](cloud/PRELAUNCH-REDESIGN-20261112.md).
+This work used Node 24.22.1 and the lockfile, built both home/index bundles,
+ran Chromium and WebKit previews, and tested new schemas/services against an
+isolated MySQL 8.4 container. The selected Cloud environment had no production
+credentials or VPN configuration. No production deployment or migration was run.

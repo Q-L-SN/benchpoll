@@ -19,10 +19,16 @@ test('short homepage hints explain the immediate choice without a calculation es
         assert.ok(words(hint) <= 32, hint);
         assert.doesNotMatch(hint, /entrance|denominator|normalized|eligible|configuration identity/);
     }
-    const publicHelp = home.match(/id="public-pie-tooltip"[^>]*>([\s\S]*?)<\/span>/)[1];
-    assert.ok(words(plain(publicHelp)) <= 40);
-    assert.match(publicHelp, /^<strong>/);
-    assert.match(publicHelp, /href="\/how-it-works#calculation-details"/);
+    const publicSummary = home.match(/<div id="public-pie-summary"[^>]*>[\s\S]*?<\/div>/)?.[0];
+    assert.ok(publicSummary);
+    assert.match(publicSummary, /role="img" tabindex="0"/);
+    assert.match(publicSummary, /fa-users[^>]*><\/i><span id="public-pie-count"/);
+    assert.doesNotMatch(publicSummary, /circle-question|public-pie-tooltip|data-help-text/);
+    const workspace = read('public/js/home-workspace.js');
+    const publicHelp = workspace.match(/publicPieSummary\.dataset\.tooltip = `([^`]+)`/)[1];
+    assert.ok(words(publicHelp) <= 40);
+    assert.match(publicHelp, /saved weight[^`]*shape these public weights\./);
+    assert.match(workspace, /publicPieSummary\.setAttribute\('aria-label', publicPieSummary\.dataset\.tooltip\)/);
 });
 
 test('static JavaScript question hints remain short and use ordinary language', () => {
@@ -89,7 +95,9 @@ test('guide details remain concise and the first read stays light', () => {
     assert.ok(main, 'Count the real article, not a slice ending at a removed section');
     assert.ok(words(plain(main)) <= 1150, String(words(plain(main))));
     assert.ok(words(plain(main.replace(/<details[\s\S]*?<\/details>/g, ''))) <= 400);
-    assert.match(main, /Collection lasts 14 days/);
+    assert.match(main, /Create a private topic, then choose <strong>Make public<\/strong>/);
+    assert.match(main, /Publication is immediate\. You can have up to three public topics at a time\./);
+    assert.doesNotMatch(main, /Collection lasts 14 days|Proposal Hall|proposal hall/);
     assert.doesNotMatch(main, /72 hours|Public weight =|48 to 88/);
     assert.doesNotMatch(main, /<ol\b|<table\b|Full calculation rules|Expand all/);
     assert.match(guide, /<p id="calculation-details">[\s\S]*?saved personal weight configurations in this topic/);

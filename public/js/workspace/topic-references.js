@@ -7,7 +7,6 @@ import { isTopicReference, referenceLabel, topicLabelText, renderTopicLabel } fr
 export { isTopicReference, referenceLabel };
 export function topicReferenceError(error) {
     return {
-        topic_reference_cycle: 'This reference would create a circular dependency. Remove it before saving.',
         topic_reference_depth_limit: 'This reference chain is too deep. Choose a more direct topic.',
         topic_reference_size_limit: 'This reference graph is too large. Remove a reference before saving.',
         topic_reference_not_found: 'A referenced topic is no longer available. Remove it or choose another.',
@@ -59,7 +58,7 @@ export function validateReferenceTargets(payload) {
 
 export function referenceIssueMessage(issue) {
     const reasons = {
-        cycle: 'Circular reference', circular: 'Circular reference', reference_cycle: 'Circular reference',
+        closed_cycle: 'This cycle does not reach a benchmark',
         empty: 'No weights in the referenced topic', empty_target: 'No weights in the referenced topic',
         missing: 'Referenced topic no longer exists', missing_target: 'Referenced topic no longer exists',
         inaccessible: 'Referenced topic is not accessible', private: 'Private topic cannot enter public weights',
@@ -100,8 +99,7 @@ export function createTopicReferencePicker({ request, getScope, getCurrentContex
         copy.append(name);
         if (target.description) copy.append(node('small', '', target.description));
         const alreadyAdded = getEntries().some(entry => Number(entry.conditionID) === -target.contextID);
-        const unavailable = target.contextID === getCurrentContextID() ? 'Cannot reference this same scene or topic'
-            : target.isPrivate && !isPrivate() ? 'Private topics cannot enter public-topic weights'
+        const unavailable = target.isPrivate && !isPrivate() ? 'Private topics cannot enter public-topic weights'
                 : !target.hasWeights ? 'This topic has no weights yet' : '';
         const add = createAction({ label: alreadyAdded ? 'Added' : 'Add', icon: alreadyAdded ? 'fa-solid fa-check' : 'fa-solid fa-plus', variant: 'quiet' });
         add.disabled = Boolean(alreadyAdded || unavailable || adding);
@@ -192,7 +190,7 @@ export function renderTopicReferences(host, { entry, composition, versions, dirt
     }
     const href = sceneURL(entry.url);
     if (href) {
-        const visit = createAction({ label: `Open ${referenceLabel(entry)}`, icon: 'fa-solid fa-arrow-up-right-from-square',
+        const visit = createAction({ label: `Visit ${referenceLabel(entry)}`, icon: 'fa-solid fa-arrow-up-right-from-square',
             href, variant: 'quiet', className: 'bp-reference-visit' });
         host.append(visit);
     }

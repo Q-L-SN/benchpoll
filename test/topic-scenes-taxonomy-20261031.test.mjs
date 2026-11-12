@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { sceneContext } from '../topic-scenes-service.js';
-import { legacyTopicRouteKey } from '../topic-service.js';
+import { legacyTopicRouteKey } from '../scripts/historical-topic-route-key.mjs';
 import { verifyTopicScenesMigration } from '../scripts/migrate-topic-scenes-20261031.mjs';
 import { topicScenesTaxonomy, validateSceneTaxonomy, planSceneTaxonomy, verifySceneTaxonomySchema,
     migrateTopicScenesTaxonomy, verifyTopicScenesTaxonomy, assertTaxonomyRehearsalSpace,

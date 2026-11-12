@@ -16,7 +16,7 @@ import { createTaxonomyDrawer } from './shared/taxonomy-drawer.js?v=20260928';
 import { mountDisclosureMotion } from './shared/motion.js';
 import { searchItems } from './shared/search.js';
 import { createOrganizationMark } from './shared/organization-logos.js?v=organization-logos-20261006';
-import { postJSON, postWriteJSON } from './shared/http.js?v=write-replay-20261008';
+import { postWriteJSON } from './shared/http.js?v=write-replay-20261008';
 import { pageAccountWriteScope, isAccountWriteError } from './shared/account-identity.js';
 import { enhanceUI } from './shared/ui-components.js';
 import { createFloatingSearchLayer } from './shared/floating-search-layer.js';
@@ -58,15 +58,6 @@ const sidebarUser = document.getElementById('contribution-user');
 const sidebarUserPicture = document.getElementById('contribution-user-picture');
 const sidebarUserName = document.getElementById('contribution-user-name');
 const sidebarLogin = document.getElementById('contribution-login');
-const accountDialog = document.getElementById('contribution-account-dialog');
-const accountDialogPicture = document.getElementById('contribution-account-picture');
-const accountDialogName = document.getElementById('contribution-account-name');
-const accountLogoutButton = document.getElementById('contribution-account-logout');
-const accountDeleteButton = document.getElementById('contribution-account-delete');
-const logoutConfirmDialog = document.getElementById('contribution-logout-confirm-dialog');
-const deleteConfirmDialog = document.getElementById('contribution-delete-confirm-dialog');
-const logoutConfirmButton = document.getElementById('contribution-logout-confirm');
-const deleteConfirmButton = document.getElementById('contribution-delete-confirm');
 const taxonomyToggle = document.getElementById('contribution-taxonomy-toggle');
 const taxonomyClose = document.getElementById('contribution-taxonomy-close');
 const taxonomyScrim = document.getElementById('contribution-taxonomy-scrim');
@@ -74,6 +65,11 @@ const authLogin = document.getElementById('auth-login-button');
 const evaluationNameOptions = document.getElementById('evaluation-name-options');
 
 const MODE_DETAILS = {
+    topic_report: {
+        label: 'Report topic', title: 'Report a topic',
+        subtitle: 'Describe the issue with this topic. Reports are private to reviewers.',
+        categoryEditable: false
+    },
     report: {
         label: 'Report content', title: 'Report a discussion post',
         subtitle: 'Reports are private to reviewers. If upheld, the reported content will be hidden.',
@@ -301,6 +297,7 @@ function selectedContextLabel() {
     if (mode === 'correct_or_add_info') {
         return param('targetName') || 'Benchmark information';
     }
+    if (mode === 'topic_report') return param('targetName') || 'Topic';
     return param('categoryPath') || 'BenchPoll';
 }
 
@@ -1953,8 +1950,10 @@ function submissionPayload() {
         type: 'report_issue',
         issueType: mode,
         targetName: param('targetName') || selectedContextLabel(),
-        targetKind: param('targetKind') || (mode === 'delete_or_migrate_category' ? 'category' : 'benchmark'),
-        targetBenchmarkID: integerOrNull(param('targetBenchmarkID') || param('benchmarkID')),
+        targetKind: mode === 'topic_report' ? 'category' : param('targetKind') || 'benchmark',
+        ...(mode === 'topic_report'
+            ? { targetCategoryID: integerOrNull(param('targetCategoryID')) }
+            : { targetBenchmarkID: integerOrNull(param('targetBenchmarkID') || param('benchmarkID')) }),
         categoryPath: param('categoryPath'),
         pageURL: param('pageURL') || document.referrer,
         sourceURL: draft.report.sourceURL,
@@ -2207,6 +2206,19 @@ function captureChangeDraft() {
 }
 
 async function loadChangeTarget() {
+    if (mode === 'topic_report') {
+        const response = await fetch('/api/get_topic', { method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ categoryID: integerOrNull(param('targetCategoryID')) }) });
+        if (!response.ok) throw new Error('This topic is no longer available.');
+        const topic = await response.json();
+        params.set('targetName', topic.name);
+        params.set('categoryPath', topic.name);
+        const previous = param('pageURL');
+        const scene = (topic.scenes ?? []).find(candidate => new URL(candidate.url, location.origin).href === previous);
+        params.set('pageURL', new URL(scene?.url ?? topic.url, location.origin).href);
+        return;
+    }
     if (!isChangeMode()) {
         return;
     }
@@ -2285,8 +2297,7 @@ async function loadUser() {
         ? 'Your contribution is waiting for review. We will email the verified address from your GitHub account when the review is complete.'
         : 'Your contribution is waiting for review. Email notifications are currently unavailable.';
     sidebarUserName.textContent = user.userName;
-    accountDialogName.textContent = user.userName;
-    [sidebarUserPicture, accountDialogPicture].forEach(picture => {
+    [sidebarUserPicture].forEach(picture => {
         if (user.userProfilePictureURL) {
             picture.textContent = '';
             picture.style.backgroundImage = `url(${JSON.stringify(user.userProfilePictureURL)})`;
@@ -2753,32 +2764,6 @@ successDialog.querySelector('.dialog-close-button').addEventListener('click', ()
 
 authLogin.addEventListener('click', () => G.loginWithGitHub());
 sidebarLogin.addEventListener('click', () => G.loginWithGitHub());
-sidebarUser.addEventListener('click', () => {
-    accountDialog.hidden = false;
-    requestAnimationFrame(() => accountLogoutButton.focus());
-});
-accountLogoutButton.addEventListener('click', () => {
-    accountDialog.hidden = true;
-    logoutConfirmDialog.hidden = false;
-});
-accountDeleteButton.addEventListener('click', () => {
-    accountDialog.hidden = true;
-    deleteConfirmDialog.hidden = false;
-});
-
-async function runAccountAction(url, button) {
-    button.setAttribute('disabled', '');
-    try {
-        await pageAccountWriteScope.write(postJSON, url);
-        window.location.reload();
-    } catch (error) {
-        button.removeAttribute('disabled');
-        showError(error.message || 'The account action could not be completed.');
-    }
-}
-
-logoutConfirmButton.addEventListener('click', () => runAccountAction('/api/logout', logoutConfirmButton));
-deleteConfirmButton.addEventListener('click', () => runAccountAction('/api/delete_account', deleteConfirmButton));
 const contributionGuide = document.getElementById('contribution-guide-dialog');
 let guideTrigger = null;
 function showContributionGuide(event) {

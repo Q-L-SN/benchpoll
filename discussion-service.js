@@ -1,7 +1,6 @@
 import { resolveRankingContext } from './ranking-service.js';
 import { selectableBenchmarkConditionSQL } from './benchmark-condition-visibility.js';
 import { canonicalAccountID } from './public/js/shared/account-identity.js';
-import { lockTopicReferenceGraph } from './topic-scenes-service.js';
 import { startTransactionConnection, commitTransactionConnection, rollbackTransactionConnection,
     releaseTransactionConnection } from './db-transaction.js';
 
@@ -12,8 +11,7 @@ export function discussionID(value) {
     return Number(value);
 }
 export function normalizeDiscussionPost(body) {
-    if (Object.keys(body).some(key => !['text', 'mentions', 'parentID', 'categoryID', 'contextValues', 'proposalID'].includes(key))) fail(400, 'unknown_discussion_field');
-    if (body.proposalID != null && (body.categoryID != null || body.contextValues != null)) fail(400, 'discussion_scope_mismatch');
+    if (Object.keys(body).some(key => !['text', 'mentions', 'parentID', 'categoryID', 'contextValues'].includes(key))) fail(400, 'unknown_discussion_field');
     if (typeof body.text !== 'string' || body.text.trim().length < 2 || body.text.length > 4000) fail(400, 'discussion_text_length');
     if (!Array.isArray(body.mentions) || body.mentions.length > 10) fail(400, 'invalid_discussion_mentions');
     const mentions = body.mentions.map(item => ({ benchmarkID: discussionID(item?.benchmarkID),
@@ -49,8 +47,6 @@ export async function createDiscussionPost(db, userID, body) {
     userID = canonicalAccountID(userID);
     if (!userID) fail(403, 'discussion_account_unavailable');
     return transaction(db, async connection => {
-        const proposalID = body.proposalID == null ? null : discussionID(body.proposalID);
-        if (proposalID !== null) await lockTopicReferenceGraph(connection);
         // Serialize writes per account so parallel requests cannot bypass the posting cooldown.
         const [users] = await connection.execute('SELECT ID FROM users WHERE ID = ? AND deleted_at IS NULL AND (banned_at IS NULL OR banned_until <= NOW()) FOR UPDATE', [userID]);
         if (!users.length) fail(403, 'discussion_account_unavailable');
@@ -59,19 +55,12 @@ export async function createDiscussionPost(db, userID, body) {
         const [daily] = await connection.execute('SELECT COUNT(*) AS count FROM discussion_posts WHERE author_ID = ? AND created_at > DATE_SUB(NOW(), INTERVAL 1 DAY)', [userID]);
         if (Number(daily[0].count) >= 100) fail(429, 'discussion_daily_limit');
         let context;
-        if (proposalID !== null) {
-            const [proposals] = await connection.execute('SELECT ID FROM topic_proposals WHERE ID = ? AND withdrawn_at IS NULL FOR SHARE', [proposalID]);
-            if (!proposals.length) fail(404, 'topic_proposal_not_found');
-        }
         if (post.parentID !== null) {
-            const [parents] = await connection.execute(`SELECT p.ID, p.category_ID, p.context_ID, p.proposal_ID FROM discussion_posts p
+            const [parents] = await connection.execute(`SELECT p.ID, p.category_ID, p.context_ID FROM discussion_posts p
                 WHERE p.ID = ? AND p.parent_ID IS NULL AND ${visible} FOR UPDATE`, [post.parentID]);
             if (!parents.length) fail(404, 'discussion_parent_unavailable');
-            if (proposalID !== null ? Number(parents[0].proposal_ID) !== proposalID : parents[0].proposal_ID != null) fail(400, 'discussion_scope_mismatch');
-            if (proposalID === null && Number(parents[0].category_ID) !== discussionID(body.categoryID)) fail(400, 'discussion_category_mismatch');
+            if (Number(parents[0].category_ID) !== discussionID(body.categoryID)) fail(400, 'discussion_category_mismatch');
             context = { categoryID: parents[0].category_ID, ID: parents[0].context_ID };
-        } else if (proposalID !== null) {
-            context = { categoryID: null, ID: null };
         } else {
             context = await resolveRankingContext(connection, { categoryID: discussionID(body.categoryID), contextValues: body.contextValues, create: true, requireAllDimensions: true });
         }
@@ -89,9 +78,8 @@ export async function createDiscussionPost(db, userID, body) {
             }
             references.push({ ...mention, label });
         }
-        const [insert] = proposalID === null
-            ? await connection.execute('INSERT INTO discussion_posts (category_ID, context_ID, author_ID, parent_ID, body) VALUES (?, ?, ?, ?, ?)', [context.categoryID, context.ID, userID, post.parentID, post.text])
-            : await connection.execute('INSERT INTO discussion_posts (proposal_ID, author_ID, parent_ID, body) VALUES (?, ?, ?, ?)', [proposalID, userID, post.parentID, post.text]);
+        const [insert] = await connection.execute('INSERT INTO discussion_posts (category_ID, context_ID, author_ID, parent_ID, body) VALUES (?, ?, ?, ?, ?)',
+            [context.categoryID, context.ID, userID, post.parentID, post.text]);
         for (const mention of references) await connection.execute('INSERT INTO discussion_mentions (post_ID, benchmark_ID, condition_ID, label) VALUES (?, ?, ?, ?)', [insert.insertId, mention.benchmarkID, mention.conditionID, mention.label]);
         return { ID: Number(insert.insertId), threadID: post.parentID ?? Number(insert.insertId) };
     });
@@ -140,52 +128,10 @@ export async function deleteDiscussionPost(db, userID, body) {
     });
 }
 
-const visible = `p.hidden_at IS NULL AND (EXISTS (SELECT 1 FROM categories active_category
-    WHERE active_category.ID = p.category_ID AND active_category.is_active = 1 AND active_category.owner_user_ID IS NULL)
-    OR EXISTS (SELECT 1 FROM topic_proposals proposal WHERE proposal.ID = p.proposal_ID AND proposal.withdrawn_at IS NULL))`;
+const visible = `p.hidden_at IS NULL AND EXISTS (SELECT 1 FROM categories active_category
+    WHERE active_category.ID = p.category_ID AND active_category.is_active = 1 AND active_category.owner_user_ID IS NULL)`;
 const voteJoin = `LEFT JOIN (SELECT post_ID, SUM(value = 1) AS upvotes, SUM(value = -1) AS downvotes FROM discussion_votes GROUP BY post_ID) v ON v.post_ID = p.ID`;
 const hotSQL = '(GREATEST(0, COALESCE(v.upvotes, 0) - COALESCE(v.downvotes, 0)) + 1) / POW(GREATEST(0, TIMESTAMPDIFF(SECOND, p.created_at, NOW()) / 3600) + 2, 1.5)';
-const postSelect = `SELECT p.*, CASE WHEN u.deleted_at IS NULL THEN COALESCE(profile.display_name, u.name) END AS author_name,
-    CASE WHEN u.deleted_at IS NULL AND p.deleted_at IS NULL THEN COALESCE(profile.avatar_data_url, u.profile_picture_URL) END AS author_avatar_url,
-    profile.github_username AS author_github_username, profile.show_github_profile AS author_show_github_profile,
-    (u.ID IS NOT NULL AND u.deleted_at IS NULL AND (u.banned_at IS NULL OR u.banned_until <= NOW())) AS author_profile_active,
-    cat.name AS category_name, rc.context_values, v.upvotes, v.downvotes,
-    (SELECT COUNT(*) FROM discussion_posts r WHERE r.parent_ID = p.ID AND r.hidden_at IS NULL AND r.deleted_at IS NULL) AS reply_count
-    FROM discussion_posts p LEFT JOIN categories cat ON cat.ID = p.category_ID
-    LEFT JOIN ranking_contexts rc ON rc.ID = p.context_ID LEFT JOIN users u ON u.ID = p.author_ID
-    LEFT JOIN user_public_profiles profile ON profile.user_ID = u.ID ${voteJoin}`;
-
-async function listProposalDiscussion(db, userID, body) {
-    if (Object.keys(body).some(key => !['proposalID', 'threadID', 'sort', 'offset'].includes(key))) fail(400, 'discussion_scope_mismatch');
-    const proposalID = discussionID(body.proposalID), offset = body.offset ?? 0;
-    if (!Number.isSafeInteger(offset) || offset < 0 || offset > 100000) fail(400, 'invalid_discussion_page');
-    if (body.sort != null && !['hot', 'new'].includes(body.sort)) fail(400, 'invalid_discussion_sort');
-    return transaction(db, async connection => {
-        const [proposals] = await connection.execute('SELECT ID, name FROM topic_proposals WHERE ID = ? AND withdrawn_at IS NULL', [proposalID]);
-        if (!proposals.length) fail(404, 'topic_proposal_not_found');
-        let threadID = body.threadID == null ? null : discussionID(body.threadID);
-        if (threadID !== null) {
-            const [threads] = await connection.execute(`SELECT p.ID, p.parent_ID FROM discussion_posts p
-                LEFT JOIN discussion_posts parent ON parent.ID = p.parent_ID
-                WHERE p.ID = ? AND p.proposal_ID = ? AND p.hidden_at IS NULL
-                AND (p.parent_ID IS NULL OR parent.hidden_at IS NULL)`, [threadID, proposalID]);
-            if (!threads.length) fail(404, 'discussion_post_unavailable');
-            threadID = Number(threads[0].parent_ID ?? threads[0].ID);
-        }
-        const where = `p.proposal_ID = ? AND p.hidden_at IS NULL AND ${threadID === null ? 'p.parent_ID IS NULL' : 'p.parent_ID = ?'}
-            AND (p.deleted_at IS NULL OR (p.parent_ID IS NULL AND EXISTS (SELECT 1 FROM discussion_posts child
-                WHERE child.parent_ID = p.ID AND child.hidden_at IS NULL AND child.deleted_at IS NULL)))`;
-        const args = threadID === null ? [proposalID] : [proposalID, threadID];
-        const [[count]] = await connection.execute(`SELECT COUNT(*) AS count FROM discussion_posts p WHERE ${where}`, args);
-        const order = threadID ? 'p.created_at ASC, p.ID ASC' : body.sort === 'new' ? 'p.created_at DESC, p.ID DESC' : `${hotSQL} DESC, p.created_at DESC, p.ID DESC`;
-        const [rows] = await connection.execute(`${postSelect} WHERE ${where} ORDER BY ${order} LIMIT 20 OFFSET ${offset}`, args);
-        const root = threadID ? (await connection.execute(`${postSelect} WHERE p.ID = ? AND p.proposal_ID = ? AND p.hidden_at IS NULL`, [threadID, proposalID]))[0] : [];
-        return { proposal: { proposalID, name: proposals[0].name }, posts: await decorate(connection, rows, userID),
-            root: (await decorate(connection, root, userID))[0] ?? null, total: Number(count.count),
-            hasMore: offset + rows.length < Number(count.count), authenticated: Boolean(userID), userID };
-    });
-}
-
 async function decorate(connection, rows, userID) {
     if (!rows.length) return [];
     userID = canonicalAccountID(userID);
@@ -199,13 +145,11 @@ async function decorate(connection, rows, userID) {
     return rows.map(row => ({ ID: Number(row.ID), parentID: row.parent_ID == null ? null : Number(row.parent_ID),
         categoryID: row.category_ID == null ? null : Number(row.category_ID), categoryName: row.category_name,
         contextID: row.context_ID == null ? null : Number(row.context_ID),
-        ...(row.proposal_ID == null ? {} : { proposalID: Number(row.proposal_ID) }),
         contextValues: (typeof row.context_values === 'string' ? JSON.parse(row.context_values) : row.context_values) ?? {},
         text: row.deleted_at ? '' : row.body, isDeleted: Boolean(row.deleted_at), createdAt: row.created_at,
         authorName: row.deleted_at ? 'Deleted message' : row.author_name || 'Deleted account',
         authorAvatarURL: row.deleted_at ? null : row.author_avatar_url ?? null,
-        ...(row.deleted_at ? {} : publicGitHubProfile(row.author_github_username,
-            { enabled: Number(row.author_show_github_profile) === 1, active: Number(row.author_profile_active) === 1 })),
+        authorPublicID: !row.deleted_at && Number(row.author_profile_active) === 1 ? row.author_public_id ?? null : null,
         isOwn: userID !== null && canonicalAccountID(row.author_ID) === userID,
         upvotes: Number(row.upvotes || 0), downvotes: Number(row.downvotes || 0), replyCount: Number(row.reply_count || 0),
         myVote: Number(votes.find(vote => Number(vote.post_ID) === Number(row.ID))?.value || 0),
@@ -219,7 +163,8 @@ async function decorate(connection, rows, userID) {
 
 export async function listDiscussion(db, userID, body) {
     userID = canonicalAccountID(userID);
-    if (body.proposalID != null) return listProposalDiscussion(db, userID, body);
+    if (Object.keys(body).some(key => !['categoryID', 'contextValues', 'threadID', 'benchmarkID', 'conditionID', 'contextID',
+        'sort', 'allCategories', 'allScenes', 'offset'].includes(key))) fail(400, 'unknown_discussion_field');
     if (body.allScenes != null && typeof body.allScenes !== 'boolean') fail(400, 'invalid_discussion_scope');
     return transaction(db, async connection => {
         const benchmarkID = body.benchmarkID == null ? null : discussionID(body.benchmarkID);
@@ -239,7 +184,7 @@ export async function listDiscussion(db, userID, body) {
         if (threadID !== null) {
             const [thread] = await connection.execute(`SELECT p.ID, p.parent_ID, p.category_ID, p.context_ID FROM discussion_posts p
                 LEFT JOIN discussion_posts parent ON parent.ID = p.parent_ID
-                WHERE p.ID = ? AND p.proposal_ID IS NULL AND p.hidden_at IS NULL AND (p.parent_ID IS NULL OR parent.hidden_at IS NULL)`, [threadID]);
+                WHERE p.ID = ? AND p.hidden_at IS NULL AND (p.parent_ID IS NULL OR parent.hidden_at IS NULL)`, [threadID]);
             if (!thread.length) fail(404, 'discussion_post_unavailable');
             threadID = Number(thread[0].parent_ID ?? thread[0].ID);
             categoryID = Number(thread[0].category_ID);
@@ -250,7 +195,7 @@ export async function listDiscussion(db, userID, body) {
             context = await resolveRankingContext(connection, { categoryID,
                 contextValues: { scene: String(threadContextID) }, create: false });
         }
-        const where = [visible, 'p.proposal_ID IS NULL', `(p.deleted_at IS NULL OR (p.parent_ID IS NULL AND EXISTS
+        const where = [visible, `(p.deleted_at IS NULL OR (p.parent_ID IS NULL AND EXISTS
             (SELECT 1 FROM discussion_posts child WHERE child.parent_ID = p.ID AND child.hidden_at IS NULL AND child.deleted_at IS NULL)))`];
         const args = [];
         if (threadID !== null) { where.push('p.parent_ID = ?'); args.push(threadID); }
@@ -276,7 +221,7 @@ export async function listDiscussion(db, userID, body) {
         }
         const select = `SELECT p.*, CASE WHEN u.deleted_at IS NULL THEN COALESCE(profile.display_name, u.name) END AS author_name,
             CASE WHEN u.deleted_at IS NULL AND p.deleted_at IS NULL THEN COALESCE(profile.avatar_data_url, u.profile_picture_URL) END AS author_avatar_url,
-            profile.github_username AS author_github_username, profile.show_github_profile AS author_show_github_profile,
+            profile.public_id AS author_public_id,
             (u.ID IS NOT NULL AND u.deleted_at IS NULL
                 AND (u.banned_at IS NULL OR u.banned_until <= NOW())) AS author_profile_active,
             cat.name AS category_name, rc.context_values, v.upvotes, v.downvotes,
@@ -312,7 +257,6 @@ export async function validateDiscussionReport(connection, content, userID = nul
     if (userID !== null) await connection.execute('SELECT ID FROM users WHERE ID = ? FOR UPDATE', [userID]);
     const [posts] = await connection.execute('SELECT * FROM discussion_posts WHERE ID = ? FOR UPDATE', [content.postID]);
     if (!posts.length) fail(404, 'discussion_post_unavailable');
-    if (posts[0].proposal_ID != null) content.pageURL = `/topic-proposals/${posts[0].proposal_ID}/preview?threadID=${posts[0].parent_ID ?? posts[0].ID}#discussion`;
     if (userID !== null) {
         const [reports] = await connection.execute(`SELECT ID FROM moderation_logs WHERE user_id = ?
             AND JSON_UNQUOTE(JSON_EXTRACT(content, '$.type')) = 'discussion_report'
@@ -330,4 +274,3 @@ export async function applyDiscussionReport(connection, content) {
     await validateDiscussionReport(connection, content);
     await connection.execute('UPDATE discussion_posts SET hidden_at = COALESCE(hidden_at, NOW()) WHERE ID = ?', [content.postID]);
 }
-import { publicGitHubProfile } from './user-profile-service.js';

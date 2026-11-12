@@ -1,4 +1,4 @@
-import { FEATURED_TOPIC_ID, topicURL } from '../shared/topics.js';
+import { topicURL, parseTopicPath } from '../shared/topics.js';
 import { searchItems } from '../shared/search.js';
 import { orderedScenes, sceneURL } from './scenes.js';
 
@@ -31,7 +31,11 @@ export function entryFromContext(context) {
         categoryID: Number(context.categoryID ?? context.ID),
         categoryName: lineage.at(-1).name,
         description: typeof context.description === 'string' ? context.description : '',
-        creator: context.creator ? { name: context.creator.name, avatarURL: context.creator.avatarURL } : null,
+        creator: context.creator ? { ...context.creator } : null,
+        isOfficial: context.isOfficial === true, publicID: context.publicID, privateID: context.privateID,
+        favoriteCount: Number(context.favoriteCount ?? 0), isFavorited: context.isFavorited === true,
+        configurationCount: Number(context.configurationCount ?? 0), coverageIndex: context.coverageIndex ?? null,
+        configuredPersonalContext: context.configuredPersonalContext ?? null,
         isPrivate: context.isPrivate === true,
         slug: context.slug,
         url: context.url || (context.path ? `/${context.path.replace(/^\/+/, '')}`
@@ -65,22 +69,20 @@ export function compareLocations(left, right) {
 }
 
 export function popularTopics(items) {
-    // Heat and exploration are server-owned. Only enforce the featured-topic invariant.
-    return [...items.filter(item => item.categoryID === FEATURED_TOPIC_ID),
-        ...items.filter(item => item.categoryID !== FEATURED_TOPIC_ID)];
+    // The API owns the favorites-based ordering, including deterministic ties.
+    return [...items];
 }
 
 export function locationURL(entry) {
     if (!Number.isSafeInteger(Number(entry.categoryID)) || Number(entry.categoryID) < 1) throw new TypeError('Invalid topic ID');
-    const name = entry.categoryName ?? entry.name ?? entry.lineage?.at(-1)?.name ?? '';
-    const path = entry.url || topicURL(entry.categoryID, name, entry.isPrivate, entry.slug);
+    const path = entry.url || topicURL(entry);
     const url = new URL(path, 'https://navigation.invalid');
-    if (!path.startsWith('/') || url.origin !== 'https://navigation.invalid') throw new TypeError('Invalid topic URL');
+    if (!path.startsWith('/') || url.origin !== 'https://navigation.invalid' || !parseTopicPath(path)) throw new TypeError('Invalid topic URL');
     const scene = entry.contextValues?.scene ? entry.scenes?.find(item => String(item.ID) === String(entry.contextValues.scene))
         ?? (entry.sceneName ? { name: entry.sceneName } : null) : entry.scenes?.find(item => item.isDefault);
     if (scene) return sceneURL(path, scene);
     if (entry.contextValues?.scene) throw new TypeError('Missing scene name');
-    Object.keys(entry.contextValues ?? {}).sort().forEach(key => url.searchParams.set(`context_${key}`, entry.contextValues[key]));
+    if (Object.keys(entry.contextValues ?? {}).length) throw new TypeError('Unsupported topic context');
     return `${url.pathname}${url.search}`;
 }
 
@@ -124,7 +126,7 @@ export function validateNavigationPayload(payload) {
                 || !Number.isSafeInteger(Number(item.contextValues.scene))))) invalid();
         const key = contextKey(item.categoryID, item.contextValues);
         if (keys.has(key)) invalid();
-        try { locationURL(item); } catch { invalid(); }
+        try { if (item.available) locationURL(item); } catch { invalid(); }
         keys.add(key);
     }
     return payload;

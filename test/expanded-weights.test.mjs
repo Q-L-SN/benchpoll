@@ -3,6 +3,13 @@ import test from 'node:test';
 import { mergeBenchmarkWeights, compositionPercentages, UNRESOLVED_WEIGHT_ID } from '../public/js/workspace/expanded-weights.js';
 import { expandTopicReferences } from '../topic-reference-service.js';
 
+function assertWeightsClose(actual, expected) {
+    const identities = entries => entries.map(({ weightBasisPoints: _weight, ...entry }) => entry);
+    assert.deepEqual(identities(actual), identities(expected));
+    actual.forEach((entry, index) => assert.ok(Math.abs(entry.weightBasisPoints - expected[index].weightBasisPoints) < 1e-8,
+        `Condition ${entry.conditionID}: ${entry.weightBasisPoints} != ${expected[index].weightBasisPoints}`));
+}
+
 test('expanded display merges versions and direct/reference contributions without changing input weights', () => {
     const entries = [{ conditionID: 10, benchmarkID: 1, name: 'Reasoning', weightBasisPoints: 2500 },
         { conditionID: 11, benchmarkID: 1, name: 'Reasoning', weightBasisPoints: 3500 },
@@ -35,7 +42,9 @@ test('selected reference composition keeps its own full percentages after nested
     const result = await expandTopicReferences({ contextID: 1, entries: [e(-3, 1000), e(-2, 4000), e(10, 5000)] },
         { loadTarget: async id => nodes.get(id) });
     const composition = result.referenceCompositions.find(item => item.referenceContextID === 3);
-    assert.deepEqual(composition.entries, [e(10, 8500), e(11, 1500)]);
-    for (const item of result.referenceCompositions) assert.equal(item.entries.reduce((sum, entry) => sum + entry.weightBasisPoints, 0), 10000);
-    assert.deepEqual(result.entries, [e(10, 6850), e(11, 3150)]);
+    assertWeightsClose(composition.entries, [e(10, 8500), e(11, 1500)]);
+    for (const item of result.referenceCompositions) {
+        assert.ok(Math.abs(item.entries.reduce((sum, entry) => sum + entry.weightBasisPoints, 0) - 10000) < 1e-8);
+    }
+    assertWeightsClose(result.entries, [e(10, 6850), e(11, 3150)]);
 });

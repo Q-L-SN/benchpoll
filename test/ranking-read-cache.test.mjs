@@ -378,7 +378,7 @@ test('an actual cancelled workspace producer cannot pass a late driver error to 
                     epoch: 'workspace', data_revision: 1, catalogue_revision: 1, ready: 1
                 }]];
                 if (sql.includes('FROM categories c LEFT JOIN users creator') && sql.endsWith('WHERE c.ID = ? AND c.is_active = 1')) return [[{
-                    ID: 1, parent_ID: null, name: 'Intelligence', slug: 'intelligence', description: 'Compare general intelligence benchmarks.',
+                    ID: 1, public_ID: 1, parent_ID: null, name: 'Intelligence', slug: 'intelligence', description: 'Compare general intelligence benchmarks.',
                     position: 0, owner_user_ID: null, created_by_user_ID: null, creator_name: null, creator_avatar: null
                 }]];
                 if (sql.includes('COUNT(*) AS count FROM categories')) return [[{ count: 1 }]];
@@ -409,7 +409,7 @@ test('an actual cancelled workspace producer cannot pass a late driver error to 
     pending.reject(Object.assign(new Error('late socket failure'), { code: 'PROTOCOL_CONNECTION_LOST' }));
     const result = await survived;
     assert.equal(result.error, undefined);
-    assert.equal(result.value.context.categoryPath, 'intelligence');
+    assert.equal(result.value.context.categoryPath, '1');
     assert.deepEqual(readers.map(reader => reader.loads), [1, 1]);
     assert.equal(readers[0].events.filter(([event]) => event === 'destroy').length, 1);
     assert.deepEqual(readers[1].events.slice(-2), [['commit'], ['release']]);

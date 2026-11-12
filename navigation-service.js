@@ -2,41 +2,27 @@ import { normalizeUserID, selectScopedDimensions, decorateDimensions, canonicali
 import { entryFromContext, compareLocations } from './public/js/navigation/model.js';
 import { selectableBenchmarkConditionSQL } from './benchmark-condition-visibility.js';
 import { preserveRemovedPersonalPies } from './private-category-service.js';
-import { TOPIC_ACTIVITY_JOIN, orderTopicsByPopularity } from './topic-popularity.js';
-import { topicURL, topicSlug } from './public/js/shared/topics.js';
-import { topicCreator } from './topic-service.js';
+import { orderTopicsByPopularity } from './topic-popularity.js';
+import { topicURL } from './public/js/shared/topics.js';
+import { topicCreator, topicSelect, serializeTopic, listTopics } from './topic-service.js';
 import { loadTopicSceneCatalog } from './topic-scenes-service.js';
 import { startTransactionConnection, commitTransactionConnection, rollbackTransactionConnection,
     releaseTransactionConnection } from './db-transaction.js';
 
 export function buildCategoryNavigation(categories, sceneCatalog = new Map()) {
     return orderTopicsByPopularity(categories.filter(category => category.owner_user_ID == null && category.is_active))
-        .map(category => ({ ...entryFromContext({ categoryID: Number(category.ID),
-            ID: sceneCatalog.get(Number(category.ID))?.defaultContextID ?? null,
-            contextValues: sceneCatalog.get(Number(category.ID))?.scenes.length
-                ? { scene: String(sceneCatalog.get(Number(category.ID)).defaultContextID) } : {},
-            description: category.description, creator: topicCreator(category),
-            lineage: [{ ID: Number(category.ID), name: String(category.name), position: Number(category.position ?? 0) }] }),
-        ...(sceneCatalog.get(Number(category.ID)) ?? { scenes: [], defaultContextID: null, rootContextID: null }),
-        slug: category.slug || topicSlug(category.name),
-        url: topicURL(category.ID, category.name, false, category.slug || topicSlug(category.name)),
-        popularity: Number(category.popularity ?? 0) }));
+        .map(category => {
+            const topic = serializeTopic(category);
+            const catalog = sceneCatalog.get(topic.ID) ?? { scenes: [], defaultContextID: null, rootContextID: null };
+            return { ...topic, ...entryFromContext({ ...topic, ...catalog, ID: catalog.defaultContextID,
+                contextValues: catalog.scenes.length ? { scene: String(catalog.defaultContextID) } : {} }), ...catalog };
+        });
 }
 
-export async function getCategoryNavigation(db) {
-    const [categories] = await db.execute(`SELECT c.ID, c.name, c.slug, c.description, c.position, c.is_active,
-        c.created_by_user_ID, c.created_at, activity.last_activity,
-        COALESCE(NULLIF(p.display_name, ''), creator.name) AS creator_name,
-        COALESCE(p.avatar_data_url, creator.profile_picture_URL) AS creator_avatar,
-        COALESCE(activity.popularity, 0) AS popularity,
-        (c.created_by_user_ID IS NULL OR (creator.ID IS NOT NULL AND creator.deleted_at IS NULL
-            AND (creator.banned_at IS NULL OR (creator.banned_until IS NOT NULL AND creator.banned_until <= NOW())))) AS creator_eligible
-        FROM categories c ${TOPIC_ACTIVITY_JOIN}
-        LEFT JOIN users creator ON creator.ID = c.created_by_user_ID AND creator.deleted_at IS NULL
-        LEFT JOIN user_public_profiles p ON p.user_ID = creator.ID AND creator.deleted_at IS NULL
-        WHERE c.owner_user_ID IS NULL ORDER BY c.position, c.ID`);
-    const sceneCatalog = await loadTopicSceneCatalog(db, categories.filter(category => category.is_active).map(category => Number(category.ID)));
-    const items = buildCategoryNavigation(categories, sceneCatalog);
+export async function getCategoryNavigation(db, viewerID = null) {
+    const { topics } = await listTopics(db, viewerID);
+    const items = topics.filter(topic => !topic.isPrivate).map(topic => ({ ...topic,
+        ...entryFromContext({ ...topic, ID: topic.defaultContextID }) }));
     return { items, entries: items, flat: true };
 }
 
@@ -84,9 +70,12 @@ export function buildPersonalNavigation(rows, categories, dimensionRows = [], op
         }
         if ((!isPrivate || Number(row.weightCount) > 0) && Number(row.totalBasisPoints) !== 10000
             || Number(row.unavailableConditions) > 0 || Number(row.unavailableReferences ?? 0) > 0) available = false;
-        return { ...entry, slug: topic?.slug || topicSlug(entry.categoryName),
+        return { ...entry, publicID: Number(topic?.public_ID), privateID: isPrivate ? topic?.private_ID : undefined,
+            isOfficial: Boolean(Number(topic?.is_official)), isMine: topic?.isMine === true,
+            favoriteCount: Number(topic?.favorite_count ?? 0), isFavorited: Boolean(Number(topic?.is_favorited)),
+            configurationCount: Number(topic?.configuration_count ?? 0), configured: true, coverageIndex: null,
             ...(sceneEntry ?? {}),
-            url: scene?.url ?? topicURL(categoryID, entry.categoryName, isPrivate, topic?.slug || topicSlug(entry.categoryName)),
+            url: scene?.url ?? (topic ? topicURL(topic) : null),
             available, weightCount: Number(row.weightCount) };
     }).sort(compareLocations);
 }
@@ -129,12 +118,9 @@ export async function getPersonalNavigation(db, userID, { retirementChecked = fa
             WHERE (cat.owner_user_ID IS NULL AND pp.user_ID = ?) OR cat.owner_user_ID = ?
             GROUP BY pp.ID, pp.user_ID, cat.owner_user_ID, rc.ID, rc.category_ID, rc.context_values
             ORDER BY rc.category_ID, rc.ID`, [owner, owner, owner]);
-        const [categories] = await connection.execute(`SELECT c.ID, c.name, c.slug, c.description, c.position, c.is_active,
-            c.owner_user_ID, c.created_by_user_ID, COALESCE(NULLIF(p.display_name, ''), creator.name) AS creator_name,
-            COALESCE(p.avatar_data_url, creator.profile_picture_URL) AS creator_avatar
-            FROM categories c LEFT JOIN users creator ON creator.ID = c.created_by_user_ID AND creator.deleted_at IS NULL
-            LEFT JOIN user_public_profiles p ON p.user_ID = creator.ID
-            WHERE c.owner_user_ID IS NULL OR c.owner_user_ID = ? ORDER BY c.position, c.ID`, [owner]);
+        const [categories] = await connection.execute(`${topicSelect()}
+            WHERE c.owner_user_ID IS NULL OR c.owner_user_ID = ? ORDER BY c.position, c.ID`, [owner, owner, owner]);
+        for (const category of categories) category.isMine = String(category.created_by_user_ID ?? category.owner_user_ID) === String(owner);
         const sceneCatalog = await loadTopicSceneCatalog(connection, categories.map(category => Number(category.ID)));
         preserveRetired = rows.some(row => categories.some(category => Number(category.ID) === Number(row.categoryID)
             && category.owner_user_ID == null && !category.is_active));

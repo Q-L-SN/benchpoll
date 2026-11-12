@@ -6,6 +6,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import test, { before, after } from 'node:test';
 import vm from 'node:vm';
 import { createFixtureState, workspace } from '../scripts/frontend/fixtures.mjs';
+import { recoveryScene, withRecoveryScenes } from './helpers/workspace-scene-fixture.mjs';
 
 // Point this at a frozen source tree to keep pre-fix failures reproducible.
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -22,6 +23,8 @@ const { readRankingContext } = await actualModule('public/js/shared/ranking-url.
 const { comparisonProfileKey } = await actualModule('public/js/shared/comparison-profile-key.js');
 const { accountWriteError } = await actualModule('public/js/shared/account-identity.js');
 const { postJSON } = await actualModule('public/js/shared/http.js');
+const { isTopicReference } = await actualModule('public/js/shared/topic-label.js');
+const { mergeBenchmarkWeights } = await actualModule('public/js/workspace/expanded-weights.js');
 const constants = await actualModule('public/js/workspace/constants.js');
 
 function block(start, end) {
@@ -50,7 +53,7 @@ after(() => { globalThis.fetch = originalFetch; });
 
 const flush = async () => { for (let i = 0; i < 80; i++) await Promise.resolve(); };
 const plain = value => JSON.parse(JSON.stringify(value));
-const contextKey = budget => `1:${JSON.stringify([['budget', budget]])}`;
+const contextKey = name => `1:${JSON.stringify([['scene', recoveryScene[name]]])}`;
 const draftA = { entries: [{ conditionID: 1, weightBasisPoints: 10000 }], fallbackRules: [] };
 const draftB = { entries: [{ conditionID: 1, weightBasisPoints: 5000 },
     { conditionID: 2, weightBasisPoints: 5000 }], fallbackRules: [] };
@@ -66,8 +69,8 @@ function deferred() {
 
 function createHarness(t, { reconcile = false, realHTTP = false } = {}) {
     const state = createWorkspaceState();
-    Object.assign(state, { categoryID: 1, categoryPath: 'Language-models', mode: 'personal',
-        selectedContextValues: reconcile ? {} : { budget: 'standard' },
+    Object.assign(state, { categoryID: 1, categoryPath: reconcile ? '1/2' : '1/1', mode: 'personal',
+        selectedContextValues: { scene: reconcile ? recoveryScene.extended : recoveryScene.standard },
         comparisonRequest: { mode: 'best', keys: ['model'], filters: [] } });
     const stored = new Map();
     const storage = { getItem: key => stored.get(key) ?? null, setItem: (key, value) => stored.set(key, value) };
@@ -76,10 +79,14 @@ function createHarness(t, { reconcile = false, realHTTP = false } = {}) {
         snapshot: () => ({ entries: state.personalEntries, fallbackRules: state.personalFallbackRules }) });
     for (const budget of ['standard', 'extended']) guestDrafts.set(contextKey(budget), draftA);
     const fixture = createFixtureState({ authenticated: false });
-    const requests = [], applied = [], errors = [], recoveries = [], recoveryBarriers = [], tasks = [], transports = [];
-    const location = { search: reconcile ? '?context_budget=extended' : '',
-        href: 'https://offline.invalid/Language-models', pathname: '/Language-models', origin: 'https://offline.invalid' };
-    const payload = body => validateWorkspacePayload(workspace(fixture, body), { initialMode: body.initialMode });
+    const requests = [], applied = [], errors = [], recoveries = [], recoveryBarriers = [], tasks = [], transports = [], contextSearches = [];
+    const location = { search: reconcile ? '?sort=initial' : '',
+        href: `https://offline.invalid/${reconcile ? '1/2' : '1/1'}`, pathname: reconcile ? '/1/2' : '/1/1', origin: 'https://offline.invalid' };
+    // Numeric route metadata supplies the requested scene. Return the community
+    // default on a base read to exercise defensive reconciliation against that
+    // immutable requested scene, independently of retired context query syntax.
+    const payload = (body, phase) => validateWorkspacePayload(withRecoveryScenes(workspace(fixture, body),
+        reconcile && phase === 'base' ? { scene: recoveryScene.standard } : body.contextValues), { initialMode: body.initialMode });
     const globals = { estimationRequest, normalizeEstimationAlgorithm,
         ...constants, state, structuredClone, URL, URLSearchParams, Map, Set, Date, Number, guestDrafts, pieRecovery,
         workspaceLoadFailed: false, comparisonProfileFailure: null, comparisonProfileLoadError: '',
@@ -95,17 +102,23 @@ function createHarness(t, { reconcile = false, realHTTP = false } = {}) {
         window: { location, queueMicrotask() {}, setTimeout: (...args) => globalThis.setTimeout(...args),
             clearTimeout: timer => globalThis.clearTimeout(timer) },
         console: { error() {}, warn() {} },
-        validateWorkspacePayload, readRankingContext, cloneEntries, cloneFallbackRules, comparisonProfileKey, accountWriteError, chartWeightMode,
+        validateWorkspacePayload,
+        readRankingContext(search, dimensions) { contextSearches.push(search); return readRankingContext(search, dimensions); },
+        cloneEntries, cloneFallbackRules, comparisonProfileKey, accountWriteError, chartWeightMode,
         finishPendingWeightAdjustments: async () => true, flushPendingPersonalPieSave: async () => true,
         registerPieEntries() {}, resetPieVisualState() {}, syncContextValuesToURL() {}, updateDiscussionEntry() {},
         renderAll() {}, renderScoringControls() {}, revealBenchmarkRow() {}, reloadBenchmarkPage() {},
+        isTopicReference, mergeBenchmarkWeights, recordProfileVisit() {},
         rankingRecoveryScope: () => 'unused-no-page-recovery',
         setStatus(message) { state.statusMessage = message; },
         renderLoadError(error) { errors.push(error); state.loading = false; globals.workspaceLoadFailed = true; },
         postJSON(route, body, options) {
             assert.equal(route, '/api/get_weighted_workspace', 'Only synthetic read requests are permitted.');
-            const request = { ...deferred(), route, body: structuredClone(body), options: options && { ...options },
-                payload: payload(body) };
+            const generation = state.loadSequence;
+            const phase = body.previewPersonalPie ? 'preview'
+                : requests.some(request => request.generation === generation) ? 'reconciled' : 'base';
+            const request = { ...deferred(), route, body: structuredClone(body), options: options && { ...options }, generation, phase,
+                payload: payload(body, phase) };
             requests.push(request);
             return realHTTP ? postJSON(route, body, options) : request.promise;
         }
@@ -120,7 +133,7 @@ function createHarness(t, { reconcile = false, realHTTP = false } = {}) {
         // Keep the async completion boundary controllable without writing a retired profile.
         await barrier.promise;
     };
-    const h = { state, requests, applied, errors, recoveries, transports, guestDrafts, location, payload,
+    const h = { state, requests, applied, errors, recoveries, transports, guestDrafts, location, payload, contextSearches,
         readDraft: budget => createGuestDraftStore(() => storage).get(contextKey(budget)),
         load(options) {
             const task = { settled: false };
@@ -194,12 +207,13 @@ for (let repetition = 1; repetition <= 2; repetition++) {
         h.state.scoreMode = 'range';
         const loading = h.load();
         await flush();
-        Object.assign(h.state, { categoryID: 2, selectedContextValues: { budget: 'standard' }, scoreMode: 'available', mode: 'public' });
+        Object.assign(h.state, { categoryID: 2, selectedContextValues: { scene: recoveryScene.standard }, scoreMode: 'available', mode: 'public' });
         h.state.comparisonRequest.keys.push('field:1');
-        h.location.search = '?context_budget=standard';
+        h.location.search = '?sort=later'; h.location.pathname = '/2/1';
         await h.respond(0);
-        assert.equal(h.requests.length, 2, 'The originally captured URL still requires reconciliation.');
-        const expected = { categoryID: 1, contextValues: { budget: 'extended' },
+        assert.equal(h.requests.length, 2, 'The originally captured numeric-route scene still requires reconciliation.');
+        assert.equal(h.contextSearches[0], '?sort=initial', 'Reconciliation reads the original search snapshot after navigation.');
+        const expected = { categoryID: 1, contextValues: { scene: recoveryScene.extended },
             comparison: { mode: 'best', keys: ['model'], filters: [] }, scoreMode: 'range', initialMode: 'personal' };
         for (const [key, value] of Object.entries(expected)) assert.deepEqual(plain(h.requests[1].body[key]), value, key);
         await h.respond(1);
@@ -215,9 +229,9 @@ for (let repetition = 1; repetition <= 2; repetition++) {
     for (const nextPhase of ['reconciliation', 'preview']) {
         run(`obsolete base cannot dispatch ${nextPhase}`, async t => {
             const h = createHarness(t);
-            if (nextPhase === 'reconciliation') h.state.selectedContextValues = { budget: 'extended' };
+            if (nextPhase === 'reconciliation') h.state.selectedContextValues = { scene: recoveryScene.extended };
             const old = h.load(); await flush();
-            h.state.selectedContextValues = { budget: 'standard' };
+            h.state.selectedContextValues = { scene: recoveryScene.standard };
             h.guestDrafts.set(contextKey('standard'), draftB);
             await restoreLatest(h, 1);
             const snapshot = h.state.rankingPagination.snapshotID;
@@ -233,8 +247,8 @@ for (let repetition = 1; repetition <= 2; repetition++) {
         const h = createHarness(t, { reconcile: true });
         const old = h.load(); await flush(); await h.respond(0);
         assert.equal(h.requests.length, 2);
-        assert.equal(h.requests[1].body.contextValues.budget, 'extended');
-        h.state.selectedContextValues = { budget: 'standard' }; h.location.search = '';
+        assert.equal(h.requests[1].body.contextValues.scene, recoveryScene.extended);
+        h.state.selectedContextValues = { scene: recoveryScene.standard }; h.location.search = '';
         h.guestDrafts.set(contextKey('standard'), draftB);
         await restoreLatest(h, 2);
         const snapshot = h.state.rankingPagination.snapshotID;
@@ -338,7 +352,7 @@ for (let repetition = 1; repetition <= 2; repetition++) {
             assert.equal(h.requests[index].options?.timeoutMs, 60000, `Deadline for read ${index}`);
             await h.respond(index);
         }
-        assert.equal(h.requests[1].body.contextValues.budget, 'extended');
+        assert.equal(h.requests[1].body.contextValues.scene, recoveryScene.extended);
         assert.ok(h.requests[2].body.previewPersonalPie);
         assert.equal(loading.settled, true);
         await loading.promise;
@@ -350,9 +364,9 @@ for (let repetition = 1; repetition <= 2; repetition++) {
         const h = createHarness(t, { reconcile: true, realHTTP: true });
         t.mock.method(globalThis, 'fetch', (url, options) => {
             assert.equal(url, '/api/get_weighted_workspace');
-            const body = JSON.parse(options.body), work = deferred();
+            const work = deferred(), request = h.requests.at(-1);
             h.transports.push({ signal: options.signal,
-                resolveLate: () => work.resolve(httpResponse(h.payload(body))) });
+                resolveLate: () => work.resolve(httpResponse(request.payload)) });
             return work.promise;
         });
         const loading = h.load(); await flush();
@@ -421,13 +435,12 @@ for (let repetition = 1; repetition <= 2; repetition++) {
                 const h = createHarness(t, { reconcile: readPhase !== 'base', realHTTP: true });
                 t.mock.method(globalThis, 'fetch', (url, options) => {
                     assert.equal(url, '/api/get_weighted_workspace');
-                    const body = JSON.parse(options.body);
-                    const currentPhase = body.previewPersonalPie ? 'preview'
-                        : body.contextValues.budget === 'extended' ? 'reconciled' : 'base';
-                    if (currentPhase !== readPhase) return Promise.resolve(httpResponse(h.payload(body)));
+                    const body = JSON.parse(options.body), request = h.requests.at(-1);
+                    const currentPhase = request.phase;
+                    if (currentPhase !== readPhase) return Promise.resolve(httpResponse(request.payload));
                     const work = deferred();
                     const transport = { work, signal: options.signal, body,
-                        resolveLate: () => work.resolve(transportPhase === 'fetch' ? httpResponse(h.payload(body)) : h.payload(body)) };
+                        resolveLate: () => work.resolve(transportPhase === 'fetch' ? httpResponse(request.payload) : request.payload) };
                     h.transports.push(transport);
                     return transportPhase === 'fetch' ? work.promise : Promise.resolve({ ...httpResponse(null), json: () => work.promise });
                 });

@@ -14,7 +14,9 @@ test('benchmark and version names share information links, with counts outside t
     const link = source('public/js/workspace/benchmark-link.js');
     assert.match(link, /detail\.textContent = version/);
     assert.match(link, /link\.dataset\.benchmarkControl = 'information'/);
-    assert.match(home, /identity\.append\(scoreCount\)/);
+    assert.match(home, /identity\.append\(name\)/);
+    assert.match(home, /metadata\.append\(scoreCount\); identity\.append\(metadata\)/);
+    assert.doesNotMatch(home, /name\.append\([^)]*(?:metadata|scoreCount)/);
     assert.doesNotMatch(families, /familyControl|bp-benchmark-family-chain|function create\(/);
     assert.doesNotMatch(home, /identity\.href|identity\.dataset\.benchmarkControl/);
     assert.doesNotMatch(home, /bp-benchmark-discuss|fa-comment|alreadyAdded \? 'check'/);
@@ -62,13 +64,18 @@ test('applied configurations show a non-destructive check, ordinary benchmarks r
     assert.match(home, /object\.familyKey/);
 });
 
-test('name underlines appear only on the owning hover-capable row or keyboard focus', () => {
+test('benchmark and topic names share a continuous underline while their metadata stays outside the link', () => {
     const nameRule = styles.match(/\.bp-benchmark-information-link \{([^}]+)\}/)?.[1];
     assert.ok(nameRule);
     assert.match(nameRule, /text-decoration: none;/);
     assert.doesNotMatch(nameRule, /text-decoration: underline;/);
     assert.match(styles, /@media \(hover: hover\) \{\s*\.bp-benchmark-row:hover > \.bp-benchmark-identity > \.bp-benchmark-information-link/);
     assert.match(styles, /\.bp-benchmark-row:focus-visible :is\(\.bp-benchmark-name\.bp-benchmark-information-link\),\s*\.bp-benchmark-information-link:focus-visible \{ text-decoration: underline; \}/);
+    const redesign = source('public/css/ui/workspace-redesign.css');
+    assert.match(redesign, /\.bp-home \.bp-benchmark-information-link \{[^}]*display: inline;[^}]*text-decoration: none/);
+    assert.match(redesign, /\.bp-benchmark-information-link \.bp-benchmark-link-name, \.bp-home \.bp-topic-link-label \{[^}]*display: inline; border: 0/);
+    assert.match(redesign, /\.bp-home \.bp-benchmark-information-link:is\(:hover, :focus-visible\)[^{]*\{[^}]*text-decoration: underline/);
+    assert.match(redesign, /\.bp-benchmark-identity > \.bp-evaluation-meta \{[^}]*display: inline-flex;[^}]*white-space: nowrap/);
 });
 
 test('workspace updates are immediate and use local animation instead of interruptible page snapshots', () => {

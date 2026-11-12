@@ -7,7 +7,7 @@ const draft = weight => ({ entries: [{ conditionID: 1, weightBasisPoints: weight
     { conditionID: 2, weightBasisPoints: 10000 - weight }], fallbackRules: [] });
 const plain = value => JSON.parse(JSON.stringify(value));
 const weights = h => h.state.personalEntries.map(row => row.weightBasisPoints);
-const context = { budget: 'standard' }, key = '1:[["budget","standard"]]';
+const context = { scene: '101' }, key = '1:[["scene","101"]]';
 
 for (let repetition = 1; repetition <= 2; repetition++) {
     test(`actual failed save is invisible after reload as a different account or anonymously (${repetition})`, async t => {

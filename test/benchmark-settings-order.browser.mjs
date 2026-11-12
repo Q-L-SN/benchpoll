@@ -15,16 +15,18 @@ for (const [engine, width] of [[chromium, 1440], [webkit, 390]]) {
                 families: families.map((family, index) => ({ ...family, weightBasisPoints: [8000, 2000][index],
                     overallWeightBasisPoints: [2080, 520][index] })) }],
             personalEntries: weightedEntries([{ conditionID: 1, weightBasisPoints: 6000 }, { conditionID: 2, weightBasisPoints: 4000 }]) });
+        t.after(() => app.close());
         const browser = await engine.launch({ headless: true });
+        t.after(() => browser.close());
         const page = await browser.newPage({ viewport: { width, height: 900 }, isMobile: width < 760, hasTouch: width < 760,
             reducedMotion: 'reduce' });
         page.setDefaultTimeout(10000);
         const errors = []; page.on('pageerror', error => errors.push(error.message));
-        t.after(async () => { await browser.close(); await app.close(); assert.deepEqual(errors, []); });
+        t.after(() => assert.deepEqual(errors, []));
         await page.addInitScript(() => localStorage.setItem('benchpoll:config-sidebar-collapsed', 'true'));
-        if (built) await page.route(app.url + '/', async route => route.fulfill({ contentType: 'text/html',
+        if (built) await page.route(app.url + '/1', async route => route.fulfill({ contentType: 'text/html',
             body: await readFile(new URL('../private/home-built.html', import.meta.url), 'utf8') }));
-        await page.goto(app.url);
+        await page.goto(app.url + '/1');
         await page.locator('#pie-mode-personal').click();
         await page.locator('#pie-mode-personal[aria-selected="true"][aria-busy="false"]').waitFor();
         await page.locator('#weight-pie [data-object-id="1"]').click();
@@ -60,7 +62,6 @@ for (const [engine, width] of [[chromium, 1440], [webkit, 390]]) {
         await card('[1,4,2]').waitFor();
         const initial = await cardOrder();
         assert.ok(initial.indexOf('[1,4,2]') > 0);
-        await settings.locator('.bp-fallback-picker-arrow[aria-label="Next fallback order"]').click();
         await choose(() => card('[1,4,2]').click());
         assert.deepEqual(await cardOrder(), initial, 'Fallback selection stays in place through saving and ranking refresh');
         assert.equal(await card('[1,4,2]').getAttribute('aria-pressed'), 'true');

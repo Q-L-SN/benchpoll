@@ -4,12 +4,23 @@ import { randomUUID } from 'node:crypto';
 import { createLifecycleDatabase, seedLifecycleEvidence } from './helpers/lifecycle-mysql.mjs';
 import { savePersonalPie, getRankingWorkspace, loadPersonalPie } from '../ranking-service.js';
 import { ensureTopicRootContext } from '../topic-scenes-service.js';
+import { allocateTopicIdentity } from '../topic-platform-schema.js';
+
+async function createPublicTopic(pool, name) {
+    const connection = await pool.getConnection();
+    try {
+        await connection.beginTransaction();
+        const { publicID, privateID } = await allocateTopicIdentity(connection);
+        const [result] = await connection.execute('INSERT INTO categories (name, slug, public_ID, private_ID) VALUES (?, ?, ?, ?)',
+            [name, name.toLowerCase().replaceAll(' ', '-'), publicID, privateID]);
+        const ID = Number(result.insertId), contextID = await ensureTopicRootContext(connection, ID);
+        await connection.commit(); return { ID, contextID };
+    } catch (error) { await connection.rollback(); throw error; }
+    finally { connection.release(); }
+}
 import { inspectCommunityVersions, migrateCommunityVersions } from '../scripts/migrate-community-versions-20261103.mjs';
 import { createRankingPager } from '../ranking-pagination.js';
 import { validateWorkspacePayload } from '../public/js/workspace/contracts.js';
-import { savePrivateTopic } from '../private-topic-service.js';
-import { captureTopicSnapshot, createProposalPreviewService, seedSnapshotTopic } from '../topic-snapshot-service.js';
-import { createTopicProposalService, readProposal } from '../topic-proposal-service.js';
 
 test('a restricted primary does not block saving an independent version or its community default', { timeout: 60000 }, async t => {
     const database = await createLifecycleDatabase(); t.after(() => database.close());
@@ -22,9 +33,8 @@ test('a restricted primary does not block saving an independent version or its c
     for (let ID = 1; ID <= 3; ID++) await db.execute(`INSERT INTO benchmark_results
         (model_ID, benchmark_ID, benchmark_condition_ID, raw_score, source_url, source_type, benchmark_condition_snapshot, score_fields)
         VALUES (?, 1, 4, ?, 'https://example.test/independent', 'vendor_official', '{}', '[]')`, [ID, ID * 15]);
-    const [topic] = await db.execute("INSERT INTO categories (name, slug) VALUES ('Available versions', 'available-versions')");
-    const categoryID = Number(topic.insertId);
-    await ensureTopicRootContext(db, categoryID);
+    const topic = await createPublicTopic(db, 'Available versions');
+    const categoryID = topic.ID;
     const read = () => getRankingWorkspace(db, { categoryID, userID: '42', scoreMode: 'range' });
     const initial = await read();
     const page = createRankingPager().create(initial);
@@ -63,9 +73,7 @@ test('real MySQL saves abstention, recalculates inherited versions, and expands 
         VALUES (?, 1, 4, ?, 'https://example.test/extended', 'vendor_official', '{}', '[]')`, [ID, ID * 15]);
     const topics = [];
     for (const name of ['Version choices', 'Referenced choices']) {
-        const [result] = await db.execute('INSERT INTO categories (name, slug) VALUES (?, ?)', [name, name.toLowerCase().replaceAll(' ', '-')]);
-        const ID = Number(result.insertId), context = await ensureTopicRootContext(db, ID);
-        topics.push({ ID, contextID: context.ID ?? context });
+        topics.push(await createPublicTopic(db, name));
     }
     const [topic, reference] = topics;
     const save = (userID, entries, revision = 0, categoryID = topic.ID, fallbackRules = []) => savePersonalPie(db, {
@@ -102,44 +110,4 @@ test('real MySQL saves abstention, recalculates inherited versions, and expands 
         assert.equal((await inspectCommunityVersions(connection)).missing, false);
         assert.equal((await migrateCommunityVersions(connection, { apply: true })).changed, false);
     } finally { connection.release(); }
-});
-
-test('snapshot capture, copy and publication seeding reject conflicting version choices before writes', { timeout: 60000 }, async t => {
-    const database = await createLifecycleDatabase(); t.after(() => database.close());
-    const db = database.pool; await seedLifecycleEvidence(db);
-    await db.execute(`INSERT INTO benchmark_conditions
-        (ID, benchmark_ID, condition_key, name, score_direction, uses_percentage_scale, is_default, is_primary)
-        VALUES (4, 1, 'extended', 'Extended', 'higher', 1, 0, 0)`);
-    const create = name => savePrivateTopic(db, '42', { name, description: 'Version validation fixture.',
-        scenes: [], defaultSceneKey: null }, randomUUID());
-    const source = await create('Snapshot source'), target = await create('Snapshot target');
-    await savePersonalPie(db, { userID: '42', categoryID: source.ID, expectedRevision: 0, writeIdentity: randomUUID(),
-        entries: [{ conditionID: 1, weightBasisPoints: 5000 }, { conditionID: 4, weightBasisPoints: 5000 }], fallbackRules: [] });
-    const snapshot = await captureTopicSnapshot(db, '42', source.ID);
-    const invalid = structuredClone(snapshot);
-    invalid.scenes[0].entries[0].followCommunityVersion = true;
-    const conflict = error => error.status === 409 && error.body?.error === 'pie_benchmark_version_conflict';
-    const counts = async () => {
-        const values = {};
-        for (const table of ['categories', 'personal_pies', 'personal_pie_weights']) {
-            const [[row]] = await db.query('SELECT COUNT(*) AS count FROM ' + table); values[table] = Number(row.count);
-        }
-        return values;
-    };
-    const proposals = createTopicProposalService({ pool: db, queueForReview: async () => { throw new Error('Review is not part of this fixture'); } });
-    const proposal = await proposals.propose('42', { sourceTopicID: source.ID }, randomUUID());
-    const previews = createProposalPreviewService({ db, readProposal });
-    const before = await counts();
-    await assert.rejects(previews.copy('42', { proposalID: proposal.proposalID, revision: proposal.revision,
-        name: 'Invalid copy', sceneDrafts: [{ key: snapshot.scenes[0].key, entries: invalid.scenes[0].entries }] }, randomUUID()), conflict);
-    assert.deepEqual(await counts(), before, 'Failed copies roll back the new private topic');
-    await assert.rejects(seedSnapshotTopic(db, target, '42', invalid), conflict);
-    assert.deepEqual(await counts(), before, 'Publication seeding rejects the snapshot before writing scenes or weights');
-    const copied = await previews.copy('42', { proposalID: proposal.proposalID, revision: proposal.revision,
-        name: 'Valid inherited copy', sceneDrafts: [{ key: snapshot.scenes[0].key,
-            entries: [{ conditionID: 1, weightBasisPoints: 10000, followCommunityVersion: true }] }] }, randomUUID());
-    assert.ok(copied.categoryID);
-    const stored = await loadPersonalPie(db, source.defaultContextID, '42');
-    await db.execute('UPDATE personal_pie_weights SET follow_community_version = 1 WHERE pie_ID = ? AND benchmark_condition_ID = 1', [stored.ID]);
-    await assert.rejects(captureTopicSnapshot(db, '42', source.ID), conflict);
 });

@@ -1,5 +1,5 @@
 import { SITE_TITLE, SITE_TAGLINE, SITE_DESCRIPTION, SITE_SOCIAL_IMAGE, topicSearchMetadata } from './public/js/shared/search-metadata.js';
-import { FEATURED_TOPIC_ID, sceneSummary, topicSlug } from './public/js/shared/topics.js';
+import { sceneSummary } from './public/js/shared/topics.js';
 
 export const PUBLIC_DOCUMENTS = Object.freeze([
     { path: '/', title: SITE_TITLE, description: SITE_DESCRIPTION, type: 'CollectionPage' },
@@ -65,17 +65,18 @@ ${meta('twitter:image:alt', `BenchPoll - ${SITE_TAGLINE}`)}
 <script id="bp-search-structured-data" type="application/ld+json">${jsonData({ '@context': 'https://schema.org', '@graph': graph })}</script>\n`;
 }
 
-export function selectSearchScene(topic, params, slug = null) {
-    if (params.has('scene') || params.has('context_scene')) throw error(404, 'topic_scene_not_found');
-    if (slug === null) return topic.scenes?.find(scene => scene.isDefault) ?? null;
-    const scene = topic.scenes?.find(scene => (scene.slug || topicSlug(scene.name)) === slug);
+export function selectSearchScene(topic, params, sceneNumber = null) {
+    if ([...params.keys()].some(key => key === 'scene' || key.startsWith('context_'))) throw error(404, 'topic_scene_not_found');
+    if (sceneNumber === null) return topic.scenes?.find(scene => scene.isDefault) ?? null;
+    if (!/^[1-9]\d*$/.test(String(sceneNumber))) throw error(404, 'topic_scene_not_found');
+    const scene = topic.scenes?.find(scene => scene.sceneNumber === Number(sceneNumber));
     if (!scene) throw error(404, 'topic_scene_not_found');
     return scene;
 }
 
 export function renderTopicDirectory(topics) {
-    return publicTopics(topics).map(topic => `<article class="th-card th-server-card${topic.ID === FEATURED_TOPIC_ID ? ' is-featured' : ''}">
-<header class="th-card-header"><div class="th-card-identity"><h3 class="th-card-title"><a class="th-topic-link" href="${escapeHTML(topic.url)}"><span class="th-topic-name">${escapeHTML(topic.name)}</span><i class="fa-solid fa-chevron-right" aria-hidden="true"></i></a></h3></div><p class="th-topic-summary">${escapeHTML(topic.description)}</p></header>
+    return publicTopics(topics).map(topic => `<article class="th-card th-server-card${topic.isOfficial && topic.name === 'Intelligence' ? ' is-featured' : ''}">
+<header class="th-card-header"><div class="th-card-identity"><h3 class="th-card-title"><a class="th-topic-link" href="${escapeHTML(topic.url)}"><span class="th-topic-name">${escapeHTML(topic.name)}</span><i class="fa-solid fa-chevron-right" aria-hidden="true"></i></a></h3><p class="th-topic-summary">${escapeHTML(topic.description)}</p><div class="th-topic-metadata">${topic.isOfficial ? '<span class="bp-topic-official">Official</span>' : topic.creator?.handle ? `<a class="bp-topic-creator-identity" href="/@${escapeHTML(topic.creator.handle)}">${escapeHTML(topic.creator.name)}</a>` : `<span>${escapeHTML(topic.creator?.name ?? 'Former contributor')}</span>`}<span class="bp-topic-favorite-count"><i class="fa-regular fa-star" aria-hidden="true"></i> ${Number(topic.favoriteCount ?? 0)}</span></div></div></header>
 <div class="th-visual"><a class="th-server-index-link" href="${escapeHTML(topic.url)}">Public AI Index <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></a></div>
 ${topic.scenes?.length ? `<details class="bp-server-scenes"><summary>Scenes (${topic.scenes.length})</summary><ul>${topic.scenes.map(scene => `<li><a href="${escapeHTML(topicSearchMetadata(topic, scene.ID).path)}">${escapeHTML(scene.name)}</a></li>`).join('')}</ul></details>` : ''}</article>`).join('');
 }
@@ -110,13 +111,14 @@ export function discoveryRobots(origin) {
 Allow: /
 Disallow: /api/
 Disallow: /account/
-Disallow: /personal/
+Disallow: /private/
+Disallow: /me
+Disallow: /settings
 Disallow: /contribute
 Disallow: /github_login
 Disallow: /github_callback
 Disallow: /login
 Disallow: /sign-in
-Disallow: /topic-proposals
 Disallow: /censor
 Disallow: /adminlogin
 Disallow: /dialogPage
@@ -209,7 +211,7 @@ export function createSearchPresentation({ origin, loadTopics, loadPreview, now 
 }
 
 export function searchIndexingHeaders(req, res, next) {
-    if (/^\/(?:api(?:\/|$)|personal(?:\/|$)|account(?:\/|$)|contribute(?:\/|$)|github_login(?:\/|$)|github_callback(?:\/|$)|login(?:\/|$)|sign-in(?:\/|$)|topic-proposals(?:\/|$)|censor(?:\/|$)|adminlogin(?:\/|$)|dialogpage(?:\/|$))/i.test(req.path)) {
+    if (/^\/(?:api(?:\/|$)|private(?:\/|$)|me(?:\/|$)|settings(?:\/|$)|account(?:\/|$)|contribute(?:\/|$)|github_login(?:\/|$)|github_callback(?:\/|$)|login(?:\/|$)|sign-in(?:\/|$)|censor(?:\/|$)|adminlogin(?:\/|$)|dialogpage(?:\/|$))/i.test(req.path)) {
         res.set('X-Robots-Tag', 'noindex, nofollow, nosnippet');
     }
     next();

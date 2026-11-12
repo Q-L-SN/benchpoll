@@ -1,3 +1,4 @@
+import { profileURL } from './shared/profile-identity.js';
 import { setLoading } from './shared/loading.js';
 import * as G from '/js/global.js';
 import { buildContributionURL } from './shared/contribution-navigation.js?v=clean-20260908';
@@ -96,7 +97,8 @@ const overlaySessions = new WeakMap();
 
 const issueTypeLabels = {
     correct_or_add_info: 'Correct or Add Information',
-    delete_or_migrate_category: 'Delete or Migrate Category'
+    delete_or_migrate_category: 'Delete or Migrate Category',
+    topic_report: 'Report Topic'
 };
 
 const requestFields = {
@@ -113,10 +115,6 @@ const requestFields = {
     new_model: [],
     score_field: [],
     score_field_option: [],
-    new_topic: [
-        { name: 'name', label: 'Public Topic Name', type: 'text', required: true, maxLength: 128 },
-        { name: 'description', label: 'Summary', type: 'textarea', required: true, maxLength: 180, wide: true }
-    ],
     new_category: [
         { name: 'name', label: 'Category Name', type: 'text', required: true, maxLength: 128 },
         { name: 'parentPath', label: 'Parent Category Path', type: 'text', maxLength: 512 },
@@ -139,6 +137,7 @@ const requestFields = {
             options: [['', 'Not specified'], ['benchmark', 'Benchmark'], ['category', 'Category']]
         },
         { name: 'targetBenchmarkID', label: 'Target Benchmark ID', type: 'number', min: 1 },
+        { name: 'targetCategoryID', label: 'Target Topic ID', type: 'number', min: 1 },
         { name: 'categoryPath', label: 'Category Path', type: 'text', maxLength: 512, wide: true },
         { name: 'pageURL', label: 'Page URL', type: 'url', maxLength: 512, wide: true },
         { name: 'sourceURL', label: 'Source URL', type: 'url', maxLength: 512, wide: true },
@@ -285,7 +284,7 @@ function getHeading(log) {
             ? firstName
             : `${firstName} + ${log.content.models.length - 1} more`;
     }
-    if (type === 'new_category' || type === 'new_topic') {
+    if (type === 'new_category') {
         return log.content.name;
     }
     if (type === 'benchmark_result' && Array.isArray(log.content.results)) {
@@ -308,8 +307,6 @@ function getTypeLabel(type) {
         return 'New Benchmark';
     case 'new_category':
         return 'New Category or Context';
-    case 'new_topic':
-        return 'Public Topic';
     case 'new_model':
         return 'New Model';
     case 'score_field':
@@ -384,9 +381,6 @@ function appendContentFields(fields, log) {
             ...createField('Page URL', log.content.pageURL),
             ...createField('Feedback', log.content.details)
         );
-    } else if (type === 'new_topic') {
-        fields.append(...createField('Proposal ID', log.content.proposalID), ...createField('Summary', log.content.description));
-        if (log.content.parentTopicID !== undefined) fields.append(...createField('Parent topic ID', log.content.parentTopicID));
     } else if (type === 'new_category') {
         fields.append(
             ...createField('Request', log.content.requestKind === 'context' ? 'Add context' : 'Add category'),
@@ -424,6 +418,7 @@ function appendContentFields(fields, log) {
             ...createField('Issue Type', issueTypeLabels[log.content.issueType] ?? log.content.issueType),
             ...createField('Target Kind', log.content.targetKind),
             ...createField('Target Benchmark ID', log.content.targetBenchmarkID),
+            ...createField('Target Topic ID', log.content.targetCategoryID),
             ...createField('Category Path', log.content.categoryPath),
             ...createField('Page URL', log.content.pageURL),
             ...createField('Source URL', log.content.sourceURL),
@@ -495,7 +490,13 @@ function createLogItem(log) {
     const issueReference = log.content.github?.issueNumber
         ? `GitHub #${log.content.github.issueNumber}, `
         : '';
-    meta.textContent = `${issueReference}moderation #${log.ID} by ${log.userName ?? log.content.github?.authorLogin ?? log.user_id}, ${formatDate(log.created_at)}`;
+    meta.append(document.createTextNode(`${issueReference}moderation #${log.ID} by `));
+    const authorURL = profileURL(log.userPublicID);
+    const author = document.createElement(authorURL ? 'a' : 'span');
+    author.className = 'bp-profile-link';
+    if (authorURL) author.href = authorURL;
+    author.textContent = log.userName ?? log.content.github?.authorLogin ?? log.user_id;
+    meta.append(author, document.createTextNode(`, ${formatDate(log.created_at)}`));
 
     const fields = document.createElement('div');
     fields.className = 'field-grid';
@@ -1239,10 +1240,6 @@ function collectEditorContent(type = editorType.value) {
         throw new Error('The moderation request schema version is missing.');
     }
     const content = { schemaVersion, type };
-    if (type === 'new_topic') {
-        content.proposalID = editorDrafts[type].proposalID;
-        if (editorDrafts[type].parentTopicID !== undefined) content.parentTopicID = editorDrafts[type].parentTopicID;
-    }
     requestFields[type].forEach(definition => {
         const input = editorFields.querySelector(`[name="${definition.name}"]`);
         content[definition.name] = definition.type === 'checkbox' ? input.checked : input.value.trim();
@@ -1254,11 +1251,6 @@ function openEditor(log) {
     activeEditorLog = log;
     invalidateEditorPreview();
     const initialContent = stripModerationMetadata(log.content);
-    if (initialContent.type === 'new_topic' && !editorType.querySelector('option[value="new_topic"]')) {
-        const option = document.createElement('option');
-        option.value = 'new_topic'; option.textContent = 'Public Topic';
-        editorType.append(option);
-    }
     activeEditorType = initialContent.type;
     editorDrafts = { [initialContent.type]: initialContent };
     editorType.value = initialContent.type;

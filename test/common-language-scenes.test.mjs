@@ -51,10 +51,10 @@ test('reviewed plan changes when scoped metadata changes', () => {
     assert.notEqual(planCommonLanguageScenes(state).planHash, hash);
 });
 
-test('scene paths preserve programming-language distinctions without rewriting stored paths', () => {
+test('scene labels retain language distinctions while URLs use local numeric identity', () => {
     assert.deepEqual(['C', 'C++', 'C#'].map(sceneSlug), ['c', 'c-plus-plus', 'c-sharp']);
-    assert.equal(scenePath('/coding', { name: 'C++' }), '/coding/c-plus-plus');
-    assert.equal(scenePath('/coding', { name: 'C#' }), '/coding/c-sharp');
-    assert.equal(scenePath('/personal/42', { name: 'C++', slug: 'existing-path' }), '/personal/42/existing-path');
+    assert.equal(scenePath('/2', { name: 'C++', sceneNumber: 8 }), '/2/8');
+    assert.equal(scenePath('/2', { name: 'C#', sceneNumber: 9 }), '/2/9');
+    assert.equal(scenePath('/private/AbCdEf123456', { name: 'C++', sceneNumber: 1, slug: 'existing-path' }), '/private/AbCdEf123456/1');
     assert.equal(topicSlug('C++'), 'c');
 });

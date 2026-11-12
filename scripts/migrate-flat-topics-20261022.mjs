@@ -5,8 +5,10 @@ import { readFile, stat } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import mysql from 'mysql2/promise';
-import { topicSlug, FEATURED_TOPIC_ID } from '../public/js/shared/topics.js';
-import { legacyTopicRouteKey } from '../topic-service.js';
+import { topicSlug } from '../public/js/shared/topics.js';
+// Historical migration identity; independent of the current public URL catalogue.
+const FEATURED_TOPIC_ID = 54;
+import { legacyTopicRouteKey } from './historical-topic-route-key.mjs';
 import { canonicalizeContextValues, decorateDimensions, selectScopedDimensions, serializeRankingContextValues } from '../ranking-service.js';
 
 export const FLAT_TOPICS_MIGRATION = 'flat_topics_home_20261022';

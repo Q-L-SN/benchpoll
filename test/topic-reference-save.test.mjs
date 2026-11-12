@@ -136,29 +136,27 @@ test('clearing a mixed pie cascades both tables; its old receipt cannot delete a
     assert.deepEqual((await loadPersonalPie(db, 10, '7')).entries, [weight(-51)]);
 });
 
-for (const reverse of [false, true]) test(`concurrent opposing references observe committed graph edges and reject a cycle (${reverse})`, async () => {
+for (const reverse of [false, true]) test(`concurrent opposing references both commit (${reverse})`, async () => {
     const db = database();
     const bodies = [request(), request({ categoryID: 2, userID: '8', expectedRevision: 0, entries: [weight(-10)] })];
     if (reverse) bodies.reverse();
     const results = await Promise.allSettled(bodies.map(body => savePersonalPie(db, body)));
-    assert.equal(results.filter(result => result.status === 'fulfilled').length, 1);
-    assert.equal(results.filter(result => result.status === 'rejected').length, 1);
-    error('topic_reference_cycle')(results.find(result => result.status === 'rejected').reason);
+    assert.equal(results.filter(result => result.status === 'fulfilled').length, 2);
     assert.ok(db.peakTransactions > 1, 'Transactions overlap before the graph row lock');
-    assert.deepEqual(db.graphReads.map(edges => edges.length), [0, 1]);
-    assert.equal([...db.stored.pies.values()].reduce((count, pie) => count + pie.topicWeights.length, 0), 1);
-    assert.equal(db.stored.receipts.size, 1); assert.equal(db.mutations, 1);
+    assert.deepEqual(db.graphReads, []);
+    assert.equal([...db.stored.pies.values()].reduce((count, pie) => count + pie.topicWeights.length, 0), 2);
+    assert.equal(db.stored.receipts.size, 2); assert.equal(db.mutations, 2);
 });
 
-test('self and transitive references fail without publishing a new write receipt', async () => {
+test('self and transitive references can be saved with stable scene identities', async () => {
     const db = database();
-    await assert.rejects(savePersonalPie(db, request({ entries: [weight(-10)] })), error('topic_reference_cycle'));
-    await savePersonalPie(db, request());
+    await savePersonalPie(db, request({ entries: [weight(-10)] }));
+    assert.deepEqual((await loadPersonalPie(db, 10, '7')).entries, [weight(-10)]);
+    await savePersonalPie(db, request({ expectedRevision: 2 }));
     await savePersonalPie(db, request({ categoryID: 2, userID: '8', expectedRevision: 0, entries: [weight(-51)] }));
-    const before = db.stored;
-    await assert.rejects(savePersonalPie(db, request({ categoryID: 5, contextValues: { scene: '51' }, expectedRevision: 0,
-        entries: [weight(-10)] })), error('topic_reference_cycle'));
-    assert.deepEqual(db.stored, before);
+    await savePersonalPie(db, request({ categoryID: 5, contextValues: { scene: '51' }, expectedRevision: 0,
+        entries: [weight(-10)] }));
+    assert.deepEqual((await loadPersonalPie(db, 51, '7')).entries, [weight(-10)]);
 });
 
 for (const [label, extra, code] of [

@@ -85,11 +85,16 @@ test('stored v4 evidence is still validated with its recorded factors, independe
 
 test('fresh and stale Home requests share only v7 cache and pagination, including concurrent reads', async () => {
     const versions = [];
-    const service = createTopicHomeService({ db: {}, loadTopic: async () => ({ ID: 54, isPrivate: false }), loadFields: async () => [],
+    const db = { async execute(sql, parameters) {
+        assert.match(sql, /SELECT ID FROM categories WHERE ID IN/);
+        assert.deepEqual(parameters, [54, null]);
+        return [[{ ID: 54, public_ID: 1, owner_user_ID: null, is_active: 1 }]];
+    } };
+    const service = createTopicHomeService({ db, loadTopic: async () => ({ ID: 54, categoryID: 54, publicID: 1, url: '/1', isPrivate: false }), loadFields: async () => [],
         loadWorkspace: async (_db, options) => {
             versions.push(options.availableInferenceVersion);
             return { context: { contextValues: {} }, comparison: { keys: ['model'], fields: [], availableKeys: ['model'], models: [] },
-                publicPie: { entries: [] }, modelLeaderboards: { public: [{ ID: 1, name: 'A', lower: options.availableInferenceVersion, upper: options.availableInferenceVersion }] } };
+                publicPie: { entries: [], coverageIndex: 0 }, modelLeaderboards: { public: [{ ID: 1, name: 'A', lower: options.availableInferenceVersion, upper: options.availableInferenceVersion }] } };
         } });
     const [fresh, stale, explicit] = await Promise.all([service.preview(null, { categoryID: 54 }),
         service.preview(null, { categoryID: 54, availableInferenceVersion: 4 }),

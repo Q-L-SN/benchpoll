@@ -48,12 +48,18 @@ test('only the rational inference version is used; neither page exposes experime
     assert.match(read('private/how-it-works.html'), /f\(c\)=5c\/\(1\+4c\)[^\n]*negatives 2-f\(c\)/);
 });
 
-test('the public action links to the proposal hall while the root modal can only create private topics', () => {
-    assert.match(read('public/js/shared/site-header.js'), /<a id="new-topic"[^>]*href="\/topic-proposals"/);
+test('topic creation starts private and the editor publishes directly with a three-public-topic limit', () => {
+    const editor = read('public/js/shared/private-topic-editor.js');
+    assert.doesNotMatch(read('public/js/shared/site-header.js'), /topic-proposals|id="new-topic"/);
     assert.match(home, /<h2 id="create-topic-title">New private topic<\/h2>/);
     assert.match(home, /id="create-topic-submit"[^>]*>[\s\S]*?<span>Create private topic<\/span>/);
     assert.match(topics, /createPrivateTopicEditor/);
-    assert.match(read('public/js/shared/private-topic-editor.js'), /\/api\/save_private_topic/);
+    assert.match(editor, /\/api\/save_private_topic/);
+    assert.match(editor, /id="topic-editor-publish" hidden>Make public<\/button>/);
+    assert.match(editor, /setTopicVisibility\(topic, topic\.isPrivate\)/);
+    assert.match(editor, /topic\.isPrivate \? 'Make public' : 'Make private'/);
+    assert.match(editor, /public_topic_limit: 'You can have up to three public topics at a time\./);
+    assert.match(read('public/js/shared/topic-actions.js'), /writeTopicAction\('\/api\/set_topic_visibility', \{ categoryID: Number\(topic\.categoryID \?\? topic\.ID\), isPublic/);
     assert.doesNotMatch(topics, /\$\('#new-topic'\)\.addEventListener|openCreateTopic\(false\)|result\.submissionID|createTopicIsPrivate/);
     const modal = home.slice(home.indexOf('<dialog id="create-topic-dialog"'));
     const sidebarForm = configuration.match(/<form id="topic-create-form"[\s\S]*?<\/form>/)?.[0];
@@ -64,32 +70,41 @@ test('the public action links to the proposal hall while the root modal can only
     assert.match(sidebarForm, /<input type="hidden" name="visibility" value="private">/);
 });
 
-test('shared page navigation links to proposals while Mine only offers private topic creation', () => {
-    assert.match(read('public/js/shared/site-header.js'), /<a id="new-topic"[^>]*href="\/topic-proposals"/);
+test('shared navigation has no proposal hall and Create topic remains beside directory Search', () => {
+    assert.doesNotMatch(read('public/js/shared/site-header.js'), /topic-proposals/);
     assert.match(topics, /mountSiteActions\(\$\('\.th-header-links'\)/);
     assert.match(read('public/js/shared/page-header.js'), /mountSiteActions\(/);
     assert.match(workspace, /minimal: true, extraActions:/);
-    const actions = home.match(/<div id="mine-actions"[\s\S]*?<\/div>/)[0];
-    assert.doesNotMatch(actions, /topic-proposals/);
-    assert.match(actions, /id="new-private-topic"/);
+    const actions = home.match(/<div class="th-topic-tabs"[\s\S]*?<\/div>/)?.[0];
+    assert.ok(actions);
+    assert.match(actions, /id="topic-search-toggle"[\s\S]*?<\/button>\s*<button id="new-private-topic"[^>]*aria-label="Create topic"/);
+    assert.match(topics, /\$\('#new-private-topic'\)\.addEventListener\('click', event => void privateTopicEditor\.open\(null, event\.currentTarget\)\)/);
+    assert.doesNotMatch(home, /id="mine-actions"|topic-proposals/);
 });
 
-test('real creator metadata is the only way to show a byline, alongside the topic summary', () => {
-    assert.equal((topics.match(/topic\.creator \? createTopicCreator/g) ?? []).length, 2);
-    assert.equal((topics.match(/creator\.hidden = !topic\.creator/g) ?? []).length, 2);
-    assert.match(topics, /if \(topic\.sceneID == null\) heading\.append\(summary, creator\)/);
+test('Official or real creator metadata sits in the card footer while the summary follows the title', () => {
+    assert.equal((topics.match(/createTopicCreator\(topic\.isOfficial \? \{ isOfficial: true \} : topic\.creator, 'th-creator'\)/g) ?? []).length, 2);
+    assert.equal((topics.match(/if \(topic\.sceneID != null\) creator\.hidden = true/g) ?? []).length, 2);
+    assert.match(topics, /identity\.append\(title\);\s*if \(topic\.sceneID == null\) identity\.append\(summary\)/);
+    assert.match(topics, /author\.append\(creator, createCardReport\(topic\)\)/);
+    assert.match(topics, /footer\.append\(author, topicMeta, sceneToggle\)/);
+    const identity = read('public/js/shared/topic-identity.js');
+    assert.match(identity, /if \(creator\?\.isOfficial\) \{[\s\S]*?fa-solid fa-circle-check[\s\S]*?'Official'/);
+    assert.match(identity, /if \(!creator\?\.name\) \{ byline\.hidden = true; return byline; \}/);
     assert.match(topics, /frame\.append\(state\.pagination\)/);
     assert.match(topics, /topic\.name\), icon\('chevron-right'\)/);
-    assert.match(workspace, /creator\.hidden = !state\.topicCreator/);
-    assert.match(configuration, /class="bp-context-actions">\s*<span id="workspace-topic-creator"[\s\S]*?id="discussion-entry"/);
+    assert.match(workspace, /if \(state\.topicMetadata\?\.isOfficial\)/);
+    assert.match(workspace, /else if \(state\.topicCreator\) creator\.append\(createTopicCreator\(state\.topicCreator\)\)/);
+    assert.match(configuration, /class="bp-context-actions">[\s\S]*?<span id="workspace-topic-creator"/);
     const breadcrumb = workspace.slice(workspace.indexOf('function renderBreadcrumb()'), workspace.indexOf('function templateValueClass('));
     assert.doesNotMatch(breadcrumb, /breadcrumb\.append\(createTopicCreator/);
 });
 
-test('the single-line summary and plot controls preserve fixed cards and avoid accent side decoration', () => {
+test('the second-line summary and plot controls preserve fixed cards and avoid accent side decoration', () => {
     const css = read('public/css/topics-home.css');
-    assert.match(css, /\.th-card \{[^}]*grid-template-rows: 52px minmax\(0, 1fr\)[^}]*height: 416px/);
-    assert.match(css, /\.th-card-header \{[^}]*height: 38px; align-self: start/);
+    assert.match(css, /\.th-card \{[^}]*grid-template-rows: 62px minmax\(0, 1fr\) 40px;[^}]*height: 416px/);
+    assert.match(css, /\.th-card-header \{[^}]*align-self: start; align-items: start/);
+    assert.match(css, /\.th-card-identity \{[^}]*flex-direction: column; align-items: start/);
     assert.match(css, /\.th-card\.is-featured \{[^}]*height: 456px/);
     assert.match(css, /\.th-topic-summary \{[^}]*font-size: 13px; line-height: 20px; font-weight: 400; white-space: nowrap;[^}]*mask-image: linear-gradient/);
     const sidebar = read('public/css/ui/config-sidebar.css');

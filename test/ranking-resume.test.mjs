@@ -242,10 +242,11 @@ test('same-scope recovery keeps the benchmark DOM and scroll anchor while the re
         replaceChildren(...nodes) { this.children = nodes; } });
     const source = await readFile(new URL('../public/js/home-workspace.js', import.meta.url), 'utf8');
     const start = source.indexOf('function renderBenchmarks() {');
-    const end = source.indexOf('    if (!expanded && state.benchmarks.length === 0 && state.rankingPageLoading.benchmarks)', start);
+    const end = source.indexOf('    if (!scenesVisible && !expanded && state.benchmarks.length === 0 && state.rankingPageLoading.benchmarks)', start);
     assert.ok(end > start);
     const originalRows = [{ ID: 1 }, { ID: 2 }];
     const benchmarkRows = { scrollTop: 420, children: [...originalRows],
+        querySelectorAll: () => [],
         replaceChildren() { this.scrollTop = 0; this.children = []; },
         append(value) { this.children.push(value); } };
     const element = { hidden: false, disabled: false, dataset: {}, classList: { toggle() {} }, setAttribute() {} };
@@ -256,6 +257,7 @@ test('same-scope recovery keeps the benchmark DOM and scroll anchor while the re
         rankingRecovery: { snapshotID: 'old', scope: 'current', mode: 'public' }, rankingRecoveryScope: () => 'current',
         benchmarkRows, pendingBenchmarkFocus: null, benchmarkRowFocus: { captureFocus: () => null },
         referenceCoverage: { begin() {} }, benchmarkSearch: { value: '' }, isExpandedWeightView: () => false,
+        isSceneDiscovery: () => false, benchmarkSearchClear: element,
         document: { activeElement: body, body, createElement }, benchmarkVersionGrouping: element,
         benchmarkCard: element, benchmarkPersonalPin: element, stylePreviews: { setPersonal() {} },
         isInlineFallbackTargetActive: () => false, selectedInlineFallbackPrimary: () => null, fallbackRuleFor: () => null
@@ -278,6 +280,7 @@ test('same-scope recovery keeps the benchmark DOM and scroll anchor while the re
                 : { snapshotID: 'old', scope: 'current', mode: 'public' },
             rankingRecoveryScope: () => 'current', benchmarkRows: rows,
             referenceCoverage: { begin() {} }, benchmarkSearch: { value: '' }, isExpandedWeightView: () => false,
+            isSceneDiscovery: () => false, benchmarkSearchClear: element,
             pendingBenchmarkFocus: null, benchmarkRowFocus: { captureFocus: () => null },
             document: { activeElement: body, body, createElement }, benchmarkVersionGrouping: element,
             benchmarkCard: element, benchmarkPersonalPin: element, stylePreviews: { setPersonal() {} },

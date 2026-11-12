@@ -5,7 +5,7 @@ import { createWeightTreemapLayout, treemapHoverTransform } from './weight-treem
 import '../shared/help-popover.js';
 import { isTopicReference, topicLabelText, topicLabelParts, renderTopicLabel, TOPIC_ICON_FONT } from '../shared/topic-label.js';
 
-export function createPieRenderer({ state, pieSvg, pieHoverTooltip, orderedPieEntries, currentPieEntries, selectedObjectIndex, renderInlineFallback, fallbackRuleFor, publicFallbackRuleFor, onSelect, getPreview = () => null, autoSelect = () => true }) {
+export function createPieRenderer({ state, pieSvg, pieHoverTooltip, orderedPieEntries, currentPieEntries, selectedObjectIndex, renderInlineFallback, fallbackRuleFor, publicFallbackRuleFor, onSelect, getPreview = () => null, autoSelect = () => false, coveragePreview = false }) {
     const measure = document.createElement('canvas').getContext('2d');
     const labelMetrics = new Map();
     const labelLayout = createPieLabelLayout(metricsOf);
@@ -42,7 +42,7 @@ export function createPieRenderer({ state, pieSvg, pieHoverTooltip, orderedPieEn
         return labelMetrics.get(key);
     }
     function raiseActive() {
-        const active = nodes.get(hoveredID) ?? nodes.get(Number(state.selectedObjectID));
+        const active = nodes.get(hoveredID) ?? (!coveragePreview && nodes.get(Number(state.selectedObjectID)));
         if (active && pieSvg.lastElementChild !== active.group) {
             // Moving a focused SVG group with append() drops keyboard focus in some engines.
             const focused = document.activeElement === active.group;
@@ -51,7 +51,8 @@ export function createPieRenderer({ state, pieSvg, pieHoverTooltip, orderedPieEn
         }
     }
     function makeTile(id) {
-        const group = element('g', { role: 'button', tabindex: 0, 'data-object-id': id });
+        const group = element('g', { role: coveragePreview ? 'img' : 'button',
+            ...(!coveragePreview ? { tabindex: 0 } : {}), 'data-object-id': id });
         const lift = element('g', { class: 'bp-weight-tile-lift' });
         const rect = element('rect', { class: 'bp-weight-tile', 'vector-effect': 'non-scaling-stroke' });
         const clip = element('clipPath', { id: `${prefix}-${id}-clip`, clipPathUnits: 'userSpaceOnUse' });
@@ -67,19 +68,21 @@ export function createPieRenderer({ state, pieSvg, pieHoverTooltip, orderedPieEn
         const labels = element('g', { class: 'bp-weight-tile-labels', 'clip-path': `url(#${clip.id})`, 'aria-hidden': true });
         lift.append(rect, labels);
         group.append(lift);
-        group.addEventListener('mousedown', event => event.preventDefault());
-        group.addEventListener('click', () => void onSelect(id));
-        group.addEventListener('keydown', event => {
-            if (event.key === 'Enter' || event.key === ' ') {
-                event.preventDefault();
-                void onSelect(id);
-            }
-        });
-        group.addEventListener('pointerenter', event => {
-            if (event.pointerType !== 'touch') { hoveredID = id; raiseActive(); }
-        });
-        group.addEventListener('pointerleave', () => { hoveredID = null; raiseActive(); });
-        group.addEventListener('focus', () => raiseActive());
+        if (!coveragePreview) {
+            group.addEventListener('mousedown', event => event.preventDefault());
+            group.addEventListener('click', () => void onSelect(id));
+            group.addEventListener('keydown', event => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    void onSelect(id);
+                }
+            });
+            group.addEventListener('pointerenter', event => {
+                if (event.pointerType !== 'touch') { hoveredID = id; raiseActive(); }
+            });
+            group.addEventListener('pointerleave', () => { hoveredID = null; raiseActive(); });
+            group.addEventListener('focus', () => raiseActive());
+        }
         pieSvg.append(group);
         const node = { group, lift, rect, clip, clipRect, gradient, mask, maskRect, labels, signature: '' };
         nodes.set(id, node);
@@ -103,14 +106,22 @@ export function createPieRenderer({ state, pieSvg, pieHoverTooltip, orderedPieEn
         const fontFamily = getComputedStyle(pieSvg).fontFamily;
         tiles.forEach((tile, index) => {
             const id = Number(tile.conditionID), node = nodes.get(id) ?? makeTile(id);
-            const selected = !preview && Number(state.selectedObjectID) === id;
+            const selected = !preview && !coveragePreview && Number(state.selectedObjectID) === id;
             const colorIndex = (state.pieOrderByObjectID.get(id) ?? index) % PIE_GRADIENTS.length;
             const fallback = mode === 'personal' ? fallbackRuleFor(id) : publicFallbackRuleFor(id);
             const hasFallback = Boolean(fallback?.entries?.length || fallback?.families?.some(
                 family => family.weightBasisPoints > 0 && family.entries?.length));
             const percent = Number(tile.weightBasisPoints) / state.limits.totalBasisPoints * 100;
-            const description = `${benchmarkAccessibleName(tile)}: ${percent.toFixed(2)}%${hasFallback ? '. Fallback enabled' : ''}`;
-            attributesOf(node.group, { 'aria-label': description, 'aria-pressed': selected });
+            const covered = coveragePreview && Number.isFinite(tile.adoptedNormalizedScore);
+            const score = covered ? String(Number(tile.adoptedNormalizedScore.toFixed(2))) : null;
+            const description = `${benchmarkAccessibleName(tile)}: ${percent.toFixed(2)}%${hasFallback ? '. Fallback enabled' : ''}`
+                + (coveragePreview ? covered ? `. Adopted score ${score} / 100. Measured coverage ${Number(tile.coverage).toFixed(2)}%.`
+                    : '. No measured score in this ranking.' : '');
+            attributesOf(node.group, { 'aria-label': description, ...(!coveragePreview ? { 'aria-pressed': selected } : {}) });
+            if (coveragePreview) {
+                node.group.classList.toggle('is-uncovered', !covered);
+                node.group.dataset.coverage = String(tile.coverage);
+            }
             node.group.dataset.weight = String(tile.weightBasisPoints);
             attributesOf(node.rect, { x: tile.x, y: tile.y, width: Math.max(0, tile.width), height: Math.max(0, tile.height),
                 fill: `var(--bp-chart-${colorIndex}-start, ${PIE_GRADIENTS[colorIndex][0]})` });
@@ -126,18 +137,34 @@ export function createPieRenderer({ state, pieSvg, pieHoverTooltip, orderedPieEn
             const topic = isTopicReference(tile);
             const label = labelLayout.layout({ name: topic ? topicLabelText(tile) : tile.name, topic,
                 percent: `${Math.round(percent)}%`, width: tile.width, height: tile.height, fontFamily });
+            // Preserve the weight label's exact font, size, weight and position.
+            if (covered) {
+                const valueRow = label.rows.find(row => row.kind === 'percent');
+                const scoreWidth = valueRow && metricsOf(score, valueRow.size, valueRow.weight, fontFamily).width;
+                label.rows = label.rows.flatMap(row => {
+                    if (row.kind === 'percent') return scoreWidth <= inner.width
+                        ? [{ ...row, text: score, adoptedScore: true }] : [];
+                    if (row.kind === 'name' && label.mode === 'inline' && valueRow) {
+                        const clipWidth = scoreWidth <= inner.width ? Math.max(0, inner.width - scoreWidth - 8) : inner.width;
+                        return [{ ...row, clipWidth, clipped: metricsOf(row.text, row.size, row.weight, fontFamily).width > clipWidth }];
+                    }
+                    return [row];
+                });
+            }
             const nameBox = { ...inner, width: label.rows.find(row => row.kind === 'name')?.clipWidth ?? inner.width };
             attributesOf(node.mask, nameBox);
             attributesOf(node.maskRect, nameBox);
             attributesOf(node.gradient, { x1: nameBox.x + nameBox.width - Math.min(14, nameBox.width / 3),
                 x2: nameBox.x + nameBox.width, y1: 0, y2: 0 });
             node.group.dataset.labelMode = label.mode;
-            const signature = JSON.stringify(label.rows.map(row => [row.kind, row.text, row.size, row.weight, row.clipped, row.align]));
+            const signature = JSON.stringify(label.rows.map(row => [row.kind, row.text, row.size, row.weight, row.clipped, row.align, row.adoptedScore]));
             if (node.signature !== signature) {
                 node.signature = signature;
                 node.labels.replaceChildren(...label.rows.map(row => {
                     const text = element('text', { 'data-label-kind': row.kind, 'font-size': row.size, 'font-weight': row.weight,
-                        'text-anchor': row.align ?? (row.clipped ? 'start' : 'middle'), ...(row.clipped ? { mask: `url(#${node.mask.id})` } : {}) });
+                        'text-anchor': row.align ?? (row.clipped ? 'start' : 'middle'),
+                        ...(row.adoptedScore ? { 'data-adopted-score': true } : {}),
+                        ...(row.clipped ? { mask: `url(#${node.mask.id})` } : {}) });
                     if (topic && row.kind === 'name') renderTopicLabel(text, row.text);
                     else text.textContent = row.text;
                     return text;
@@ -150,7 +177,8 @@ export function createPieRenderer({ state, pieSvg, pieHoverTooltip, orderedPieEn
             });
         });
         raiseActive();
-        pieSvg.setAttribute('aria-label', `${mode === 'personal' ? 'Personal' : 'Public'} index composition treemap`);
+        pieSvg.setAttribute('aria-label', coveragePreview ? 'Measured benchmark coverage and adopted scores in this ranking'
+            : `${mode === 'personal' ? 'Personal' : 'Public'} index composition treemap`);
         visualTiles = new Map(tiles.map(tile => [Number(tile.conditionID), { ...tile }]));
         if (preview) return;
         state.visualPieWeights = new Map(tiles.map(tile => [Number(tile.conditionID), tile.weightBasisPoints]));

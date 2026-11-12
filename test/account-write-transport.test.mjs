@@ -14,21 +14,26 @@ function guarded(body, actualUserID = '7') {
 
 function database() {
     const writes = [];
+    let privateID;
     const connection = {
         beginTransaction: async () => {}, commit: async () => {}, rollback: async () => {}, release() {},
-        async execute(sql, args) {
+        async execute(sql, args = []) {
             if (sql.startsWith('SELECT ID FROM users')) return [[{ ID: '7' }]];
             if (sql.includes('INTERVAL 30 SECOND')) return [[]];
             if (sql.includes('INTERVAL 1 DAY')) return [[{ count: 0 }]];
             if (sql.includes('SELECT p.ID, p.category_ID')) return [[{ ID: 9, category_ID: 1, context_ID: 1 }]];
             if (sql.includes('SELECT ID, author_ID, deleted_at')) return [[{ ID: 9, author_ID: '7', deleted_at: null }]];
-            if (sql.startsWith('SELECT c.ID, c.name, c.slug, c.description, c.position, c.created_by_user_ID,')) {
-                assert.deepEqual(args, [40, '7']);
+            if (sql.startsWith('SELECT next_public_ID')) return [[{ next_public_ID: 100 }]];
+            if (sql.includes('LEFT JOIN topic_scenes')) return [[{ contextID: 50, category_ID: 40,
+                scene_context_ID: null, context_hash: args.at(-1) }]];
+            if (sql.startsWith('SELECT c.ID, c.name, c.slug, c.description, c.owner_user_ID,')) {
+                assert.deepEqual(args, ['7', '7', 40, '7']);
                 return [[{ ID: 40, name: 'My category', slug: 'my-category', description: 'My personal benchmark weights.',
-                    position: 0, created_by_user_ID: '7', creator_name: 'Fixture account', creator_avatar: null }]];
+                    public_ID: 100, private_ID: privateID, owner_user_ID: '7', is_official: 0,
+                    position: 0, created_by_user_ID: '7', creator_public_id: '7', creator_name: 'Fixture account', creator_avatar: null }]];
             }
             writes.push({ sql, args });
-            if (sql.startsWith('INSERT INTO categories')) return [{ insertId: 40 }];
+            if (sql.startsWith('INSERT INTO categories')) { privateID = args[6]; return [{ insertId: 40 }]; }
             if (sql.startsWith('INSERT INTO ranking_contexts')) return [{ insertId: 50 }];
             if (sql.startsWith('INSERT INTO discussion_posts')) return [{ insertId: 60 }];
             if (/^(UPDATE|DELETE) /.test(sql)) return [{ affectedRows: 1 }];
@@ -50,7 +55,10 @@ for (let repetition = 1; repetition <= 2; repetition += 1) {
         assert.equal(category.categoryID, 40);
         assert.equal(category.isPrivate, true);
         assert.equal(category.description, 'My personal benchmark weights.');
-        assert.deepEqual(category.creator, { name: 'Fixture account', avatarURL: '/assets/benchpoll-mark.svg' });
+        assert.deepEqual(category.creator, { id: '7', handle: '7', name: 'Fixture account',
+            url: '/@7', avatarURL: '/assets/benchpoll-mark.svg' });
+        assert.equal(category.publicID, 100);
+        assert.match(category.url, /^\/private\/[a-f0-9]{24}$/);
         assert.equal(Object.hasOwn(category, 'owner_user_ID'), false);
         assert.equal(Object.hasOwn(category, 'created_by_user_ID'), false);
         assert.equal(post.expectedUserID, '7', 'The original transport record remains intact');
@@ -58,9 +66,9 @@ for (let repetition = 1; repetition <= 2; repetition += 1) {
         assert.deepEqual(writes.find(write => write.sql.startsWith('INSERT INTO discussion_posts')).args,
             [1, 1, '7', 9, 'A considered reply']);
         assert.deepEqual(writes.find(write => write.sql.startsWith('INSERT INTO categories')).args,
-            ['7', '7', 'My category', 'my-category', 'My personal benchmark weights.', null]);
+            ['7', '7', 'My category', 'my-category', 'My personal benchmark weights.', 100, category.privateID, null]);
         assert.match(writes.find(write => write.sql.startsWith('INSERT INTO categories')).sql,
-            /\(owner_user_ID, created_by_user_ID, name, slug, description, position, notes\) VALUES \(\?, \?, \?, \?, \?, 0, \?\)/);
+            /\(owner_user_ID, created_by_user_ID, name, slug, description, public_ID, private_ID, is_official, position, notes\) VALUES \(\?, \?, \?, \?, \?, \?, \?, 0, 0, \?\)/);
     });
 }
 

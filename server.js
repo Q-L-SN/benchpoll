@@ -7,17 +7,15 @@ import { selectableBenchmarkConditionSQL, conditionCoverage } from './benchmark-
 import { listComparisonProfiles, saveComparisonProfile, deleteComparisonProfile, renameComparisonProfile } from './comparison-profiles.js';
 import { getPersonalNavigation, getCategoryNavigation } from './navigation-service.js';
 import { createPrivateCategory, getPrivateCategory } from './private-category-service.js';
-import { getTopic, findTopicBySlug, listTopics, createTopic, resolveLegacyTopic,
-    normalizeTopicRequest, assertPublicTopicAvailable } from './topic-service.js';
+import { getTopic, listTopics, createTopic, readTopicRequest, readProfileTopics, assertTopicAccess } from './topic-service.js';
 import { createTopicHomeService, topicPreviewComparison, normalizeHomeComparison } from './topic-home-service.js';
 import { loadTopicReferenceTargets, lockTopicReferences } from './topic-reference-service.js';
-import { createPrivateTopicScene, updatePrivateTopicScene, setPrivateTopicDefaultScene,
-    assertPublicSceneAvailable, TOPIC_SCENE_SQL_PREVIEW } from './topic-scenes-service.js';
-import { createTopicProposalService, lockTopicProposalForReview, finishTopicProposalReview,
-    normalizeTopicProposalRequest, approveTopicSceneProposal, readProposal } from './topic-proposal-service.js';
-import { readPrivateTopicEditor, savePrivateTopic, deletePrivateTopic } from './private-topic-service.js';
-import { createProposalPreviewService, loadTopicProposalSnapshot, seedSnapshotTopic } from './topic-snapshot-service.js';
-import { scenePath } from './public/js/shared/topics.js';
+import { createPrivateTopicScene, updatePrivateTopicScene, setPrivateTopicDefaultScene } from './topic-scenes-service.js';
+import { readPrivateTopicEditor, savePrivateTopic, deletePrivateTopic, setTopicVisibility, setTopicFavorite } from './private-topic-service.js';
+import { createTopicPageHandler } from './topic-routes.js';
+import { prepareTopicReport } from './topic-report-service.js';
+import { registerProfileRoutes } from './profile-routes.js';
+import { ensureUserPublicID } from './profile-schema.js';
 import { loadUserProfile, saveUserProfile, recordGitHubProfile } from './user-profile-service.js';
 import { loadScoreFieldCatalog, normalizeFieldContribution, normalizeScoreFieldRequests, normalizeContributionScoreFields, resolveScoreFields, applyFieldContribution } from './score-field-service.js';
 import { fieldDisplayValue, normalizeScoreFields } from './public/js/shared/score-fields.js';
@@ -117,7 +115,7 @@ import { createRankingPager } from './ranking-pagination.js';
 import { createRankingReadCache } from './ranking-read-cache.js';
 import { createHomeAssetRenderer } from './home-assets.js';
 import { createSearchPresentation, searchIndexingHeaders, searchHead, replaceSearchSlot,
-    renderTopicDirectory, renderPublicTopic, selectSearchScene, PUBLIC_DOCUMENTS, escapeHTML } from './search-presentation.js';
+    renderTopicDirectory, PUBLIC_DOCUMENTS, escapeHTML } from './search-presentation.js';
 import { normalizeRankingResume } from './public/js/shared/ranking-resume.js';
 import { FALLBACK_CONFIGURATION_VERSION } from './public/js/shared/benchmark-families.js';
 import {
@@ -148,8 +146,6 @@ const topicHome = createTopicHomeService({ db, rankingCache });
 const searchPresentation = createSearchPresentation({ origin: publicOrigin,
     loadTopics: () => listTopics(db, null), loadPreview: body => topicHome.preview(null, body) });
 const pageErrorHTML = fs.readFileSync(currentDir + '/private/dialogPage.html', 'utf8');
-const topicProposals = createTopicProposalService({ pool: db, queueForReview: queueTopicProposalForReview });
-const proposalPreview = createProposalPreviewService({ db, rankingCache, readProposal });
 let rankingWarmup = null;
 function warmRankingEvidence() {
     if (!rankingWarmup) rankingWarmup = getRankingWorkspace(db, { rankingCache, scoreMode: 'available', jsonMemberMetadata: true })
@@ -441,10 +437,7 @@ page.get('/account/privacy', (req, res) => {
     res.sendFile(currentDir + '/private/account-privacy.html');
 });
 
-page.get('/topic-proposals', (_req, res) => {
-    res.set('Cache-Control', 'no-store');
-    res.sendFile(currentDir + '/private/topic-proposals.html');
-});
+
 
 API.get('/privacy_information', (_req, res) => {
     res.set('Cache-Control', 'no-store');
@@ -560,7 +553,7 @@ API.post('/rename_comparison_profile', discussionSameOrigin, requireAuthForAPI, 
     res.json(await renameComparisonProfile(db, req.user.ID, req.body?.name, req.body?.newName));
 });
 API.post('/get_reported_discussion', requireReviewerAuthForAPI, requireAccountWriteOwner, async (req, res) => {
-    const [rows] = await db.execute('SELECT ID, category_ID, context_ID, proposal_ID, author_ID, parent_ID, body, created_at, hidden_at FROM discussion_posts WHERE ID = ?', [discussionID(req.body.postID)]);
+    const [rows] = await db.execute('SELECT ID, category_ID, context_ID, author_ID, parent_ID, body, created_at, hidden_at FROM discussion_posts WHERE ID = ?', [discussionID(req.body.postID)]);
     if (!rows.length) throw { status: 404, body: { error: 'discussion_post_unavailable' } };
     res.json(rows[0]);
 });
@@ -593,21 +586,11 @@ API.post('/get_topic_reference_targets', async (req, res) => {
     if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body) || Object.keys(req.body).length) {
         throw { status: 400, body: { error: 'invalid_topic_reference_query' } };
     }
-    res.json({ targets: await loadTopicReferenceTargets(db, await activeSessionUserID(req)) });
+    res.json({ targets: await loadTopicReferenceTargets(db, await activeSessionUserID(req), { includeMetadata: true }) });
 });
 API.post('/get_topic', async (req, res) => {
     res.set('Cache-Control', 'private, no-store');
-    if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)
-        || Object.keys(req.body).some(key => !['categoryID', 'slug'].includes(key))) {
-        throw { status: 400, body: { error: 'invalid_topic_request' } };
-    }
-    if (Object.hasOwn(req.body, 'slug')) {
-        if (Object.hasOwn(req.body, 'categoryID')) throw { status: 400, body: { error: 'invalid_topic_request' } };
-        const topic = await findTopicBySlug(db, req.body.slug);
-        if (!topic) throw { status: 404, body: { error: 'topic_not_found' } };
-        return res.json(topic);
-    }
-    res.json(await getTopic(db, await activeSessionUserID(req), req.body.categoryID));
+    res.json(await readTopicRequest(db, await activeSessionUserID(req), req.body));
 });
 API.post('/get_topic_preview', async (req, res) => {
     res.set('Cache-Control', 'private, no-store');
@@ -623,20 +606,21 @@ API.post('/locate_topic_model', async (req, res) => {
 });
 API.post('/create_topic', discussionSameOrigin, requireAuthForAPI, requireAccountWriteOwner, requireCurrentTermsForAPI, async (req, res) => {
     res.set('Cache-Control', 'private, no-store');
-    if (req.body?.isPrivate === false) throw { status: 409, body: { error: 'topic_proposal_required', url: '/topic-proposals' } };
-    const topic = normalizeTopicRequest(req.body);
-    res.status(201).json(await createTopic(db, req.user.ID, topic));
+    res.status(201).json(await createTopic(db, req.user.ID, req.body));
+    topicHome.invalidate(); searchPresentation.invalidate();
 });
 API.post('/get_private_topic_editor', discussionSameOrigin, requireAuthForAPI, async (req, res) => {
     res.set('Cache-Control', 'private, no-store');
     res.json(await readPrivateTopicEditor(db, req.user.ID, req.body));
 });
-for (const [route, operation] of [['/save_private_topic', savePrivateTopic], ['/delete_private_topic', deletePrivateTopic]]) {
+for (const [route, operation] of [['/save_private_topic', savePrivateTopic], ['/delete_private_topic', deletePrivateTopic],
+    ['/set_topic_visibility', setTopicVisibility], ['/set_topic_favorite', setTopicFavorite]]) {
     API.post(route, discussionSameOrigin, requireAuthForAPI, requireAccountWriteOwner, requireCurrentTermsForAPI, privacyForm, async (req, res) => {
         res.set('Cache-Control', 'private, no-store');
         const body = { ...req.body }; delete body.csrfToken;
         const result = await operation(db, req.user.ID, body, readWriteIdentity(req));
         topicHome.invalidate(); searchPresentation.invalidate();
+        if (operation !== setTopicFavorite) rankingPager.invalidate();
         res.json(result);
     });
 }
@@ -648,97 +632,14 @@ for (const [route, operation] of [
     res.set('Cache-Control', 'private, no-store');
     const result = await operation(db, req.user.ID, req.body, readWriteIdentity(req));
     topicHome.invalidate();
-    searchPresentation.invalidate();
+    searchPresentation.invalidate(); rankingPager.invalidate();
     res.json(result);
-});
-
-API.post('/get_topic_proposals', discussionSameOrigin, async (req, res) => {
-    res.set('Cache-Control', 'private, no-store');
-    res.json(await topicProposals.list(await activeSessionUserID(req), req.body));
-});
-API.post('/get_topic_proposal_snapshot', discussionSameOrigin, async (req, res) => {
-    res.set('Cache-Control', 'private, no-store');
-    res.json(await proposalPreview.read(await activeSessionUserID(req), req.body));
-});
-API.post('/preview_topic_proposal', discussionSameOrigin, async (req, res) => {
-    res.set('Cache-Control', 'private, no-store');
-    res.json(await proposalPreview.preview(await activeSessionUserID(req), req.body));
-});
-API.post('/copy_topic_proposal', discussionSameOrigin, requireAuthForAPI, requireAccountWriteOwner, requireCurrentTermsForAPI, privacyForm, async (req, res) => {
-    res.set('Cache-Control', 'private, no-store');
-    const body = { ...req.body }; delete body.csrfToken;
-    const result = await proposalPreview.copy(req.user.ID, body, readWriteIdentity(req));
-    topicHome.invalidate();
-    res.json(result);
-});
-page.get('/topic-proposals/:proposalID/preview', async (req, res) => {
-    if (!/^[1-9]\d*$/.test(req.params.proposalID)) throw { status: 404 };
-    await readProposal(db, Number(req.params.proposalID), await activeSessionUserID(req));
-    res.set('Cache-Control', 'private, no-store'); res.set('X-Robots-Tag', 'noindex, follow');
-    res.sendFile(currentDir + '/private/topic-proposal-preview.html');
-});
-API.post('/propose_topic', discussionSameOrigin, requireAuthForAPI, requireAccountWriteOwner, requireCurrentTermsForAPI, privacyForm, async (req, res) => {
-    res.set('Cache-Control', 'private, no-store');
-    const body = { ...req.body };
-    delete body.csrfToken;
-    res.json(await topicProposals.propose(req.user.ID, body, readWriteIdentity(req)));
-});
-API.post('/vote_topic_proposal', discussionSameOrigin, requireAuthForAPI, requireAccountWriteOwner, requireCurrentTermsForAPI, privacyForm, async (req, res) => {
-    res.set('Cache-Control', 'private, no-store');
-    const body = { ...req.body };
-    delete body.csrfToken;
-    res.json(await topicProposals.support(req.user.ID, body, readWriteIdentity(req)));
-});
-API.post('/cancel_topic_proposal_support', discussionSameOrigin, requireAuthForAPI, requireAccountWriteOwner, requireCurrentTermsForAPI, privacyForm, async (req, res) => {
-    res.set('Cache-Control', 'private, no-store');
-    const body = { ...req.body };
-    delete body.csrfToken;
-    res.json(await topicProposals.cancelSupport(req.user.ID, body, readWriteIdentity(req)));
-});
-API.post('/edit_topic_proposal', discussionSameOrigin, requireAuthForAPI, requireAccountWriteOwner, requireCurrentTermsForAPI, privacyForm, async (req, res) => {
-    res.set('Cache-Control', 'private, no-store');
-    const body = { ...req.body };
-    delete body.csrfToken;
-    res.json(await topicProposals.edit(req.user.ID, body, readWriteIdentity(req)));
-});
-API.post('/withdraw_topic_proposal', discussionSameOrigin, requireAuthForAPI, requireAccountWriteOwner, requireCurrentTermsForAPI, privacyForm, async (req, res) => {
-    res.set('Cache-Control', 'private, no-store');
-    const body = { ...req.body };
-    delete body.csrfToken;
-    res.json(await topicProposals.withdraw(req.user.ID, body, readWriteIdentity(req)));
-});
-
-API.post('/get_page{/*path}', async (req, res, next) => {
-    res.set('Cache-Control', 'private, no-store');
-    if (req.body?.treeOnly !== true) {
-        return next({ status: 410, body: { error: 'legacy_ranking_disabled' } });
-    }
-    const userID = await activeSessionUserID(req);
-    const parts = req.params.path ?? [];
-    let topic = null, sceneSlug = null;
-    if (parts[0] === 'topics' && /^[1-9]\d*$/.test(parts[1] ?? '') && parts.length <= 3) {
-        topic = await getTopic(db, userID, Number(parts[1]));
-    } else if (parts.length) {
-        topic = parts.length <= 2 ? await findTopicBySlug(db, parts[0]) : null;
-        if (topic) sceneSlug = parts[1] ?? null;
-        topic ??= await resolveLegacyTopic(db, parts.map(encodeURIComponent).join('/'), userID);
-        if (!topic) return next({ status: 404 });
-    }
-    const { topics } = await listTopics(db, userID);
-    const scene = topic ? selectSearchScene(topic, new URLSearchParams(), sceneSlug) : null;
-    res.json({ categoryTree: topics.map(row => ({ ...row, hasChildren: false })),
-        currentCategoryID: topic?.ID ?? null, topic, flat: true,
-        contextValues: scene ? { scene: String(scene.ID) } : {} });
-});
-
-API.post('/load_benchmarks_and_subcategories', async (req, res, next) => {
-    return next({ status: 410, body: { error: 'topic_hierarchy_removed' } });
 });
 
 // The account is always taken from the validated session, never from request data.
-API.post('/get_category_navigation', async (_req, res) => {
+API.post('/get_category_navigation', async (req, res) => {
     res.set('Cache-Control', 'no-store');
-    res.json(await getCategoryNavigation(db));
+    res.json(await getCategoryNavigation(db, await activeSessionUserID(req)));
 });
 
 API.post('/get_personal_navigation', requireAuthForAPI, async (req, res) => {
@@ -754,32 +655,13 @@ API.post('/get_private_category', requireAuthForAPI, async (req, res) => {
     res.set('Cache-Control', 'private, no-store');
     res.json(await getPrivateCategory(db, req.user.ID, req.body.categoryID));
 });
-page.get(['/personal/:categoryID', '/personal/:categoryID/:sceneSlug'], async (req, res) => {
-    if (!/^[1-9]\d*$/.test(req.params.categoryID)) throw { status: 404 };
-    const userID = await activeSessionUserID(req);
-    const topic = await getTopic(db, userID, Number(req.params.categoryID));
-    if (!topic.isPrivate) throw { status: 404 };
-    const url = new URL(req.originalUrl, publicOrigin);
-    const scene = selectSearchScene(topic, url.searchParams, req.params.sceneSlug ?? null);
-    const path = scene ? scenePath(topic.url, scene) : topic.url;
-    res.set('Cache-Control', 'private, no-store');
-    res.set('X-Robots-Tag', 'noindex, nofollow, nosnippet');
-    if (url.pathname !== path) return res.redirect(302, path + url.search);
-    await renderHome(res, { categoryID: topic.ID, guest: !userID });
-});
+registerProfileRoutes({ page, API, db, currentDir, activeSessionUserID, requireAuthForAPI,
+    discussionSameOrigin, requireAccountWriteOwner, readProfileTopics, getTopic });
 
-page.get(['/topics/:categoryID', '/topics/:categoryID/:slug'], async (req, res) => {
-    if (!/^[1-9]\d*$/.test(req.params.categoryID)) throw { status: 404 };
-    const topic = await getTopic(db, await activeSessionUserID(req), Number(req.params.categoryID));
-    const url = new URL(req.originalUrl, publicOrigin);
-    selectSearchScene(topic, url.searchParams);
-    if (url.searchParams.has('view')) {
-        url.searchParams.delete('view');
-        return res.redirect(302, topic.url + url.search);
-    }
-    if (url.pathname !== topic.url) return res.redirect(302, topic.url + url.search);
-    await renderHome(res, { categoryID: topic.ID, guest: !req.session.userID });
-});
+async function authorizeRankingSnapshot(snapshotID, userID) {
+    const IDs = rankingPager.getSnapshotTopicIDs({ snapshotID, userID });
+    await assertTopicAccess(db, userID, IDs);
+}
 
 API.post('/get_weighted_workspace', async (req, res) => {
     const rankingResume = normalizeRankingResume(req.body.rankingResume);
@@ -808,6 +690,9 @@ API.post('/get_weighted_workspace', async (req, res) => {
         });
         if (req.aborted || res.destroyed || res.writableEnded) return;
         res.set('Cache-Control', 'private, no-store');
+        await assertTopicAccess(db, userID, [workspace.context.categoryID,
+            ...workspace.benchmarks.filter(row => row.type === 'topic').map(row => row.categoryID).filter(ID => Number.isSafeInteger(ID) && ID > 0)]);
+        if (req.aborted || res.destroyed || res.writableEnded) return;
         res.json(rankingPager.create(workspace, {
             userID,
             initialMode: workspace.context.isPrivate ? 'personal' : req.body.initialMode ?? 'public',
@@ -826,6 +711,7 @@ API.post('/get_weighted_workspace', async (req, res) => {
 
 API.post('/get_ranking_page', async (req, res) => {
     const userID = await activeSessionUserID(req);
+    await authorizeRankingSnapshot(req.body.snapshotID, userID);
     if (['benchmarks', 'fallbacks'].includes(req.body.list)) {
         rankingPager.retainReferencedFamilies(await loadReferencedBenchmarkFamilyIDs(db));
     }
@@ -850,8 +736,10 @@ API.post('/locate_ranking_model', async (req, res) => {
         || Object.keys(req.body).some(key => !['snapshotID', 'list', 'targetModel'].includes(key))) {
         throw { status: 400, body: { error: 'invalid_ranking_target' } };
     }
+    const userID = await activeSessionUserID(req);
+    await authorizeRankingSnapshot(req.body.snapshotID, userID);
     res.json(rankingPager.locateModel({ snapshotID: req.body.snapshotID,
-        userID: await activeSessionUserID(req), list: req.body.list, targetModel: req.body.targetModel }));
+        userID, list: req.body.list, targetModel: req.body.targetModel }));
 });
 
 API.post('/search_ranking_models', async (req, res) => {
@@ -860,8 +748,10 @@ API.post('/search_ranking_models', async (req, res) => {
         || Object.keys(req.body).some(key => !['snapshotID', 'list', 'query'].includes(key))) {
         throw { status: 400, body: { error: 'invalid_ranking_query' } };
     }
+    const userID = await activeSessionUserID(req);
+    await authorizeRankingSnapshot(req.body.snapshotID, userID);
     res.json(rankingPager.searchModels({ snapshotID: req.body.snapshotID,
-        userID: await activeSessionUserID(req), list: req.body.list, query: req.body.query }));
+        userID, list: req.body.list, query: req.body.query }));
 });
 
 API.post('/get_model_score_configurations', async (req, res) => {
@@ -1241,6 +1131,7 @@ page.get('/github_callback', markErrorFrom('callback-page'), async (req, res, ne
             SET banned_at = NULL, banned_until = NULL, banned_reason = NULL
             WHERE ID = ? AND banned_until IS NOT NULL AND banned_until <= NOW()`, [userID]);
         await recordGitHubProfile(loginConnection, userID, userData.login);
+        await ensureUserPublicID(loginConnection, userID);
         await privacyControls.recordAcceptanceOn(loginConnection, userID, oauth.legalChoice);
         await commitTransactionConnection(loginConnection, 'github-login');
     } catch (error) {
@@ -2162,10 +2053,10 @@ function buildContributionContent(body, { originalBenchmarks = null, allowLegacy
     }
     if (type === 'report_issue') {
         assertAllowedRecordKeys(body, [
-            'type', 'issueType', 'targetName', 'targetKind', 'targetBenchmarkID',
+            'type', 'issueType', 'targetName', 'targetKind', 'targetBenchmarkID', 'targetCategoryID',
             'categoryPath', 'pageURL', 'sourceURL', 'details'
         ]);
-        const allowedIssueTypes = new Set(['correct_or_add_info', 'delete_or_migrate_category']);
+        const allowedIssueTypes = new Set(['correct_or_add_info', 'delete_or_migrate_category', 'topic_report']);
         const allowedTargetKinds = new Set(['', 'benchmark', 'category']);
         if (!allowedIssueTypes.has(body.issueType)) {
             throw { status: 400 };
@@ -2178,8 +2069,10 @@ function buildContributionContent(body, { originalBenchmarks = null, allowLegacy
             type: type,
             issueType: body.issueType,
             targetName: normalizeString(body.targetName, 128, true),
-            targetKind: normalizeString(body.targetKind, 32),
-            targetBenchmarkID: normalizeOptionalPositiveInteger(body.targetBenchmarkID),
+            targetKind: body.issueType === 'topic_report' ? 'category' : normalizeString(body.targetKind, 32),
+            ...(body.issueType === 'topic_report'
+                ? { targetCategoryID: normalizeRequiredPositiveInteger(body.targetCategoryID) }
+                : { targetBenchmarkID: normalizeOptionalPositiveInteger(body.targetBenchmarkID) }),
             categoryPath: splitCategoryPath(body.categoryPath).join('/'),
             pageURL: normalizeOptionalURL(body.pageURL),
             sourceURL: normalizeOptionalURL(body.sourceURL),
@@ -2188,15 +2081,6 @@ function buildContributionContent(body, { originalBenchmarks = null, allowLegacy
     }
     if (type === 'entity_change') {
         return normalizeEntityChange(body);
-    }
-    if (type === 'new_topic') {
-        assertAllowedRecordKeys(body, ['type', 'proposalID', 'parentTopicID', 'name', 'description']);
-        const topic = normalizeTopicProposalRequest({ name: body.name, description: body.description,
-            ...(body.parentTopicID === undefined ? {} : { parentTopicID: body.parentTopicID }) });
-        if (typeof body.proposalID !== 'number' || !Number.isSafeInteger(body.proposalID) || body.proposalID < 1) {
-            throw { status: 400, body: { error: 'invalid_topic_proposal_id' } };
-        }
-        return { schemaVersion: 1, type, proposalID: body.proposalID, ...topic };
     }
     if (type === 'new_category') {
         assertAllowedRecordKeys(body, [
@@ -2291,7 +2175,6 @@ function buildContributionContent(body, { originalBenchmarks = null, allowLegacy
 }
 
 function contributionSchemaVersion(type, targetKind = null) {
-    if (type === 'new_topic') return 1;
     if (type === 'new_benchmark' || (type === 'entity_change' && targetKind === 'benchmark')) return 6;
     if (type === 'score_field' || type === 'score_field_option') return 1;
     if (type === 'new_model' || (type === 'entity_change' && targetKind === 'model')) return 6;
@@ -2817,10 +2700,7 @@ function validateEditedContributionClientRefs(original, edited) {
         normalizeString(item.clientRef, 96) === reference
     ));
 
-    if (copy.type === 'new_topic') {
-        if (copy.proposalID !== original.proposalID) throw { status: 400, body: { error: 'moderation_proposal_identity_immutable' } };
-        if (copy.parentTopicID !== original.parentTopicID) throw { status: 400, body: { error: 'moderation_proposal_parent_immutable' } };
-    } else if (copy.type === 'score_field' || copy.type === 'score_field_option') {
+    if (copy.type === 'score_field' || copy.type === 'score_field_option') {
         for (const key of ['operation', 'targetID', 'revision', 'fieldID']) {
             if (copy[key] !== original[key]) throw { status: 400, body: { error: 'moderation_field_identity_immutable' } };
         }
@@ -3092,11 +2972,6 @@ async function validateContributionStructureForSubmission(connection, content, u
 }
 
 async function validateContributionEntitiesForSubmission(connection, content) {
-    if (content.type === 'new_topic') {
-        if (content.parentTopicID !== undefined) await assertPublicSceneAvailable(connection, content.parentTopicID, content.name);
-        else await assertPublicTopicAvailable(connection, content);
-        return;
-    }
     if (content.type === 'new_benchmark') {
         for (const benchmark of content.benchmarks) {
             if (benchmark.existingBenchmarkID !== null) {
@@ -3983,44 +3858,9 @@ async function applyBenchmarkResult(connection, content, metadata) {
     }
 }
 
-async function createPublicTopicFromSubmission(connection, content, metadata) {
-    const creator = canonicalAccountID(metadata.submittedBy);
-    if (!creator) throw { status: 409, body: { error: 'topic_submitter_unavailable' } };
-    const slug = await assertPublicTopicAvailable(connection, content);
-    try {
-        const [inserted] = await connection.execute(`INSERT INTO categories
-            (name, slug, description, owner_user_ID, created_by_user_ID, position)
-            VALUES (?, ?, ?, NULL, ?, 0)`, [content.name, slug, content.description, creator]);
-        const [context] = await connection.execute(`INSERT INTO ranking_contexts (category_ID, context_values, context_hash)
-            VALUES (?, '{}', ?)`, [Number(inserted.insertId), crypto.createHash('sha256').update('{}').digest('hex')]);
-        return { topicID: Number(inserted.insertId), rootContextID: Number(context.insertId) };
-    } catch (error) {
-        if (error.code === 'ER_DUP_ENTRY') throw { status: 409, body: { error: 'topic_name_exists' } };
-        throw error;
-    }
-}
-
 async function applyModerationContent(connection, content, metadata = {}) {
     if (content.type === 'new_category') {
-        throw { status: 410, body: { error: 'category_contribution_retired', url: '/topic-proposals' } };
-    }
-    if (content.type === 'new_topic') {
-        const normalized = normalizeStoredModerationContent(content);
-        if (normalized.parentTopicID !== undefined) {
-            await approveTopicSceneProposal(connection, normalized, metadata);
-            return;
-        }
-        await lockTopicReferences(connection);
-        const proposal = await lockTopicProposalForReview(connection, normalized, metadata);
-        const saved = await loadTopicProposalSnapshot(connection, Number(proposal.ID), Number(proposal.revision));
-        if (saved && (normalized.name !== saved.snapshot.name || normalized.description !== saved.snapshot.description)) {
-            throw { status: 409, body: { error: 'topic_proposal_snapshot_immutable' } };
-        }
-        const { topicID, rootContextID } = await createPublicTopicFromSubmission(connection, normalized, metadata);
-        if (saved) await seedSnapshotTopic(connection, { ID: topicID, name: normalized.name, description: normalized.description },
-            canonicalAccountID(metadata.submittedBy), saved.snapshot, { rootContextID });
-        await finishTopicProposalReview(connection, proposal, 'approved', topicID);
-        return;
+        throw { status: 410, body: { error: 'category_contribution_retired' } };
     }
     if (content.type === 'score_field' || content.type === 'score_field_option') {
         await applyFieldContribution(connection, content, metadata);
@@ -4067,7 +3907,6 @@ async function buildExecutedModerationSQLPreview(connection, ID, content, edited
         .replace(/\s+FOR\s+UPDATE\s*$/i, '')
         .replace(/\s+FOR\s+SHARE\s*$/i, '');
     const recordingConnection = {
-        [TOPIC_SCENE_SQL_PREVIEW]: true,
         async execute(sql, params = []) {
             const statement = String(sql).trim();
             statements.push(mysql.format(statement, params).trim());
@@ -4165,23 +4004,10 @@ function createModerationPreviewToken({ moderationLogID, reviewerUserID, updated
     });
 }
 
-async function queueTopicProposalForReview(connection, proposal) {
-    const content = buildContributionContent({ type: 'new_topic', proposalID: Number(proposal.ID),
-        name: proposal.name, description: proposal.description,
-        ...(proposal.parent_topic_ID == null ? {} : { parentTopicID: Number(proposal.parent_topic_ID) }) });
-    const [inserted] = await connection.execute(
-        'INSERT INTO moderation_logs (content, report_count, user_id) VALUES (?, ?, ?)',
-        [JSON.stringify(content), 1, proposal.user_ID]);
-    return Number(inserted.insertId);
-}
-
 API.post('/submit_contribution', requireAuthForAPI, requireAccountWriteOwner, requireCurrentTermsForAPI, async (req, res) => {
     requireRecord(req.body, 'invalid_submission');
     const submission = { ...req.body };
     delete submission.expectedUserID;
-    if (submission.type === 'new_topic') {
-        throw { status: 409, body: { error: 'topic_proposal_required', url: '/topic-proposals' } };
-    }
     if (submission.type === 'score_field' || submission.type === 'score_field_option') {
         throw { status: 410, body: { error: 'score_field_contribution_retired' } };
     }
@@ -4226,6 +4052,9 @@ API.post('/submit_contribution', requireAuthForAPI, requireAccountWriteOwner, re
             };
         }
         content = await prepareEntityChangeForSubmission(workingConnection, content, scoreFieldCatalog);
+        if (content.type === 'report_issue' && content.issueType === 'topic_report') {
+            content = await prepareTopicReport(workingConnection, req.session.userID, content, publicOrigin);
+        }
         if (content.type === 'discussion_report') await validateDiscussionReport(workingConnection, content, req.user.ID);
         await validateContributionReferences(workingConnection, content, req.session.userID);
         await validateContributionStructureForSubmission(workingConnection, content, req.session.userID);
@@ -4770,9 +4599,10 @@ API.post('/list_moderation_logs', requireReviewerAuthForAPI, requireAccountWrite
         moderation_logs.user_id,
         moderation_logs.created_at,
         moderation_logs.updated_at,
-        users.name AS userName
+        COALESCE(NULLIF(p.display_name, ''), users.name) AS userName, p.public_id AS userPublicID
         FROM moderation_logs
-        LEFT JOIN users ON users.ID = moderation_logs.user_id
+        LEFT JOIN users ON users.ID = moderation_logs.user_id AND users.deleted_at IS NULL
+        LEFT JOIN user_public_profiles p ON p.user_ID = users.ID
         WHERE moderation_logs.status = ?
         ${escalationFilter}
         ORDER BY moderation_logs.created_at ASC, moderation_logs.ID ASC
@@ -5289,12 +5119,6 @@ API.post('/review_moderation_log', requireReviewerAuthForAPI, requireAccountWrit
                 [JSON.stringify(content), status, ID]
             );
         } else {
-            if (storedContent.type === 'new_topic') {
-                content = normalizeStoredModerationContent(storedContent);
-                const proposal = await lockTopicProposalForReview(auditedConnection, content,
-                    { moderationLogID: ID, submittedBy: requestBefore.submittedBy });
-                await finishTopicProposalReview(auditedConnection, proposal, 'rejected');
-            }
             await auditedConnection.execute(
                 'UPDATE moderation_logs SET status = ?, updated_at = NOW() WHERE ID = ?',
                 [status, ID]
@@ -5353,31 +5177,7 @@ API.post('/*any_path', (req, res, next) => { // 包括/dialogPage
 page.get('/dialogPage', (req, res) => {
     res.sendFile(currentDir + '/private/dialogPage.html');
 });
-page.get('/*any_path', async (req, res, next) => {
-    const url = new URL(req.originalUrl, publicOrigin);
-    const parts = url.pathname.split('/').filter(Boolean);
-    let slug;
-    try { slug = parts.length <= 2 ? decodeURIComponent(parts[0]).toLowerCase() : null; }
-    catch { return next({ status: 404 }); }
-    const canonical = slug ? await findTopicBySlug(db, slug) : null;
-    const topic = canonical ?? await resolveLegacyTopic(db, url.pathname, await activeSessionUserID(req));
-    if (!topic) return next({ status: 404 });
-    let sceneSlug = null;
-    try { sceneSlug = canonical && parts.length === 2 ? decodeURIComponent(parts[1]) : null; }
-    catch { return next({ status: 404 }); }
-    const scene = selectSearchScene(topic, url.searchParams, sceneSlug);
-    const path = scene ? scenePath(topic.url, scene) : topic.url;
-    if (url.searchParams.get('view') === 'showcase') return res.redirect(302, '/');
-    if (url.searchParams.has('view')) {
-        url.searchParams.delete('view');
-        return res.redirect(302, path + url.search);
-    }
-    if (url.pathname !== path) return res.redirect(scene && canonical && parts.length === 1 ? 302 : 308, path + url.search);
-    const snapshot = topic.isPrivate ? null : await searchPresentation.snapshot(topic, scene);
-    if (topic.isPrivate) res.set('X-Robots-Tag', 'noindex, nofollow, nosnippet');
-    await renderHome(res, { categoryID: topic.ID, guest: !await activeSessionUserID(req),
-        ...(topic.isPrivate ? {} : { transformHTML: html => renderPublicTopic(html, topic, scene, snapshot, publicOrigin) }) });
-});
+page.get('/*any_path', createTopicPageHandler({ db, activeSessionUserID, renderHome, searchPresentation, publicOrigin }));
 
 function databaseErrorResponse(err) {
     switch (err?.code) {

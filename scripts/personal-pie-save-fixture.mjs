@@ -22,11 +22,11 @@ export function createPieSaveDatabase({ revision = 1, failCompletion = false, lo
     let stored = {
         users: new Map(users.map(user => [String(user.ID), { ...user, ID: String(user.ID) }])),
         topics: new Map(topics.map(topic => [topic.ID, { name: `Fixture topic ${topic.ID}`, slug: `fixture-topic-${topic.ID}`,
-            description: 'Compare fixture benchmarks.', position: 0, owner_user_ID: null, is_active: 1,
+            description: 'Compare fixture benchmarks.', public_ID: topic.ID, private_ID: `fixtureTopic${String(topic.ID).padStart(4, '0')}`, position: 0, owner_user_ID: null, is_active: 1,
             created_by_user_ID: null, creator_name: null, creator_avatar: null, ...topic }])),
         contexts: new Map(contexts.map(context => [context.ID, { ...context, context_hash: hash(context.context_values) }])),
-        scenes: new Map(scenes.map(scene => [scene.context_ID, { name: `Scene ${scene.context_ID}`, slug: `scene-${scene.context_ID}`,
-            description: 'Compare this scene.', position: 0, is_default: 0, is_active: 1, ...scene }])),
+        scenes: new Map(scenes.map((scene, index) => [scene.context_ID, { name: `Scene ${scene.context_ID}`, slug: `scene-${scene.context_ID}`,
+            description: 'Compare this scene.', scene_number: index + 1, position: 0, is_default: 0, is_active: 1, ...scene }])),
         pies: new Map(initialPies.map(pie => [pie.ID, { revision: 1, updated_at: new Date(), weights: [],
             topicWeights: [], rules: [], ...structuredClone(pie), user_ID: String(pie.user_ID) }])),
         receipts: new Map(), families: new Map(), nextFamilyID: 100,
@@ -70,7 +70,7 @@ export function createPieSaveDatabase({ revision = 1, failCompletion = false, lo
                 if (!topic || scene && (!scene.is_active || scene.category_ID !== context.category_ID)
                     || !scene && context.context_hash !== emptyHash) return [];
                 return [{ ...scene, contextID: context.ID, category_ID: context.category_ID, context_hash: context.context_hash,
-                    scene_context_ID: scene?.context_ID ?? null, category_name: topic.name,
+                    scene_context_ID: scene?.context_ID ?? null, category_name: topic.name, public_ID: topic.public_ID, private_ID: topic.private_ID,
                     category_slug: topic.slug, owner_user_ID: topic.owner_user_ID }];
             }), []];
         }
@@ -85,8 +85,8 @@ export function createPieSaveDatabase({ revision = 1, failCompletion = false, lo
                     && activeUser(state.users.get(pie.user_ID)) && (pie.weights.length || pie.topicWeights.length)
                     && (topic.owner_user_ID != null || new Date(pie.updated_at).getTime() >= Date.now() - 14 * 86400000));
                 return [{ context_ID: context.ID, category_ID: topic.ID, topic_name: topic.name, slug: topic.slug,
-                    topic_description: topic.description, owner_user_ID: topic.owner_user_ID,
-                    scene_ID: activeScene?.context_ID ?? null, scene_name: activeScene?.name,
+                    public_ID: topic.public_ID, private_ID: topic.private_ID, topic_description: topic.description, owner_user_ID: topic.owner_user_ID,
+                    scene_ID: activeScene?.context_ID ?? null, scene_number: activeScene?.scene_number, scene_name: activeScene?.name,
                     scene_description: activeScene?.description, is_default: activeScene?.is_default ?? 0,
                     has_weights: Number(hasWeights) }];
             }), []];

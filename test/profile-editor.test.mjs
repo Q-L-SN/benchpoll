@@ -44,14 +44,11 @@ test('invalid, oversized and already-cancelled uploads fail before browser decod
     await assert.rejects(prepareProfileAvatar(null, { signal: controller.signal }), { name: 'AbortError' });
 });
 
-test('editor uses native modality, shared transport, text-only rendering and document profile notifications', async () => {
-    const source = await readFile(new URL('../public/js/shared/profile-editor.js', import.meta.url), 'utf8');
-    assert.match(source, /dialog.showModal\(\)/);
-    assert.match(source, /file.type = 'file'/);
+test('full-page editor uses the account-fenced transport and text-only profile notifications', async () => {
+    const source = await readFile(new URL('../public/js/profile-settings.js', import.meta.url), 'utf8');
     assert.match(source, /pageAccountWriteScope.write\(/);
-    assert.match(source, /postJSON\(path, payload/);
     assert.match(source, /document.dispatchEvent\(new CustomEvent\('benchpoll:profile-updated'/);
-    assert.doesNotMatch(source, /innerHTML|localStorage|sessionStorage|accountUserID|expectedUserID:|createObjectURL/);
+    assert.doesNotMatch(source, /innerHTML|showModal\(|accountUserID|expectedUserID:|createObjectURL/);
     const discussion = await readFile(new URL('../public/js/discussion.js', import.meta.url), 'utf8');
     assert.match(discussion, /document.addEventListener\('benchpoll:profile-updated'/);
     assert.match(discussion, /post.isDeleted \? null/);

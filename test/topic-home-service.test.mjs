@@ -41,7 +41,7 @@ test('grouped home previews supply the catalogue name, not a key=value presentat
 test('preview and subsequent pages retain canonical names without exposing the full catalogue', async () => {
     const models = Array.from({ length: 30 }, (_, index) => ({ ID: index + 1, modelID: 339,
         name: 'Harness=Not recorded / Effort=max / Acme (a=b) / v2', lower: 42, upper: 42 }));
-    const service = createTopicHomeService({ db: {}, loadTopic: async () => ({ ID: 54, isPrivate: false }),
+    const service = createTopicHomeService({ db: {}, authorizeTopics: async () => {}, loadTopic: async () => ({ ID: 54, isPrivate: false }),
         loadFields: async () => [], loadWorkspace: async () => ({
             context: { contextValues: {} }, comparison: { keys: ['model'], fields: [], availableKeys: ['model'],
                 models: [{ ID: 339, name: 'Acme (a=b) / v2' }] },
@@ -65,7 +65,7 @@ function fixture(isPrivate = false) {
         modelLeaderboards: { public: Array.from({ length: 30 }, (_, index) => ({ ID: index + 1, name: `Model ${index + 1}`,
             lower: 30 - index, upper: 30 - index, coverage: 100 })), personal: [] } };
     const service = createTopicHomeService({
-        db: {}, loadTopic: async (_db, userID) => {
+        db: {}, authorizeTopics: async () => {}, loadTopic: async (_db, userID) => {
             if (isPrivate && userID !== '42') throw { status: 404 };
             return { ID: 54, isPrivate };
         }, loadFields: async () => [],
@@ -114,7 +114,7 @@ test('home model search uses all recorded models and only currently enabled para
     const runs = ['low', 'high'].map((value, index) => ({ ID: index + 1, modelID: 77, modelName: 'Example',
         name: 'Example', vendor: 'Acme', condition: { parameters: { 'field:3': value } }, results: new Map() }));
     let loads = 0;
-    const service = createTopicHomeService({ db: {}, loadFields: async () => fields,
+    const service = createTopicHomeService({ db: {}, authorizeTopics: async () => {}, loadFields: async () => fields,
         loadRuns: async () => { loads++; return runs; } });
     const result = await service.searchModels({ query: 'example high', reasoning: true, harness: false });
     assert.equal(result.items.length, 1);
@@ -134,4 +134,50 @@ test('home locating returns a centered window and validates topic snapshot acces
     assert.equal(result.models[25].ID, 26);
     assert.equal((await f.service.locate(null, { categoryID: 54, snapshotID: first.pagination.snapshotID, targetModel: '100' })).found, false);
     await assert.rejects(f.service.locate(null, { categoryID: 55, snapshotID: first.pagination.snapshotID, targetModel: '26' }), error => error.status === 410);
+});
+
+
+test('cached preview, page and locate reauthorize referenced topics after publication changes', async () => {
+    let readable = true;
+    const service = createTopicHomeService({ db: {}, loadTopic: async () => ({ ID: 1, isPrivate: false }),
+        authorizeTopics: async (_db, _userID, IDs) => {
+            assert.deepEqual(IDs, [1, 2]);
+            if (!readable) throw { status: 410, body: { error: 'ranking_snapshot_expired' } };
+        }, loadFields: async () => [], loadWorkspace: async () => ({ context: { contextValues: {} },
+            comparison: { keys: ['model'], fields: [], availableKeys: ['model'], models: [] },
+            benchmarks: [{ type: 'topic', categoryID: 2 }], publicPie: { entries: [] }, modelLeaderboards: { public: [] } }) });
+    const first = await service.preview(null, { categoryID: 1 });
+    readable = false;
+    for (const body of [{ categoryID: 1 }, { categoryID: 1, snapshotID: first.pagination.snapshotID, offset: 0 }]) {
+        await assert.rejects(service.preview(null, body), error => error.status === 410);
+    }
+    await assert.rejects(service.locate(null, { categoryID: 1, snapshotID: first.pagination.snapshotID, targetModel: '1' }), error => error.status === 410);
+});
+
+
+test('personal reference previews use viewer weights and isolate each account cache', async () => {
+    const f = fixture();
+    const personal = await f.service.preview('42', { categoryID: 54, mode: 'personal' });
+    assert.deepEqual(f.owners, ['42']);
+    assert.equal(personal.models.length, 0);
+    await f.service.preview('43', { categoryID: 54, mode: 'personal' });
+    await f.service.preview('42', { categoryID: 54, mode: 'public' });
+    assert.deepEqual(f.owners, ['42', '43', null]);
+    await assert.rejects(f.service.preview(null, { categoryID: 54, mode: 'personal' }), error => error.status === 401);
+    await assert.rejects(f.service.preview('43', { categoryID: 54, mode: 'personal', snapshotID: personal.pagination.snapshotID }), error => error.status === 410);
+    const privateFixture = fixture(true);
+    await assert.rejects(privateFixture.service.preview('42', { categoryID: 54, mode: 'public' }), error => error.status === 400);
+});
+
+test('preview coverage index uses the complete precise aggregate rather than rounded page rows', async () => {
+    const service = createTopicHomeService({ db: {}, authorizeTopics: async () => {},
+        loadTopic: async () => ({ ID: 1, isPrivate: false }), loadFields: async () => [],
+        loadWorkspace: async () => ({ context: { contextValues: {} },
+            comparison: { keys: ['model'], fields: [], availableKeys: ['model'], models: [] },
+            publicPie: { entries: [], coverageIndex: 29.999999999999 },
+            modelLeaderboards: { public: Array.from({ length: 30 }, (_, index) => ({ ID: index + 1, name: `Model ${index + 1}`, lower: 30 - index, upper: 30 - index, coverage: 100 })) } }) });
+    const result = await service.preview(null, { categoryID: 1 });
+    assert.equal(result.models.length, 25);
+    assert.equal(result.coverageIndex, 29.999999999999);
+    assert.equal(result.totalCoverageIndex, 29.999999999999);
 });

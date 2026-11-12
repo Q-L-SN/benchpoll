@@ -227,12 +227,23 @@ test('locally served real HTML and native browser behavior obey the enforced pol
                 document.addEventListener('securitypolicyviolation', event => window.applicationPolicyViolations.push(event.effectiveDirective));
             });
             const page = await context.newPage();
-            for (const path of ['/Intelligence', '/__built-home', '/contribute/scores/new', '/privacy', '/terms', '/how-it-works', '/adminlogin', '/censor', '/dialogPage?dialogCode=2']) {
+            const pages = [{ path: '/1', built: false }, { path: '/1', built: true },
+                ...['/contribute/scores/new', '/privacy', '/terms', '/how-it-works', '/adminlogin', '/censor', '/dialogPage?dialogCode=2']
+                    .map(path => ({ path, built: false }))];
+            for (const { path, built } of pages) {
+                // The bundle must run at a valid numeric topic address. Serving
+                // it at a synthetic path could navigate into the source page.
+                const builtHome = async route => route.fulfill({ response: await route.fetch({ url: site.origin + '/__built-home' }) });
+                if (built) await page.route(site.origin + '/1', builtHome);
                 const res = await page.goto(site.origin + path, { waitUntil: 'networkidle' });
                 assert.equal(res.status(), 200, `Local page response for ${path}`);
                 assert.equal(new URL(page.url()).pathname, path === '/adminlogin' ? '/censor'
-                    : ['/Intelligence', '/__built-home'].includes(path) ? '/language-models' : new URL(site.origin + path).pathname,
+                    : new URL(site.origin + path).pathname,
                     `Only expected application navigation for ${path}`);
+                if (built) {
+                    assert.ok(await page.locator('script[src^="/build/home/"]').count(), 'The built topic page loads its real bundle');
+                    await page.unroute(site.origin + '/1', builtHome);
+                }
                 assert.equal(await page.evaluate(() => window.applicationPolicyViolations.length), 0, `No application CSP violations for ${path}`);
             }
             await context.close();
@@ -292,7 +303,7 @@ test('locally served real HTML and native browser behavior obey the enforced pol
                             await noEagerEntry();
                             await page.locator('#beta-feedback-link').click();
                         } else {
-                            await page.goto(site.origin + '/Intelligence' + (mode === 'Discussion report' ? '?discussion=1' : ''));
+                            await page.goto(site.origin + '/1' + (mode === 'Discussion report' ? '?discussion=1' : ''));
                             await page.waitForFunction(() => document.querySelector('#model-ranking-status')?.dataset.phase === 'ready');
                             if (await page.locator('#showcase-enter').isVisible()) await page.locator('#showcase-enter').click();
                             await noEagerEntry();

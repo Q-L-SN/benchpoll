@@ -44,29 +44,30 @@ test('the migration plan retains category identities and is repeatable without t
     assert.equal(privateCategory.name, 'Business');
 });
 
-test('canonical short topic URLs retain new English labels without renaming private topics', () => {
-    const entries = buildCategoryNavigation([...after, { ...before.find(node => node.ID === 235), is_active: 0 }, privateCategory]);
+test('numeric topic URLs retain English labels without renaming private topics', () => {
+    const currentRows = [...after, privateCategory].map(row => ({ ...row, public_ID: row.ID, private_ID: 'AbCdEf123456' }));
+    const entries = buildCategoryNavigation([...currentRows, { ...before.find(node => node.ID === 235), is_active: 0 }]);
     const management = entries.find(entry => entry.categoryID === 202);
     const memory = entries.find(entry => entry.categoryID === 215);
     assert.equal(management.categoryName, 'Management');
     assert.equal(memory.categoryName, 'Memory & Context');
-    assert.equal(locationURL(management), '/management');
-    assert.equal(locationURL(memory), '/memory-context');
+    assert.equal(locationURL(management), '/202');
+    assert.equal(locationURL(memory), '/215');
     assert.deepEqual(management.lineage.map(item => item.name), ['Management']);
     assert.deepEqual(memory.lineage.map(item => item.name), ['Memory & Context']);
     assert.equal(entries.some(entry => entry.categoryID === 235 || entry.categoryID === 9000), false);
     const personal = buildPersonalNavigation([
         { contextID: 77, categoryID: 202, contextValues: {}, weightCount: 1, totalBasisPoints: 10000, unavailableConditions: 0 },
         { contextID: 78, categoryID: 9000, contextValues: {}, weightCount: 1, totalBasisPoints: 10000, unavailableConditions: 0 }
-    ], [...after, privateCategory], [], []);
+    ], currentRows, [], []);
     assert.equal(personal.length, 2);
     const publicPie = personal.find(entry => entry.categoryID === 202);
     assert.equal(publicPie.contextID, 77);
     assert.equal(publicPie.available, true);
-    assert.equal(locationURL(publicPie), '/management');
+    assert.equal(locationURL(publicPie), '/202');
     const privatePie = personal.find(entry => entry.categoryID === 9000);
     assert.equal(privatePie.categoryName, 'Business');
     assert.equal(privatePie.isPrivate, true);
     assert.equal(privatePie.available, true);
-    assert.equal(locationURL(privatePie), '/personal/9000');
+    assert.equal(locationURL(privatePie), '/private/AbCdEf123456');
 });

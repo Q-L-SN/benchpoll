@@ -5,7 +5,9 @@ import { readFile, stat } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import mysql from 'mysql2/promise';
-import { FEATURED_TOPIC_ID, topicSlug, isReservedTopicSlug } from '../public/js/shared/topics.js';
+import { topicSlug, isReservedTopicSlug } from '../public/js/shared/topics.js';
+// Historical migration identity; independent of the current public URL catalogue.
+const FEATURED_TOPIC_ID = 54;
 
 export const TOPIC_SLUG_MIGRATION = 'topic_short_urls_20261023';
 const validSlug = slug => typeof slug === 'string' && slug.length <= 80

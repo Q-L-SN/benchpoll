@@ -63,7 +63,7 @@ test('workspace contract rejects missing arrays, mixed identities, and invalid f
         payload => { payload.benchmarks[0].conditionName = 'changed'; },
         payload => { delete payload.benchmarks[0].scoreCount; },
         payload => { payload.benchmarks[0].lowCoverage = 'false'; },
-        payload => { payload.context.dimensions[0].options = null; },
+        payload => { payload.context.dimensions = [{ key: 'invalid', name: 'Invalid', options: null }]; },
         payload => { payload.personalPie.fallbackRules = [{ primaryConditionID: 1, mode: 'fallback_if_missing', entries: [{ ...payload.benchmarks[1], weightBasisPoints: 9999 }] }]; },
         payload => { payload.personalPie.fallbackRules = [{ primaryConditionID: 1, mode: 'fallback_if_missing', entries: [{ ...payload.benchmarks[0], weightBasisPoints: 10000 }] }]; },
         payload => { payload.modelLeaderboards.public[0].rank = undefined; },

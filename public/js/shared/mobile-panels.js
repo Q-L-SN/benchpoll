@@ -11,7 +11,8 @@ export function initializeMobilePanels(workspace) {
     let current = names.includes(workspace.dataset.mobilePanel) ? workspace.dataset.mobilePanel : 'mix';
     let lastAnnounced = null, previewingDiscussion = false;
     let frame = null, settleTimer = null;
-    const identity = workspace.querySelector('.bp-context-identity');
+    const identity = workspace.querySelector('.bp-heading-stack');
+    let viewportWidth = null;
     const progress = () => enabled() && pager.clientWidth ? Math.max(0, Math.min(names.length - 1, pager.scrollLeft / pager.clientWidth)) : names.indexOf(current);
 
     function paint() {
@@ -65,8 +66,12 @@ export function initializeMobilePanels(workspace) {
     }
     function resize() {
         if (identity) workspace.style.setProperty('--bp-mobile-topic-height', `${identity.getBoundingClientRect().height}px`);
-        if (enabled()) { select(current, { instant: true }); commit(); }
-        else panels.forEach(panel => { panel.inert = false; panel.removeAttribute('aria-hidden'); });
+        const widthChanged = viewportWidth !== pager.clientWidth;
+        viewportWidth = pager.clientWidth;
+        // A discussion/composer update may resize panel content while a finger
+        // is between pages. Only a viewport-width change can realign the pager.
+        if (enabled() && widthChanged) { select(current, { instant: true }); commit(); }
+        else if (!enabled()) panels.forEach(panel => { panel.inert = false; panel.removeAttribute('aria-hidden'); });
         paint();
     }
     controls.forEach(control => control.addEventListener('click', () => select(control.dataset.mobilePanel)));
@@ -91,14 +96,26 @@ export function initializeMobilePanels(workspace) {
     pager.addEventListener('touchcancel', commit, { passive: true });
     let display = workspace.dataset.display;
     const modeObserver = new MutationObserver(() => {
-        if (display !== workspace.dataset.display) { display = workspace.dataset.display; resize(); }
+        if (display !== workspace.dataset.display) { display = workspace.dataset.display; viewportWidth = null; resize(); }
         else if (workspace.dataset.mobilePanel !== current) select(workspace.dataset.mobilePanel);
     });
     modeObserver.observe(workspace, { attributes: true, attributeFilter: ['data-mobile-panel', 'data-display'] });
     const sizing = new window.ResizeObserver(resize);
     sizing.observe(pager); sizing.observe(dock);
     if (identity) sizing.observe(identity);
-    mobile.addEventListener('change', resize);
+    mobile.addEventListener('change', () => { viewportWidth = null; resize(); });
+
+    const stickySizes = new window.ResizeObserver(entries => {
+        for (const entry of entries) {
+            const variable = entry.target.dataset.stickyHeight;
+            workspace.style.setProperty(variable, `${entry.target.getBoundingClientRect().height}px`);
+        }
+    });
+    for (const [selector, variable] of [['.bp-benchmark-toolbar', '--bp-evaluation-toolbar-height'],
+        ['.bp-model-controls', '--bp-index-toolbar-height'], ['#estimation-test-control', '--bp-estimation-toolbar-height']]) {
+        const element = workspace.querySelector(selector);
+        if (element) { element.dataset.stickyHeight = variable; stickySizes.observe(element); }
+    }
 
     const toolbar = workspace.querySelector('.bp-model-controls');
     const updateEdges = () => {

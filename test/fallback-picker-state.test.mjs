@@ -138,18 +138,18 @@ test('pagination, retry and custom deduplication preserve the selected order unt
     h.picker.open(primary, { action: 'replace' });
     assert.equal(h.columns()[0].querySelector('.bp-fallback-picker-card-toggle').getAttribute('aria-pressed'), 'true');
     assert.equal(h.$('.bp-fallback-picker-confirm'), null);
-    h.$('.bp-fallback-picker-more').click();
-    assert.equal(h.$('.bp-fallback-picker-more').disabled, true);
+    await Promise.resolve();
+    assert.equal(h.$('.bp-fallback-picker-retry').disabled, true);
     await settle();
-    assert.equal(h.$('.bp-fallback-picker-more').textContent, 'Retry');
+    assert.equal(h.$('.bp-fallback-picker-retry').textContent, 'Retry');
     h.state.load = () => {
         h.state.view.error = ''; h.state.view.hasMore = false;
         h.state.view.items = [order(10, 2), order(11, 3)]; h.picker.refresh();
     };
-    h.$('.bp-fallback-picker-more').click();
+    h.$('.bp-fallback-picker-retry').click();
     assert.deepEqual(h.columns().map(column => column.dataset.familyKey), ['[1,2]', '[1]', '[1,3]']);
     assert.equal(h.columns()[0].querySelector('.bp-fallback-picker-card-toggle').getAttribute('aria-pressed'), 'true');
-    assert.equal(h.$('.bp-fallback-picker-more').hidden, true);
+    assert.equal(h.$('.bp-fallback-picker-retry').hidden, true);
     assert.deepEqual(h.loaded, [1, 1]);
     assert.equal(h.applied.length + h.customized.length, 0);
     h.toggle('[1,3]'); await settle();
@@ -174,6 +174,34 @@ test('newly loaded popular configurations append until the chooser is reopened',
     assert.deepEqual(keys(), ['[1,2]', '[1]', '[1,3]']);
     h.picker.close(); h.picker.open(primary, { action: 'replace' });
     assert.deepEqual(keys(), ['[1,3]', '[1,2]', '[1]']);
+});
+
+test('one settings visit preserves each version order across inspection and custom editor remounts', async t => {
+    const h = pickerHarness(t, { current: null, composition: { families: [
+        { entries: [member(2)], weightBasisPoints: 9000 }, { entries: [member(3)], weightBasisPoints: 1000 }
+    ] } });
+    const visit = {};
+    h.picker.open(primary, { action: 'replace', visit });
+    const original = h.columns().map(column => column.dataset.familyKey);
+    h.toggle('[1,3]'); await settle();
+    h.picker.close({ restore: false });
+    h.picker.open({ ...primary, ID: 4, conditionID: 4 }, { action: 'replace', visit });
+    h.picker.open(primary, { action: 'replace', visit });
+    assert.deepEqual(h.columns().map(column => column.dataset.familyKey), original);
+    h.picker.open(primary, { action: 'replace', visit: {} });
+    assert.equal(h.columns()[0].dataset.familyKey, '[1,3]', 'A new settings visit starts with the current choice');
+});
+
+test('closing a distant page clears rendered choices before switching layout without a version', t => {
+    const h = pickerHarness(t, { current: null,
+        view: { featured: Array.from({ length: 15 }, (_, index) => order(10 + index, 100 + index)),
+            items: [], loaded: true, hasMore: false } });
+    h.picker.open(primary, { action: 'replace' });
+    for (let index = 0; index < 5; index++) h.dialog.querySelectorAll('.bp-choice-page-arrow')[1].click();
+    h.picker.close({ restore: false });
+    h.picker.setLayout('accordion');
+    assert.equal(h.columns().length, 0);
+    assert.equal(h.dialog.hidden, true);
 });
 
 test('old apply completions cannot close or show errors in a newly opened picker', async t => {

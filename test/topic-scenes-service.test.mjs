@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { resolveTopicScene, serializeTopicScene, sceneContext, loadTopicScenes,
     createPrivateTopicScene, updatePrivateTopicScene, setPrivateTopicDefaultScene,
-    normalizeTopicSceneRequest, loadTopicSceneCatalog, ensureTopicRootContext, topicSceneURL, TOPIC_SCENE_SQL_PREVIEW } from '../topic-scenes-service.js';
+    normalizeTopicSceneRequest, loadTopicSceneCatalog, ensureTopicRootContext, topicSceneURL } from '../topic-scenes-service.js';
 import { searchTopicsAndScenes } from '../topic-service.js';
 import { buildCategoryNavigation, buildPersonalNavigation } from '../navigation-service.js';
 import { selectSearchScene } from '../search-presentation.js';
@@ -11,12 +11,12 @@ import { scenePath, topicSlug } from '../public/js/shared/topics.js';
 import { sceneDatabase } from './helpers/topic-scenes-fixture-20261031.mjs';
 
 const errorIs = code => error => error.body?.error === code;
-const raw = (contextID, defaults = {}) => ({ context_ID: contextID, category_ID: 172, name: `Scene ${contextID}`,
+const raw = (contextID, defaults = {}) => ({ context_ID: contextID, category_ID: 172, scene_number: contextID, name: `Scene ${contextID}`,
     slug: `scene-${contextID}`, description: 'A useful scene.', position: contextID, is_default: 0, is_active: 1, ...defaults });
 const scenes = () => [serializeTopicScene(raw(101, { name: 'Vector output', legacy_context_values: { output: 'vector', realtime: 'any' } })),
     serializeTopicScene(raw(1095, { name: 'General', is_default: 1, legacy_context_values: { output: 'any', realtime: 'any' } }))];
 
-test('accepted long scene names serialize and resolve legacy truncated slugs without colliding with shorter names', async () => {
+test('long scene names keep numeric URL identities independent of stored slugs', async () => {
     const h = sceneDatabase(), prefix = 'a'.repeat(79), name = prefix + ' b';
     const request = normalizeTopicSceneRequest({ categoryID: 172, name, description: 'A long scene name.' });
     const storedSlug = topicSlug(request.name), expectedSlug = storedSlug + 'scene';
@@ -29,16 +29,16 @@ test('accepted long scene names serialize and resolve legacy truncated slugs wit
             raw(siblingID, { category_ID: categoryID, name: prefix, slug: prefix }));
         const catalog = (await loadTopicSceneCatalog(h.pool, [categoryID])).get(categoryID);
         const topic = { ...h.state.categories.find(row => row.ID === categoryID), scenes: catalog.scenes };
-        const base = categoryID === 172 ? '/image-generation' : '/personal/501';
+        const base = categoryID === 172 ? '/11' : '/private/PrivateToken123456';
         const scene = catalog.scenes.find(item => item.ID === ID);
         assert.equal(scene.name, name);
         assert.equal(scene.slug, expectedSlug);
-        assert.equal(scene.url, `${base}/${expectedSlug}`);
-        assert.equal(topicSceneURL(topic, { name, slug: storedSlug }), scene.url);
-        assert.equal(topicSceneURL(topic, { name }), scene.url);
+        assert.equal(scene.url, `${base}/${ID}`);
+        assert.equal(topicSceneURL(topic, { name, slug: storedSlug, sceneNumber: ID }), scene.url);
+        assert.equal(topicSceneURL(topic, { name, sceneNumber: ID }), scene.url);
         assert.equal(scenePath(base, scene), scene.url);
-        assert.equal(selectSearchScene(topic, new URLSearchParams(), expectedSlug).ID, ID);
-        assert.equal(selectSearchScene(topic, new URLSearchParams(), prefix).ID, siblingID);
+        assert.equal(selectSearchScene(topic, new URLSearchParams(), ID).ID, ID);
+        assert.equal(selectSearchScene(topic, new URLSearchParams(), siblingID).ID, siblingID);
         assert.equal((await resolveTopicScene(h.pool, topic, { scene: String(ID) })).ID, ID);
         assert.equal(h.state.scenes.find(item => item.context_ID === ID).slug, storedSlug, 'Reading does not rewrite stored identities');
     }
@@ -54,8 +54,8 @@ test('creating and renaming accepted long scenes returns resolvable canonical pa
             : await createPrivateTopicScene(h.pool, '42', { categoryID: 501, name, description: 'New scene.' });
         assert.equal(result.scene.name, name);
         assert.equal(result.scene.slug, slug);
-        assert.equal(result.scene.url, `/personal/501/${slug}`);
-        assert.equal(selectSearchScene({ scenes: result.scenes }, new URLSearchParams(), slug).ID, result.sceneID);
+        assert.equal(result.scene.url, '/private/PrivateToken123456/2');
+        assert.equal(selectSearchScene({ scenes: result.scenes }, new URLSearchParams(), result.scene.sceneNumber).ID, result.sceneID);
         assert.equal((await resolveTopicScene(h.pool, { ID: 501 }, { scene: String(result.sceneID) })).ID, result.sceneID);
     }
 });
@@ -74,14 +74,10 @@ test('browsing selects exactly one default first, while writes and references pi
     assert.equal((await resolveTopicScene(null, topic, {}, { ...options, forReference: true, contextID: 101 })).ID, 101);
 });
 
-test('legacy context mapping is exact and never invents Cartesian combinations', async () => {
-    const options = { scenes: scenes(), requireAllDimensions: true };
-    assert.equal((await resolveTopicScene(null, { ID: 172 }, { realtime: 'any', output: 'vector' }, options)).ID, 101);
-    assert.equal((await resolveTopicScene(null, { ID: 172 }, { realtime: 'any', output: 'any' }, options)).ID, 1095);
-    for (const values of [{ output: 'vector' }, { output: 'vector', realtime: 'yes' }, { output: 'missing', realtime: 'any' }]) {
-        await assert.rejects(resolveTopicScene(null, { ID: 172 }, values, options), errorIs('topic_scene_not_found'));
+test('old template contexts are rejected instead of redirecting into numeric scenes', async () => {
+    for (const values of [{ realtime: 'any', output: 'vector' }, { realtime: 'any', output: 'any' }, { output: 'vector' }]) {
+        await assert.rejects(resolveTopicScene(null, { ID: 172 }, values, { scenes: scenes() }), errorIs('topic_scene_not_found'));
     }
-    await assert.rejects(resolveTopicScene(null, { ID: 172 }, { realtime: 'any', output: 'vector' }, { ...options, forReference: true }), errorIs('topic_scene_not_found'));
 });
 
 test('malformed, inactive, cross-topic and mismatched scene selections fail closed', async () => {
@@ -101,7 +97,7 @@ test('private creation preserves root identity, uses canonical URLs and takes gr
     const created = await createPrivateTopicScene(h.pool, '42', { categoryID: 501, name: 'Coding', description: 'Write useful software.' });
     assert.equal(created.defaultContextID, 99);
     assert.deepEqual(created.scenes.map(scene => scene.name), ['General', 'Coding']);
-    assert.equal(created.scenes[0].url, '/personal/501/general');
+    assert.equal(created.scenes[0].url, '/private/PrivateToken123456/1');
     assert.equal(h.state.contexts.find(row => row.ID === 99).context_values, '{"scene":"99"}');
     const graph = h.events.findIndex(event => event.sql.includes('topic_reference_lock'));
     const user = h.events.findIndex(event => event.sql.includes('FROM users'));
@@ -175,10 +171,9 @@ test('committed scene retries survive lost acknowledgements without repeating or
         error => error.status === 409 && error.body.error === 'write_identity_reused');
 });
 
-test('root creation rejects synthetic insert IDs unless the connection is the explicitly marked preview recorder', async () => {
+test('root creation rejects invalid insert identities', async () => {
     const connection = { async execute(sql) { return /^SELECT/.test(sql) ? [[]] : [{ insertId: -1 }]; } };
     await assert.rejects(ensureTopicRootContext(connection, 172, { allowSynthetic: true }), errorIs('invalid_topic_context_insert'));
-    assert.equal(await ensureTopicRootContext({ ...connection, [TOPIC_SCENE_SQL_PREVIEW]: true }, 172), -1);
 });
 
 test('scene discovery is batched, includes roots, and search returns exact scene destinations', async () => {
@@ -190,7 +185,7 @@ test('scene discovery is batched, includes roots, and search returns exact scene
     const topics = [{ ID: 501, name: 'My work', description: 'My daily work.', ...catalog.get(501) }];
     const matches = searchTopicsAndScenes(topics, 'scalable');
     assert.equal(matches.length, 1); assert.equal(matches[0].searchMatches[0].name, 'Vector graphics');
-    assert.match(matches[0].searchMatches[0].url, /^\/personal\/501\/vector-graphics$/);
+    assert.match(matches[0].searchMatches[0].url, /^\/private\/PrivateToken123456\/2$/);
     const parentMatch = searchTopicsAndScenes(topics, 'My work');
     assert.deepEqual(parentMatch[0].searchMatches, [], 'parent matches are not attributed to every child');
     assert.equal(parentMatch[0].scenes.length, topics[0].scenes.length, 'full catalogue remains available for explicit expansion');
@@ -200,6 +195,6 @@ test('scene discovery is batched, includes roots, and search returns exact scene
     const configured = buildPersonalNavigation([{ contextID: 99, categoryID: 501, contextValues: '{"scene":"99"}',
         weightCount: 2, totalBasisPoints: 10000, unavailableConditions: 0, unavailableReferences: 0 }], h.state.categories, [], [], catalog);
     assert.equal(configured[0].contextLabel, 'General'); assert.equal(configured[0].available, true);
-    assert.equal(configured[0].url, '/personal/501/general');
+    assert.equal(configured[0].url, '/private/PrivateToken123456/1');
     assert.equal((await loadTopicScenes(h.pool, 501))[0].ID, 99);
 });

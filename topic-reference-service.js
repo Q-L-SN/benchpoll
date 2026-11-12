@@ -1,13 +1,14 @@
 import { topicURL, sceneSummary, scenePath } from './public/js/shared/topics.js';
+import { absorbReferenceGraph } from './topic-reference-graph.js';
+import { loadTopicMetadata } from './topic-service.js';
 
 const fail = (status, error, details = {}) => { throw { status, body: { error, ...details } }; };
-export const MAX_REFERENCE_DEPTH = 16;
 export const MAX_REFERENCE_NODES = 256;
 
-export async function loadTopicReferenceTargets(db, userID = null) {
+export async function loadTopicReferenceTargets(db, userID = null, { includeMetadata = false } = {}) {
     const [rows] = await db.execute(`SELECT rc.ID AS context_ID, c.ID AS category_ID,
-        c.name AS topic_name, c.slug, c.description AS topic_description, c.owner_user_ID,
-        s.context_ID AS scene_ID, s.name AS scene_name, s.slug AS scene_slug, s.description AS scene_description,
+        c.name AS topic_name, c.slug, c.public_ID, c.private_ID, c.description AS topic_description, c.owner_user_ID,
+        s.context_ID AS scene_ID, s.scene_number, s.name AS scene_name, s.slug AS scene_slug, s.description AS scene_description,
         s.is_default,
         EXISTS(SELECT 1 FROM personal_pies p JOIN users u ON u.ID = p.user_ID
             WHERE p.context_ID = rc.ID AND u.deleted_at IS NULL
@@ -20,18 +21,26 @@ export async function loadTopicReferenceTargets(db, userID = null) {
         AND (s.context_ID IS NOT NULL OR (rc.context_values = JSON_OBJECT()
             AND NOT EXISTS(SELECT 1 FROM topic_scenes other WHERE other.category_ID = c.ID AND other.is_active = 1)))
         ORDER BY c.position, c.ID, COALESCE(s.is_default, 0) DESC, s.position, s.context_ID`, [userID]);
-    return rows.map(row => {
+    const metadata = includeMetadata ? await loadTopicMetadata(db, userID, rows.map(row => Number(row.category_ID))) : null;
+    return rows.filter(row => !metadata || metadata.has(Number(row.category_ID))).map(row => {
         const contextID = Number(row.context_ID), categoryID = Number(row.category_ID);
         const sceneID = row.scene_ID == null ? null : Number(row.scene_ID);
         const isPrivate = row.owner_user_ID != null;
-        const base = topicURL(categoryID, row.topic_name, isPrivate, row.slug);
-        return { contextID, categoryID, sceneID, topicName: row.topic_name,
+        const publicID = Number(row.public_ID), privateID = row.private_ID ?? null;
+        const sceneNumber = row.scene_number == null ? null : Number(row.scene_number);
+        const base = topicURL({ ID: categoryID, publicID, privateID, isPrivate });
+        const topic = metadata?.get(categoryID);
+        return { contextID, categoryID, publicID, ...(isPrivate ? { privateID } : {}), sceneID, sceneNumber, topicName: row.topic_name,
             sceneName: row.scene_name ?? null,
             name: sceneID === null ? row.topic_name : `${row.topic_name} / ${row.scene_name}`,
             description: sceneSummary({ name: row.topic_name, description: row.topic_description },
                 { name: row.scene_name, description: row.scene_description }),
             isDefault: Boolean(Number(row.is_default)), isPrivate, hasWeights: Boolean(Number(row.has_weights)),
-            url: sceneID === null ? base : scenePath(base, { name: row.scene_name, slug: row.scene_slug }) };
+            ...(topic ? { favoriteCount: topic.favoriteCount, isFavorited: topic.isFavorited,
+                configured: topic.configuredContextIDs.includes(contextID), configuredContextIDs: topic.configuredContextIDs,
+                configurationCount: topic.configurationCount, coverageIndex: topic.coverageIndex,
+                creator: topic.creator, isOfficial: topic.isOfficial, isMine: topic.isMine } : {}),
+            url: sceneID === null ? base : scenePath(base, { sceneNumber }) };
     });
 }
 
@@ -50,39 +59,13 @@ export function missingReferenceCondition(contextID) {
         scoredModelCount: 0, scoreCount: 0 };
 }
 
-// Every graph-changing write takes this row lock, preventing concurrent A->B / B->A saves.
+// Serialize graph-changing writes with topic lifecycle operations and reference cleanup.
 export async function lockTopicReferences(db) {
     const [rows] = await db.execute('SELECT ID FROM topic_reference_lock WHERE ID = 1 FOR UPDATE');
     if (rows.length !== 1) fail(503, 'topic_reference_schema_unavailable');
 }
 
-export function assertAcyclicReferences(edges, sourceID, targets) {
-    const graph = new Map();
-    for (const edge of edges) {
-        const source = Number(edge.source_context_ID), target = Number(edge.target_context_ID);
-        if (!graph.has(source)) graph.set(source, new Set());
-        graph.get(source).add(target);
-    }
-    const visited = new Set(), active = new Set(), heights = new Map();
-    const visit = (ID, depth) => {
-        if (ID === sourceID || active.has(ID)) fail(409, 'topic_reference_cycle');
-        if (depth > MAX_REFERENCE_DEPTH) fail(409, 'topic_reference_depth_limit');
-        if (heights.has(ID)) {
-            if (depth + heights.get(ID) > MAX_REFERENCE_DEPTH) fail(409, 'topic_reference_depth_limit');
-            return heights.get(ID);
-        }
-        visited.add(ID);
-        if (visited.size > MAX_REFERENCE_NODES) fail(409, 'topic_reference_size_limit');
-        active.add(ID);
-        let height = 0;
-        for (const next of [...graph.get(ID) ?? []].sort((a, b) => a - b)) height = Math.max(height, visit(next, depth + 1) + 1);
-        active.delete(ID); heights.set(ID, height);
-        return height;
-    };
-    for (const target of [...targets].sort((a, b) => a - b)) visit(target, 1);
-}
-
-// Display weights are rounded to 1bp. Recursive scoring must retain the unrounded electorate shares.
+// Display weights are rounded to 1bp. Graph scoring retains unrounded electorate shares.
 export function publicReferenceWeights(pie) {
     if (!pie.participantCount) return [];
     return pie.scoringEntries.map(entry => ({ conditionID: entry.conditionID,
@@ -98,11 +81,7 @@ export async function validateTopicReferences(db, source, entries, userID) {
         if (!target) fail(404, 'topic_reference_not_found', { targetContextID: ID });
         if (!source.isPrivate && target.isPrivate) fail(409, 'private_topic_reference_not_public');
     }
-    const [edges] = await db.execute(`SELECT p.context_ID AS source_context_ID, w.target_context_ID
-        FROM personal_pie_topic_weights w JOIN personal_pies p ON p.ID = w.pie_ID
-        JOIN ranking_contexts rc ON rc.ID = p.context_ID
-        JOIN categories c ON c.ID = rc.category_ID WHERE c.is_active = 1`);
-    assertAcyclicReferences(edges, source.ID, IDs);
+
 }
 
 function chainKey(family) {
@@ -116,74 +95,80 @@ function compositionFor(node, conditionID) {
         ?? [{ familyID: null, entries: [], weightBasisPoints: 10000 }];
 }
 
-/** Expand raw weights, never child scores. Missing targets retain their share as unobserved weight. */
-export async function expandTopicReferences(root, { loadTarget, maxDepth = MAX_REFERENCE_DEPTH,
-    maxNodes = MAX_REFERENCE_NODES } = {}) {
-    const memo = new Map(), active = new Set(), targets = new Map([[root.contextID, root]]);
-    const referenceCompositions = [];
-    const unavailable = (ID, reason, name = 'Unavailable topic') => ({
-        entries: [{ conditionID: -ID, weightBasisPoints: 10000 }], familyComposition: [],
-        issues: [{ targetContextID: ID, reason, name }]
-    });
-    async function expand(node, depth) {
-        const ID = node.contextID;
-        const memoKey = `${ID}:${depth}`;
-        if (active.has(ID)) return unavailable(ID, 'cycle', node.name);
-        if (depth > maxDepth) return unavailable(ID, 'depth_limit', node.name);
-        if (memo.has(memoKey)) return memo.get(memoKey);
-        active.add(ID);
-        const weights = new Map(), families = new Map(), issues = new Map();
-        const add = (conditionID, weight, choices) => {
-            weights.set(conditionID, (weights.get(conditionID) ?? 0) + weight);
-            if (conditionID < 1) return;
-            if (!families.has(conditionID)) families.set(conditionID, new Map());
-            const group = families.get(conditionID);
-            for (const family of choices) {
-                const key = chainKey(family), previous = group.get(key);
-                group.set(key, { familyID: family.familyID ?? null, entries: family.entries ?? [],
-                    rawWeight: (previous?.rawWeight ?? 0) + weight * family.weightBasisPoints / 10000 });
-            }
-        };
-        // Stable traversal makes resource-limit handling independent of UI ordering.
-        for (const entry of [...node.entries].sort((a, b) => a.conditionID - b.conditionID)) {
+/** Expand allocations to their eventual benchmark/fallback absorption shares.
+ * Every context is loaded once using the caller's public/personal policy.
+ * Missing targets and closed topic-only classes keep explicit unmeasured mass.
+ */
+export async function expandTopicReferences(root, { loadTarget, maxNodes = MAX_REFERENCE_NODES } = {}) {
+    if (!Number.isSafeInteger(maxNodes) || maxNodes < 1) throw new TypeError('Invalid topic graph limit');
+    const targets = new Map([[root.contextID, root]]), nodes = new Map(), outcomes = new Map();
+    const missingKeys = new Map();
+    const add = (map, key, weight) => { if (weight > 0) map.set(key, (map.get(key) ?? 0) + weight); };
+    const missing = (ID, reason, name = 'Unavailable topic', details = {}) => {
+        const key = `missing:${ID}:${reason}`;
+        if (!outcomes.has(key)) outcomes.set(key, { conditionID: -ID,
+            issue: { targetContextID: ID, reason, name, ...details } });
+        return key;
+    };
+    const queue = [root.contextID];
+    for (let index = 0; index < queue.length; index++) {
+        const ID = queue[index], target = targets.get(ID);
+        const row = { edges: new Map(), absorbed: new Map() }; nodes.set(ID, row);
+        const entries = [...target?.entries ?? []].sort((a, b) => a.conditionID - b.conditionID);
+        for (const entry of entries) {
+            if (!Number.isSafeInteger(entry.conditionID) || entry.conditionID === 0
+                || !Number.isFinite(entry.weightBasisPoints) || entry.weightBasisPoints < 0) throw new TypeError('Invalid topic weight');
             if (entry.weightBasisPoints === 0) continue;
-            if (!Number.isFinite(entry.weightBasisPoints) || entry.weightBasisPoints < 0) throw new TypeError('Invalid topic weight');
             if (entry.conditionID > 0) {
-                add(entry.conditionID, entry.weightBasisPoints, compositionFor(node, entry.conditionID));
+                for (const family of compositionFor(target, entry.conditionID)) {
+                    if (!Number.isFinite(family.weightBasisPoints) || family.weightBasisPoints < 0) throw new TypeError('Invalid topic fallback share');
+                    const key = `benchmark:${entry.conditionID}:${chainKey(family)}`;
+                    if (!outcomes.has(key)) outcomes.set(key, { conditionID: entry.conditionID,
+                        familyID: family.familyID ?? null, entries: family.entries ?? [] });
+                    add(row.absorbed, key, entry.weightBasisPoints * family.weightBasisPoints / 10000);
+                }
                 continue;
             }
             const targetID = -entry.conditionID;
-            let child;
-            if (active.has(targetID)) child = unavailable(targetID, 'cycle');
-            else if (depth >= maxDepth) child = unavailable(targetID, 'depth_limit');
-            else if (!targets.has(targetID) && targets.size >= maxNodes) child = unavailable(targetID, 'size_limit');
-            else if (memo.has(`${targetID}:${depth + 1}`)) child = memo.get(`${targetID}:${depth + 1}`);
-            else {
-                if (!targets.has(targetID)) targets.set(targetID, await loadTarget(targetID));
-                const target = targets.get(targetID);
-                child = !target ? unavailable(targetID, 'unavailable')
-                    : !target.entries.some(entry => entry.weightBasisPoints > 0) ? unavailable(targetID, 'empty', target.name)
-                        : await expand(target, depth + 1);
+            if (!targets.has(targetID) && !missingKeys.has(targetID)) {
+                if (targets.size >= maxNodes) missingKeys.set(targetID, missing(targetID, 'size_limit'));
+                else { targets.set(targetID, await loadTarget(targetID)); queue.push(targetID); }
             }
-            if (depth === 0) referenceCompositions.push({ referenceContextID: targetID,
-                entries: child.entries.map(entry => ({ ...entry })), issues: [...child.issues] });
-            for (const issue of child.issues) issues.set(`${issue.targetContextID}:${issue.reason}`, issue);
-            for (const leaf of child.entries) add(leaf.conditionID,
-                entry.weightBasisPoints * leaf.weightBasisPoints / 10000, compositionFor(child, leaf.conditionID));
+            if (missingKeys.has(targetID)) add(row.absorbed, missingKeys.get(targetID), entry.weightBasisPoints);
+            else add(row.edges, targetID, entry.weightBasisPoints);
         }
-        active.delete(ID);
-        const result = {
-            entries: [...weights].map(([conditionID, weightBasisPoints]) => ({ conditionID, weightBasisPoints })),
-            familyComposition: [...families].map(([primaryConditionID, choices]) => ({
-                primaryConditionID, families: [...choices.values()].map(({ rawWeight, ...family }) => ({
-                    ...family, primaryConditionID,
-                    weightBasisPoints: rawWeight / weights.get(primaryConditionID) * 10000,
-                    overallWeightBasisPoints: rawWeight
-                }))
-            })), issues: [...issues.values()]
-        };
-        if (!result.issues.some(issue => issue.reason === 'cycle')) memo.set(memoKey, result);
-        return result;
+        if (!row.edges.size && !row.absorbed.size) {
+            if (ID === root.contextID && target) return { entries: [], familyComposition: [], issues: [], referenceCompositions: [] };
+            row.absorbed.set(missing(ID, target ? 'empty' : 'unavailable', target?.name), 10000);
+        }
     }
-    return { ...await expand(root, 0), referenceCompositions };
+    const solved = absorbReferenceGraph(nodes, component => {
+        const ID = component[0];
+        return missing(ID, 'closed_cycle', targets.get(ID)?.name, { contextIDs: component });
+    });
+    const composition = distribution => {
+        const weights = new Map(), families = new Map(), issues = [];
+        for (const [key, fraction] of [...distribution].sort(([a], [b]) => a.localeCompare(b, 'en'))) {
+            const outcome = outcomes.get(key), weight = fraction * 10000;
+            add(weights, outcome.conditionID, weight);
+            if (outcome.issue) issues.push(outcome.issue);
+            else {
+                if (!families.has(outcome.conditionID)) families.set(outcome.conditionID, []);
+                families.get(outcome.conditionID).push({ primaryConditionID: outcome.conditionID,
+                    familyID: outcome.familyID, entries: outcome.entries, overallWeightBasisPoints: weight });
+            }
+        }
+        return {
+            entries: [...weights].sort(([a], [b]) => a - b).map(([conditionID, weightBasisPoints]) => ({ conditionID, weightBasisPoints })),
+            familyComposition: [...families].sort(([a], [b]) => a - b).map(([primaryConditionID, choices]) => ({
+                primaryConditionID, families: choices.map(family => ({ ...family,
+                    weightBasisPoints: family.overallWeightBasisPoints / weights.get(primaryConditionID) * 10000 }))
+            })), issues
+        };
+    };
+    return { ...composition(solved.get(root.contextID)),
+        referenceCompositions: [...new Set(root.entries.filter(entry => entry.conditionID < 0 && entry.weightBasisPoints > 0)
+            .map(entry => -entry.conditionID))].sort((a, b) => a - b).map(referenceContextID => ({ referenceContextID,
+            ...composition(solved.get(referenceContextID) ?? new Map([[missingKeys.get(referenceContextID), 1]])) }))
+    };
 }

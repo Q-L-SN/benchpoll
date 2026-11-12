@@ -115,9 +115,6 @@ export function renderModelBarChart({ container, models, state, scale, showVendo
         if (showVendorMarks) identity.append(createOrganizationMark(model, 'bp-vendor-mark'));
         const name = document.createElement('span'); name.className = 'bp-model-column-name';
         renderComparisonName(name, model, state.comparison ?? state.comparisonRequest); identity.append(name);
-        const score = comparable ? state.scoreMode === 'available' ? rankingNumber(model.lower)
-            : `${rankingNumber(model.lower)} - ${rankingNumber(model.upper)}` : 'No comparable score';
-        column.dataset.tooltip = `${model.name}\n${score}\nScores cover ${rankingNumber(model.coverage)}% of the weights`;
         const activate = event => {
             if (event.type === 'keydown' && !['Enter', ' '].includes(event.key)) return;
             event.preventDefault(); void onActivate(model);

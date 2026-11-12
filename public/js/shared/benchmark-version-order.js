@@ -11,3 +11,12 @@ export function benchmarkVersionTieOrder(left, right) {
         || right.scoreCount - left.scoreCount
         || Number(left.conditionID) - Number(right.conditionID);
 }
+
+// A topic's positive weights keep their existing order. For items outside that
+// composition, prior public allocations across the site determine discovery.
+export function benchmarkEvaluationOrder(left, right) {
+    return right.publicWeightBasisPoints - left.publicWeightBasisPoints
+        || (left.publicWeightBasisPoints === 0 && right.publicWeightBasisPoints === 0
+            ? (right.globalWeightBasisPoints ?? 0) - (left.globalWeightBasisPoints ?? 0) : 0)
+        || benchmarkVersionTieOrder(left, right);
+}

@@ -10,7 +10,7 @@ test('discussion summary only counts visible category threads without loading a 
     const calls = [];
     const db = { execute: async (sql, args) => {
         calls.push({ sql, args });
-        if (sql.includes('FROM categories c LEFT JOIN users creator')) return [[{ ID: 7, name: 'Language models', owner_user_ID: null }]];
+        if (sql.includes('FROM categories c LEFT JOIN users creator')) return [[{ ID: 7, public_ID: 7, private_ID: null, name: 'Language models', owner_user_ID: null }]];
         if (sql.includes('LEFT JOIN topic_scenes')) return [[]];
         if (sql.includes('FROM ranking_contexts')) return [[{ ID: 10 }]];
         if (sql.startsWith('SELECT COUNT(*) AS count FROM discussion_posts')) return [[{ count: '3' }]];
@@ -38,6 +38,13 @@ test('discussion posts use explicit ID references and enforce bounded content', 
     assert.throws(() => normalizeDiscussionPost({ text: 'x'.repeat(4001), mentions: [] }), isError('discussion_text_length'));
     assert.throws(() => normalizeDiscussionPost({ text: 'hello', mentions: [{ benchmarkID: 1 }, { benchmarkID: 1 }] }), isError('duplicate_discussion_mention'));
     assert.throws(() => normalizeDiscussionPost({ text: 'hello', mentions: Array(11).fill({ benchmarkID: 1 }) }), isError('invalid_discussion_mentions'));
+    assert.throws(() => normalizeDiscussionPost({ text: 'hello', mentions: [], proposalID: 1 }), isError('unknown_discussion_field'));
+});
+
+test('retired proposal scopes cannot start a discussion read', async () => {
+    let read = false;
+    await assert.rejects(listDiscussion({ getConnection() { read = true; } }, null, { proposalID: 1 }), isError('unknown_discussion_field'));
+    assert.equal(read, false);
 });
 test('hot ranking decays with age and does not reward downvote controversy', () => {
     assert.ok(discussionHotScore(10, 1, 2) > discussionHotScore(10, 1, 20));
@@ -136,13 +143,11 @@ function listingDB({ rows = [], root = null, thread = [], total = rows.length, s
         if (sql.startsWith('SELECT c.ID FROM benchmark_conditions')) return [[{ ID: 901 }]];
         if (sql.startsWith('SELECT p.ID, p.parent_ID')) return [thread];
         if (sql.includes('FROM categories c LEFT JOIN users creator') && sql.endsWith('WHERE c.ID = ? AND c.is_active = 1')) {
-            assert.equal(sql.replace(/\s+/g, ' ').trim(), 'SELECT c.ID, c.name, c.slug, c.description, c.position, c.owner_user_ID, '
-                + "c.created_by_user_ID, COALESCE(NULLIF(p.display_name, ''), creator.name) AS creator_name, "
-                + 'COALESCE(p.avatar_data_url, creator.profile_picture_URL) AS creator_avatar '
-                + 'FROM categories c LEFT JOIN users creator ON creator.ID = c.created_by_user_ID AND creator.deleted_at IS NULL '
-                + 'LEFT JOIN user_public_profiles p ON p.user_ID = creator.ID WHERE c.ID = ? AND c.is_active = 1');
+            assert.match(sql, /c\.public_ID, c\.private_ID/);
+            assert.match(sql, /LEFT JOIN users creator ON creator\.ID = c\.created_by_user_ID AND creator\.deleted_at IS NULL/);
+            assert.match(sql, /LEFT JOIN user_public_profiles p ON p\.user_ID = creator\.ID/);
             assert.deepEqual(args, [7]);
-            return [[{ ID: 7, name: 'Language models', slug: 'language-models', description: 'Compare language model benchmarks.',
+            return [[{ ID: 7, public_ID: 7, private_ID: null, name: 'Language models', slug: 'language-models', description: 'Compare language model benchmarks.',
                 position: 0, owner_user_ID: null, created_by_user_ID: '17', creator_name: 'Fixture curator', creator_avatar: null }]];
         }
         if (sql.includes('LEFT JOIN topic_scenes')) return [sceneRows];
@@ -244,7 +249,7 @@ test('an unavailable thread is rejected before listing replies', async () => {
     assert.deepEqual(calls, ['begin', 'rollback', 'release']);
 });
 
-const sceneRows = [10, 11].map(ID => ({ contextID: ID, category_ID: 7, scene_context_ID: ID,
+const sceneRows = [10, 11].map(ID => ({ contextID: ID, category_ID: 7, scene_context_ID: ID, scene_number: ID - 9, public_ID: 7, private_ID: null,
     category_name: 'Language models', category_slug: 'language-models', owner_user_ID: null,
     name: ID === 10 ? 'General' : 'Translation', slug: ID === 10 ? 'general' : 'translation',
     description: 'A specific language evaluation.', position: ID, is_active: 1, is_default: Number(ID === 10) }));

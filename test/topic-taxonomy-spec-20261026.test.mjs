@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { buildTopicTaxonomy } from '../scripts/build-topic-taxonomy-20261026.mjs';
-import { FEATURED_TOPIC_ID, isReservedTopicSlug, topicSlug } from '../public/js/shared/topics.js';
+import { isReservedTopicSlug, topicSlug } from '../public/js/shared/topics.js';
 
 const readSpecification = name => JSON.parse(readFileSync(new URL(`../ops/${name}.json`, import.meta.url), 'utf8'));
 const previous = readSpecification('task-taxonomy-20261015');
@@ -72,7 +72,6 @@ for (const [label, specification] of [
         assert.equal(spec.categories.length, 30);
         assert.deepEqual(spec.categories.map(({ key, ID, position }) => [key, ID, position]),
             retained.map(([key, ID], index) => [key, ID, (index + 1) * 10]));
-        assert.equal(FEATURED_TOPIC_ID, 54);
         assert.equal(spec.featuredTopicID, 54);
         assert.equal(spec.categories[0].ID, spec.featuredTopicID);
         for (const [key, , name] of retained) {

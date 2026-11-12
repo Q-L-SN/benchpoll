@@ -1,9 +1,9 @@
 import { readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import mysql from 'mysql2/promise';
-import { ensureTopicSnapshotSchema } from '../../scripts/migrate-topic-snapshots-20261102.mjs';
+import { installTopicPlatformSchema } from '../../topic-platform-schema.js';
+import { ensureProfilePagesSchema, ensureUserPublicID } from '../../profile-schema.js';
 import { migrateCommunityVersions } from '../../scripts/migrate-community-versions-20261103.mjs';
-import { migrateProposalDiscussions } from '../../scripts/migrate-proposal-discussions-20261103.mjs';
 
 // Explicitly opt-in, loopback-only, synthetic schema. Never connect to an application database.
 export async function createLifecycleDatabase() {
@@ -31,14 +31,15 @@ export async function createLifecycleDatabase() {
                     await connection.query(statement.trimEnd().slice(0, -delimiter.length)); statement = '';
                 }
             }
-            await ensureTopicSnapshotSchema(connection);
+            await installTopicPlatformSchema(connection);
+            await ensureProfilePagesSchema(connection);
             await migrateCommunityVersions(connection, { apply: true });
-            await migrateProposalDiscussions(connection, { apply: true });
             await connection.query('INSERT INTO topic_reference_lock (ID) VALUES (1)');
             await connection.query('INSERT INTO ranking_cache_revisions (ID, epoch, ready) VALUES (1, UUID(), 1), (2, UUID(), 1)');
             for (const ID of ['42', '43', ...Array.from({ length: 31 }, (_, index) => String(1000 + index))]) {
                 await connection.execute(`INSERT INTO users (ID, name, profile_picture_URL, followers_count, email, email_verified_at)
                     VALUES (?, ?, '/assets/benchpoll-mark.svg', 1, ?, NOW(3))`, [ID, 'Example ' + ID, 'user' + ID + '@example.test']);
+                await ensureUserPublicID(connection, ID);
             }
         } finally { connection.release(); }
         return { pool, database, async close() { await pool.end(); await admin.query('DROP DATABASE ' + database); await admin.end(); } };

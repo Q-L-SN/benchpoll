@@ -123,16 +123,13 @@ test('privacy requests no longer depend on the signed-in contribution form', asy
     assert.doesNotMatch(code, /privacyRequestTemplate|buildContributionURL/);
 });
 
-test('account actions share the site primitives and keep destructive operations separately confirmed', async () => {
+test('account actions use settings pages and keep account deletion separately acknowledged', async () => {
     const html = await readFile(new URL('../private/home.html', import.meta.url), 'utf8');
-    const account = await readFile(new URL('../public/js/shared/account-center.js', import.meta.url), 'utf8');
-    assert.match(account, /Close your account/);
-    assert.match(account, /createAction/);
-    assert.doesNotMatch(account, /innerHTML|global-dialog-action|slot="actions"/);
-    assert.match(account, /startView\('logout', 'Log out\?'\)/);
-    assert.match(account, /startView\('deactivate', 'Deactivate your account\?'\)/);
-    assert.match(account, /commit\('\/api\/logout', 'logout'\)/);
-    assert.match(account, /commit\('\/api\/delete_account', 'deactivate'\)/);
+    const account = await readFile(new URL('../public/js/profile-settings.js', import.meta.url), 'utf8');
+    assert.doesNotMatch(account, /innerHTML|global-dialog-action|showModal/);
+    assert.match(account, /I understand what will be retained/);
+    assert.match(account, /accountAction\('\/api\/logout'\)/);
+    assert.match(account, /accountAction\('\/api\/delete_account'\)/);
     assert.match(account, /pageAccountWriteScope\.write/);
     assert.doesNotMatch(html, /<global-dialog id="user-account-dialog"/);
 });

@@ -2,7 +2,6 @@ import { bindDrawerDrag } from './drawer-drag.js';
 
 const STORAGE_KEY = 'benchpoll:config-sidebar-collapsed';
 const SIDEBAR_MS = 300;
-const FADE_MS = 110;
 export function readConfigSidebarCollapsed() {
     try { return globalThis.localStorage.getItem(STORAGE_KEY) !== 'false'; }
     catch { return true; }
@@ -19,9 +18,8 @@ export function createConfigSidebar() {
     const direction = toggle.querySelector('.bp-sidebar-toggle-direction');
     const mobile = window.matchMedia('(max-width: 760px)');
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
-    const identity = document.querySelector('.bp-context-identity');
-    const creator = document.getElementById('workspace-topic-creator');
-    const creatorParent = creator?.parentElement, creatorNext = creator?.nextSibling;
+    const headerBrand = brand.cloneNode(true);
+    headerSlot.replaceChildren(headerBrand);
     let collapsed = readConfigSidebarCollapsed();
     let sequence = 0;
     let animation = null;
@@ -29,7 +27,6 @@ export function createConfigSidebar() {
     let context = '';
 
     const discussionOpen = () => body.classList.contains('discussion-open');
-    const inHeader = () => !mobile.matches && collapsed && !discussionOpen();
     const contextKey = () => `${mobile.matches}:${discussionOpen()}:${body.classList.contains('taxonomy-open')}`;
     const wait = ms => new Promise(resolve => window.setTimeout(resolve, ms));
 
@@ -59,23 +56,12 @@ export function createConfigSidebar() {
         animation = null;
         transitioning = false;
         body.classList.toggle('config-sidebar-collapsed', collapsed);
-        body.classList.toggle('config-brand-in-header', inHeader());
-        placeBrand(discussionOpen() ? discussionSlot : inHeader() ? headerSlot : sidebar);
-        if (creator && identity && creatorParent) {
-            if (mobile.matches && creator.parentElement !== identity) identity.append(creator);
-            else if (!mobile.matches && creator.parentElement !== creatorParent) creatorParent.insertBefore(creator, creatorNext);
-        }
+        body.classList.toggle('config-brand-in-header', !mobile.matches);
+        placeBrand(discussionOpen() ? discussionSlot : sidebar);
         brand.style.opacity = '';
         body.dataset.configSidebarPhase = 'idle';
         context = contextKey();
         updateAccess();
-    }
-
-    async function fade(visible) {
-        brand.style.opacity = visible ? '1' : '0';
-        animation = brand.animate([{ opacity: visible ? 0 : 1 }, { opacity: visible ? 1 : 0 }],
-            { duration: FADE_MS, easing: 'ease', fill: 'none' });
-        await animation.finished.catch(() => {});
     }
 
     async function setCollapsed(next, { remember = true } = {}) {
@@ -90,19 +76,9 @@ export function createConfigSidebar() {
         const token = ++sequence;
         transitioning = true;
         updateAccess();
-        body.dataset.configSidebarPhase = 'brand-out';
-        // Start both layout transitions together; hand off the single logo while invisible.
-        body.classList.toggle('config-sidebar-collapsed', collapsed);
-        body.classList.toggle('config-brand-in-header', collapsed);
-        const sidebarFinished = wait(SIDEBAR_MS);
-        await fade(false);
-        if (token !== sequence) return;
-        placeBrand(collapsed ? headerSlot : sidebar);
-        body.dataset.configSidebarPhase = 'brand-in';
-        await fade(true);
-        if (token !== sequence) return;
         body.dataset.configSidebarPhase = 'sidebar';
-        await sidebarFinished;
+        body.classList.toggle('config-sidebar-collapsed', collapsed);
+        await wait(SIDEBAR_MS);
         if (token === sequence) settle();
     }
 

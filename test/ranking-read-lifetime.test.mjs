@@ -35,11 +35,11 @@ function fixture({ execute, query, commit, acquire } = {}) {
     const events = [];
     const rows = sql => {
         if (sql.includes('FROM categories c LEFT JOIN users creator') && sql.endsWith('WHERE c.ID = ? AND c.is_active = 1')) return [[{ ID: 1, parent_ID: null,
-            name: 'Intelligence', slug: 'intelligence', description: 'Compare general intelligence benchmarks.',
+            name: 'Intelligence', slug: 'intelligence', public_ID: 1, private_ID: null, is_official: 1, description: 'Compare general intelligence benchmarks.',
             position: 0, owner_user_ID: null, created_by_user_ID: null, creator_name: null, creator_avatar: null }], []];
         if (sql.includes('COUNT(*) AS count FROM categories')) return [[{ count: 1 }], []];
         if (sql.includes('FROM categories') && sql.includes('WHERE parent_ID IS NULL')) return [[{
-            ID: 1, parent_ID: null, name: 'Intelligence', slug: 'intelligence', description: 'Compare general intelligence benchmarks.',
+            ID: 1, parent_ID: null, name: 'Intelligence', slug: 'intelligence', public_ID: 1, private_ID: null, is_official: 1, description: 'Compare general intelligence benchmarks.',
             position: 0, owner_user_ID: null, created_by_user_ID: null, creator_name: null, creator_avatar: null }], []];
         return [[], []];
     };
@@ -137,7 +137,7 @@ for (const repetition of [1, 2]) {
         t.mock.timers.enable({ apis: ['setTimeout'] });
         const controller = new AbortController(), { db, events } = fixture();
         const workspace = await ranking.getRankingWorkspace(db, { categoryID: 1, signal: controller.signal });
-        assert.equal(workspace.context.categoryPath, 'intelligence');
+        assert.equal(workspace.context.categoryPath, '1');
         assert.equal(workspace.authenticated, false);
         assert.deepEqual(workspace.personalPie.entries, []);
         assert.deepEqual(workspace.modelLeaderboards, { personal: [], public: [] });
@@ -219,6 +219,7 @@ for (const repetition of [1, 2]) {
             const context = vm.createContext({ API: { post(_path, value) { handler = value; } }, db: data.db,
                 AbortController, normalizeRankingResume, getRankingWorkspace: ranking.getRankingWorkspace, rankingCache: null,
                 activeSessionUserID: async () => null,
+                async assertTopicAccess(_db, userID, IDs) { assert.equal(userID, null); assert.deepEqual(Array.from(IDs), [1]); },
                 rankingPager: { create(workspace) { snapshots++; return { context: workspace.context.categoryPath }; } } });
             vm.runInContext(serverSource.slice(routeStart, routeEnd), context);
             const app = express(); app.use(express.json());
@@ -240,7 +241,7 @@ for (const repetition of [1, 2]) {
                 });
                 client.on('error', () => {}); client.end(body);
                 if (phase === 'normal') {
-                    assert.deepEqual(await received.promise, { status: 200, body: { context: 'intelligence' } });
+                    assert.deepEqual(await received.promise, { status: 200, body: { context: '1' } });
                     await finished.done;
                     assert.equal(snapshots, 1);
                     assert.deepEqual(data.events.slice(-2), [['commit'], ['release']]);

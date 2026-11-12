@@ -41,6 +41,11 @@ for (const engine of [chromium, webkit]) for (const width of [1440, 390, 320]) {
         await page.waitForFunction(() => !document.querySelector('#fallback details').open);
         await page.locator('#fallback summary').focus(); await page.keyboard.press('Enter');
         await page.waitForFunction(() => document.querySelector('#fallback details').open);
+        await page.evaluate(() => { location.hash = '#references'; });
+        await page.waitForFunction(() => document.querySelector('#references details').open);
+        assert.match(await page.locator('#references .hi-answer').textContent(), /Topics can reference one another in a loop/);
+        assert.match(await page.locator('#references .hi-answer').textContent(), /no path to benchmarks adds no measured score or coverage/);
+        await page.screenshot({ path: `${output}/${engine.name()}-${width}-references.png` });
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
         assert.equal(await page.locator('.bp-how-content h1, .bp-how-content h2').evaluateAll(nodes => nodes.some(node => node.textContent.includes(','))), false);
     });

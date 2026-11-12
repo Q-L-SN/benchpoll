@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { BENCHMARK_GROUPS, benchmarkConditionGroup } from './public/js/shared/benchmark-condition-groups.js';
 import { createSearchIndex, dominantSearchMatch } from './public/js/shared/search.js';
 import { FEATURED_FALLBACK_LIMIT, FEATURED_FALLBACK_MIN_BASIS_POINTS } from './public/js/shared/fallback-catalogue-policy.js';
-import { benchmarkVersionTieOrder } from './public/js/shared/benchmark-version-order.js';
+import { benchmarkVersionTieOrder, benchmarkEvaluationOrder } from './public/js/shared/benchmark-version-order.js';
 import { groupBenchmarkRows } from './public/js/shared/benchmark-version-choice.js';
 import { normalizeRankingResume, RANKING_PAGE_SIZE } from './public/js/shared/ranking-resume.js';
 import { normalizeModelFocusTarget, findModelFocusIndex } from './public/js/workspace/model-focus-target.js';
@@ -99,7 +99,8 @@ function benchmarkRows(snapshot, query, pinPersonal) {
         if (leftWeight !== undefined && rightWeight !== undefined && leftWeight !== rightWeight) {
             return rightWeight - leftWeight;
         }
-        return (right.publicWeightBasisPoints - left.publicWeightBasisPoints) || benchmarkVersionTieOrder(left, right);
+        return query ? (right.publicWeightBasisPoints - left.publicWeightBasisPoints) || benchmarkVersionTieOrder(left, right)
+            : benchmarkEvaluationOrder(left, right);
     });
 }
 
@@ -126,10 +127,16 @@ function updateBenchmarkCatalogue(snapshot, catalogue) {
         return { ...row, searchPromoted: false, fallbackConfigCount: families.length,
             featuredFallbackConfigurations: families.filter(family => family.publicWeightBasisPoints >= FEATURED_FALLBACK_MIN_BASIS_POINTS)
                 .slice(0, FEATURED_FALLBACK_LIMIT) };
-    }).sort((left, right) => right.publicWeightBasisPoints - left.publicWeightBasisPoints
-        || benchmarkVersionTieOrder(left, right));
+    }).sort(benchmarkEvaluationOrder);
     snapshot.search = null;
     snapshot.benchmarkPages.clear();
+}
+
+function groupedEvaluationOrder(left, right) {
+    return right.publicWeightBasisPoints - left.publicWeightBasisPoints
+        || (left.publicWeightBasisPoints === 0 && right.publicWeightBasisPoints === 0
+            ? (right.globalWeightBasisPoints ?? 0) - (left.globalWeightBasisPoints ?? 0) : 0)
+        || left.conditionID - right.conditionID;
 }
 
 function benchmarkPage(snapshot, query, pinPersonal, offset, group, groupVersions, size = RANKING_PAGE_SIZE.benchmarks) {
@@ -142,10 +149,11 @@ function benchmarkPage(snapshot, query, pinPersonal, offset, group, groupVersion
         const keyFor = row => row.conditionID < 0 ? `topic:${row.conditionID}` : `benchmark:${row.benchmarkID}`;
         const matches = new Set(matched.map(keyFor));
         const rows = groupedBenchmarks ? groupBenchmarkRows(snapshot.benchmarks).filter(row => matches.has(keyFor(row))) : matched;
+        if (groupedBenchmarks && !query) rows.sort(groupedEvaluationOrder);
         if (groupedBenchmarks && pinPersonal) rows.sort((a, b) =>
             Number(b.personalWeightBasisPoints !== null) - Number(a.personalWeightBasisPoints !== null)
             || (b.personalWeightBasisPoints ?? 0) - (a.personalWeightBasisPoints ?? 0)
-            || b.publicWeightBasisPoints - a.publicWeightBasisPoints);
+            || (query ? b.publicWeightBasisPoints - a.publicWeightBasisPoints : groupedEvaluationOrder(a, b)));
         for (const row of rows) {
             groups[grouping === 'flat' ? 'primary' : benchmarkConditionGroup(row)].push(row);
         }
@@ -212,6 +220,15 @@ export function createRankingPager({ now = () => Date.now() } = {}) {
         snapshots.delete(id);
         snapshots.set(id, snapshot);
     }
+
+    function getSnapshotTopicIDs({ snapshotID, userID = null }) {
+        if (typeof snapshotID !== 'string' || !/^[0-9a-f-]{36}$/.test(snapshotID)) {
+            throw rankingError(400, 'invalid_ranking_snapshot');
+        }
+        return [...read(snapshotID, userID).topicIDs];
+    }
+
+    function invalidate() { snapshots.clear(); }
 
     function getPage({ snapshotID, userID = null, list, group, conditionID, offset = 0, query = '', pinPersonal = false, groupVersions = false }) {
         if (typeof snapshotID !== 'string' || !/^[0-9a-f-]{36}$/.test(snapshotID)) {
@@ -297,6 +314,9 @@ export function createRankingPager({ now = () => Date.now() } = {}) {
         const snapshotID = randomUUID();
         const snapshot = {
             userID,
+            topicIDs: [...new Set([workspace.context?.categoryID,
+                ...workspace.benchmarks.filter(row => row.type === 'topic').map(row => row.categoryID)]
+                .filter(ID => Number.isSafeInteger(ID) && ID > 0))].sort((a, b) => a - b),
             scoreMode: workspace.scoreMode,
             comparison: workspace.comparison ?? { keys: ['model'], fields: [], models: [] },
             versionComposition: workspace.versionComposition,
@@ -358,5 +378,5 @@ export function createRankingPager({ now = () => Date.now() } = {}) {
         }
     }
 
-    return { create, getPage, locateModel, searchModels, retainReferencedFamilies };
+    return { create, getPage, locateModel, searchModels, retainReferencedFamilies, getSnapshotTopicIDs, invalidate };
 }

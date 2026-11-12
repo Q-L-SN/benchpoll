@@ -167,7 +167,8 @@ test('loader preserves exact string account IDs and existing private profile fie
         userProfilePictureURL: 'https://avatars.githubusercontent.com/u/123?v=4',
         hasCustomDisplayName: false, hasCustomAvatar: false, defaultUserName: 'GitHub default',
         defaultUserProfilePictureURL: 'https://avatars.githubusercontent.com/u/123?v=4', role: 'user', hasVerifiedEmail: true,
-        canShowGitHubProfile: false, showGitHubProfile: false });
+        canShowGitHubProfile: false, showGitHubProfile: false, publicID: null, profileURL: null, bio: '',
+        publishFavorites: false, publishConfiguredTopics: false });
     assert.deepEqual(calls[0].args, [userID]);
     assert.match(calls[0].sql, /LEFT JOIN user_public_profiles p ON p.user_ID = u.ID/);
     assert.match(calls[0].sql, /deleted_at IS NULL/);
@@ -283,7 +284,7 @@ test('feed roots, thread roots and replies all return the custom identity with f
             execute: async (sql, args) => {
                 queries.push({ sql, args });
                 if (sql.includes('FROM categories c LEFT JOIN users creator') && sql.endsWith('WHERE c.ID = ? AND c.is_active = 1')) return [[{
-                    ID: 7, name: 'Topic', slug: 'topic', description: 'Compare topic benchmarks.', position: 0, owner_user_ID: null,
+                    ID: 7, public_ID: 7, private_ID: null, name: 'Topic', slug: 'topic', description: 'Compare topic benchmarks.', position: 0, owner_user_ID: null,
                     created_by_user_ID: '9007199254740993', creator_name: 'Custom display name', creator_avatar: avatar }]];
                 if (sql.includes('LEFT JOIN topic_scenes')) return [[]];
                 if (/SELECT ID\s+FROM ranking_contexts/.test(sql)) return [[{ ID: 10 }]];

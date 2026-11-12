@@ -3,10 +3,10 @@ import { before, after, test } from 'node:test';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { chromium, webkit, devices } from 'playwright';
-import { startConfigSidebarPreview } from './helpers/config-sidebar-fixture-20261022.mjs';
+import { startPreview } from '../scripts/frontend/server.mjs';
 import { startTopicsPreview } from '../scripts/frontend/topics-home-fixtures.mjs';
 
-const output = resolve('D:/Codex-artifacts/website1/mobile-workspace-20261031');
+const output = resolve(process.env.BP_MOBILE_POLISH_OUTPUT ?? '/workspace/benchpoll-work/mobile-workspace-20261031');
 const browsers = new Map();
 before(async () => {
     await mkdir(join(output, 'tmp'), { recursive: true });
@@ -17,7 +17,7 @@ before(async () => {
 });
 after(async () => { for (const browser of browsers.values()) await browser.close(); });
 async function open(t, engine, { home = false, width = 1440, mobile = false, collapsed = true } = {}) {
-    const fixture = await (home ? startTopicsPreview({ built: false }) : startConfigSidebarPreview());
+    const fixture = await (home ? startTopicsPreview({ built: false }) : startPreview());
     const context = await browsers.get(engine).newContext({ ...(mobile ? devices['iPhone 16'] : {}),
         viewport: { width, height: mobile ? 852 : 900 }, isMobile: mobile, hasTouch: mobile,
         deviceScaleFactor: mobile ? 3 : 1, reducedMotion: 'no-preference' });
@@ -27,7 +27,7 @@ async function open(t, engine, { home = false, width = 1440, mobile = false, col
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
     t.after(async () => { await context.close(); await fixture.close(); assert.deepEqual(errors, []); });
-    await page.goto(fixture.url + (home ? '/' : '/intelligence'));
+    await page.goto(fixture.url + (home ? '/' : '/1'));
     await page.waitForSelector(home ? '.th-model' : '#weight-pie [data-object-id]');
     await page.evaluate(() => document.fonts.ready);
     await page.waitForTimeout(400);
@@ -80,22 +80,14 @@ for (const engine of ['chromium', 'webkit']) {
         await writeFile(join(output, `${engine}-${width}-geometry.json`), JSON.stringify(states, null, 2));
     });
 
-    for (const home of [false, true]) test(`${engine} ${home ? 'home' : 'configuration'} account labels share typography`, async t => {
+    for (const home of [false, true]) test(`${engine} ${home ? 'home' : 'configuration'} account control opens the profile page`, async t => {
         const page = await open(t, engine, { home });
-        await page.locator(home ? '#topics-account' : '#header-user-profile').click();
-        await page.waitForSelector('.bp-account-center-operations');
-        await page.waitForTimeout(250);
-        const labels = await page.locator('.bp-account-center-operations .bp-ui-action-label').evaluateAll(nodes => nodes.map(node => {
-            const style = getComputedStyle(node);
-            return { text: node.textContent, font: style.fontFamily, size: style.fontSize, weight: style.fontWeight, line: style.lineHeight };
-        }));
-        assert.ok(labels.length >= 5, JSON.stringify(labels));
-        const { text: first, ...font } = labels[0];
-        assert.equal(first, 'Edit profile');
-        for (const { text, ...style } of labels) assert.deepEqual(style, font, text);
-        assert.equal(font.size, '14px');
-        assert.equal(await page.locator('#delete-account-button').evaluate(node => getComputedStyle(node).color), 'rgb(161, 38, 53)');
-        await page.screenshot({ path: join(output, `${engine}-${home ? 'home' : 'config'}-account.png`) });
+        const account = page.locator(home ? '#topics-account' : '#header-user-profile');
+        if (home) assert.equal(await account.getAttribute('href'), '/me');
+        await page.route('**/me', route => route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>Profile route fixture</title>' }));
+        await account.click();
+        await page.waitForURL('**/me');
+        assert.equal(await page.title(), 'Profile route fixture');
     });
 
     for (const collapsed of [false, true]) test(`${engine} discussion reclaims sidebar toggle space while sliding`, async t => {

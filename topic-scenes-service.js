@@ -7,8 +7,6 @@ import { startTransactionConnection, commitTransactionConnection, rollbackTransa
 
 const fail = (status, error, extra = {}) => { throw { status, body: { error, ...extra } }; };
 export const EMPTY_TOPIC_CONTEXT_HASH = createHash('sha256').update('{}').digest('hex');
-// Only the server's non-writing SQL recorder receives this non-JSON capability.
-export const TOPIC_SCENE_SQL_PREVIEW = Symbol('topic_scene_sql_preview');
 
 export function sceneIdentity(value) {
     if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 1) fail(400, 'invalid_scene_id');
@@ -37,10 +35,8 @@ function sceneURLSlug(scene) {
 }
 
 export function topicSceneURL(topic, scene) {
-    const ID = sceneIdentity(Number(topic.categoryID ?? topic.ID));
-    const base = topicURL(ID, topic.categoryName ?? topic.name, topic.isPrivate === true || topic.owner_user_ID != null,
-        topic.slug || topicSlug(topic.categoryName ?? topic.name));
-    const path = scenePath(base, scene && { ...scene, slug: sceneURLSlug(scene) });
+    const base = topicURL(topic);
+    const path = scenePath(base, scene);
     if (!path) fail(400, 'invalid_scene_path');
     return path;
 }
@@ -49,7 +45,7 @@ export function serializeTopicScene(row, topic = null) {
     const ID = sceneIdentity(Number(row.context_ID ?? row.contextID ?? row.ID));
     const categoryID = sceneIdentity(Number(row.category_ID ?? row.categoryID));
     const legacy = row.legacy_context_values == null ? null : valuesRecord(row.legacy_context_values);
-    const scene = { ID, contextID: ID, sceneID: ID, categoryID, name: row.name, slug: sceneURLSlug(row),
+    const scene = { ID, contextID: ID, sceneID: ID, sceneNumber: sceneIdentity(Number(row.scene_number ?? row.sceneNumber)), categoryID, name: row.name, slug: sceneURLSlug(row),
         description: row.description ?? '', position: Number(row.position ?? 0),
         isDefault: Boolean(Number(row.is_default)), isActive: row.is_active == null || Boolean(Number(row.is_active)),
         ...sceneContext(ID), legacyContextValues: legacy };
@@ -68,9 +64,9 @@ export async function loadTopicSceneCatalog(db, categoryIDs) {
     const IDs = [...new Set(categoryIDs.map(sceneIdentity))];
     if (!IDs.length) return new Map();
     const [rows] = await db.execute(`SELECT rc.ID AS contextID, rc.category_ID, rc.context_hash,
-        s.context_ID AS scene_context_ID, s.name, s.slug, s.description, s.position,
+        s.context_ID AS scene_context_ID, s.scene_number, s.name, s.slug, s.description, s.position,
         s.is_default, s.is_active, s.legacy_context_values,
-        c.name AS category_name, c.slug AS category_slug, c.owner_user_ID
+        c.name AS category_name, c.slug AS category_slug, c.owner_user_ID, c.public_ID, c.private_ID
         FROM ranking_contexts rc JOIN categories c ON c.ID = rc.category_ID
         LEFT JOIN topic_scenes s ON s.context_ID = rc.ID AND s.category_ID = rc.category_ID
         WHERE rc.category_ID IN (${IDs.map(() => '?').join(', ')})
@@ -82,7 +78,7 @@ export async function loadTopicSceneCatalog(db, categoryIDs) {
         if (!entry) fail(409, 'topic_scene_category_mismatch');
         if (row.scene_context_ID != null) {
             const scene = serializeTopicScene({ ...row, context_ID: row.scene_context_ID },
-                { ID: Number(row.category_ID), name: row.category_name, slug: row.category_slug, owner_user_ID: row.owner_user_ID });
+                { ID: Number(row.category_ID), name: row.category_name, publicID: row.public_ID, privateID: row.private_ID, owner_user_ID: row.owner_user_ID });
             entry.scenes.push(scene);
         } else {
             if (entry.rootContextID !== null) fail(409, 'topic_root_context_invalid');
@@ -106,6 +102,7 @@ export async function resolveTopicScene(db, category, contextValues = {}, opts =
     const categoryID = sceneIdentity(Number(category.ID ?? category.categoryID));
     if (typeof contextValues === 'string') fail(400, 'invalid_context_values');
     const values = valuesRecord(contextValues);
+    if (Object.keys(values).some(key => key !== 'scene')) fail(404, 'topic_scene_not_found');
     const scenes = orderTopicScenes(opts.scenes ?? await loadTopicScenes(db, categoryID));
     let requestedID = opts.contextID == null ? null : sceneIdentity(opts.contextID);
     if ('scene' in values) {
@@ -128,16 +125,8 @@ export async function resolveTopicScene(db, category, contextValues = {}, opts =
     else if (!Object.keys(values).length) {
         if (opts.requireExplicit || opts.forReference || opts.requireAllDimensions) fail(400, 'topic_scene_required', { categoryID });
         scene = scenes[0];
-    } else if (opts.allowLegacy !== false && !opts.requireExplicit && !opts.forReference) {
-        const serialized = JSON.stringify(values);
-        scene = scenes.find(item => item.legacyContextValues !== null
-            && JSON.stringify(valuesRecord(item.legacyContextValues)) === serialized);
     }
     if (!scene || Number(scene.categoryID) !== categoryID) fail(404, 'topic_scene_not_found');
-    if (requestedID !== null && Object.keys(values).length && !('scene' in values)
-        && JSON.stringify(valuesRecord(scene.legacyContextValues ?? {})) !== JSON.stringify(values)) {
-        fail(409, 'ranking_context_values_mismatch');
-    }
     return { ...sceneContext(scene.ID), categoryID, sceneID: scene.ID, scene,
         contextDisplayValues: { scene: scene.name }, dimensions: [], scenes,
         defaultContextID: scenes[0].ID, rootContextID: scenes[0].ID };
@@ -172,7 +161,6 @@ export async function ensureTopicRootContext(connection, categoryID) {
     if (existing.length === 1) return sceneIdentity(Number(existing[0].ID));
     const [inserted] = await connection.execute(`INSERT INTO ranking_contexts (category_ID, context_values, context_hash)
         VALUES (?, '{}', ?) ON DUPLICATE KEY UPDATE ID = LAST_INSERT_ID(ID)`, [categoryID, EMPTY_TOPIC_CONTEXT_HASH]);
-    if (connection[TOPIC_SCENE_SQL_PREVIEW] === true && Number.isSafeInteger(inserted.insertId) && inserted.insertId < 0) return inserted.insertId;
     if (Number(inserted.insertId) < 0) fail(409, 'invalid_topic_context_insert');
     const [rows] = await connection.execute(`SELECT ID FROM ranking_contexts
         WHERE category_ID = ? AND context_hash = ? FOR SHARE`, [categoryID, EMPTY_TOPIC_CONTEXT_HASH]);
@@ -193,22 +181,24 @@ export async function assertPublicSceneAvailable(connection, categoryID, name, {
     return { topic: topics[0], slug };
 }
 
-export async function insertTopicScene(connection, categoryID, request, { contextID = null, legacyValues = null, position = 10 } = {}) {
+export async function insertTopicScene(connection, categoryID, request, { contextID = null, legacyValues = null, position = 10, sceneNumber = null } = {}) {
+    if (sceneNumber === null) {
+        const [topics] = await connection.execute('SELECT next_scene_number FROM categories WHERE ID = ? FOR UPDATE', [categoryID]);
+        sceneNumber = sceneIdentity(Number(topics[0]?.next_scene_number));
+        await connection.execute('UPDATE categories SET next_scene_number = next_scene_number + 1 WHERE ID = ?', [categoryID]);
+    }
     if (contextID === null) {
         const pending = JSON.stringify({ pendingScene: randomUUID() });
         const [inserted] = await connection.execute(`INSERT INTO ranking_contexts (category_ID, context_values, context_hash)
             VALUES (?, ?, ?)`, [categoryID, pending, createHash('sha256').update(pending).digest('hex')]);
         contextID = Number(inserted.insertId);
     }
-    // The existing read-only moderation SQL recorder supplies negative IDs for simulated INSERTs.
-    const synthetic = connection[TOPIC_SCENE_SQL_PREVIEW] === true && Number.isSafeInteger(contextID) && contextID < 0;
-    const serialized = JSON.stringify({ scene: String(contextID) });
-    const context = synthetic ? { serialized, contextHash: createHash('sha256').update(serialized).digest('hex') } : sceneContext(contextID);
+    const context = sceneContext(contextID);
     await connection.execute(`UPDATE ranking_contexts SET context_values = ?, context_hash = ?, updated_at = updated_at
         WHERE ID = ? AND category_ID = ?`, [context.serialized, context.contextHash, contextID, categoryID]);
     await connection.execute(`INSERT INTO topic_scenes
-        (context_ID, category_ID, name, slug, description, position, is_default, is_active, legacy_context_values)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)`, [contextID, categoryID, request.name, sceneSlug(request.name),
+        (context_ID, category_ID, scene_number, name, slug, description, position, is_default, is_active, legacy_context_values)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`, [contextID, categoryID, sceneNumber, request.name, sceneSlug(request.name),
         request.description, position, Number(request.isDefault === true), legacyValues === null ? null : JSON.stringify(legacyValues)]);
     return contextID;
 }

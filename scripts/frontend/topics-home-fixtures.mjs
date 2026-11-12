@@ -20,12 +20,20 @@ const vendors = [
 ];
 export const fixtureTopics = ['Coding', 'Science', 'Math', 'Writing', 'Vision', 'Research', 'Translation', 'Audio', 'Tool use',
     'Everyday assistance', 'Safety', 'Data analysis', 'Long context', 'Creative work', 'Open models', 'General intelligence']
-    .map((name, index) => ({ ID: index === 10 ? 54 : index + 1, name: index === 10 ? 'Community priorities' : name,
-        slug: index === 10 ? 'community-priorities' : name.toLowerCase().replaceAll(' ', '-'),
-        url: index === 14 ? `/personal/${index + 1}` : `/${index === 10 ? 'community-priorities' : name.toLowerCase().replaceAll(' ', '-')}?source=home`,
-        description: `Community weights for ${name.toLowerCase()}.`, isPrivate: index === 14,
-        isMine: index % 3 !== 0, configured: index % 4 === 1,
-        creator: { name: index % 3 ? 'Alex Chen' : 'BenchPoll', avatarURL: '/assets/apple-touch-icon.png' }, hasWeights: index !== 7 }));
+    .map((name, index) => {
+        const ID = index === 10 ? 54 : index + 1;
+        const isPrivate = index === 14, isOfficial = !isPrivate && (index % 3 === 0 || index === 10);
+        const publicID = isPrivate ? null : index === 10 ? 1 : index + 2;
+        const privateID = isPrivate ? 'FixturePrivate15' : null;
+        return { ID, categoryID: ID, publicID, privateID, name: index === 10 ? 'Intelligence' : name,
+            url: isPrivate ? `/private/${privateID}` : `/${publicID}`,
+            description: `Community weights for ${index === 10 ? 'intelligence' : name.toLowerCase()}.`, isPrivate, isOfficial,
+            isMine: !isOfficial, configured: index % 4 === 1, configurationCount: 12 + index,
+            favoriteCount: index === 10 ? 48 : 32 - index, isFavorited: index % 5 === 0,
+            coverageIndex: null, editRevision: `fixture-${ID}-1`, scenes: [],
+            creator: isOfficial ? null : { id: '42', publicID: '42', handle: '42', name: 'Alex Chen', url: '/@42', avatarURL: '/assets/apple-touch-icon.png' },
+            hasWeights: index !== 7 };
+    }).sort((a, b) => b.favoriteCount - a.favoriteCount);
 
 function comparison(body) {
     const keys = ['model'];
@@ -62,7 +70,7 @@ export async function startTopicsPreview(options = {}) {
         authenticated: options.authenticated ?? true, previewDelay: options.previewDelay ?? 65,
         topicsDelay: options.topicsDelay ?? 0, profileDelay: options.profileDelay ?? 0, topicsFailures: 0,
         failures: new Map(), previewRevisions: new Map(), previewOverrides: new Map(), createError: null, pageSize: options.pageSize ?? 25,
-        profile: { userID: '42', userName: 'Alex Chen', userProfilePictureURL: '/assets/apple-touch-icon.png',
+        profile: { userID: '42', publicID: '42', userName: 'Alex Chen', userProfilePictureURL: '/assets/apple-touch-icon.png',
             defaultUserProfilePictureURL: '/assets/apple-touch-icon.png', hasCustomDisplayName: false, hasCustomAvatar: false } };
     const server = createServer(async (request, response) => {
         const url = new URL(request.url, 'http://127.0.0.1');
@@ -90,6 +98,40 @@ export async function startTopicsPreview(options = {}) {
                     return send(state.authenticated ? 200 : 204, state.authenticated
                         ? state.profile : null);
                 }
+                if (url.pathname === '/api/get_privacy_status') return send(state.authenticated ? 200 : 401,
+                    state.authenticated ? { csrfToken: 'fixture-topics-csrf' } : { error: 'authentication_required' });
+                if (['/api/set_topic_favorite', '/api/set_topic_visibility', '/api/save_private_topic', '/api/delete_private_topic'].includes(url.pathname)) {
+                    if (!state.authenticated) return send(401, { error: 'authentication_required' });
+                    if (body.expectedUserID !== state.profile.userID) return send(409, { error: 'account_changed' });
+                    if (body.csrfToken !== 'fixture-topics-csrf') return send(403, { error: 'invalid_csrf_token' });
+                }
+                if (url.pathname === '/api/set_topic_favorite') {
+                    const topic = state.topics.find(item => item.ID === Number(body.categoryID));
+                    if (!topic || typeof body.isFavorited !== 'boolean') return send(404, { error: 'topic_not_found' });
+                    topic.favoriteCount = Math.max(0, topic.favoriteCount + Number(body.isFavorited) - Number(topic.isFavorited === true));
+                    topic.isFavorited = body.isFavorited;
+                    return send(200, { categoryID: topic.ID, favoriteCount: topic.favoriteCount, isFavorited: topic.isFavorited });
+                }
+                if (url.pathname === '/api/get_private_topic_editor') {
+                    const topic = state.topics.find(item => item.ID === Number(body.categoryID));
+                    return topic?.isMine && state.authenticated ? send(200, topic) : send(404, { error: 'private_topic_not_found' });
+                }
+                if (url.pathname === '/api/set_topic_visibility') {
+                    const topic = state.topics.find(item => item.ID === Number(body.categoryID));
+                    if (!topic?.isMine) return send(404, { error: 'topic_not_found' });
+                    topic.isPrivate = !body.isPublic;
+                    if (topic.isPrivate) topic.privateID ??= `FixturePrivate${topic.ID}`;
+                    else topic.publicID ??= topic.ID + 100;
+                    topic.url = topic.isPrivate ? `/private/${topic.privateID}` : `/${topic.publicID}`;
+                    return send(200, topic);
+                }
+                if (url.pathname === '/api/delete_private_topic') {
+                    const topic = state.topics.find(item => item.ID === Number(body.categoryID));
+                    if (!topic?.isMine) return send(404, { error: 'private_topic_not_found' });
+                    if (!topic.isPrivate) return send(409, { error: 'make_topic_private_before_deleting' });
+                    state.topics = state.topics.filter(item => item !== topic);
+                    return send(200, { categoryID: topic.ID, deleted: true });
+                }
                 if (url.pathname === '/api/get_device_count') return send(state.authenticated ? 200 : 401,
                     state.authenticated ? { deviceCount: 2 } : { error: 'authentication_required' });
                 if (url.pathname === '/api/logout') {
@@ -103,7 +145,7 @@ export async function startTopicsPreview(options = {}) {
                     const oldName = state.profile.userName;
                     if (body.displayName) { state.profile.userName = body.displayName; state.profile.hasCustomDisplayName = true; }
                     if (body.avatar) { state.profile.userProfilePictureURL = body.avatar; state.profile.hasCustomAvatar = true; }
-                    for (const topic of state.topics) if (topic.creator.name === oldName) {
+                    for (const topic of state.topics) if (topic.creator?.name === oldName) {
                         topic.creator.name = state.profile.userName; topic.creator.avatarURL = state.profile.userProfilePictureURL;
                     }
                     return send(200, state.profile);
@@ -151,18 +193,29 @@ export async function startTopicsPreview(options = {}) {
                         models: models.slice(offset, nextOffset), pagination: { snapshotID, offset, nextOffset,
                             hasMore: nextOffset < models.length, total: models.length } });
                 }
-                if (url.pathname === '/api/create_topic') {
-                    if (!state.authenticated) return send(401, { error: 'authentication_required' });
-                    if (body.expectedUserID !== '42') return send(409, { error: 'account_changed' });
+                if (url.pathname === '/api/save_private_topic') {
                     if (state.createError) return send(state.createError.status, { error: state.createError.error });
-                    const ID = 200 + state.created.length;
-                    const topic = { ID, name: body.name, description: body.description, isPrivate: body.isPrivate, isMine: true, configured: false,
-                        slug: `new-topic-${ID}`, url: body.isPrivate ? `/personal/${ID}` : `/new-topic-${ID}`, creator: { name: 'Alex Chen', avatarURL: '/assets/apple-touch-icon.png' } };
-                    state.created.push(topic); state.topics.splice(1, 0, topic); return send(201, topic);
+                    const previous = body.categoryID == null ? null : state.topics.find(item => item.ID === Number(body.categoryID) && item.isMine);
+                    if (body.categoryID != null && !previous) return send(404, { error: 'private_topic_not_found' });
+                    const ID = previous?.ID ?? 200 + state.created.length;
+                    const privateID = previous?.privateID ?? `FixturePrivate${ID}`;
+                    const scenes = (body.scenes ?? []).map((scene, index) => ({ ...scene, ID: scene.ID ?? ID * 100 + index + 1,
+                        contextID: scene.ID ?? ID * 100 + index + 1, sceneNumber: index + 1, isDefault: scene.key === body.defaultSceneKey }));
+                    const topic = { ID, categoryID: ID, publicID: null, privateID, isPrivate: true, isOfficial: false, isMine: true, configured: false,
+                        favoriteCount: 0, isFavorited: false, coverageIndex: null, configurationCount: 0,
+                        creator: { id: '42', publicID: '42', handle: '42', name: 'Alex Chen', url: '/@42', avatarURL: '/assets/apple-touch-icon.png' },
+                        ...previous, name: body.name, description: body.description, scenes, editRevision: `fixture-${ID}-${Date.now()}` };
+                    const base = topic.isPrivate ? `/private/${privateID}` : `/${topic.publicID}`;
+                    for (const scene of scenes) scene.url = `${base}/${scene.sceneNumber}`;
+                    topic.url = scenes.find(scene => scene.isDefault)?.url ?? base;
+                    if (previous) state.topics[state.topics.indexOf(previous)] = topic;
+                    else { state.created.push(topic); state.topics.unshift(topic); }
+                    return send(previous ? 200 : 201, topic);
                 }
                 return send(404, { error: 'fixture_route_not_found' });
             }
-            const target = state.topics.find(topic => new URL(topic.url, 'http://fixture.local').pathname === url.pathname);
+            const target = state.topics.find(topic => [topic.url, ...(topic.scenes ?? []).map(scene => scene.url)].filter(Boolean)
+                .some(href => new URL(href, 'http://fixture.local').pathname === url.pathname));
             if (target) {
                 if (target.isPrivate && !state.authenticated) return send(404, { error: 'not_found' });
                 response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });

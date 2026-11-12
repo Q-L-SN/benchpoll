@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex"><title>Settings · BenchPoll</title>
+    <link rel="icon" href="/favicon.ico" sizes="any"><link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
+    <link rel="stylesheet" href="/css/ui/tokens.css"><link rel="stylesheet" href="/css/ui/site-header.css">
+    <link rel="stylesheet" href="/css/typography.css"><link rel="stylesheet" href="/css/profile.css">
+    <script type="module" src="/js/profile-settings.js"></script>
+</head>
+<body class="bp-profile-page">
+    <a class="pf-skip" href="#settings-content">Skip to settings</a>
+    <header class="bp-site-header"><div class="bp-site-header-inner"><a class="bp-site-brand" href="/" aria-label="BenchPoll home"><img src="/assets/benchpoll-logo.svg" alt="BenchPoll" width="150" height="31"></a><nav id="profile-site-links"></nav></div></header>
+    <main id="settings-content" class="pf-main pf-settings" tabindex="-1">
+        <a class="pf-back" href="/me"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i> Your profile</a>
+        <h1 id="settings-title">Settings</h1>
+        <div class="pf-settings-layout"><nav class="pf-settings-nav" aria-label="Settings"><a href="/settings/profile">Profile</a><a href="/settings/privacy">Privacy</a><a href="/settings/delete-account">Delete account</a><a href="/settings/logout">Log out</a></nav>
+            <section id="settings-panel" aria-labelledby="settings-title"><p id="settings-status" class="pf-status" role="status">Loading settings…</p><div id="settings-view"></div></section>
+        </div>
+        <noscript>JavaScript is required to update settings.</noscript>
+    </main>
+</body>
+</html>

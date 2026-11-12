@@ -1,4 +1,4 @@
-import { getTopic, topicID } from './topic-service.js';
+import { getTopic, topicID, assertTopicAccess } from './topic-service.js';
 import { getRankingWorkspace, loadModels } from './ranking-service.js';
 import { loadScoreFieldCatalog } from './score-field-service.js';
 import { fieldKey } from './public/js/shared/score-fields.js';
@@ -23,11 +23,13 @@ export function normalizeHomeComparison(value) {
 
 export function normalizeTopicPreview(body) {
     if (!body || typeof body !== 'object' || Array.isArray(body)
-        || Object.keys(body).some(key => !['categoryID', 'sceneID', 'scoreMode', 'reasoning', 'harness', 'availableInferenceVersion', 'snapshotID', 'offset'].includes(key))) {
+        || Object.keys(body).some(key => !['categoryID', 'sceneID', 'mode', 'scoreMode', 'reasoning', 'harness', 'availableInferenceVersion', 'snapshotID', 'offset'].includes(key))) {
         fail(400, 'invalid_topic_preview');
     }
     const categoryID = topicID(body.categoryID);
     const sceneID = body.sceneID == null ? null : topicID(body.sceneID);
+    const mode = body.mode ?? null;
+    if (mode !== null && !['personal', 'public'].includes(mode)) fail(400, 'invalid_topic_mode');
     const scoreMode = body.scoreMode ?? 'available';
     if (!['available', 'range'].includes(scoreMode)) fail(400, 'invalid_score_mode');
     let availableInferenceVersion;
@@ -41,7 +43,7 @@ export function normalizeTopicPreview(body) {
     if (body.snapshotID !== undefined && (typeof body.snapshotID !== 'string'
         || !/^[0-9a-f-]{36}$/.test(body.snapshotID))) fail(400, 'invalid_ranking_snapshot');
     if (offset > 0 && !body.snapshotID) fail(400, 'ranking_snapshot_required');
-    return { categoryID, sceneID, scoreMode, availableInferenceVersion, reasoning: body.reasoning === true, harness: body.harness === true,
+    return { categoryID, sceneID, mode, scoreMode, availableInferenceVersion, reasoning: body.reasoning === true, harness: body.harness === true,
         snapshotID: body.snapshotID, offset };
 }
 
@@ -65,7 +67,7 @@ export function serializeTopicPreviewModels(models, catalogue = []) {
 }
 
 export function createTopicHomeService({ db, rankingCache, now = () => Date.now(),
-    loadTopic = getTopic, loadFields = loadScoreFieldCatalog, loadWorkspace = getRankingWorkspace, loadRuns = loadModels } = {}) {
+    loadTopic = getTopic, authorizeTopics = assertTopicAccess, loadFields = loadScoreFieldCatalog, loadWorkspace = getRankingWorkspace, loadRuns = loadModels } = {}) {
     const previews = new Map(), scopes = new Map();
     let modelCatalog = null;
     const prune = () => {
@@ -87,14 +89,17 @@ export function createTopicHomeService({ db, rankingCache, now = () => Date.now(
     async function preview(userID, body) {
         const options = normalizeTopicPreview(body);
         const topic = await loadTopic(db, userID, options.categoryID);
-        const owner = topic.isPrivate ? userID : null;
-        const mode = topic.isPrivate ? 'personal' : 'public';
+        const mode = options.mode ?? (topic.isPrivate ? 'personal' : 'public');
+        if (mode === 'personal' && userID == null) fail(401, 'authentication_required');
+        if (topic.isPrivate && mode === 'public') fail(400, 'private_topic_has_no_public_index');
+        const owner = mode === 'personal' ? userID : null;
         if (options.sceneID !== null && !(topic.scenes ?? []).some(scene => scene.ID === options.sceneID)) fail(404, 'topic_scene_not_found');
-        const signature = JSON.stringify([options.categoryID, options.sceneID, owner, options.scoreMode, options.reasoning, options.harness, options.availableInferenceVersion]);
+        const signature = JSON.stringify([options.categoryID, options.sceneID, mode, owner, options.scoreMode, options.reasoning, options.harness, options.availableInferenceVersion]);
         prune();
         if (options.snapshotID) {
             const scope = scopes.get(options.snapshotID);
             if (!scope || scope.signature !== signature) fail(410, 'ranking_snapshot_expired');
+            await authorizeTopics(db, userID, scope.topicIDs);
             scopes.delete(options.snapshotID); scopes.set(options.snapshotID, scope);
             scope.expiresAt = now() + 900000;
             return modelPage(scope, options.offset);
@@ -102,7 +107,10 @@ export function createTopicHomeService({ db, rankingCache, now = () => Date.now(
         const cached = previews.get(signature);
         if (cached) {
             const result = await cached.value;
-            if (scopes.has(result.pagination.snapshotID)) return result;
+            if (scopes.has(result.pagination.snapshotID)) {
+                await authorizeTopics(db, userID, scopes.get(result.pagination.snapshotID).topicIDs);
+                return result;
+            }
             if (previews.get(signature) === cached) previews.delete(signature);
         }
         const entry = { categoryID: options.categoryID, expiresAt: now() + 60000, value: null };
@@ -114,13 +122,18 @@ export function createTopicHomeService({ db, rankingCache, now = () => Date.now(
                 scoreMode: options.scoreMode, comparison, userID: owner, rankingCache,
                 availableInferenceVersion: options.availableInferenceVersion, jsonMemberMetadata: true });
             const models = serializeTopicPreviewModels(rankModels(workspace.modelLeaderboards[mode]), workspace.comparison.models);
-            const scope = { categoryID: options.categoryID, signature, models, snapshotID: randomUUID(), expiresAt: now() + 900000 };
+            const topicIDs = [...new Set([options.categoryID, ...(workspace.benchmarks ?? []).filter(row => row.type === 'topic').map(row => row.categoryID).filter(ID => Number.isSafeInteger(ID) && ID > 0)])];
+            await authorizeTopics(db, userID, topicIDs);
+            const scope = { categoryID: options.categoryID, topicIDs, signature, models, snapshotID: randomUUID(), expiresAt: now() + 900000 };
             scopes.set(scope.snapshotID, scope);
             prune();
             const endpoints = models.filter(model => model.comparable !== false).flatMap(model => [model.lower, model.upper]);
             const scoreScale = endpoints.reduce((scale, value) => ({ min: Math.min(scale.min, value), max: Math.max(scale.max, value) }),
                 { min: 0, max: 100 });
-            const weights = mode === 'public' ? workspace.publicPie.entries : workspace.personalPie.entries;
+            const selectedPie = mode === 'public' ? workspace.publicPie : workspace.personalPie;
+            const weights = selectedPie.entries;
+            const coverageIndex = Number.isFinite(selectedPie.coverageIndex) ? selectedPie.coverageIndex
+                : models.reduce((sum, model) => sum + (Number.isFinite(model.coverage) ? model.coverage / 100 : 0), 0);
             return { ...modelPage(scope, 0), contextValues: workspace.context.contextValues,
                 comparison: { mode: 'best', keys: workspace.comparison.keys, fields: workspace.comparison.fields,
                     availableKeys: workspace.comparison.availableKeys, models: [] },
@@ -130,7 +143,9 @@ export function createTopicHomeService({ db, rankingCache, now = () => Date.now(
                     topicName: weight.topicName, sceneName: weight.sceneName,
                     benchmarkID: weight.benchmarkID, conditionName: weight.conditionName,
                     weightBasisPoints: weight.weightBasisPoints })),
-                totalCoverageIndex: models.reduce((sum, model) => sum + (Number.isFinite(model.coverage) ? model.coverage / 100 : 0), 0),
+                coverageIndex,
+                totalCoverageIndex: coverageIndex,
+                configurationCount: topic.configurationCount,
                 scoreScale };
         })().then(value => {
             entry.expiresAt = now() + 60000;

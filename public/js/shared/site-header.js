@@ -10,10 +10,9 @@ export function mountSiteActions(nav, { accountID = 'site-account', moreID = 'si
     nav.classList.add('bp-site-links', 'th-header-links');
     nav.setAttribute('aria-label', 'About and account');
     nav.innerHTML = `<a class="th-quiet th-social" href="https://x.com/BenchPoll" target="_blank" rel="noopener noreferrer" aria-label="BenchPoll on X" data-tooltip="BenchPoll on X"><i class="th-x-mark" aria-hidden="true">&#120143;</i></a>
-        ${minimal ? '' : `<a id="new-topic" class="th-quiet" href="/topic-proposals" aria-label="Proposal hall" data-tooltip="Proposal hall"><i class="fa-regular fa-lightbulb" aria-hidden="true"></i><span>Proposal hall</span></a>
-        <a class="th-quiet" href="/how-it-works" aria-label="How it works" data-tooltip="How it works"><i class="fa-regular fa-circle-question" aria-hidden="true"></i><span>How it works</span></a>
+        ${minimal ? '' : `<a class="th-quiet" href="/how-it-works" aria-label="How it works" data-tooltip="How it works"><i class="fa-regular fa-circle-question" aria-hidden="true"></i><span>How it works</span></a>
         ${accountButton ? '<button class="th-quiet" type="button" disabled>' : '<a class="th-quiet" href="/login">'}<i class="fa-regular fa-user" aria-hidden="true"></i><span>Sign in</span>${accountButton ? '</button>' : '</a>'}`}
-        <details class="th-more"><summary class="th-quiet" role="button" aria-label="More information" data-tooltip="More information"><i class="fa-solid fa-ellipsis" aria-hidden="true"></i></summary>
+        <details class="th-more"${minimal ? ' hidden' : ''}><summary class="th-quiet" role="button" aria-label="More information" data-tooltip="More information"><i class="fa-solid fa-ellipsis" aria-hidden="true"></i></summary>
             <nav aria-label="More information"><a href="/terms">Terms</a><a href="/privacy">Privacy</a><a href="/cookies">Cookies</a><a href="/community-guidelines">Community guidelines</a></nav></details>`;
     const account = minimal ? null : nav.querySelector(accountButton ? 'button' : 'a[href="/login"]');
     if (account) { account.id = accountID; account.dataset.tooltip = 'Account'; }
@@ -45,7 +44,9 @@ export function mountSiteActions(nav, { accountID = 'site-account', moreID = 'si
             const occupied = visible.reduce((total, node) => total + (node === directory
                 ? node.querySelector('.th-topic-tabs')?.scrollWidth ?? 0
                 : Math.max(node.getBoundingClientRect().width, node.scrollWidth)), 0);
-            const compact = occupied + nav.scrollWidth + gap * visible.length > inner.clientWidth + 1;
+            // The workspace supplies its own compact icon row and drawer. Keep
+            // those primary controls in place instead of nesting them in More.
+            const compact = !minimal && occupied + nav.scrollWidth + gap * visible.length > inner.clientWidth + 1;
             if (compact) {
                 more.hidden = false;
                 for (const action of actions) menu.insertBefore(action, firstLegal);
@@ -72,9 +73,10 @@ export function mountSiteActions(nav, { accountID = 'site-account', moreID = 'si
             else { mark.className = 'fa-regular fa-user'; mark.setAttribute('aria-hidden', 'true'); }
             const label = document.createElement('span'); label.textContent = profile ? name : 'Sign in';
             account.append(mark, label);
-            account.setAttribute('aria-label', profile ? `Open account center: ${name}` : 'Sign in');
-            if (profile) account.setAttribute('aria-haspopup', 'dialog');
-            else account.removeAttribute('aria-haspopup');
+            account.setAttribute('aria-label', profile ? `View your profile: ${name}` : 'Sign in');
+            account.dataset.tooltip = profile ? 'Your profile' : 'Sign in';
+            account.removeAttribute('aria-haspopup');
+            if (account.tagName === 'A') account.href = profile ? '/me' : '/login';
         };
         const refresh = async () => {
             const current = ++serial;
@@ -84,16 +86,12 @@ export function mountSiteActions(nav, { accountID = 'site-account', moreID = 'si
                 profile = result && canonicalAccountID(result.userID) === result.userID ? result : null;
                 if (profile) pageAccountWriteScope.bind(profile.userID);
             } catch { if (current === serial) profile = null; }
-            if (current === serial) render();
+            if (current === serial) { render(); refreshLayout(); }
         };
-        account.addEventListener('click', async event => {
-            if (!profile) return;
-            event.preventDefault();
-            try {
-                const { openAccountCenter } = await import('./account-center.js');
-                await openAccountCenter({ profile, onProfileSaved: saved => { profile = { ...profile, ...saved }; render(); },
-                    onSignedOut: () => { profile = null; render(); } });
-            } catch { account.dataset.tooltip = 'Account center is unavailable'; }
+        if (account.tagName !== 'A') account.addEventListener('click', () => { if (profile) location.assign('/me'); });
+        document.addEventListener('benchpoll:profile-updated', event => {
+            if (profile?.userID !== event.detail?.userID) return;
+            profile = { ...profile, ...event.detail }; render(); refreshLayout();
         });
         listenAccountChange(() => { void refresh(); });
         void refresh();

@@ -5,15 +5,18 @@ import { configuredRows, entryFromContext, locationURL, popularTopics } from '..
 import { readConfigSidebarCollapsed } from '../public/js/shared/config-sidebar.js';
 import { addRecentTopic, readRecentTopics, writeRecentTopics, readSidebarPreferences } from '../public/js/navigation/preferences.js';
 
-const entry = (ID, name, extra = {}) => entryFromContext({ categoryID: ID,
+const privateID = 'PrivateTopic999Token';
+const researchScenes = [{ ID: 601, sceneNumber: 1, name: 'General', isDefault: true },
+    { ID: 602, sceneNumber: 2, name: 'Physics', isDefault: false }];
+const entry = (ID, name, extra = {}) => entryFromContext({ categoryID: ID, publicID: ID,
     lineage: [{ ID, name }], contextValues: {}, ...extra });
 
 test('flat navigation uses the canonical topic helper and real IDs, including duplicate names', () => {
-    const first = entry(167, 'Research'), second = entry(190, 'Research');
-    assert.equal(locationURL(first), '/research');
-    assert.throws(() => locationURL({ ...second, slug: 'research-190' }), /must match/);
-    assert.equal(locationURL(entry(170, 'Biology & Medicine')), '/biology-medicine');
-    assert.equal(locationURL(entry(999, 'My topic', { isPrivate: true })), '/personal/999');
+    const first = entry(167, 'Research', { publicID: 11 }), second = entry(190, 'Research', { publicID: 12 });
+    assert.equal(locationURL(first), '/11');
+    assert.equal(locationURL(second), '/12');
+    assert.equal(locationURL(entry(170, 'Biology & Medicine', { publicID: 13 })), '/13');
+    assert.equal(locationURL(entry(999, 'My topic', { isPrivate: true, privateID })), `/private/${privateID}`);
     const rows = configuredRows([{ ...first, weightCount: 1 }, { ...second, weightCount: 1 }], second);
     assert.deepEqual(rows.map(row => row.depth), [0, 0]);
     assert.deepEqual(rows.map(row => row.groupStart), [false, false]);
@@ -21,24 +24,32 @@ test('flat navigation uses the canonical topic helper and real IDs, including du
     assert.ok(rows.every(row => row.pathLabel === `Topic ${row.categoryID}`));
 });
 
-test('topic URLs retain the exact selected context without leaking legacy lineage routes', () => {
-    const saved = entry(54, 'Intelligence', { contextValues: { tools: 'allowed&value=1' } });
+test('topic URLs use local scene numbers while selected contexts keep internal scene IDs', () => {
+    const saved = entry(54, 'Intelligence', { publicID: 1, scenes: researchScenes, contextValues: { scene: '602' } });
     const url = new URL(locationURL(saved), 'https://example.com');
-    assert.equal(url.pathname, '/intelligence');
-    assert.equal(url.searchParams.get('context_tools'), 'allowed&value=1');
+    assert.equal(url.pathname, '/1/2');
+    assert.equal(url.search, '');
+    assert.equal(saved.sceneID, 602);
+    assert.deepEqual(saved.contextValues, { scene: '602' });
+    assert.equal(locationURL(entry(54, 'Intelligence', { publicID: 1, scenes: researchScenes })), '/1/1');
+    assert.equal(locationURL(entry(999, 'My topic', { isPrivate: true, privateID,
+        scenes: researchScenes, contextValues: { scene: '602' } })), `/private/${privateID}/2`);
+    assert.throws(() => locationURL(entry(54, 'Intelligence', { publicID: 1, contextValues: { budget: 'standard' } })), /Unsupported topic context/);
 });
 
-test('Popular pins ID54 and preserves server heat/exploration order without re-sorting popularity', () => {
-    const topics = [{ ...entry(54, 'Intelligence'), popularity: 0 }, { ...entry(190, 'Other'), popularity: 7 },
+test('Popular preserves the server favorites order without pinning Intelligence or re-sorting ties', () => {
+    const topics = [{ ...entry(54, 'Intelligence', { publicID: 1 }), popularity: 0 }, { ...entry(190, 'Other'), popularity: 7 },
         { ...entry(170, 'Biology'), popularity: 40 }, { ...entry(167, 'Research'), popularity: 7 }];
+    const before = structuredClone(topics);
     assert.deepEqual(popularTopics(topics).map(topic => topic.categoryID), [54, 190, 170, 167]);
-    assert.deepEqual(popularTopics([entry(190, 'Other'), entry(54, 'Intelligence'), entry(167, 'Research')])
-        .map(topic => topic.categoryID), [54, 190, 167]);
+    assert.deepEqual(popularTopics([entry(190, 'Other'), entry(54, 'Intelligence', { publicID: 1 }), entry(167, 'Research')])
+        .map(topic => topic.categoryID), [190, 54, 167]);
+    assert.deepEqual(topics, before);
 });
 
 test('Configured filters empty or unconfirmed public/private entries and never inserts the browsing topic', () => {
     const saved = { ...entry(54, 'Intelligence'), weightCount: 4 };
-    const emptyPrivate = { ...entry(999, 'Private', { isPrivate: true }), weightCount: 0 };
+    const emptyPrivate = { ...entry(999, 'Private', { isPrivate: true, privateID }), weightCount: 0 };
     const emptyPublic = { ...entry(170, 'Biology'), weightCount: 0 };
     assert.deepEqual(configuredRows([saved, emptyPrivate, emptyPublic, entry(171, 'Unconfirmed')], entry(167, 'Research')).map(row => row.categoryID), [54]);
 });
@@ -51,15 +62,20 @@ test('Recent stores only numeric/context identity, isolates accounts and keeps c
     } });
     try {
         let visits = addRecentTopic([], entry(54, 'Intelligence'), '1', 10);
-        visits = addRecentTopic(visits, entry(167, 'Research', { contextValues: { budget: 'standard' } }), '1', 20);
-        visits = addRecentTopic(visits, entry(167, 'Research', { contextValues: { budget: 'extended' } }), '1', 30);
-        visits = addRecentTopic(visits, entry(999, 'Secret private name', { isPrivate: true }), '1', 40);
+        visits = addRecentTopic(visits, entry(167, 'Research', { scenes: researchScenes, contextValues: { scene: '601' } }), '1', 20);
+        visits = addRecentTopic(visits, entry(167, 'Research', { scenes: researchScenes, contextValues: { scene: '602' } }), '1', 30);
+        visits = addRecentTopic(visits, entry(999, 'Secret private name', { isPrivate: true, privateID }), '1', 40);
         assert.equal(writeRecentTopics('1', visits), true);
-        assert.equal(readRecentTopics('1').length, 4);
+        assert.deepEqual(readRecentTopics('1'), [
+            { categoryID: 999, contextValues: {}, isPrivate: true, visitedAt: 40 },
+            { categoryID: 167, contextValues: { scene: '602' }, isPrivate: false, visitedAt: 30 },
+            { categoryID: 167, contextValues: { scene: '601' }, isPrivate: false, visitedAt: 20 },
+            { categoryID: 54, contextValues: {}, isPrivate: false, visitedAt: 10 }
+        ]);
         assert.deepEqual(readRecentTopics('2'), []);
         assert.deepEqual(readRecentTopics(null), []);
-        assert.ok([...storage.values()].every(value => !/Research|Secret|name|url/i.test(value)));
-        assert.equal(addRecentTopic([], entry(999, 'Secret', { isPrivate: true }), null, 50).length, 0);
+        assert.ok([...storage.values()].every(value => !/Research|Secret|name|url|publicID|privateID/i.test(value)));
+        assert.equal(addRecentTopic([], entry(999, 'Secret', { isPrivate: true, privateID }), null, 50).length, 0);
         assert.equal(writeRecentTopics('01', visits), false);
         assert.deepEqual(readRecentTopics('01'), []);
     } finally {
@@ -80,14 +96,16 @@ test('legacy All preferences migrate to Popular with independent scroll position
     }
 });
 
-test('navigation preserves server slugs, canonical URLs and ranking context paths for duplicate names', () => {
-    const metadata = entry(190, 'Research', { slug: 'research-unique', url: '/research-original' });
-    assert.equal(locationURL(metadata), '/research-original');
-    assert.equal(metadata.slug, 'research-unique');
-    assert.equal(locationURL(entry(191, 'Research', { path: '/research-second', contextValues: { budget: 'extended' } })),
-        '/research-second?context_budget=extended');
-    assert.equal(locationURL(entry(192, 'Research', { categoryPath: 'research-third' })), '/research-third');
-    assert.throws(() => locationURL({ ...metadata, url: '//example.com/leak' }), /Invalid topic URL/);
+test('navigation preserves canonical numeric URLs, local scenes and ranking parameters for duplicate names', () => {
+    const metadata = entry(190, 'Research', { publicID: 23, url: '/23?scoreMode=range' });
+    assert.equal(locationURL(metadata), '/23?scoreMode=range');
+    assert.equal(metadata.publicID, 23);
+    assert.equal(locationURL(entry(191, 'Research', { publicID: 24, url: '/24', scenes: researchScenes,
+        contextValues: { scene: '602' } })), '/24/2');
+    assert.equal(locationURL(entry(192, 'Research', { publicID: 25 })), '/25');
+    for (const url of ['//example.com/leak', '/research', '/23?context_scene=602', '/23?scene=2', '/private/999']) {
+        assert.throws(() => locationURL({ ...metadata, url }), /Invalid topic URL/);
+    }
 });
 
 test('the sidebar has four icon-only modes and private creation lives exclusively in Mine', async () => {
@@ -150,5 +168,6 @@ test('configuration entry has no presentation or Public composition DOM/modules 
     assert.doesNotMatch(navigation, /load_benchmarks_and_subcategories|loadChildren|rememberExpansion/);
     assert.match(html, /id="public-fallback-toggle"/);
     assert.match(navigation, /benchpoll:profile-updated/);
-    assert.match(navigation, /import\(['"][^'"]*shared\/(?:profile-editor|account-center)\.js['"]\)/);
+    assert.doesNotMatch(navigation, /account-center\.js/);
+    assert.match(navigation, /\/me/);
 });

@@ -125,7 +125,7 @@ export function modelScoreSearchCopy(scope) {
 }
 
 export function createModelScoresView({ state, modelScoresDialog, modelScoresTitle, modelScoresSummary, modelScoresList,
-    getMemberURL, onInspectVersion }) {
+    getMemberURL, onInspectVersion, coveragePreview }) {
     protectModelName(modelScoresTitle);
     let modelScoresRequestSequence = 0;
     const search = modelScoresDialog.querySelector('#model-scores-search');
@@ -134,18 +134,54 @@ export function createModelScoresView({ state, modelScoresDialog, modelScoresTit
     let activeModel = null;
     let allScoresView = null;
     let rankingView = null;
+    let coverageView = null;
+    let contextFrame = null;
     function cancelAllScores() {
         allScoresView?.controller.abort();
         rankingView?.controller.abort();
         allScoresView = null;
         rankingView = null;
+        coverageView?.destroy();
+        coverageView = null;
+        if (contextFrame !== null) cancelAnimationFrame(contextFrame);
+        contextFrame = null;
         modelScoresList.removeAttribute('aria-busy');
     }
+    function closeScores() {
+        cancelAllScores();
+        ++modelScoresRequestSequence;
+        activeModel = null;
+        if (!modelScoresDialog.hidden) modelScoresDialog.hidden = true;
+    }
+    const close = createAction({ label: 'Close model scores', icon: 'fa-solid fa-xmark', iconOnly: true,
+        className: 'dialog-close-button bp-model-scores-close' });
+    close.slot = 'title';
+    close.addEventListener('click', closeScores);
+    modelScoresDialog.append(close);
+    const closed = new MutationObserver(() => {
+        if (modelScoresDialog.hidden) closeScores();
+    });
+    closed.observe(modelScoresDialog, { attributes: true, attributeFilter: ['hidden'] });
+    const scoreContext = () => {
+        const comparison = state.comparison ?? state.comparisonRequest;
+        return JSON.stringify([state.categoryID, state.selectedContextValues, state.mode, state.scoreMode,
+            state.rankingVersion, state.rankingPagination?.snapshotID, comparison?.mode, comparison?.keys, comparison?.filters,
+            state.estimationAlgorithm, state.availableInferenceVersion, state.mode === 'personal' && state.personalRankingDirty]);
+    };
     function readGuard(sequence, model) {
         const { authenticated, userID, loadSequence } = state;
+        const context = scoreContext();
         return () => sequence === modelScoresRequestSequence && activeModel === model
             && !modelScoresDialog.hidden && state.authenticated === authenticated
-            && state.userID === userID && state.loadSequence === loadSequence;
+            && state.userID === userID && state.loadSequence === loadSequence
+            && context === scoreContext() && !state.loading && !state.comparisonPending;
+    }
+    function trackView(view) {
+        const check = () => {
+            if (!view.current()) { closeScores(); return; }
+            contextFrame = requestAnimationFrame(check);
+        };
+        contextFrame = requestAnimationFrame(check);
     }
     const informationLink = member => createBenchmarkInformationLink(member, { getURL: getMemberURL, showVersion: true,
         onInspect: event => {
@@ -406,6 +442,20 @@ export function createModelScoresView({ state, modelScoresDialog, modelScoresTit
                 ...(state.personalCommunityComposition ?? []).flatMap(group => group.families.flatMap(family => family.entries)),
                 ...(state.publicFamilyComposition ?? []).flatMap(group => group.families.flatMap(family => family.entries))]
                 .find(item => Number(item.conditionID) === Number(conditionID));
+    }
+
+    function renderCoverageResults(model) {
+        if (coveragePreview) {
+            const figure = document.createElement('figure');
+            figure.className = 'bp-model-coverage-figure';
+            figure.setAttribute('aria-label', 'Measured benchmark coverage in this ranking');
+            const stage = document.createElement('div');
+            const caption = document.createElement('figcaption');
+            caption.textContent = 'Adopted scores / 100. Faded benchmarks have no measured score.';
+            figure.append(stage, caption);
+            modelScoresList.append(figure);
+            coverageView = coveragePreview.renderInto(stage, model);
+        }
     }
 
     function renderCalculationResults(model) {
@@ -711,6 +761,8 @@ export function createModelScoresView({ state, modelScoresDialog, modelScoresTit
         selectTab(true);
         rankingView = { current: readGuard(modelScoresRequestSequence, model), controller: new globalThis.AbortController(),
             entries: [], query: '', browsing: new Map(), overrides: new WeakMap() };
+        trackView(rankingView);
+        renderCoverageResults(model);
         renderCalculationResults(model);
         animateContent(modelScoresList);
     }
@@ -728,6 +780,7 @@ export function createModelScoresView({ state, modelScoresDialog, modelScoresTit
         const view = { current, entries: [], ready: false, omitted: false, controller: new globalThis.AbortController(), active: 0,
             query: '', browsing: new Map() };
         allScoresView = view;
+        trackView(view);
         renderComparisonName(modelScoresTitle, model, state.comparison);
         modelScoresList.replaceChildren();
         setLoading(modelScoresSummary, 'Loading all recorded configurations…');
@@ -1003,5 +1056,9 @@ export function createModelScoresView({ state, modelScoresDialog, modelScoresTit
         }
     }
 
-    return { openApprovedModelResults };
+    return { openApprovedModelResults, destroy() {
+        closeScores();
+        closed.disconnect();
+        close.remove();
+    } };
 }

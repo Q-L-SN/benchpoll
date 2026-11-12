@@ -1,0 +1,91 @@
+.bp-home .bp-page-heading { align-items: center; gap: 14px; margin-bottom: 4px; }
+.bp-heading-stack { flex: 1; min-width: 0; display: grid; gap: 10px; }
+.bp-heading-topic-row { display: flex; flex-direction: column; align-items: flex-start; gap: 5px; min-width: 0; }
+.bp-home .bp-page-heading #workspace-headline { flex: 0 1 auto; }
+.bp-home .bp-page-heading #workspace-topic-summary { display: block; flex: 0 1 auto; max-width: none; font-size: 13px; line-height: 1.5; }
+.bp-home .bp-page-heading #workspace-topic-summary[hidden] { display: none; }
+.bp-home[data-header-layout="inline"] .bp-heading-topic-row { flex-direction: row; align-items: baseline; gap: 14px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 12px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 12px), transparent); }
+.bp-home[data-header-layout="inline"] .bp-heading-topic-row::-webkit-scrollbar { display: none; }
+.bp-home[data-header-layout="inline"] .bp-heading-topic-row :is(#workspace-headline, #workspace-topic-summary) { flex: 0 0 auto; white-space: nowrap; }
+.bp-home[data-header-layout="inline"] .bp-heading-topic-row #bp-breadcrumb { flex-wrap: nowrap; }
+.bp-home[data-header-layout="inline"] .bp-heading-topic-row .bp-breadcrumb-current { white-space: nowrap; }
+.bp-home .bp-config-header-account { align-self: start; }
+.bp-home .bp-context-row { justify-content: flex-end; padding-bottom: 4px; margin-bottom: 4px; gap: 6px; }
+.bp-home .bp-context-actions { margin-left: auto; gap: 10px; }
+.bp-header-layout-test { --ui-control-height: 32px; display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--bp-muted); }
+.bp-header-layout-test select { min-height: 28px; padding: 3px 6px; width: auto; border: 1px solid var(--bp-line); border-radius: 5px; font: inherit; background: white; }
+.bp-home #workspace-brand-slot { display: block; width: auto; height: 32px; margin: 0; overflow: visible; }
+.bp-home #workspace-brand-slot .bp-brand { width: 155px; margin: 0; }
+#config-mobile-home { display: none; }
+
+.bp-pie-focus-bar { position: sticky; top: 0; z-index: 12; padding-block: 10px 8px; background: #fff; border-radius: 10px 10px 0 0; }
+.bp-home .bp-pie-card { padding-top: 0; }
+.bp-pie-tools-row { flex-wrap: nowrap; align-items: center; gap: 6px; padding: 8px 12px 0; }
+.bp-pie-tools-row .bp-pie-guidance { display: flex; flex: 1 1 auto; flex-wrap: nowrap; align-items: baseline; justify-content: flex-start; gap: 5px; min-width: 0; padding: 0; }
+.bp-pie-tools-row .bp-pie-guidance[hidden] { display: none; }
+.bp-pie-guidance #pie-instruction { flex: 0 1 auto; min-width: 0; font-size: 13px; }
+.bp-pie-guidance #pie-context-note { flex: 0 0 auto; text-align: left; }
+.bp-pie-tools-row #public-pie-summary { display: inline-flex; flex: 0 0 auto; flex-wrap: nowrap; align-items: center; gap: 5px; padding: 0; white-space: nowrap; }
+.bp-pie-tools-row #public-pie-summary[hidden] { display: none; }
+.bp-pie-tools:empty { display: none; }
+.bp-pie-tools > [hidden] { display: none; }
+.bp-pie-adjustment-hint, .bp-expanded-weight-note { display: flex; align-items: center; gap: 8px; margin: 8px 12px 0; padding: 8px 10px; border-radius: 5px; background: var(--bp-fill); color: #fff; font-size: 12px; line-height: 1.45; }
+.bp-pie-adjustment-hint[hidden], .bp-expanded-weight-note[hidden] { display: none; }
+.bp-pie-adjustment-hint > span, .bp-expanded-weight-note > span { flex: 1; min-width: 0; }
+.bp-pie-adjustment-hint > button, .bp-expanded-weight-note > button { flex: 0 0 auto; min-height: 32px; padding: 4px 6px; border: 0; border-radius: 4px; background: #ffffff21; color: inherit; font: inherit; cursor: pointer; }
+.bp-pie-adjustment-hint > button:hover, .bp-expanded-weight-note > button:hover { background: #ffffff38; }
+.is-expanded-weight-view .bp-pie-tools { display: none; }
+
+.bp-home .bp-benchmark-information-link { display: inline; color: var(--bp-ink); text-decoration: none; overflow: visible; text-overflow: clip; }
+.bp-home .bp-benchmark-information-link .bp-benchmark-link-name, .bp-home .bp-topic-link-label { display: inline; border: 0; font: inherit; }
+.bp-home .bp-benchmark-information-link .bp-benchmark-link-name > i { display: inline; }
+.bp-home .bp-benchmark-information-link:is(:hover, :focus-visible), .bp-home .bp-benchmark-information-link:has(.bp-topic-link-label):is(:hover, :focus-visible) { text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1px; }
+.bp-home .bp-benchmark-row:hover .bp-benchmark-information-link .bp-topic-link-label { border: 0; }
+.bp-home .bp-benchmark-row > .bp-benchmark-identity { display: block; min-width: 0; line-height: 1.65; }
+.bp-home .bp-benchmark-row > .bp-benchmark-identity > .bp-benchmark-information-link { display: inline; width: auto; }
+.bp-benchmark-identity > .bp-evaluation-meta { display: inline-flex; align-items: center; gap: 5px; margin-left: 5px; vertical-align: baseline; white-space: nowrap; }
+.bp-benchmark-identity > .bp-benchmark-score-count { display: inline-flex; margin-left: 5px; vertical-align: baseline; }
+.bp-home .bp-benchmark-toolbar-actions { gap: 6px; }
+.bp-home .bp-benchmark-search { --ui-control-height: 32px; height: 32px; min-height: 32px; padding-block: 2px; }
+.bp-home .bp-benchmark-search input { min-height: 28px; padding-block: 3px; }
+.bp-home #benchmark-personal-pin { min-height: 32px; height: 32px; }
+.bp-home #benchmark-search-clear { flex: 0 0 28px; width: 28px; min-height: 28px; padding: 0; }
+.bp-home #benchmark-search-clear.bp-ui-action { height: 28px; min-height: 28px; }
+.bp-home #benchmark-search-clear[hidden] { display: none; }
+.bp-benchmark-search input::-webkit-search-cancel-button { display: none; }
+.bp-scene-search-empty { padding: 14px 12px; color: var(--bp-muted); font-size: 12px; }
+#ranking-coverage-index { flex: 0 0 auto; white-space: nowrap; }
+.bp-home #workspace-topic-creator { align-items: center; gap: 7px; }
+
+@media (max-width: 760px) {
+    .bp-home #workspace-brand-slot { display: none; }
+    #config-mobile-home { display: inline-flex; }
+    .bp-home #back-to-topics { display: none; }
+    .bp-home .bp-page-heading { margin-bottom: 2px; gap: 8px; }
+    .bp-home .bp-page-heading #workspace-topic-summary { font-size: 12px; }
+    .bp-home .bp-context-row { padding-bottom: 0; margin-bottom: 3px; }
+    .bp-home .bp-context-actions { flex: 1; justify-content: flex-end; gap: 7px; }
+    .bp-header-layout-test > span:first-child { display: none; }
+    .bp-home .bp-scene-strip { margin-bottom: 6px; }
+    .bp-home .bp-benchmark-card, .bp-home .bp-model-card { overflow: visible; }
+    .bp-home .bp-benchmark-toolbar, .bp-home .bp-model-controls { position: sticky; top: 0; z-index: 15; background: #fff; border-radius: 10px 10px 0 0; }
+    .bp-home .bp-benchmark-head { position: sticky; top: var(--bp-evaluation-toolbar-height, 92px); z-index: 14; }
+    .bp-home #estimation-test-control { position: sticky; top: var(--bp-index-toolbar-height, 64px); z-index: 14; background: #fff; }
+    .bp-home .bp-model-head { position: sticky; top: calc(var(--bp-index-toolbar-height, 64px) + var(--bp-estimation-toolbar-height, 56px)); z-index: 13; }
+    .bp-home .bp-workspace .bp-mobile-panels { backface-visibility: hidden; transform: translate3d(-50%, 0, 0); will-change: transform; }
+}
+@media (max-width: 380px) {
+    .bp-home .bp-pie-tools > button { width: 32px; height: 36px; }
+    .bp-pie-tools-row { padding-inline: 8px; gap: 4px; }
+}
+@media (max-width: 760px) and (max-height: 650px) {
+    .bp-home:not(.is-showcase) .bp-workspace { padding-top: 6px; }
+    .bp-home .bp-pie-focus-bar { padding-top: 6px; padding-bottom: 5px; }
+    .bp-home #pie-card .bp-mode-switch[data-ui-component="segmented"] > button { min-height: 32px; padding-block: 3px; }
+    .bp-home .bp-pie-tools-row { padding-top: 4px; }
+    .bp-home:not(.is-showcase) .bp-pie-tools > button { height: 34px; }
+    .bp-home:not(.is-showcase) .bp-workspace-grid > :is(.bp-left-workspace, .bp-right-workspace, .bp-discussion-workspace) {
+        padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+        scroll-padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+    }
+}

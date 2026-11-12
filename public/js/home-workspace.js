@@ -52,7 +52,6 @@ import { createPrivateTopicEditor } from './shared/private-topic-editor.js';
 import { renderTopicReferences, isTopicReference, topicReferenceError } from './workspace/topic-references.js';
 import { mergeBenchmarkWeights } from './workspace/expanded-weights.js';
 import { createReferenceCoverage } from './workspace/reference-coverage.js';
-import { topicLabelText, renderTopicLabel } from './shared/topic-label.js';
 import { BENCHMARK_GROUPS, benchmarkConditionGroup } from './shared/benchmark-condition-groups.js?v=fallback-discovery-20261005';
 import { captureRankingResume } from './shared/ranking-resume.js';
 import { createToast } from './shared/toast.js';
@@ -66,9 +65,24 @@ import { excludedFromRanking } from './shared/aa-ranking-policy.js';
 import { mountSiteActions } from './shared/site-header.js';
 import { createUpdateIndicator } from './shared/update-indicator.js';
 import { mountDisclosureChevron } from './shared/disclosure-chevron.js';
+import { createFavoriteButton, createConfiguredIndicator, createTopicReportButton } from './shared/topic-actions.js';
+import { recordProfileVisit } from './shared/profile-history.js';
+import { createModelCoveragePreview } from './workspace/model-coverage-preview.js';
 
+const mobileHomeAction = document.createElement('a');
+mobileHomeAction.id = 'config-mobile-home'; mobileHomeAction.className = 'th-quiet'; mobileHomeAction.href = '/';
+mobileHomeAction.setAttribute('aria-label', 'Home'); mobileHomeAction.dataset.tooltip = 'Home';
+mobileHomeAction.innerHTML = '<i class="fa-solid fa-house" aria-hidden="true"></i>';
 mountSiteActions(document.getElementById('config-site-links'), { accountID: 'config-site-account', moreID: 'config-site-more',
-    minimal: true, extraActions: [document.getElementById('taxonomy-toggle')] });
+    minimal: true, extraActions: [mobileHomeAction, document.getElementById('taxonomy-toggle')] });
+
+const headerLayout = document.getElementById('workspace-header-layout');
+try { headerLayout.value = localStorage.getItem('benchpoll:header-layout') === 'inline' ? 'inline' : 'stacked'; } catch { /* Keep the default layout. */ }
+document.body.dataset.headerLayout = headerLayout.value;
+headerLayout.addEventListener('change', () => {
+    document.body.dataset.headerLayout = headerLayout.value;
+    try { localStorage.setItem('benchpoll:header-layout', headerLayout.value); } catch { /* The page keeps the selected layout. */ }
+});
 
 const pieSvg = document.getElementById('weight-pie');
 const pieHoverTooltip = document.getElementById('pie-hover-tooltip');
@@ -76,6 +90,7 @@ const breadcrumb = document.getElementById('bp-breadcrumb');
 const templateStrip = document.getElementById('bp-template-strip');
 const benchmarkRows = document.getElementById('benchmark-rows');
 const benchmarkSearch = document.getElementById('benchmark-search');
+const benchmarkSearchClear = document.getElementById('benchmark-search-clear');
 const benchmarkPersonalPin = document.getElementById('benchmark-personal-pin');
 const modelRows = document.getElementById('model-rows');
 const scoreModeButtons = [...document.querySelectorAll('[data-score-mode]')];
@@ -196,6 +211,7 @@ const fallbackPickerOptions = { catalogue: benchmarkFallbackCatalogue,
 const fallbackPicker = createFallbackPicker(fallbackPickerOptions);
 const benchmarkSettings = createBenchmarkSettings({
     host: document.getElementById('benchmark-settings'),
+    selectedHeader: document.getElementById('pie-focus-bar'),
     fallbackPickerOptions,
     getScope: () => `${workspaceContextFingerprint()}|${state.mode}|${state.userID ?? 'guest'}`,
     getData(benchmarkID) {
@@ -205,6 +221,7 @@ const benchmarkSettings = createBenchmarkSettings({
         const entries = state.personalEntries.filter(entry => IDs.has(entry.conditionID));
         return { group, entries, isPrivate: state.contextIsPrivate, rule: entries.length === 1 ? fallbackRuleFor(entries[0].conditionID) : null,
             editable: state.mode === 'personal' && !isExpandedWeightView() && entries.length > 0 && !state.loading && !state.gestureOpen,
+            readOnly: state.mode === 'public' || isExpandedWeightView(),
             busy: state.loading || state.gestureOpen, editing: isInlineFallbackEditing() };
     },
     onVersion: chooseBenchmarkVersion,
@@ -222,12 +239,15 @@ const personalPieStart = createPersonalPieStart({
     stage: pieSvg.closest('.bp-pie-stage'),
     getScope: () => `${workspaceContextFingerprint()}|${state.userID ?? 'guest'}|${state.personalRevision}|${state.personalEditVersion}`,
     getPublicStart: () => publicWeightStart(state.publicEntries, state.versionComposition, state.limits),
+    hasWeights: () => state.personalEntries.length > 0,
     isPrivate: () => state.contextIsPrivate,
     onApply: startPersonalPie,
     onChange: () => { renderModeState(); renderPie(); }
 });
 let personalStartContext = null;
 let benchmarkSearchTimer = null;
+let benchmarkSearchActive = false;
+let sceneTargets = [], sceneTargetsScope = '', sceneTargetsPending = null, sceneTargetsError = '';
 let lowCoverageExpanded = false;
 let otherConditionsExpanded = false;
 
@@ -272,7 +292,7 @@ function nextVisibleBenchmarkGroup() {
 }
 
 function loadVisibleBenchmarkPage() {
-    if (isExpandedWeightView() || state.versionComposition && isInlineFallbackTargetActive()) return;
+    if (isExpandedWeightView() || isSceneDiscovery() || state.versionComposition && isInlineFallbackTargetActive()) return;
     const group = nextVisibleBenchmarkGroup();
     if (group && shouldLoadMore(benchmarkRows)) void loadNextRankingPage('benchmarks', group);
 }
@@ -410,10 +430,14 @@ let fallbackEditorScope = null;
 let pendingFallbackSave = false;
 let fallbackSaveFailed = false;
 
-const { openApprovedModelResults } = createModelScoresView({ state, modelScoresDialog, modelScoresTitle, modelScoresSummary, modelScoresList,
+const coveragePreview = createModelCoveragePreview({ state, pieSvg,
+    getExpandedEntries: () => state.effectiveEntries[state.mode] ?? rawPieEntries(),
+    getVersions: () => state.versionComposition ?? [] });
+const { openApprovedModelResults } = createModelScoresView({ state, modelScoresDialog, modelScoresTitle, modelScoresSummary, modelScoresList, coveragePreview,
     getMemberURL: getBenchmarkMemberURL, onInspectVersion: onBenchmarkInspection });
 const modelListView = createModelListView({
     state, modelRows, openApprovedModelResults,
+    onBindModelRow: (row, model) => coveragePreview.bindRow(row, model),
     onUpdateStatus: updateLastUpdated,
     onRetrySave: () => state.personalSaveConflict ? window.location.reload() : void persistPersonalPie(),
     onNeedMore: () => {
@@ -457,7 +481,7 @@ createModelSearch({ container: document.getElementById('ranking-model-search'),
 const { renderPie: renderPieGraphic } = createPieRenderer({
     state, pieSvg, pieHoverTooltip, orderedPieEntries, currentPieEntries, selectedObjectIndex,
     getPreview: () => personalPieStart.previewPublic ? state.publicEntries : null,
-    autoSelect: () => !isExpandedWeightView(),
+    autoSelect: () => false,
     renderInlineFallback, fallbackRuleFor, publicFallbackRuleFor,
     async onSelect(objectID) {
         if (currentPieEntries().find(entry => entry.conditionID === objectID)?.isUnresolved) return;
@@ -555,6 +579,25 @@ function rawPieEntries(mode = state.mode) {
 
 function isExpandedWeightView() {
     return state.topicsExpanded && rawPieEntries().some(isTopicReference);
+}
+
+function reconcileWeightSelection({ contextChanged = false } = {}) {
+    if (!rawPieEntries().some(isTopicReference)) state.topicsExpanded = false;
+    if (contextChanged || !currentPieEntries().some(entry => entry.conditionID === state.selectedObjectID)) {
+        state.selectedObjectID = null;
+        state.selectedFamilyKey = null;
+        state.workspaceView = 'overview';
+    }
+}
+
+async function clearWeightSelection() {
+    const scope = workspaceContextFingerprint();
+    if (!await finishPendingWeightAdjustments() || scope !== workspaceContextFingerprint()) return;
+    state.selectedObjectID = null;
+    state.selectedFamilyKey = null;
+    state.workspaceView = 'overview';
+    deactivateInlineFallbackTarget();
+    renderModeState(); renderPie(); renderBenchmarks(); renderBenchmarkSummary();
 }
 
 const expandedWeightCache = new Map();
@@ -756,9 +799,16 @@ function currentCategoryNode(name) {
 }
 
 function renderBreadcrumb() {
+    breadcrumb.querySelectorAll('.bp-topic-favorite').forEach(button => button.dispose?.());
     breadcrumb.replaceChildren();
     const name = currentCategoryNode(state.topicName || 'Topics');
-    breadcrumb.append(name, updateIndicator.element);
+    breadcrumb.append(name);
+    if (state.authenticated && state.hasSavedPersonalWeights) breadcrumb.append(createConfiguredIndicator({ configured: true }));
+    if (state.categoryID && !state.contextIsPrivate) breadcrumb.append(createFavoriteButton({
+        ...state.topicMetadata, ID: state.categoryID, categoryID: state.categoryID
+    }, { onChange: update => { state.topicMetadata = { ...state.topicMetadata, ...update }; },
+        onError: (_error, message) => additionToast.show(message) }));
+    breadcrumb.append(updateIndicator.element);
     if (state.contextIsPrivate) {
         const label = document.createElement('small'); label.className = 'bp-private-context-label'; label.textContent = 'Private';
         breadcrumb.append(label);
@@ -770,8 +820,11 @@ function renderBreadcrumb() {
     }
     const creator = document.getElementById('workspace-topic-creator');
     creator.replaceChildren();
-    creator.hidden = !state.topicCreator;
-    if (state.topicCreator) creator.append(createTopicCreator(state.topicCreator));
+    creator.hidden = state.contextIsPrivate && !state.topicCreator;
+    if (state.topicMetadata?.isOfficial) creator.textContent = 'Official';
+    else if (state.topicCreator) creator.append(createTopicCreator(state.topicCreator));
+    if (state.categoryID) creator.append(createTopicReportButton({ ...state.topicMetadata, categoryID: state.categoryID,
+        name: state.topicName }, { scene: state.scenes.find(scene => Number(scene.ID) === Number(state.sceneID)) }));
     const summary = document.getElementById('workspace-topic-summary');
     summary.textContent = state.topicSummary;
     summary.hidden = !state.topicSummary;
@@ -787,6 +840,8 @@ async function selectScene(id) {
     const category = state.categoryID;
     if (!state.scenes.some(scene => Number(scene.ID) === id) || !await prepareContextChange() || category !== state.categoryID) return;
     state.selectedContextValues = { scene: String(id) };
+    state.selectedObjectID = null;
+    state.selectedFamilyKey = null;
     state.workspaceView = 'overview';
     await loadWeightedWorkspace();
 }
@@ -797,20 +852,21 @@ function renderTemplateControls() {
 
 function updateUndoState() {
     const readOnly = isExpandedWeightView();
+    undoButton.hidden = readOnly || state.mode !== 'personal';
     undoButton.disabled = readOnly || personalPieStart.isOpen || state.gestureOpen
         || wheelWeightCommitTimer !== null
         || !state.editHistory.canUndo;
-    redoButton.hidden = readOnly || !state.editHistory.canRedo;
+    redoButton.hidden = readOnly || state.mode !== 'personal' || !state.editHistory.canRedo;
     redoButton.disabled = readOnly || personalPieStart.isOpen || state.gestureOpen || wheelWeightCommitTimer !== null || !state.editHistory.canRedo;
     const resetting = personalPieStart.isResetting;
-    resetButton.hidden = state.mode !== 'personal';
+    resetButton.hidden = readOnly || state.mode !== 'personal';
     resetButton.disabled = resetting ? personalPieStart.isApplying : readOnly || personalPieStart.isOpen || state.loading || state.gestureOpen || wheelWeightCommitTimer !== null
         || state.accountWriteBlocked || state.personalRecoveryBlocked || state.personalSaveConflict;
     resetButton.querySelector('i').className = resetting ? 'fa-solid fa-xmark' : 'fa-solid fa-eraser';
     resetButton.setAttribute('aria-label', resetting ? 'Cancel reset' : 'Reset personal weights');
     resetButton.setAttribute('aria-expanded', String(Boolean(resetting)));
     resetButton.dataset.tooltip = resetting ? 'Cancel reset' : 'Start over';
-    topicViewButton.hidden = !rawPieEntries().some(isTopicReference) || personalPieStart.isOpen;
+    topicViewButton.hidden = readOnly || !rawPieEntries().some(isTopicReference) || personalPieStart.isOpen;
     topicViewButton.disabled = state.loading || state.gestureOpen || wheelWeightCommitTimer !== null
         || state.mode === 'personal' && state.personalRankingDirty;
     topicViewButton.setAttribute('aria-pressed', String(isExpandedWeightView()));
@@ -1231,7 +1287,7 @@ async function selectWeightedBenchmark(object, { toggle = false } = {}) {
     const selected = state.workspaceView === 'focus' && Number(state.selectedObjectID) === Number(object.ID)
         && (object.isFamily ? state.selectedFamilyKey === object.familyKey : state.selectedFamilyKey === null);
     deactivateInlineFallbackTarget();
-    state.selectedObjectID = object.ID;
+    state.selectedObjectID = toggle && selected ? null : object.ID;
     state.selectedFamilyKey = object.isFamily ? object.familyKey : null;
     state.workspaceView = toggle && selected ? 'leaderboard' : 'focus';
     applyWorkspaceView({ animate: true });
@@ -1729,7 +1785,7 @@ function removeObjectFromPersonalPie(object) {
     ));
     if (state.mode === 'personal' && Number(state.selectedObjectID) === objectID) {
         deactivateInlineFallbackTarget();
-        state.selectedObjectID = state.personalEntries[0]?.conditionID ?? null;
+        state.selectedObjectID = null;
         if (state.workspaceView === 'focus') {
             state.workspaceView = 'leaderboard';
         }
@@ -1739,6 +1795,42 @@ function removeObjectFromPersonalPie(object) {
 }
 
 let pendingBenchmarkFocus = null;
+function isSceneDiscovery() {
+    return benchmarkSearchActive && !benchmarkSearch.value.trim() && state.scenes.length > 0 && !isInlineFallbackTargetActive();
+}
+
+function loadSceneTargets() {
+    const scope = `${state.userID ?? 'guest'}:${state.categoryID}`;
+    if (!isSceneDiscovery() || sceneTargetsPending?.scope === scope || sceneTargetsScope === scope && !sceneTargetsError) return;
+    sceneTargets = []; sceneTargetsError = ''; sceneTargetsScope = scope;
+    const pending = { scope };
+    sceneTargetsPending = pending;
+    const isCurrent = () => sceneTargetsPending === pending && scope === `${state.userID ?? 'guest'}:${state.categoryID}`;
+    void postJSON('/api/get_topic_reference_targets', {}).then(payload => {
+        if (!isCurrent()) return;
+        sceneTargets = (payload.targets ?? []).filter(target => Number(target.categoryID) === Number(state.categoryID));
+    }).catch(() => { if (isCurrent()) sceneTargetsError = 'Could not load these scenes.'; })
+        .finally(() => {
+            if (sceneTargetsPending !== pending) return;
+            sceneTargetsPending = null;
+            if (isSceneDiscovery()) renderBenchmarks();
+        });
+}
+
+function sceneDiscoveryRows() {
+    return state.scenes.map((scene, index) => {
+        const target = sceneTargets.find(item => Number(item.contextID) === Number(scene.ID)) ?? scene;
+        const conditionID = -Number(scene.ID);
+        const personal = state.personalEntries.find(entry => entry.conditionID === conditionID);
+        const community = state.publicEntries.find(entry => entry.conditionID === conditionID);
+        return { ...state.topicMetadata, ...target, ID: conditionID, conditionID, referenceContextID: Number(scene.ID),
+            contextID: Number(scene.ID), sceneID: Number(scene.ID), categoryID: state.categoryID, type: 'topic', rank: index + 1,
+            name: `${state.topicName} / ${scene.name}`, topicName: state.topicName, sceneName: scene.name,
+            isPrivate: state.contextIsPrivate, hasWeights: target.hasWeights === true,
+            url: scene.url, publicWeight: community?.weight ?? 0, personalWeight: personal?.weight ?? null };
+    });
+}
+
 function renderBenchmarks() {
     // Keep the current list's geometry until its same-scope recovery is ready.
     if (state.loading && rankingRecovery?.snapshotID === state.rankingPagination?.snapshotID
@@ -1746,12 +1838,15 @@ function renderBenchmarks() {
     const scrollTop = benchmarkRows.scrollTop;
     const familyFocus = benchmarkRowFocus.captureFocus(benchmarkRows)
         ?? (document.activeElement === document.body ? pendingBenchmarkFocus : null);
+    benchmarkRows.querySelectorAll('.bp-topic-favorite').forEach(button => button.dispose?.());
     benchmarkRows.replaceChildren();
     referenceCoverage.begin();
     const expanded = isExpandedWeightView();
     const personalControlsActive = state.mode === 'personal' && !expanded;
     benchmarkCard?.classList.toggle('has-personal-controls', personalControlsActive);
     const fallbackTargetActive = isInlineFallbackTargetActive();
+    const scenesVisible = isSceneDiscovery();
+    benchmarkSearchClear.hidden = !benchmarkSearch.value && !scenesVisible;
     const fallbackVersions = fallbackTargetActive && Boolean(state.versionComposition);
     const fallbackPrimary = fallbackTargetActive ? selectedInlineFallbackPrimary() : null;
     const activeFallbackRule = fallbackPrimary ? fallbackRuleFor(fallbackPrimary.ID) : null;
@@ -1781,7 +1876,7 @@ function renderBenchmarks() {
         benchmarkRows.append(loading);
         return;
     }
-    if (!expanded && state.benchmarks.length === 0 && state.rankingPageLoading.benchmarks) {
+    if (!scenesVisible && !expanded && state.benchmarks.length === 0 && state.rankingPageLoading.benchmarks) {
         const loading = document.createElement('div');
         loading.className = 'bp-loading-state';
         setLoading(loading, 'Loading benchmarks…');
@@ -1799,7 +1894,7 @@ function renderBenchmarks() {
     const availableObjects = state.mode === 'personal'
         ? state.benchmarks.filter(object => !hiddenPersonalBenchmarkIDs.has(Number(object.ID)))
         : state.benchmarks;
-    const objects = expanded ? expandedBenchmarkRows() : fallbackVersions ? fallbackVersionRows()
+    const objects = scenesVisible ? sceneDiscoveryRows() : expanded ? expandedBenchmarkRows() : fallbackVersions ? fallbackVersionRows()
         : (fallbackTargetActive ? availableObjects.filter(object => !isTopicReference(object)) : availableObjects).map(object => {
         if (!object.isBenchmarkGroup) return object;
         const entries = (state.mode === 'personal' ? state.personalEntries : state.publicEntries)
@@ -1836,7 +1931,7 @@ function renderBenchmarks() {
         } else if (!expanded) appendBenchmarkDiscoveryActions(empty);
     }
 
-    const groupPages = expanded || fallbackVersions ? null : currentBenchmarkPages();
+    const groupPages = expanded || fallbackVersions || scenesVisible ? null : currentBenchmarkPages();
     const hasOtherVersions = (groupPages?.other.total ?? 0) > 0;
     const lowCoverageRows = document.createElement('div');
     lowCoverageRows.id = 'benchmark-low-rows';
@@ -1890,13 +1985,26 @@ function renderBenchmarks() {
         const name = createBenchmarkInformationLink(object, { getURL: getBenchmarkMemberURL,
             onInspect: onBenchmarkInspection, className: 'bp-benchmark-name', showVersion: fallbackTargetActive });
         identity.append(name);
+        const metadata = document.createElement('span'); metadata.className = 'bp-evaluation-meta';
+        if (isTopicReference(object)) {
+            if (object.configured) metadata.append(createConfiguredIndicator(object));
+            if (!object.isPrivate) metadata.append(createFavoriteButton({ ...object, ID: object.categoryID }, {
+                onError: (_error, message) => additionToast.show(message)
+            }));
+            if (!object.configured) {
+                const configurations = document.createElement('span'); configurations.className = 'bp-evidence-count';
+                configurations.tabIndex = 0; configurations.setAttribute('role', 'img');
+                const count = Number(object.configurationCount ?? 0);
+                configurations.innerHTML = '<i class="fa-solid fa-users" aria-hidden="true"></i>';
+                const value = document.createElement('span'); value.textContent = count.toLocaleString('en-US'); configurations.append(value);
+                configurations.dataset.tooltip = `${count.toLocaleString('en-US')} saved public weight sets`;
+                configurations.setAttribute('aria-label', configurations.dataset.tooltip); metadata.append(configurations);
+            }
+        }
         const scoreCount = isTopicReference(object) ? referenceCoverage.create(object)
-            : createEvidenceCount(object.scoreCount, { modelCount: object.isBenchmarkGroup ? undefined : object.scoredModelCount });
+            : createEvidenceCount(object.scoredModelCount ?? object.scoreCount, { kind: object.scoredModelCount == null ? 'scores' : 'models' });
         scoreCount.classList.add('bp-benchmark-score-count');
-        identity.append(scoreCount);
-        identity.dataset.tooltip = isTopicReference(object) ? accessibleName
-            : object.isBenchmarkGroup ? `${object.name}, ${object.scoreCount} approved scores across versions`
-                : `${accessibleName}, ${object.scoreCount} approved scores from ${object.scoredModelCount} models`;
+        metadata.append(scoreCount); identity.append(metadata);
 
         const publicValue = document.createElement('span');
         publicValue.className = 'bp-benchmark-weight bp-benchmark-public-weight';
@@ -1995,13 +2103,17 @@ function renderBenchmarks() {
     objects.forEach(object => {
         const entry = document.createElement('div'); entry.className = 'bp-benchmark-entry';
         entry.append(createRow(object));
-        const group = expanded || fallbackVersions ? 'primary' : currentBenchmarkGroup(object);
+        const group = expanded || fallbackVersions || scenesVisible ? 'primary' : currentBenchmarkGroup(object);
         if (group === 'lowCoverage') lowCoverageRows.append(entry);
         else if (group === 'other') otherRows.append(entry);
         else benchmarkRows.append(entry);
     });
+    if (scenesVisible && sceneTargetsError) {
+        const retry = document.createElement('button'); retry.type = 'button'; retry.className = 'bp-quiet-action';
+        retry.textContent = 'Retry scene details'; retry.addEventListener('click', loadSceneTargets); benchmarkRows.append(retry);
+    }
     const appendPageFooter = (container, group) => {
-        if (expanded) return;
+        if (expanded || fallbackVersions || scenesVisible) return;
         const page = groupPages?.[group];
         const key = benchmarkPageKey(group);
         if (!page?.hasMore && !state.rankingPageError[key]) return;
@@ -2089,6 +2201,15 @@ function renderModeState() {
     modelIndexHeading.textContent = indexTitle;
     modelIndexTab.textContent = 'AI Index';
     modelIndexTab.setAttribute('aria-label', indexTitle);
+    const coverage = document.getElementById('ranking-coverage-index');
+    const coverageValue = state.coverageIndex?.[state.mode];
+    coverage.hidden = !Number.isFinite(coverageValue);
+    if (!coverage.hidden) {
+        const label = Math.floor(coverageValue).toLocaleString('en-US');
+        coverage.querySelector('[data-coverage-value]').textContent = label;
+        coverage.dataset.tooltip = `Total coverage index: ${label}. Sum of model coverage; 100% coverage counts as 1.`;
+        coverage.setAttribute('aria-label', coverage.dataset.tooltip);
+    }
     pieCard.classList.toggle('is-expanded-weight-view', isExpandedWeightView());
     document.getElementById('expanded-weight-note').hidden = !isExpandedWeightView();
     document.body.classList.toggle('bp-private-category', state.contextIsPrivate);
@@ -2125,7 +2246,9 @@ function renderModeState() {
     }
     personalPieGuidance.hidden = false;
     publicPieSummary.hidden = personal || choosingStart;
-    publicPieCount.textContent = `${state.publicParticipantCount.toLocaleString('en-US')} saved weight ${state.publicParticipantCount === 1 ? 'set' : 'sets'}`;
+    publicPieCount.textContent = state.publicParticipantCount.toLocaleString('en-US');
+    publicPieSummary.dataset.tooltip = `${state.publicParticipantCount.toLocaleString('en-US')} saved weight ${state.publicParticipantCount === 1 ? 'set' : 'sets'} shape these public weights.`;
+    publicPieSummary.setAttribute('aria-label', publicPieSummary.dataset.tooltip);
     const hasPersonalWeights = state.personalEntries.length > 0;
     const emptyPie = !state.loading && currentPieEntries().length === 0 && !personalPieStart.previewPublic;
     pieCard.classList.toggle('has-empty-pie', emptyPie);
@@ -2133,7 +2256,8 @@ function renderModeState() {
     compactPieMessage.textContent = personal ? 'Add a benchmark or topic to start your index.' : 'No public weights for this topic or scene yet.';
     compactPieAction.hidden = personal;
     compactPieAction.textContent = hasPersonalWeights ? 'View your personal weights' : 'Create personal weights';
-    pieSvg.style.touchAction = personal && state.personalEntries.length > 1 ? 'pan-x' : 'pan-x pan-y';
+    pieSvg.style.touchAction = personal && state.selectedObjectID !== null && !isExpandedWeightView()
+        && state.personalEntries.length > 1 ? 'pan-x' : 'pan-x pan-y';
     const showCreatePersonal = !state.loading && !hasPersonalWeights && !personal;
     const showEmptyPersonal = !state.loading && !hasPersonalWeights && personal && !personalPieStart.previewPublic;
     pieSvg.toggleAttribute('hidden', showEmptyPersonal);
@@ -2191,11 +2315,12 @@ function renderWeightSourcePresentation(showSwitch, showCreate) {
 
 function renderSelectedWeightHeading() {
     const entries = currentPieEntries();
-    const selected = entries.find(entry => Number(entry.conditionID) === Number(state.selectedObjectID))
-        ?? (isExpandedWeightView() ? null : entries[0]);
+    const selected = entries.find(entry => Number(entry.conditionID) === Number(state.selectedObjectID));
     personalPieGuidance.hidden = !selected || personalPieStart.isOpen;
-    if (isTopicReference(selected)) renderTopicLabel(pieInstruction, topicLabelText(selected));
-    else pieInstruction.textContent = selected ? benchmarkAccessibleName(selected) : '';
+    pieInstruction.replaceChildren();
+    if (selected) pieInstruction.append(createBenchmarkInformationLink(selected, {
+        getURL: getBenchmarkMemberURL, onInspect: onBenchmarkInspection, className: 'bp-selected-weight-link'
+    }));
     if (selected && !isTopicReference(selected) && typeof selected.scoredModelCount === 'number') {
         updateEvidenceCount(pieModelCount, selected.scoredModelCount, { kind: 'models' });
         if (pieModelCount.parentElement !== pieContextNote) pieContextNote.replaceChildren(pieModelCount);
@@ -2288,10 +2413,8 @@ function applyPieMode(mode, { animate = true } = {}) {
     deactivateInlineFallbackTarget();
     state.mode = mode === 'public' && !state.contextIsPrivate ? 'public' : 'personal';
     writeWorkspacePreferences(state);
+    reconcileWeightSelection();
     const entries = currentPieEntries();
-    if (!entries.some(entry => Number(entry.conditionID) === Number(state.selectedObjectID))) {
-        state.selectedObjectID = entries[0]?.conditionID ?? null;
-    }
     if (state.workspaceView === 'focus' && entries.length === 0) {
         state.workspaceView = 'leaderboard';
     }
@@ -2358,6 +2481,9 @@ function applyServerWorkspace(payload, {
     const contextChanged = state.pieContextFingerprint !== nextContextFingerprint;
     if (contextChanged) {
         state.editHistory.clear();
+        benchmarkSearchActive = false;
+        state.selectedObjectID = null;
+        state.selectedFamilyKey = null;
         hiddenPersonalBenchmarkIDs.clear();
         resetPieVisualState();
         state.pieContextFingerprint = nextContextFingerprint;
@@ -2383,6 +2509,7 @@ function applyServerWorkspace(payload, {
     state.topicName = String(payload.context.categoryName ?? payload.context.lineage?.at(-1)?.name ?? state.topicName ?? '');
     state.topicSummary = String(payload.context.description ?? '');
     state.topicCreator = payload.context.creator ?? null;
+    state.topicMetadata = { ...state.topicMetadata, ...payload.context };
     state.contextIsPrivate = payload.context.isPrivate === true;
     state.scenes = (payload.context.scenes ?? []).map(scene => ({ ...scene }));
     state.sceneID = payload.context.sceneID ?? null;
@@ -2398,6 +2525,7 @@ function applyServerWorkspace(payload, {
     state.personalEntries = cloneEntries(payload.personalPie.entries);
     state.personalFallbackRules = cloneFallbackRules(payload.personalPie.fallbackRules);
     state.publicEntries = cloneEntries(payload.publicPie.entries);
+    state.coverageIndex = { personal: payload.personalPie.coverageIndex, public: payload.publicPie.coverageIndex };
     state.referenceIssues = { personal: structuredClone(payload.personalPie.referenceIssues ?? []), public: structuredClone(payload.publicPie.referenceIssues ?? []) };
     state.effectiveEntries = { personal: structuredClone(payload.personalPie.effectiveEntries ?? null), public: structuredClone(payload.publicPie.effectiveEntries ?? null) };
     state.referenceCompositions = { personal: structuredClone(payload.personalPie.referenceCompositions ?? []), public: structuredClone(payload.publicPie.referenceCompositions ?? []) };
@@ -2450,10 +2578,7 @@ function applyServerWorkspace(payload, {
     pieRecovery.bind(recoveryRecord);
     state.lastLoadTime = Date.parse(payload.serverTime) || Date.now();
     state.statusMessage = '';
-    const currentEntries = currentPieEntries();
-    if (!currentEntries.some(entry => Number(entry.conditionID) === Number(state.selectedObjectID))) {
-        state.selectedObjectID = currentEntries[0]?.conditionID ?? null;
-    }
+    reconcileWeightSelection({ contextChanged });
     if (state.workspaceView === 'focus' && state.selectedObjectID !== null) {
         window.queueMicrotask(() => revealBenchmarkRow(state.selectedObjectID));
     }
@@ -2465,6 +2590,9 @@ function applyServerWorkspace(payload, {
         authenticated: state.authenticated,
         hasPersonalWeights: state.hasSavedPersonalWeights,
         personalSave
+    });
+    if (state.authenticated && state.categoryID && contextChanged) void recordProfileVisit({
+        categoryID: state.categoryID, contextID: state.contextID
     });
 }
 
@@ -2968,10 +3096,13 @@ async function applyWorkspaceState(detail = {}) {
     state.topicName = String(detail.categoryName ?? state.topicName ?? '');
     state.topicSummary = String(detail.description ?? '');
     state.topicCreator = detail.creator ?? null;
+    if (changed) state.topicMetadata = { ...detail };
     state.contextIsPrivate = detail.isPrivate === true;
     if (state.contextIsPrivate) state.mode = 'personal';
     if (changed || explicitContext) {
         state.selectedContextValues = { ...(detail.contextValues ?? {}) };
+        state.selectedObjectID = null;
+        state.selectedFamilyKey = null;
         state.dimensions = [];
         state.workspaceView = 'overview';
     }
@@ -3029,7 +3160,7 @@ function startPersonalPie(entries, isCurrent) {
     state.personalEntries = cloneEntries(entries); state.personalFallbackRules = [];
     state.personalCommunityComposition = [];
     state.referenceIssues.personal = []; state.effectiveEntries.personal = null; state.referenceCompositions.personal = [];
-    state.selectedObjectID = entries[0]?.conditionID ?? null; state.selectedFamilyKey = null;
+    state.selectedObjectID = null; state.selectedFamilyKey = null;
     state.workspaceView = 'overview'; state.personalFallbackExpanded = false;
     registerPieEntries(state.personalEntries);
     setStatus(''); renderAll();
@@ -3044,21 +3175,26 @@ resetButton.addEventListener('click', () => {
         if (!personalPieStart.isApplying) personalPieStart.close();
     } else void openPersonalStart(resetButton, true);
 });
-topicViewButton.addEventListener('click', async () => {
-    if (topicViewButton.disabled) return;
+async function toggleExpandedWeights() {
+    if (!isExpandedWeightView() && topicViewButton.disabled) return;
     const scope = workspaceContextFingerprint(), mode = state.mode;
     if (!await finishPendingWeightAdjustments() || !await flushPendingPersonalPieSave()
         || scope !== workspaceContextFingerprint() || mode !== state.mode) return;
     const selected = currentPieEntries().find(entry => entry.conditionID === state.selectedObjectID);
     state.topicsExpanded = !isExpandedWeightView();
-    if (isTopicReference(selected) || !currentPieEntries().some(entry => entry.conditionID === state.selectedObjectID)) {
+    const retained = selected && !isTopicReference(selected) && currentPieEntries().find(entry =>
+        !isTopicReference(entry) && (entry.conditionID === selected.conditionID || entry.benchmarkID === selected.benchmarkID));
+    if (!retained) {
         state.selectedObjectID = null; state.selectedFamilyKey = null; state.workspaceView = 'overview';
-    }
+    } else state.selectedObjectID = retained.conditionID;
     deactivateInlineFallbackTarget();
     window.clearTimeout(benchmarkSearchTimer);
     renderAll();
     if (!isExpandedWeightView()) reloadBenchmarkPage();
-});
+}
+topicViewButton.addEventListener('click', toggleExpandedWeights);
+document.getElementById('expanded-weight-close').addEventListener('click', toggleExpandedWeights);
+document.getElementById('pie-selection-clear').addEventListener('click', clearWeightSelection);
 compactPieAction.addEventListener('click', () => {
     if (state.personalEntries.length) void setMode('personal');
     else void openPersonalStart(compactPieAction);
@@ -3320,7 +3456,7 @@ function restoreHistory(direction) {
         hiddenPersonalBenchmarkIDs.delete(Number(entry.conditionID));
     }
     if (!state.personalEntries.some(entry => Number(entry.conditionID) === Number(state.selectedObjectID))) {
-        state.selectedObjectID = state.personalEntries[0]?.conditionID ?? null;
+        state.selectedObjectID = null;
     }
     renderAll();
     void persistPersonalPie();
@@ -3363,8 +3499,10 @@ document.addEventListener('visibilitychange', () => {
 });
 
 benchmarkSearch.addEventListener('input', () => {
+    benchmarkSearchActive = true;
     hiddenPersonalBenchmarkIDs.clear();
     window.clearTimeout(benchmarkSearchTimer);
+    if (isSceneDiscovery()) { loadSceneTargets(); renderBenchmarks(); return; }
     if (isExpandedWeightView() || state.versionComposition && isInlineFallbackTargetActive()) { renderBenchmarks(); return; }
     if (!state.rankingPagination || state.loading || workspaceLoadFailed) return;
     state.rankingPageSequence.benchmarks += 1;
@@ -3375,6 +3513,21 @@ benchmarkSearch.addEventListener('input', () => {
         state.rankingPageLoading.benchmarks = false;
         reloadBenchmarkPage();
     }, 180);
+});
+benchmarkSearch.addEventListener('focus', () => {
+    benchmarkSearchActive = true;
+    if (isSceneDiscovery()) { loadSceneTargets(); renderBenchmarks(); }
+});
+benchmarkSearchClear.addEventListener('click', () => {
+    const hadQuery = Boolean(benchmarkSearch.value.trim());
+    benchmarkSearchActive = false;
+    benchmarkSearch.value = '';
+    benchmarkSearch.blur();
+    window.clearTimeout(benchmarkSearchTimer);
+    if (hadQuery && !isExpandedWeightView() && !isInlineFallbackTargetActive()) reloadBenchmarkPage();
+    else renderBenchmarks();
+    document.getElementById('benchmark-heading').setAttribute('tabindex', '-1');
+    document.getElementById('benchmark-heading').focus({ preventScroll: true });
 });
 
 benchmarkPersonalPin.addEventListener('click', () => {

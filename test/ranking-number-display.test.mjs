@@ -37,7 +37,8 @@ test('short endpoint labels move outside by default for both weight and score tr
 test('both score modes use the same thick track and inline endpoint labels', async () => {
     const code = await readFile(new URL('../public/js/workspace/model-list.js', import.meta.url), 'utf8');
     const css = await readFile(new URL('../public/css/ui/workspace.css', import.meta.url), 'utf8');
-    assert.match(code, /if \(comparable\) mountBarEndpointLabel\(track, score/);
+    assert.match(code, /if \(comparable\) \{\s*mountBarEndpointLabel\(track, score/);
+    assert.match(code, /track\.removeAttribute\('data-tooltip'\)/);
     assert.match(code, /row\.classList\.toggle\('has-inline-score', comparable\)/);
     assert.doesNotMatch(code, /if \(relative\) mountBarEndpointLabel/);
     assert.match(css, /\.bp-score-track\s*\{[^}]*height: 26px;[^}]*background: transparent;[^}]*overflow: visible;[^}]*border-radius: 3px;/);

@@ -32,6 +32,10 @@ export function returnFromContribution(params = new URLSearchParams()) {
 }
 
 export function contributionPath(mode, values = {}) {
+    if (mode === 'topic_report') {
+        if (!/^[1-9]\d*$/.test(String(values.targetCategoryID))) throw new Error('A valid topic ID is required.');
+        return `/contribute/topics/${values.targetCategoryID}/report`;
+    }
     if (targets[mode]) {
         const [collection, field] = targets[mode];
         if (!/^[1-9]\d*$/.test(String(values[field]))) throw new Error('A valid object ID is required.');
@@ -51,6 +55,8 @@ export function contributionRoute(pathname) {
     }
     const report = path.match(/^\/contribute\/discussions\/([1-9]\d*)\/report$/);
     if (report) return { mode: 'report', postID: report[1] };
+    const topicReport = path.match(/^\/contribute\/topics\/([1-9]\d*)\/report$/);
+    if (topicReport) return { mode: 'topic_report', targetCategoryID: topicReport[1] };
     const mode = Object.keys(routes).find(key => path === `/contribute/${routes[key]}`);
     return mode ? { mode } : null;
 }

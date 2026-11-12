@@ -4,7 +4,6 @@ import { pathToFileURL } from 'node:url';
 import vm from 'node:vm';
 import { canonicalAccountID } from '../public/js/shared/account-identity.js';
 import { deleteDiscussionPost, voteDiscussion } from '../discussion-service.js';
-import { publicGitHubProfile } from '../user-profile-service.js';
 import { moderationAuditSnapshot, insertModerationAuditLog } from '../moderation-admin.js';
 import { createModerationEmailService } from '../moderation-email.js';
 import { createModerationMutationHarness } from './review-moderation-replay-20261008.mjs';
@@ -42,20 +41,20 @@ export async function probeDriverConfiguration(source) {
 }
 
 export async function probeDiscussionOwnership(source, actor, author, { showGitHubProfile = false, active = true } = {}) {
-    const context = vm.createContext({ canonicalAccountID, publicGitHubProfile });
+    const context = vm.createContext({ canonicalAccountID });
     const start = source.indexOf('async function decorate('), end = source.indexOf('export async function listDiscussion', start);
     assert.ok(start > 0 && end > start);
     vm.runInContext(source.slice(start, end), context);
     context.actor = actor;
     context.rows = [{ ID: 7, author_ID: author, context_values: {}, body: 'Isolated text', category_ID: 1, context_ID: 1,
-        author_name: 'Custom public name', author_avatar_url: null, author_github_username: 'Verified-Login',
+        author_name: 'Custom public name', author_avatar_url: null, author_public_id: 'verified-user', author_github_username: 'Verified-Login',
         author_show_github_profile: showGitHubProfile ? 1 : 0, author_profile_active: active ? 1 : 0 }];
     const calls = [];
     context.connection = { execute: async (sql, args) => { calls.push({ sql, args }); return [[]]; } };
     const post = (await vm.runInContext('decorate(connection, rows, actor)', context))[0];
     assert.equal(post.authorName, 'Custom public name');
-    assert.equal(Object.hasOwn(post, 'githubURL'), showGitHubProfile && active);
-    if (post.githubURL) assert.equal(post.githubURL, 'https://github.com/Verified-Login');
+    assert.equal(Object.hasOwn(post, 'githubURL'), false);
+    assert.equal(post.authorPublicID, active ? 'verified-user' : null);
     for (const key of ['author_ID', 'author_github_username', 'author_show_github_profile', 'author_profile_active']) {
         assert.equal(Object.hasOwn(post, key), false);
     }

@@ -1,9 +1,10 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { canonicalAccountID } from './public/js/shared/account-identity.js';
 import { topicSlug, sceneSlug } from './public/js/shared/topics.js';
-import { normalizeTopicRequest, serializeTopic, topicID } from './topic-service.js';
+import { normalizeTopicRequest, topicID, assertPublicTopicCapacity, assertPublicTopicAvailable, getTopic } from './topic-service.js';
 import { loadTopicSceneCatalog, normalizeTopicSceneRequest, lockTopicReferenceGraph,
     ensureTopicRootContext, insertTopicScene, EMPTY_TOPIC_CONTEXT_HASH } from './topic-scenes-service.js';
+import { allocateTopicIdentity } from './topic-platform-schema.js';
 import { claimWriteIntent, completeWriteIntent } from './write-idempotency.js';
 import { startTransactionConnection, commitTransactionConnection, rollbackTransactionConnection,
     releaseTransactionConnection } from './db-transaction.js';
@@ -20,7 +21,7 @@ const expectedVersion = value => {
 };
 
 export function privateTopicRevision(topic, scenes) {
-    return createHash('sha256').update(JSON.stringify([topic.name, topic.description,
+    return createHash('sha256').update(JSON.stringify([topic.name, topic.description, topic.owner_user_ID == null,
         scenes.map(scene => [scene.ID, scene.name, scene.description, scene.position, scene.isDefault])])).digest('hex');
 }
 
@@ -52,8 +53,8 @@ export function normalizePrivateTopicEdit(body) {
 }
 
 async function privateRow(connection, owner, ID, lock = false) {
-    const [rows] = await connection.execute(`SELECT ID, name, slug, description, owner_user_ID, created_by_user_ID,
-        is_active FROM categories WHERE ID = ? AND owner_user_ID = ? AND is_active = 1${lock ? ' FOR UPDATE' : ''}`, [ID, owner]);
+    const [rows] = await connection.execute(`SELECT ID, name, slug, description, owner_user_ID, created_by_user_ID, public_ID, private_ID, is_official,
+        is_active FROM categories WHERE ID = ? AND created_by_user_ID = ? AND is_official = 0 AND is_active = 1${lock ? ' FOR UPDATE' : ''}`, [ID, owner]);
     if (rows.length !== 1) fail(404, 'private_topic_not_found');
     return rows[0];
 }
@@ -65,13 +66,8 @@ export async function readPrivateTopicEditor(db, userID, body) {
 }
 
 async function editorResult(connection, row) {
-    const catalog = (await loadTopicSceneCatalog(connection, [Number(row.ID)])).get(Number(row.ID));
-    const [collecting] = await connection.execute(`SELECT p.ID FROM topic_proposals p
-        JOIN topic_proposal_snapshots s ON s.proposal_ID = p.ID AND s.revision = p.revision
-        WHERE s.source_topic_ID = ? AND p.user_ID = ? AND p.status = 'open' AND p.withdrawn_at IS NULL
-        AND p.created_at > CURRENT_TIMESTAMP(3) - INTERVAL 14 DAY`, [Number(row.ID), row.owner_user_ID]);
-    return { ...serializeTopic(row), ...catalog, hasScenes: catalog.scenes.length > 0,
-        isMine: true, hasCollectingProposal: collecting.length > 0, editRevision: privateTopicRevision(row, catalog.scenes) };
+    const topic = await getTopic(connection, row.created_by_user_ID, Number(row.ID));
+    return { ...topic, isMine: true, editRevision: privateTopicRevision(row, topic.scenes) };
 }
 
 export async function privateTopicTransaction(db, userID, key, action, payload, operation) {
@@ -98,13 +94,14 @@ export async function insertPrivateTopic(connection, owner, metadata) {
     const [[count]] = await connection.execute(`SELECT COUNT(*) AS count FROM categories
         WHERE created_by_user_ID = ? AND created_at >= NOW() - INTERVAL 1 DAY`, [owner]);
     if (Number(count.count) >= 20) fail(429, 'topic_creation_limit');
+    const { publicID, privateID } = await allocateTopicIdentity(connection);
     const [inserted] = await connection.execute(`INSERT INTO categories
-        (name, slug, description, owner_user_ID, created_by_user_ID, position)
-        VALUES (?, ?, ?, ?, ?, 0)`, [metadata.name, topicSlug(metadata.name), metadata.description, owner, owner]);
+        (name, slug, description, owner_user_ID, created_by_user_ID, public_ID, private_ID, is_official, position)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0)`, [metadata.name, topicSlug(metadata.name), metadata.description, owner, owner, publicID, privateID]);
     const ID = Number(inserted.insertId);
     await ensureTopicRootContext(connection, ID);
     return { ID, name: metadata.name, slug: topicSlug(metadata.name), description: metadata.description,
-        owner_user_ID: owner, created_by_user_ID: owner, is_active: 1 };
+        owner_user_ID: owner, created_by_user_ID: owner, public_ID: publicID, private_ID: privateID, is_official: 0, is_active: 1 };
 }
 
 // The graph lock prevents pie saves and concurrent reference/scene edits from racing this replacement.
@@ -129,7 +126,7 @@ export async function replacePrivateScenes(connection, topic, previous, request)
         const old = previous.scenes.find(item => item.ID === scene.ID);
         const contextID = scene.ID ?? (!previous.scenes.length && isDefault ? rootID : null);
         await insertTopicScene(connection, Number(topic.ID), { ...scene, isDefault },
-            { contextID, legacyValues: old?.legacyContextValues ?? (contextID === rootID && !previous.scenes.length ? {} : null), position });
+            { contextID, sceneNumber: old?.sceneNumber ?? null, legacyValues: old?.legacyContextValues ?? (contextID === rootID && !previous.scenes.length ? {} : null), position });
     }
 }
 
@@ -141,7 +138,7 @@ export async function savePrivateTopic(db, userID, body, key) {
         const catalog = (await loadTopicSceneCatalog(connection, [Number(topic.ID)])).get(Number(topic.ID));
         if (request.categoryID !== null && privateTopicRevision(topic, catalog.scenes) !== request.expectedRevision) fail(409, 'private_topic_changed');
         await replacePrivateScenes(connection, topic, catalog, request);
-        await connection.execute('UPDATE categories SET name = ?, slug = ?, description = ? WHERE ID = ? AND owner_user_ID = ?',
+        await connection.execute('UPDATE categories SET name = ?, slug = ?, description = ? WHERE ID = ? AND created_by_user_ID = ?',
             [request.name, topicSlug(request.name), request.description, Number(topic.ID), owner]);
         return editorResult(connection, { ...topic, name: request.name, slug: topicSlug(request.name), description: request.description });
     });
@@ -154,17 +151,60 @@ export async function deletePrivateTopic(db, userID, body, key) {
         const topic = await privateRow(connection, owner, request.categoryID, true);
         const current = await editorResult(connection, topic);
         if (current.editRevision !== request.expectedRevision) fail(409, 'private_topic_changed');
-        // Proposal support/review transitions share the graph lock. Only the current,
-        // still-collecting snapshot follows deletion; review snapshots stay independent.
-        await connection.execute(`DELETE p FROM topic_proposals p
-            JOIN topic_proposal_snapshots s ON s.proposal_ID = p.ID AND s.revision = p.revision
-            WHERE s.source_topic_ID = ? AND p.user_ID = ? AND p.status = 'open' AND p.withdrawn_at IS NULL
-            AND p.created_at > CURRENT_TIMESTAMP(3) - INTERVAL 14 DAY`, [request.categoryID, owner]);
+        if (topic.owner_user_ID == null) fail(409, 'make_topic_private_before_deleting');
         await connection.execute(`DELETE p FROM personal_pies p JOIN ranking_contexts rc ON rc.ID = p.context_ID
             WHERE rc.category_ID = ?`, [request.categoryID]);
         await connection.execute('DELETE FROM topic_scenes WHERE category_ID = ?', [request.categoryID]);
         await connection.execute(`UPDATE categories SET is_active = 0, name = ?, slug = ?, description = '', notes = NULL
             WHERE ID = ? AND owner_user_ID = ?`, ['Deleted private topic ' + randomUUID(), 'deleted-private-' + request.categoryID, request.categoryID, owner]);
         return { categoryID: request.categoryID, deleted: true };
+    });
+}
+
+export async function setTopicVisibility(db, userID, body, key) {
+    record(body, ['categoryID', 'isPublic', 'expectedRevision']);
+    if (typeof body.isPublic !== 'boolean') fail(400, 'invalid_topic_visibility');
+    const request = { categoryID: topicID(body.categoryID), isPublic: body.isPublic,
+        ...(body.expectedRevision === undefined ? {} : { expectedRevision: expectedVersion(body.expectedRevision) }) };
+    return privateTopicTransaction(db, userID, key, 'set_topic_visibility', request, async (connection, owner) => {
+        const topic = await privateRow(connection, owner, request.categoryID, true);
+        const current = await editorResult(connection, topic);
+        if (request.expectedRevision && current.editRevision !== request.expectedRevision) fail(409, 'private_topic_changed');
+        if (request.isPublic === (topic.owner_user_ID == null)) return current;
+        if (request.isPublic) {
+            await assertPublicTopicCapacity(connection, owner, request.categoryID);
+            await assertPublicTopicAvailable(connection, topic, request.categoryID);
+            // A publication may contain cycles, but no public composition may
+            // disclose another private topic or its saved weights.
+            const [privateTargets] = await connection.execute(`SELECT target.ID FROM personal_pie_topic_weights w
+                JOIN personal_pies p ON p.ID = w.pie_ID JOIN ranking_contexts source ON source.ID = p.context_ID
+                JOIN ranking_contexts destination ON destination.ID = w.target_context_ID
+                JOIN categories target ON target.ID = destination.category_ID
+                WHERE source.category_ID = ? AND target.owner_user_ID IS NOT NULL AND target.ID <> ? LIMIT 1`,
+                [request.categoryID, request.categoryID]);
+            if (privateTargets.length) fail(409, 'private_topic_reference_not_public');
+        }
+        await connection.execute('UPDATE categories SET owner_user_ID = ? WHERE ID = ? AND created_by_user_ID = ?',
+            [request.isPublic ? null : owner, request.categoryID, owner]);
+        return { ...await getTopic(connection, owner, request.categoryID),
+            editRevision: privateTopicRevision({ ...topic, owner_user_ID: request.isPublic ? null : owner }, current.scenes) };
+    });
+}
+
+export async function setTopicFavorite(db, userID, body, key) {
+    record(body, ['categoryID', 'isFavorited']);
+    if (typeof body.isFavorited !== 'boolean') fail(400, 'invalid_topic_favorite');
+    const request = { categoryID: topicID(body.categoryID), isFavorited: body.isFavorited };
+    return privateTopicTransaction(db, userID, key, 'set_topic_favorite', request, async (connection, owner) => {
+        const [topics] = await connection.execute(`SELECT ID FROM categories WHERE ID = ? AND is_active = 1
+            AND (owner_user_ID IS NULL OR owner_user_ID = ?) FOR UPDATE`, [request.categoryID, owner]);
+        if (topics.length !== 1) fail(404, 'topic_not_found');
+        if (request.isFavorited) await connection.execute(`INSERT INTO topic_favorites (category_ID, user_ID, is_active) VALUES (?, ?, 1)
+            ON DUPLICATE KEY UPDATE is_active = 1`, [request.categoryID, owner]);
+        else await connection.execute('UPDATE topic_favorites SET is_active = 0 WHERE category_ID = ? AND user_ID = ?', [request.categoryID, owner]);
+        const [[count]] = await connection.execute(`SELECT COUNT(*) AS count FROM topic_favorites f JOIN users u ON u.ID = f.user_ID
+            WHERE f.category_ID = ? AND f.is_active = 1 AND u.deleted_at IS NULL
+                AND (u.banned_at IS NULL OR (u.banned_until IS NOT NULL AND u.banned_until <= NOW()))`, [request.categoryID]);
+        return { categoryID: request.categoryID, isFavorited: request.isFavorited, favoriteCount: Number(count.count) };
     });
 }

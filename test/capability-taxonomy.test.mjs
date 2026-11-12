@@ -2,7 +2,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { taxonomy, planCategories, desiredDimensions } from '../scripts/migrate-expanded-taxonomy.mjs';
 import { canonicalizeContextValues } from '../ranking-service.js';
-import { rankingContextURL, readRankingContext } from '../public/js/shared/ranking-url.js';
 
 const current = [
     { ID: 54, parent_ID: null, name: 'Intelligence', is_active: 1 },
@@ -54,8 +53,5 @@ test('new context definitions satisfy ranking invariants and shared reference op
     }
     const dimensions = desiredDimensions('video');
     const values = { reference_image: 'present', reference_video: 'present', realtime: 'yes' };
-    const url = rankingContextURL('https://benchpoll.com/Creation-and-Expression/Audiovisual/Video', dimensions, values);
-    assert.deepEqual(readRankingContext(url.search, dimensions), values);
-    assert.equal(new URLSearchParams(url.search).get('reference_image'), 'present');
-    assert.equal(new URLSearchParams(url.search).get('reference_video'), 'present');
+    assert.deepEqual(canonicalizeContextValues(values, dimensions).contextValues, values);
 });

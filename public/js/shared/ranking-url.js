@@ -1,81 +1,24 @@
-import { scenePath } from './topics.js';
-const reserved = new Set(['discussion', 'categoryID', 'benchmarkID', 'threadID', 'scene']);
+import { parseTopicPath, scenePath } from './topics.js';
 const invalidContextURL = message => Object.assign(new Error(message), { status: 400 });
 
-function sceneValue(value) {
-    if (!/^[1-9]\d*$/.test(String(value)) || !Number.isSafeInteger(Number(value))) {
-        throw invalidContextURL('Invalid scene');
+export function readRankingContext(search) {
+    for (const key of new URLSearchParams(search).keys()) {
+        if (key === 'scene' || key.startsWith('context_')) throw invalidContextURL('Scenes use numeric URL paths.');
     }
-    return String(value);
+    return {};
 }
 
-function ownersOf(key, dimensions) {
-    return dimensions.filter(dimension => dimension.options.some(option => option.key === key));
-}
-
-export function readRankingContext(search, dimensions = []) {
-    const values = {};
-    for (const [key, value] of new URLSearchParams(search)) {
-        if (key === 'scene' || key === 'context_scene') {
-            throw invalidContextURL('Scenes use named URL paths.');
-        }
-        let dimension;
-        let selected = value;
-        if (key.startsWith('context_')) {
-            // Old explicit context links are resolved to stable scenes by the server.
-            if (!dimensions.length) {
-                const name = key.slice(8);
-                if (!name || !value || Object.hasOwn(values, name)) throw invalidContextURL('Invalid legacy context');
-                values[name] = value;
-                continue;
-            }
-            dimension = dimensions.find(item => item.key === key.slice(8));
-            if (!dimension) throw invalidContextURL(`Unknown context: ${key.slice(8)}`);
-        } else if (!reserved.has(key) && dimensions.some(item => item.key === key) && value) {
-            dimension = dimensions.find(item => item.key === key);
-        } else if (!value && dimensions.length) {
-            const owners = ownersOf(key, dimensions);
-            if (owners.length !== 1) throw invalidContextURL(`Unknown or ambiguous context option: ${key}`);
-            [dimension] = owners;
-            selected = key;
-        } else continue;
-        if (Object.hasOwn(values, dimension.key)) throw invalidContextURL(`Repeated context: ${dimension.key}`);
-        if (!dimension.options.some(option => option.key === selected)) throw invalidContextURL(`Invalid context option: ${selected}`);
-        values[dimension.key] = selected;
-    }
-    if (values.scene && Object.keys(values).length !== 1) throw invalidContextURL('A scene cannot be combined with context options');
-    return values;
-}
-
-export function rankingContextURL(input, dimensions = [], values = {}, scenes = []) {
+export function rankingContextURL(input, _dimensions = [], values = {}, scenes = []) {
     const url = new URL(input);
-    if (url.searchParams.has('scene') || url.searchParams.has('context_scene')) {
-        throw invalidContextURL('Scenes use named URL paths.');
-    }
-    const extra = [...url.searchParams].filter(([key, value]) => !key.startsWith('context_')
-        && !(dimensions.some(dimension => dimension.key === key) && !reserved.has(key))
-        && !(value === '' && ownersOf(key, dimensions).length));
-    const parts = [];
+    readRankingContext(url.search);
+    const identity = parseTopicPath(url.pathname);
+    if (!identity) throw invalidContextURL('Invalid topic path');
     if (values.scene !== undefined) {
-        const scene = scenes.find(item => String(item.ID) === sceneValue(values.scene));
+        const scene = scenes.find(item => String(item.ID) === String(values.scene));
         if (!scene) throw invalidContextURL('Unknown scene');
         const path = scenePath(url.pathname, scene);
-        if (!path) throw invalidContextURL('Invalid topic path');
+        if (!path) throw invalidContextURL('Invalid scene path');
         url.pathname = path;
     }
-    for (const dimension of values.scene === undefined ? dimensions : []) {
-        const selected = dimension.options.find(option => option.key === values[dimension.key]);
-        if (!selected) throw new Error(`Invalid context selection: ${dimension.key}`);
-        // Only omit neutral defaults: omission must never select a different context.
-        if (selected.isNeutral && selected.isDefault) continue;
-        if (ownersOf(selected.key, dimensions).length === 1 && !reserved.has(selected.key)
-            && !selected.key.startsWith('context_')) parts.push(encodeURIComponent(selected.key));
-        else {
-            const key = reserved.has(dimension.key) ? `context_${dimension.key}` : dimension.key;
-            parts.push(`${encodeURIComponent(key)}=${encodeURIComponent(selected.key)}`);
-        }
-    }
-    parts.push(...extra.map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`));
-    url.search = parts.length ? `?${parts.join('&')}` : '';
     return url;
 }

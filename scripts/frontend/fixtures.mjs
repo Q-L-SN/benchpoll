@@ -17,8 +17,8 @@ export function rankingModelSearch(state, body) {
     return fixtureRankingPager.searchModels({ ...body, userID: state.authenticated ? state.userID : null });
 }
 export const categories = [
-    { ID: 1, name: 'Language models', parentID: null, path: 'Language-models', hasChildren: true, expanded: true,
-        children: [{ ID: 2, name: 'Reasoning', parentID: 1, path: 'Language-models/Reasoning' }, { ID: 3, name: 'Coding', parentID: 1, path: 'Language-models/Coding' }] }
+    { ID: 1, publicID: 1, isOfficial: true, name: 'Language models', parentID: null, path: '1', hasChildren: true, expanded: true,
+        children: [{ ID: 2, publicID: 2, isOfficial: true, name: 'Reasoning', parentID: 1, path: '2' }, { ID: 3, publicID: 3, isOfficial: true, name: 'Coding', parentID: 1, path: '3' }] }
 ];
 export const benchmarks = ['General knowledge', 'Advanced reasoning', 'Code generation', 'Mathematics', 'Instruction following', 'Long context', 'Multilingual', 'Tool use'].map((name, index) => ({
     ID: index + 1, rank: index + 1, conditionID: index + 1, benchmarkID: index + 101, name,
@@ -73,8 +73,8 @@ export function workspace(state, body, { paginate = true } = {}) {
     if (!['range', 'available'].includes(scoreMode)) {
         throw { status: 400, body: { error: 'invalid_score_mode' } };
     }
-    const category = [categories[0], ...categories[0].children].find(item => item.ID === Number(body.categoryID)) ?? categories[0];
-    const selectedKey = body.contextValues?.budget ?? 'standard';
+    const category = [...(state.topics ?? [categories[0], ...categories[0].children]), ...(state.newTopics ?? [])]
+        .find(item => item.ID === Number(body.categoryID)) ?? categories[0];
     const options = state.comparisonModels ? comparisonOptions(state.comparisonModels, body.comparison, state.comparisonFields ?? []) : null;
     const publicWeights = state.publicWeights ?? benchmarks.filter(item => item.publicWeight).map(item => ({ conditionID: item.conditionID, weightBasisPoints: item.publicWeight * 100 }));
     const publicEmpty = state.empty || publicWeights.length === 0;
@@ -104,15 +104,16 @@ export function workspace(state, body, { paginate = true } = {}) {
         estimationAlgorithm,
         authenticated: state.authenticated,
         userID: state.authenticated ? state.userID : null,
-        context: { ...(state.isPrivate ? { isPrivate: true } : {}), categoryID: category.ID, categoryPath: category.path, categoryName: category.name,
+        context: { ...(state.isPrivate ? { isPrivate: true } : {}), ID: 100 + category.ID, categoryID: category.ID, publicID: category.publicID,
+            categoryPath: category.path, categoryName: category.name, url: '/' + category.publicID, isOfficial: true,
+            favoriteCount: 12, isFavorited: false,
             description: category.description ?? `Compare models on ${category.name.toLowerCase()} tasks.`,
             creator: { name: 'BenchPoll', avatarURL: '/assets/benchpoll-mark.svg' },
             lineage: (category.ID === 1 ? [categories[0]] : [categories[0], category]).map(item => ({ ID: item.ID, name: item.name })),
-            contextValues: { budget: selectedKey }, dimensions: [{ key: 'budget', name: 'Budget', selectedKey,
-                options: [{ key: 'standard', name: 'Standard' }, { key: 'extended', name: 'Extended' }] }] },
-        personalPie: { revision: state.revision, isDraft: Boolean(preview) || !state.authenticated, editable: true,
+            contextValues: {}, dimensions: [], scenes: [] },
+        personalPie: { revision: state.revision, isDraft: Boolean(preview) || !state.authenticated, editable: true, coverageIndex: 5.75,
             entries: personalEntries, fallbackRules: personalFallbackRules },
-        publicPie: { participantCount: publicEmpty ? 0 : 128, isFallback: false,
+        publicPie: { participantCount: publicEmpty ? 0 : 128, isFallback: false, coverageIndex: publicEmpty ? 0 : 6.75,
             familyComposition: publicEmpty ? [] : publicWeights.map(entry => state.publicFamilyComposition?.find(group => group.primaryConditionID === entry.conditionID)
                 ?? { primaryConditionID: entry.conditionID, families: [{ primaryConditionID: entry.conditionID,
                     familyID: null, entries: [], weightBasisPoints: 10000, overallWeightBasisPoints: entry.weightBasisPoints }] }),
@@ -215,6 +216,7 @@ export function workspace(state, body, { paginate = true } = {}) {
         data.publicPie.familyComposition = compositionFor(data.publicPie.effectiveEntries);
         data.communityFallbackComposition = data.publicPie.familyComposition;
     }
+    state.transformWorkspace?.(data, body);
     if (!paginate) return data;
     return fixtureRankingPager.create(data, {
         userID: state.authenticated ? state.userID : null,

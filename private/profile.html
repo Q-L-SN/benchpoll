@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Explore a BenchPoll profile and the topics they publish, favorite and configure.">
+    <title>Profile · BenchPoll</title>
+    <link rel="icon" href="/favicon.ico" sizes="any">
+    <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
+    <link rel="stylesheet" href="/css/ui/tokens.css"><link rel="stylesheet" href="/css/ui/site-header.css">
+    <link rel="stylesheet" href="/css/ui/topic-identity.css"><link rel="stylesheet" href="/css/ui/profile-editor.css">
+    <link rel="stylesheet" href="/css/typography.css"><link rel="stylesheet" href="/css/profile.css">
+    <script type="module" src="/js/profile.js"></script>
+</head>
+<body class="bp-profile-page">
+    <a class="pf-skip" href="#profile-content">Skip to profile</a>
+    <header class="bp-site-header"><div class="bp-site-header-inner"><a class="bp-site-brand" href="/" aria-label="BenchPoll home"><img src="/assets/benchpoll-logo.svg" alt="BenchPoll" width="150" height="31"></a><nav id="profile-site-links"></nav></div></header>
+    <main id="profile-content" class="pf-main" tabindex="-1">
+        <p id="profile-status" class="pf-status" role="status">Loading profile…</p>
+        <section id="profile-identity" class="pf-identity" hidden aria-label="Profile"></section>
+        <div id="profile-tabs" class="pf-tabs" role="tablist" aria-label="Profile topics" hidden></div>
+        <section id="profile-topics" class="pf-topics" role="tabpanel" tabindex="0" hidden></section>
+        <noscript>JavaScript is required to load this profile.</noscript>
+    </main>
+    <footer class="pf-footer"><a href="/">Explore topics</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a></footer>
+</body>
+</html>

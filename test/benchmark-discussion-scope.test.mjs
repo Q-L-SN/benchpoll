@@ -3,11 +3,12 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import vm from 'node:vm';
 import { categoryDiscussionURL, createDiscussionEntry, setDiscussionEntryView } from '../public/js/workspace/discussion-entry.js';
-import { scenePath, topicSlug } from '../public/js/shared/topics.js';
+import { scenePath, parseTopicPath } from '../public/js/shared/topics.js';
 import { readRankingContext } from '../public/js/shared/ranking-url.js';
 import { orderedScenes } from '../public/js/navigation/scenes.js';
 import { createDiscussionAutoLoader } from '../public/js/shared/discussion-auto-load.js';
 import { profileAvatarURL } from '../public/js/shared/profile-editor.js';
+import { profileURL } from '../public/js/shared/profile-identity.js';
 import { createAccountWriteScope, isAccountWriteError } from '../public/js/shared/account-identity.js';
 import { hasAADisplayRestriction, AA_DISPLAY_MESSAGE } from '../public/js/shared/aa-ranking-policy.js';
 
@@ -16,7 +17,8 @@ const loadingSource = (await readFile(new URL('../public/js/shared/loading.js', 
 const read = path => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 const source = await read('public/js/discussion.js');
 const flush = async () => { for (let turn = 0; turn < 30; turn++) await Promise.resolve(); };
-const scenes = [{ ID: 70, name: 'Standard', isDefault: true }, { ID: 71, name: 'Extended', isDefault: false }];
+const scenes = [{ ID: 70, sceneNumber: 1, url: '/7/1', name: 'Standard', isDefault: true },
+    { ID: 71, sceneNumber: 2, url: '/7/2', name: 'Extended', isDefault: false }];
 const customAvatar = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNQSQv4DwADZgHaE5klaQAAAABJRU5ErkJggg==';
 
 class Element {
@@ -74,15 +76,14 @@ function harness({ mobile = false, resolveRequest, sceneOptions = scenes } = {})
     $('discussion-entry').parts = { '[data-discussion-count]': $('entry-label') };
     $('context-actions').append($('discussion-entry'), $('workspace-refresh'));
     $('benchmark-information').parts = { '.benchmark-information-meta': $('benchmark-meta') };
-    for (const id of ['benchmark-scores-view', 'discussion-compose-fields', 'benchmark-information', 'benchmark-discussion-heading']) $(id).hidden = true;
-    const sort = [new Element(), new Element()]; sort[0].dataset.sort = 'hot'; sort[1].dataset.sort = 'new';
+    for (const id of ['benchmark-scores-view', 'benchmark-information', 'benchmark-discussion-heading']) $(id).hidden = true;
+    $('discussion-sort-toggle').append(new Element('i'), new Element('span'));
     const scope = createAccountWriteScope();
     const context = vm.createContext({
         document: { getElementById: $, body, documentElement: { lang: 'en' }, createElement: tag => new Element(tag), createTextNode: value => ({ textContent: value }),
             addEventListener(name, callback) { listeners.set(`document:${name}`, callback); },
             querySelector(selector) { return selector === '.bp-shell > .bp-sidebar' ? sidebar : selector === '.bp-workspace' ? workspace : $('sort'); },
             querySelectorAll(selector) {
-                if (selector === '[data-sort]') return sort;
                 if (selector === '.bp-discussion-author[data-profile-self="true"]') return [$('thread-root'), $('discussion-feed')]
                     .flatMap(host => host.querySelectorAll('.bp-discussion-author')).filter(author => author.dataset.profileSelf === 'true');
                 return [];
@@ -90,8 +91,8 @@ function harness({ mobile = false, resolveRequest, sceneOptions = scenes } = {})
         window: { matchMedia: () => media, scrollY: 0, scrollTo() {},
             Option: class extends Element { constructor(text, value) { super(); this.textContent = text; this.value = value; } },
             addEventListener(name, callback) { listeners.set(name, callback); } },
-        location: new URL('http://localhost/reasoning/general?categoryID=7'), URL, URLSearchParams, structuredClone, console, AbortController,
-        setDiscussionEntryView, readDiscussionEntryContext: () => null, readRankingContext, orderedScenes, scenePath, topicSlug, createDiscussionAutoLoader, profileAvatarURL,
+        location: new URL('http://localhost/7/1'), URL, URLSearchParams, structuredClone, console, AbortController,
+        setDiscussionEntryView, readDiscussionEntryContext: () => null, readRankingContext, orderedScenes, scenePath, parseTopicPath, createDiscussionAutoLoader, profileAvatarURL, profileURL,
         hasAADisplayRestriction, AA_DISPLAY_MESSAGE,
         createAction({ label, href, className = '', iconOnly }) {
             const element = new Element(); element.className = className;
@@ -128,7 +129,7 @@ function harness({ mobile = false, resolveRequest, sceneOptions = scenes } = {})
     vm.runInContext(`${loadingSource}\n${code}\nthis.ui = { state, openDiscussion, closeDiscussion, renderDiscussionScope };`, context);
     listeners.get('benchpoll:discussion-context')({ detail: { categoryID: 7, contextValues: { scene: '70' }, scenes: sceneOptions } });
     const open = async (extra = '') => {
-        await context.ui.openDiscussion(new URL(`http://localhost/reasoning/general?discussion=1&categoryID=7&benchmarkID=101&conditionID=901${extra}`));
+        await context.ui.openDiscussion(new URL(`http://localhost/7/1?discussion=1&categoryID=7&benchmarkID=101&conditionID=901${extra}`));
         assert.equal($('discussion-error').hidden, true, errors.at(-1)?.stack ?? $('discussion-error').textContent);
     };
     return { $, requests, media, listeners, scope, ...context.ui, open,
@@ -147,17 +148,15 @@ for (const { label, categoryPath, metadata, expected } of [
         metadata: { lineage: [{ name: 'Legacy root' }, { name: 'Reasoning' }] }, expected: 'Reasoning' },
     { label: 'legacy path fallback', categoryPath: 'Legacy/Reasoning', metadata: {}, expected: 'Legacy / Reasoning' }
 ]) {
-    test(`discussion and weight labels use ${label} without exposing canonical URL segments`, async () => {
+    test(`weight labels use ${label} without adding a topic subtitle below Discussion`, async () => {
         const h = harness({ resolveRequest: (path, body) => {
             if (path !== '/api/get_discussion') return undefined;
             return { context: { categoryID: body.categoryID, categoryPath, ...metadata,
                 contextValues: body.contextValues, dimensions: [], scenes }, contexts: [], root: null,
             authenticated: true, userID: '1', posts: [], total: 0, hasMore: false };
         } });
-        await h.openDiscussion(new URL('http://localhost/reasoning/general?discussion=1&categoryID=7'));
+        await h.openDiscussion(new URL('http://localhost/7/1?discussion=1&categoryID=7'));
         assert.equal(h.$('discussion-error').hidden, true);
-        assert.equal(h.$('category-path').hidden, false);
-        assert.equal(h.$('category-path').textContent, expected);
         await h.open();
         h.$('discussion-text').value = 'Keep the scoped draft';
         const detail = { categoryID: 7, categoryPath, ...metadata, contextValues: { scene: '70' },
@@ -203,24 +202,24 @@ test('scope toggle preserves benchmark, version, category, posting options and d
 
 test('workspace context changes keep the benchmark and all-category scope until category entry navigation', async () => {
     const h = harness();
-    await h.updateContext({ categoryID: 7, contextValues: { budget: 'standard' }, isPrivate: false });
+    await h.updateContext({ categoryID: 7, contextValues: { scene: '70' }, isPrivate: false });
     await h.open(); await h.click('discussion-scope-toggle');
-    await h.updateContext({ categoryID: 8, contextValues: { budget: 'extended', length: 'long' }, isPrivate: false });
+    await h.updateContext({ categoryID: 8, contextValues: { scene: '71' }, isPrivate: false });
     assert.equal(h.state.categoryID, 8); assert.equal(h.state.benchmarkID, 101); assert.equal(h.state.conditionID, 901);
     assert.equal(h.state.allCategories, true);
     assert.equal(h.$('entry-label').textContent, 'Category discussion');
-    await h.openDiscussion(new URL('http://localhost/?discussion=1&categoryID=8&context_budget=extended&context_length=long'));
+    await h.openDiscussion(new URL('http://localhost/8/2?discussion=1&categoryID=8'));
     assert.equal(h.state.benchmarkID, null); assert.equal(h.state.conditionID, null); assert.equal(h.state.allCategories, false);
-    assert.deepEqual({ ...h.state.contextValues }, { budget: 'extended', length: 'long' });
+    assert.deepEqual({ ...h.state.contextValues }, { scene: '71' });
     assert.equal(h.$('benchmark-information').hidden, true); assert.equal(h.$('discussion-scope-toggle').hidden, true);
-    assert.equal(h.$('category-path').hidden, false); assert.equal(h.$('discussion-title').textContent, 'Discussion');
+    assert.equal(h.$('discussion-title').textContent, 'Discussion');
 });
 
 test('mobile benchmark panel keeps category navigation outside the panel until it is closed', async () => {
     const h = harness({ mobile: true }); await h.open();
     assert.equal(h.$('discussion-entry').parentElement, h.$('context-actions'));
     assert.equal(h.$('entry-label').textContent, 'Category discussion');
-    await h.openDiscussion(new URL('http://localhost/?discussion=1&categoryID=7&context_budget=standard'));
+    await h.openDiscussion(new URL('http://localhost/7/1?discussion=1&categoryID=7'));
     assert.equal(h.$('discussion-entry').parentElement, h.$('context-actions'));
     await h.open(); h.closeDiscussion();
     assert.equal(h.$('discussion-entry').parentElement, h.$('context-actions'));
@@ -237,7 +236,7 @@ test('desktop category entry stays in the workspace while the benchmark panel is
 
 test('benchmark and ordinary discussion drafts stay separate and survive switching', async () => {
     const h = harness(); await h.open(); h.$('discussion-text').value = 'Benchmark draft';
-    const categoryURL = new URL('http://localhost/reasoning/general?discussion=1&categoryID=7');
+    const categoryURL = new URL('http://localhost/7/1?discussion=1&categoryID=7');
     await h.openDiscussion(categoryURL); assert.equal(h.$('discussion-text').value, '');
     h.$('discussion-text').value = 'Category draft';
     await h.open(); assert.equal(h.$('discussion-text').value, 'Benchmark draft');

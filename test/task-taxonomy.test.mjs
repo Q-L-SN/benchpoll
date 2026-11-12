@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { taxonomy, planCategories, desiredDimensions } from '../scripts/migrate-expanded-taxonomy.mjs';
 import { canonicalizeContextValues } from '../ranking-service.js';
-import { rankingContextURL, readRankingContext } from '../public/js/shared/ranking-url.js';
 
 const specification = JSON.parse(readFileSync(new URL('../ops/task-taxonomy-20260930.json', import.meta.url), 'utf8'));
 const originalIDs = [54, 167, 168, 169, 174, 170, 175, 176, 177, 178, 179, 180, 181, 182, 183,
@@ -46,8 +45,7 @@ test('ordered templates all offer a neutral default and distinguish no reference
     assert.deepEqual(desiredDimensions('video', specification).map(d => d.key), ['realtime', 'output', 'reference_video', 'reference_image']);
     const image = desiredDimensions('image', specification);
     const values = { realtime: 'no', output: 'vector', reference_image: 'none' };
-    const url = rankingContextURL('https://benchpoll.com/Creation/Media/Image', image, values);
-    assert.deepEqual(canonicalizeContextValues(readRankingContext(url.search, image), image).contextValues, values);
+    assert.deepEqual(canonicalizeContextValues(values, image).contextValues, values);
     assert.equal(canonicalizeContextValues({}, image).contextValues.reference_image, 'any');
     assert.deepEqual(canonicalizeContextValues({ realtime: 'any', output: 'vector' }, image).contextValues,
         { realtime: 'any', output: 'vector', reference_image: 'any' });

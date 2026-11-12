@@ -21,6 +21,7 @@ import { cloneEntries, cloneFallbackRules } from '../public/js/workspace/weights
 import { topicReferenceError } from '../public/js/workspace/topic-references.js';
 import { familyKey, portableFamilyEntry, FALLBACK_CONFIGURATION_VERSION } from '../public/js/shared/benchmark-families.js';
 import { createFixtureState, workspace, weightedEntries } from '../scripts/frontend/fixtures.mjs';
+import { recoveryScene, withRecoveryScenes } from './helpers/workspace-scene-fixture.mjs';
 
 const request = (extra = {}) => ({ userID: '7', writeIdentity: randomUUID(), categoryID: 1,
     contextValues: {}, expectedRevision: 1, entries: [], fallbackRules: [], ...extra });
@@ -44,13 +45,13 @@ function createPieSaveDatabase(options) {
         connection.execute = (sql, parameters = []) => {
             if (sql.includes('FROM categories c LEFT JOIN users creator') && sql.endsWith('WHERE c.ID = ? AND c.is_active = 1')) {
                 assert.equal(active, true);
-                assert.equal(sql.replace(/\s+/g, ' ').trim(), 'SELECT c.ID, c.name, c.slug, c.description, c.position, c.owner_user_ID, '
-                    + "c.created_by_user_ID, COALESCE(NULLIF(p.display_name, ''), creator.name) AS creator_name, "
+                assert.equal(sql.replace(/\s+/g, ' ').trim(), 'SELECT c.ID, c.name, c.slug, c.public_ID, c.private_ID, c.is_official, c.description, c.position, c.owner_user_ID, '
+                    + "c.created_by_user_ID, p.public_id AS creator_public_id, COALESCE(NULLIF(p.display_name, ''), creator.name) AS creator_name, "
                     + 'COALESCE(p.avatar_data_url, creator.profile_picture_URL) AS creator_avatar '
                     + 'FROM categories c LEFT JOIN users creator ON creator.ID = c.created_by_user_ID AND creator.deleted_at IS NULL '
                     + 'LEFT JOIN user_public_profiles p ON p.user_ID = creator.ID WHERE c.ID = ? AND c.is_active = 1');
                 assert.deepEqual(parameters, [1]);
-                return Promise.resolve([[{ ID: 1, name: 'Fixture topic', slug: 'fixture-topic', description: 'Compare fixture benchmarks.',
+                return Promise.resolve([[{ ID: 1, public_ID: 1, name: 'Fixture topic', slug: 'fixture-topic', description: 'Compare fixture benchmarks.',
                     position: 0, owner_user_ID: null, created_by_user_ID: null, creator_name: null, creator_avatar: null }], []]);
             }
             if (/COUNT\(\*\) AS count FROM categories/.test(sql)) assert.fail('Flat topic saves must not inspect child categories');
@@ -67,7 +68,7 @@ function createPieSaveDatabase(options) {
     return db;
 }
 
-test('benchmark-only saves take the graph lock before accounts and still use the legacy root context', async () => {
+test('benchmark-only saves take the graph lock before accounts and use the stable internal root context', async () => {
     const db = createPieSaveDatabase();
     const receipt = await savePersonalPie(db, request({ entries: [{ conditionID: 1, weightBasisPoints: 10000 }] }));
     assert.match(db.statements[0].sql, /^SELECT ID FROM topic_reference_lock WHERE ID = 1 FOR UPDATE$/);
@@ -294,7 +295,7 @@ function browserHarness(t, { gesture = null } = {}) {
     const state = createWorkspaceState(), fixture = createFixtureState({ userID: '7' });
     const draft = [6000, 4000].map((weightBasisPoints, index) => ({ conditionID: index + 1, weightBasisPoints }));
     Object.assign(state, { authenticated: true, userID: '7', categoryID: 1, mode: 'personal',
-        selectedContextValues: { budget: 'standard' }, personalEditVersion: 1, personalRevision: fixture.revision,
+        selectedContextValues: { scene: recoveryScene.standard }, personalEditVersion: 1, personalRevision: fixture.revision,
         personalEntries: cloneEntries(draft), serverPersonalEntries: cloneEntries(draft), personalSavePending: true,
         personalRankingDirty: true, comparisonRequest: { mode: 'best', keys: ['model'], filters: [] } });
     const values = new Map(), timers = new Map(), requests = [], applied = [], tasks = [], receipts = new Map();
@@ -357,7 +358,8 @@ function browserHarness(t, { gesture = null } = {}) {
             return receipts.get(item.key);
         },
         async save(index) { requests[index].resolve(response(h.commit(index))); await drain(); },
-        async read(index) { requests[index].resolve(response(workspace(fixture, requests[index].body))); await drain(); },
+        async read(index) { const body = requests[index].body;
+            requests[index].resolve(response(withRecoveryScenes(workspace(fixture, body), body.contextValues))); await drain(); },
         async fail(index, status = 503, code = 'fixture_failure') { requests[index].resolve(response({ error: code }, status)); await drain(); },
         async stallBody(index) { const item = requests[index]; item.bodyRead = deferred();
             item.resolve({ ...response(h.commit(index)), json: () => item.bodyRead.promise }); await drain(); }
@@ -366,7 +368,8 @@ function browserHarness(t, { gesture = null } = {}) {
         gesture?.resolve();
         for (let turn = 0; turn < 20 && tasks.some(task => !task.settled); turn++) {
             for (const item of requests) {
-                const value = item.path.endsWith('save_personal_pie') ? h.commit(requests.indexOf(item)) : workspace(fixture, item.body);
+                const value = item.path.endsWith('save_personal_pie') ? h.commit(requests.indexOf(item))
+                    : withRecoveryScenes(workspace(fixture, item.body), item.body.contextValues);
                 item.resolve(response(value)); item.bodyRead?.resolve(value);
             }
             await drain();
@@ -412,8 +415,8 @@ for (let repetition = 1; repetition <= 2; repetition++) {
         assert.equal(h.state.personalEntries.length, 0); assert.equal(h.historyClears, 0);
         assert.equal(h.state.personalSaveRequest, null); assert.equal(h.state.personalSavePending, true);
         assert.match(h.state.statusMessage, /changes are kept/);
-        assert.equal(h.pieRecovery.lookup('7', 1, { budget: 'standard' }).value.draft.entries.length, 0);
-        assert.equal(h.guestDrafts.get('1:[["budget","standard"]]'), null);
+        assert.equal(h.pieRecovery.lookup('7', 1, { scene: recoveryScene.standard }).value.draft.entries.length, 0);
+        assert.equal(h.guestDrafts.get('1:[["scene","101"]]'), null);
     });
     for (const responseType of ['failure', 'success']) test(`old-context ${responseType} cannot touch the replacement context (${repetition})`, async t => {
         const h = browserHarness(t), task = h.start(); await drain();

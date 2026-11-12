@@ -203,3 +203,48 @@ test('model ordering is deterministic for tied scores and coverage', () => {
     assert.deepEqual(rows.map(row => row.ID), [2, 8, 3]);
     assert.deepEqual(rows.map(row => row.rank), [1, 1, null]);
 });
+
+test('zero-weight default pages preserve site-wide order across page boundaries without overriding search', () => {
+    const data = workspace();
+    data.benchmarks.forEach(row => { row.publicWeightBasisPoints = 0; row.globalWeightBasisPoints = row.ID * 100; });
+    data.benchmarks[0].publicWeightBasisPoints = 10000;
+    const pager = createRankingPager(), first = pager.create(data), snapshotID = first.rankingPagination.snapshotID;
+    const second = pager.getPage({ snapshotID, list: 'benchmarks', group: 'primary', offset: 40 });
+    assert.deepEqual([...first.benchmarks, ...second.items].map(row => row.ID),
+        [1, ...Array.from({ length: 54 }, (_, index) => 55 - index)]);
+    const search = pager.getPage({ snapshotID, list: 'benchmarks', group: 'primary', query: 'needle' });
+    assert.deepEqual(search.items.map(row => row.ID), [54]);
+});
+
+test('grouped zero-weight benchmarks use the sum of all version allocations', () => {
+    const data = workspace(); data.versionComposition = [];
+    data.benchmarks = data.benchmarks.slice(0, 3).map((row, index) => ({ ...row,
+        benchmarkID: index < 2 ? 10 : 20, isPrimaryCondition: index !== 1,
+        publicWeightBasisPoints: 0, globalWeightBasisPoints: index === 2 ? 1100 : 600,
+        personalWeightBasisPoints: null }));
+    const first = createRankingPager().create(data);
+    assert.deepEqual(first.benchmarks.map(row => row.benchmarkID), [10, 20]);
+    assert.deepEqual(first.benchmarks.map(row => row.globalWeightBasisPoints), [1200, 1100]);
+});
+
+test('positive grouped weights keep their previous condition-ID tie order', () => {
+    const data = workspace(); data.versionComposition = [];
+    data.benchmarks = data.benchmarks.slice(0, 2).map((row, index) => ({ ...row, benchmarkID: index + 1,
+        publicWeightBasisPoints: 5000, globalWeightBasisPoints: index * 100000, scoreCount: index + 1,
+        personalWeightBasisPoints: null }));
+    assert.deepEqual(createRankingPager().create(data).benchmarks.map(row => row.conditionID), [1, 2]);
+});
+
+test('snapshot authorization includes every referenced topic and lifecycle invalidation expires cached reads', () => {
+    const data = workspace(); data.context = { categoryID: 3 };
+    data.benchmarks.push({ conditionID: -99, type: 'topic', referenceContextID: 99, categoryID: 8,
+        publicWeightBasisPoints: 0, scoreCount: 0, isPrimaryCondition: true, lowCoverage: false });
+    const pager = createRankingPager(), first = pager.create(data, { userID: 7 }), snapshotID = first.rankingPagination.snapshotID;
+    const IDs = pager.getSnapshotTopicIDs({ snapshotID, userID: 7 });
+    assert.deepEqual(IDs, [3, 8]); IDs.push(20);
+    assert.deepEqual(pager.getSnapshotTopicIDs({ snapshotID, userID: 7 }), [3, 8]);
+    assert.throws(() => pager.getSnapshotTopicIDs({ snapshotID, userID: 8 }), error => error.status === 403);
+    pager.invalidate();
+    assert.throws(() => pager.getPage({ snapshotID, userID: 7, list: 'public' }), error => error.status === 410);
+    assert.throws(() => pager.getSnapshotTopicIDs({ snapshotID, userID: 7 }), error => error.status === 410);
+});

@@ -1,3 +1,5 @@
+import { profileURL } from './profile-identity.js';
+
 function node(tag, className, text) {
     const element = document.createElement(tag);
     element.className = className;
@@ -33,14 +35,17 @@ export function publicGitHubURL(value) {
 
 export function createTopicCreator(creator, className = '') {
     const byline = node('span', `bp-topic-byline ${className}`.trim());
+    if (creator?.isOfficial) {
+        byline.classList.add('bp-topic-official');
+        const mark = node('i', 'fa-solid fa-circle-check'); mark.setAttribute('aria-hidden', 'true');
+        byline.append(mark, node('span', '', 'Official'));
+        return byline;
+    }
     if (!creator?.name) { byline.hidden = true; return byline; }
     const name = creator.name;
-    const githubURL = publicGitHubURL(creator.githubURL);
-    const identity = node(githubURL ? 'a' : 'span', githubURL ? 'bp-public-github-link' : 'bp-topic-creator-identity');
-    if (githubURL) {
-        identity.href = githubURL; identity.target = '_blank'; identity.rel = 'noopener noreferrer nofollow';
-        identity.referrerPolicy = 'no-referrer';
-    }
+    const href = profileURL(creator);
+    const identity = node(href ? 'a' : 'span', 'bp-profile-link bp-topic-creator-identity');
+    if (href) identity.href = href;
     identity.append(createIdentityAvatar(name, creator.avatarURL), node('span', 'bp-topic-byline-name', name));
     byline.append(node('span', 'bp-topic-byline-prefix', 'by'), identity);
     byline.dataset.tooltip = `Created by ${name}`;

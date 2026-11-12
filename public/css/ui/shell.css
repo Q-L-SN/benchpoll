@@ -444,7 +444,7 @@ body.bp-home  {
     .taxonomy-tracked.taxonomy-open :is(.bp-workspace, .contribution-workspace, .bp-how-main, .bp-legal-main) {
         animation: none; transform: none;
     }
-    .taxonomy-tracked.taxonomy-dragging :is(.bp-sidebar, .bp-taxonomy-scrim) { transition: none; }
+    .taxonomy-tracked:is(.taxonomy-dragging, .taxonomy-preparing) :is(.bp-sidebar, .bp-taxonomy-scrim) { transition: none; }
 }
 @media (prefers-reduced-motion: reduce) {
     .taxonomy-tracked.taxonomy-open :is(.bp-sidebar, .bp-taxonomy-scrim) { transition: none; }

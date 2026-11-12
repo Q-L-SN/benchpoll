@@ -17,7 +17,7 @@ import { normalizeScoreFieldRequests, normalizeFieldContribution } from '../../s
 import { normalizeModelParameters, modelParameterLabel, parameterRowsToObject } from '../../public/js/shared/model-parameters.js';
 import { normalizeDiscussionReport } from '../../discussion-service.js';
 import { normalizePrivateCategoryRequest } from '../../private-category-service.js';
-import { topicSlug, topicURL } from '../../public/js/shared/topics.js';
+import { topicSlug, topicURL, parseTopicPath, scenePath } from '../../public/js/shared/topics.js';
 import { normalizeTopicRequest } from '../../topic-service.js';
 import { topicPreviewComparison, normalizeHomeComparison } from '../../topic-home-service.js';
 import { AA_DISPLAY_RESTRICTION } from '../../public/js/shared/aa-ranking-policy.js';
@@ -49,12 +49,19 @@ export async function startPreview({ port = 0, ...options } = {}) {
         .map(match => `/api${match[1]}`));
     const pieReceipts = new Map();
     const topicMetadata = category => ({ ...category, categoryID: category.ID, categoryName: category.name,
+        publicID: category.publicID ?? category.ID, privateID: category.privateID ?? `privatefixture${String(category.ID).padStart(10, '0')}`,
+        favoriteCount: state.favorites?.[category.ID]?.count ?? 12, isFavorited: state.favorites?.[category.ID]?.active ?? false,
+        isOfficial: category.isOfficial ?? !category.isMine, configurationCount: 128,
         description: category.description ?? `Compare models on ${category.name.toLowerCase()} tasks.`,
-        slug: category.slug || topicSlug(category.name), url: topicURL(category.ID, category.name, category.isPrivate === true, category.slug || topicSlug(category.name)),
+        slug: category.slug || topicSlug(category.name), url: topicURL({ ...category, publicID: category.publicID ?? category.ID,
+            privateID: category.privateID ?? `privatefixture${String(category.ID).padStart(10, '0')}` }),
         lineage: [{ ID: category.ID, name: category.name }], contextValues: {}, dimensions: [],
+        scenes: (category.scenes ?? []).map((scene, index) => ({ ...scene, sceneNumber: scene.sceneNumber ?? index + 1,
+            url: scenePath(topicURL({ ...category, publicID: category.publicID ?? category.ID,
+                privateID: category.privateID ?? `privatefixture${String(category.ID).padStart(10, '0')}` }), { sceneNumber: scene.sceneNumber ?? index + 1 }) })),
         isMine: category.isMine === true, configured: state.authenticated && category.ID === 1 && !state.empty && state.personalEntries.length > 0,
         creator: { name: 'BenchPoll', avatarURL: '/assets/benchpoll-mark.svg' } });
-    const publicTopics = () => [categories[0], ...categories[0].children, ...(state.newTopics ?? []).filter(topic => !topic.isPrivate)];
+    const publicTopics = () => [...(state.topics ?? [categories[0], ...categories[0].children]), ...(state.newTopics ?? []).filter(topic => !topic.isPrivate)];
     const server = createServer(async (request, response) => {
         const url = new URL(request.url, 'http://localhost');
         if (url.pathname.startsWith('/contribute/')) url.pathname = '/contribute';
@@ -80,11 +87,31 @@ export async function startPreview({ port = 0, ...options } = {}) {
                 case '/api/locate_ranking_model': return send(200, rankingModelLocation(state, body));
                 case '/api/search_ranking_models': return send(200, rankingModelSearch(state, body));
                 case '/api/get_topic': {
-                    const selected = publicTopics().find(topic => body.slug ? topicSlug(topic.name) === body.slug : topic.ID === Number(body.categoryID));
-                    return selected ? send(200, topicMetadata(selected)) : send(404, { error: 'topic_not_found' });
+                    const selected = [...publicTopics(), ...(state.newTopics ?? []).filter(topic => topic.isPrivate)].find(topic =>
+                        body.privateID ? state.authenticated && topicMetadata(topic).privateID === body.privateID
+                            : body.publicID ? !topic.isPrivate && (topic.publicID ?? topic.ID) === Number(body.publicID)
+                                : topic.ID === Number(body.categoryID) && (!topic.isPrivate || state.authenticated));
+                    if (!selected) return send(404, { error: 'topic_not_found' });
+                    const metadata = topicMetadata(selected);
+                    const scene = body.sceneNumber ? metadata.scenes.find(item => item.sceneNumber === body.sceneNumber)
+                        : metadata.scenes.find(item => item.isDefault);
+                    if (body.sceneNumber && !scene) return send(404, { error: 'scene_not_found' });
+                    return send(200, { ...metadata, selectedScene: scene ?? null,
+                        canonicalPath: scene ? scenePath(metadata.url, scene) : metadata.url });
                 }
                 case '/api/get_topics': return send(200, { topics: [...publicTopics(),
-                    ...(state.authenticated ? (state.newTopics ?? []).filter(topic => topic.isPrivate) : [])].map(topicMetadata), featuredTopicID: 54 });
+                    ...(state.authenticated ? (state.newTopics ?? []).filter(topic => topic.isPrivate) : [])].map(topicMetadata), featuredTopicID: 1 });
+                case '/api/get_privacy_status': return send(200, { userID: state.userID, csrfToken: 'fixture-csrf', authenticated: state.authenticated });
+                case '/api/record_profile_visit': return send(200, { recorded: true });
+                case '/api/set_topic_favorite': {
+                    if (!state.authenticated) return send(401, { error: 'authentication_required' });
+                    state.favorites ??= {};
+                    const old = state.favorites[body.categoryID] ?? { count: 12, active: false };
+                    const count = Math.max(0, old.count + Number(body.isFavorited === true) - Number(old.active));
+                    state.favorites[body.categoryID] = { count, active: body.isFavorited === true };
+                    return send(200, { categoryID: body.categoryID, favoriteCount: count, isFavorited: body.isFavorited === true });
+                }
+                case '/api/get_topic_reference_targets': return send(200, { targets: options.referenceTargets ?? [] });
                 case '/api/create_topic': {
                     if (!state.authenticated) return send(401, { error: 'authentication_required' });
                     const topic = normalizeTopicRequest(body);
@@ -99,7 +126,7 @@ export async function startPreview({ port = 0, ...options } = {}) {
                 case '/api/get_category_navigation': {
                     return send(200, { items: publicTopics().map(category => entryFromContext(topicMetadata(category))) });
                 }
-                case '/api/get_user_profile': return send(state.authenticated ? 200 : 204, { userID: state.userID, userName: 'Preview account', hasVerifiedEmail: true, reviewEmailEnabled: options.reviewEmailEnabled === true, role: state.isSenior ? 'senior' : 'reviewer' });
+                case '/api/get_user_profile': return send(state.authenticated ? 200 : 204, { userID: state.userID, publicID: '1', profileURL: '/@1', bio: '', userName: 'Preview account', hasVerifiedEmail: true, reviewEmailEnabled: options.reviewEmailEnabled === true, role: state.isSenior ? 'senior' : 'reviewer' });
                 case '/api/get_comparison_profiles': return send(200, state.authenticated
                     ? { authenticated: true, userID: state.userID, last: state.comparisonLast, profiles: state.comparisonProfiles }
                     : { authenticated: false, last: null, profiles: [] });
@@ -126,7 +153,7 @@ export async function startPreview({ port = 0, ...options } = {}) {
                 case '/api/get_personal_navigation':
                     if (!state.authenticated) return send(401, { error: 'authentication_required' });
                     return send(200, { userID: state.userID, items: state.empty || state.personalEntries.length === 0 ? []
-                        : [{ ...entryFromContext(workspace(state, { categoryID: 1, contextValues: { budget: 'standard' } }).context), weightCount: state.personalEntries.length }] });
+                        : [{ ...entryFromContext(workspace(state, { categoryID: 1 }).context), weightCount: state.personalEntries.length }] });
                 case '/api/create_private_category': {
                     normalizePrivateCategoryRequest(body);
                     const entry = entryFromContext({ categoryID: 999, categoryName: body.name, isPrivate: true,
@@ -142,6 +169,11 @@ export async function startPreview({ port = 0, ...options } = {}) {
                     if (state.workspaceFailure) return send(state.workspaceFailure, { error: 'fixture_workspace_failure' });
                     if (body.homeComparison !== undefined) body.comparison = topicPreviewComparison(state.comparisonFields ?? [], normalizeHomeComparison(body.homeComparison));
                     return send(200, workspace(state, body));
+                case '/api/get_topic_preview': {
+                    const data = workspace(state, { ...body, contextValues: body.sceneID ? { scene: String(body.sceneID) } : {} }, { paginate: false });
+                    const mode = body.mode ?? 'public';
+                    return send(200, { totalCoverageIndex: data[`${mode}Pie`].coverageIndex });
+                }
                 case '/api/get_ranking_page': return send(200, rankingPage(state, body));
                 case '/api/save_personal_pie': {
                     const key = readWriteIdentity(request);
@@ -261,7 +293,11 @@ export async function startPreview({ port = 0, ...options } = {}) {
                 }
             }
             const pathname = decodeURIComponent(url.pathname);
+            if (pathname === '/' && options.topicHome !== true) {
+                response.writeHead(302, { location: '/1' + url.search }); response.end(); return;
+            }
             let page = pathname === '/' && options.topicHome === true ? 'index.html' : pages[pathname];
+            if (parseTopicPath(pathname)) page = 'home.html';
             if (!page) {
                 try {
                     const parts = categoryPathParts(url.pathname);

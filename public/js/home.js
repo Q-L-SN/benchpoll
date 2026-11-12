@@ -6,7 +6,7 @@ import { workspaceChannel } from './shared/workspace-channel.js';
 import { createOverlayScrollbar } from './workspace/overlay-scrollbar.js';
 import { buildContributionURL as buildContributeURL } from './shared/contribution-navigation.js?v=taxonomy-20260929';
 import { createTaxonomyDrawer } from './shared/taxonomy-drawer.js?v=20260928';
-import { topicURL, topicSlug, scenePath } from './shared/topics.js';
+import { topicURL, parseTopicPath, scenePath } from './shared/topics.js';
 import { createConfigSidebar } from './shared/config-sidebar.js';
 import { openPrivateTopicEditor } from './shared/private-topic-editor.js';
 import { pageAccountWriteScope, isAccountWriteError } from './shared/account-identity.js';
@@ -102,7 +102,7 @@ function normalizeTopic(topic) {
 function setCurrentTopic(topic) {
     currentCategoryID = topic.categoryID;
     currentCategoryName = topic.categoryName;
-    currentCategoryPath = (topic.url || topicURL(topic.categoryID, topic.categoryName, topic.isPrivate, topic.slug)).slice(1);
+    currentCategoryPath = (topic.url || topicURL(topic)).slice(1);
     sidebarNavigation.setCurrentTopic(topic);
     updateContributionLinks();
 }
@@ -121,7 +121,7 @@ async function selectTopic(entry) {
         setCurrentTopic({ ...topic, contextValues });
         const url = new URL(locationURL({ ...topic, contextValues }), window.location.origin);
         window.history.pushState({}, '', url);
-        const pendingWorkspace = publishWorkspaceState({ contextValues, isPrivate: topic.isPrivate });
+        const pendingWorkspace = publishWorkspaceState({ ...topic, contextValues, isPrivate: topic.isPrivate });
         setTaxonomyOpen(false);
         await pendingWorkspace;
         return true;
@@ -184,62 +184,27 @@ async function loadUserProfile() {
     if (sequence === profileSequence) showUserProfile(profile);
 }
 
-let accountCenterOpening = false;
-async function openCurrentAccount(event) {
-    if (!currentUserProfile || accountCenterOpening) return;
-    event?.currentTarget?.focus({ preventScroll: true });
-    const owner = String(currentUserProfile.userID);
-    accountCenterOpening = true;
-    try {
-        const { openAccountCenter } = await import('./shared/account-center.js');
-        if (!currentUserProfile || String(currentUserProfile.userID) !== owner) return;
-        if (pageAccountWriteScope.capture() !== owner) return;
-        const outcome = await openAccountCenter({ profile: { ...currentUserProfile },
-            onProfileSaved: profile => updateEffectiveProfile(profile, owner),
-            onSignedOut: () => {
-                if (currentUserProfile && String(currentUserProfile.userID) === owner) {
-                    ++profileSequence;
-                    clearUserProfile();
-                }
-            }
-        });
-        if (outcome?.action) window.location.reload();
-    } catch (error) { showNavigationError(error); }
-    finally { accountCenterOpening = false; }
+function openCurrentAccount() {
+    if (currentUserProfile) window.location.assign('/me');
 }
 
 async function initializeTopic({ fromURL = false } = {}) {
-    const privateMatch = window.location.pathname.match(/^\/personal\/([1-9]\d*)(?:\/([a-z0-9]+(?:-[a-z0-9]+)*))?\/?$/);
-    const shortMatch = window.location.pathname.match(/^\/([a-z0-9]+(?:-[a-z0-9]+)*)(?:\/([a-z0-9]+(?:-[a-z0-9]+)*))?\/?$/);
-    const publicMatch = window.location.pathname.match(/^\/topics\/([1-9]\d*)(?:\/[^/]+)?\/?$/);
-    let topic;
-    if (privateMatch) {
-        topic = normalizeTopic({ ...await requestJSON('/api/get_topic', { categoryID: Number(privateMatch[1]) }), isPrivate: true });
-    } else if (publicMatch) {
-        topic = normalizeTopic(await requestJSON('/api/get_topic', { categoryID: Number(publicMatch[1]) }));
-        if (topic.categoryID !== Number(publicMatch[1])) throw new Error('Topic identity changed');
-    } else if (shortMatch) {
-        topic = normalizeTopic(await requestJSON('/api/get_topic', { slug: shortMatch[1] }));
-    } else {
-        const payload = await requestJSON(`/api/get_page${window.location.pathname}`, { treeOnly: true });
-        if (payload?.jump) { window.location.replace('/'); return; }
-        const selected = payload?.categoryTree?.find(entry => Number(entry.ID) === Number(payload.currentCategoryID));
-        if (!selected) throw new Error('Current topic is missing');
-        topic = normalizeTopic(selected);
-    }
-    const url = new URL(window.location.href);
-    if (url.searchParams.has('scene') || url.searchParams.has('context_scene')) throw new Error('Scenes use named URL paths.');
-    const requestedScene = privateMatch ? privateMatch[2] : publicMatch ? null : shortMatch?.[2];
-    const scene = requestedScene ? topic.scenes?.find(item => (item.slug || topicSlug(item.name)) === requestedScene)
-        : topic.scenes?.find(item => item.isDefault);
-    if (requestedScene && !scene) throw new Error('This scene is unavailable.');
+    const identity = parseTopicPath(window.location.pathname + window.location.search);
+    if (!identity) throw new Error('This topic address is unavailable.');
+    const response = await requestJSON('/api/get_topic', identity);
+    const topic = normalizeTopic(response);
+    const scene = response.selectedScene ?? (identity.sceneNumber == null
+        ? topic.scenes?.find(item => item.isDefault)
+        : topic.scenes?.find(item => Number(item.sceneNumber) === identity.sceneNumber));
+    if (identity.sceneNumber != null && !scene) throw new Error('This scene is unavailable.');
     const contextValues = scene ? { scene: String(scene.ID) } : {};
     setCurrentTopic({ ...topic, contextValues });
-    const base = topic.url || topicURL(topic.categoryID, topic.categoryName, topic.isPrivate, topic.slug);
-    url.pathname = scene ? new URL(scenePath(base, scene), window.location.origin).pathname : base;
+    const url = new URL(window.location.href);
+    const base = topic.url || topicURL(topic);
+    url.pathname = response.canonicalPath ?? (scene ? scenePath(base, scene) : base);
     url.searchParams.delete('view');
     window.history.replaceState(window.history.state, '', url);
-    await publishWorkspaceState({ fromURL, contextValues, isPrivate: topic.isPrivate });
+    await publishWorkspaceState({ ...topic, fromURL, contextValues, isPrivate: topic.isPrivate });
 }
 
 // Back/forward changes the location, never the selected sidebar or pie mode.

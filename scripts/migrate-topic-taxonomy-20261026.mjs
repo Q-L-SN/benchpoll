@@ -4,8 +4,10 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import mysql from 'mysql2/promise';
-import { topicSlug, isReservedTopicSlug, FEATURED_TOPIC_ID } from '../public/js/shared/topics.js';
-import { legacyTopicRouteKey } from '../topic-service.js';
+import { topicSlug, isReservedTopicSlug } from '../public/js/shared/topics.js';
+// Historical migration identity; independent of the current public URL catalogue.
+const FEATURED_TOPIC_ID = 54;
+import { legacyTopicRouteKey } from './historical-topic-route-key.mjs';
 import { canonicalizeContextValues, serializeRankingContextValues } from '../ranking-service.js';
 import { preserveContextPies } from '../private-category-service.js';
 import { verifySlugBackup } from './migrate-topic-slugs-20261023.mjs';

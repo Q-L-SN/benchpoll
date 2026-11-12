@@ -119,7 +119,6 @@ function contributionLabel(type) {
     return ({
         feedback: 'feedback',
         new_category: 'category or context contribution',
-        new_topic: 'public topic',
         new_benchmark: 'benchmark contribution',
         new_model: 'model contribution',
         benchmark_result: 'score contribution',

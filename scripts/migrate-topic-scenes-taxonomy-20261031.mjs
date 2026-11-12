@@ -5,8 +5,10 @@ import { statfs } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import mysql from 'mysql2/promise';
-import { FEATURED_TOPIC_ID, topicSlug, isReservedTopicSlug, normalizeTopicSummary } from '../public/js/shared/topics.js';
-import { legacyTopicRouteKey } from '../topic-service.js';
+import { topicSlug, isReservedTopicSlug, normalizeTopicSummary } from '../public/js/shared/topics.js';
+// Historical migration identity; independent of the current public URL catalogue.
+const FEATURED_TOPIC_ID = 54;
+import { legacyTopicRouteKey } from './historical-topic-route-key.mjs';
 import { EMPTY_TOPIC_CONTEXT_HASH, sceneContext, lockTopicReferenceGraph } from '../topic-scenes-service.js';
 import { TOPIC_SCENES_MIGRATION, verifyTopicScenesSchema, verifyTopicScenesMigration } from './migrate-topic-scenes-20261031.mjs';
 import { verifySlugBackup } from './migrate-topic-slugs-20261023.mjs';

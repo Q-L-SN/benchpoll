@@ -1,19 +1,28 @@
-export const FEATURED_TOPIC_ID = 54;
+export const FEATURED_TOPIC_ID = 1;
+
+export function parseTopicPath(input) {
+    if (typeof input !== 'string' || !input.startsWith('/') || input.startsWith('//') || input.includes('\\')) return null;
+    let url;
+    try { url = new URL(input, 'https://benchpoll.invalid'); } catch { return null; }
+    if (url.origin !== 'https://benchpoll.invalid' || [...url.searchParams.keys()].some(key => key === 'scene' || key.startsWith('context_'))) return null;
+    const publicMatch = /^\/([1-9]\d*)(?:\/([1-9]\d*))?$/.exec(url.pathname);
+    const privateMatch = /^\/private\/([A-Za-z0-9]{12,64})(?:\/([1-9]\d*))?$/.exec(url.pathname);
+    const match = publicMatch ?? privateMatch;
+    if (!match || (publicMatch && !Number.isSafeInteger(Number(match[1])))
+        || (match[2] && !Number.isSafeInteger(Number(match[2])))) return null;
+    return { ...(publicMatch ? { publicID: Number(match[1]) } : { privateID: match[1] }),
+        sceneNumber: match[2] ? Number(match[2]) : null };
+}
 
 export function scenePath(input, scene = null) {
-    if (typeof input !== 'string' || !input.startsWith('/') || input.startsWith('//') || input.includes('\\')) return null;
+    const identity = parseTopicPath(input);
+    if (!identity) return null;
     const url = new URL(input, 'https://benchpoll.invalid');
-    if (url.origin !== 'https://benchpoll.invalid' || url.searchParams.has('scene') || url.searchParams.has('context_scene')) return null;
-    const parts = url.pathname.split('/').filter(Boolean), rootLength = parts[0] === 'personal' ? 2 : 1;
-    if (!parts.length || parts.length > rootLength + 1 || parts.some(part => !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(part))) return null;
-    if (parts[0] === 'personal' && (!/^[1-9]\d*$/.test(parts[1] ?? '') || parts.length < 2)) return null;
     if (scene !== null) {
-        if (!scene || typeof scene !== 'object' || typeof scene.name !== 'string' || !scene.name.trim()) return null;
-        const slug = scene.slug || sceneSlug(scene.name);
-        if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) return null;
-        url.pathname = '/' + [...parts.slice(0, rootLength), slug].join('/');
+        const number = Number(scene.sceneNumber ?? scene.scene_number);
+        if (!Number.isSafeInteger(number) || number < 1) return null;
+        url.pathname = `${identity.privateID ? '/private/' + identity.privateID : '/' + identity.publicID}/${number}`;
     }
-    for (const key of [...url.searchParams.keys()]) if (key.startsWith('context_')) url.searchParams.delete(key);
     return url.pathname + url.search + url.hash;
 }
 
@@ -59,7 +68,7 @@ export const RESERVED_TOPIC_SLUGS = Object.freeze([
     'rss', 'safety', 'score', 'scores', 'search', 'session', 'sessions', 'settings', 'share', 'shared',
     'showcase', 'signin', 'sign-in', 'signout', 'sign-out', 'signup', 'sign-up', 'sitemap', 'sso',
     'static', 'status', 'storage', 'subscribe', 'subscription', 'subscriptions', 'support', 'system',
-    'team', 'teams', 'terms', 'terms-of-service', 'test', 'testing', 'token', 'tokens', 'topic', 'topics', 'topic-proposals',
+    'team', 'teams', 'terms', 'terms-of-service', 'test', 'testing', 'token', 'tokens', 'topic', 'topics',
     'tour', 'trending', 'unsubscribe', 'update', 'updates', 'upload', 'uploads', 'user', 'users',
     'vendor', 'vendors', 'verify', 'version', 'versions', 'webhook', 'webhooks', 'welcome', 'well-known',
     'widget', 'widgets', 'workspace', 'workspaces', 'www'
@@ -73,7 +82,7 @@ export function topicSlug(name) {
 }
 
 // Scene names include programming languages: punctuation distinguishes C, C++ and C#.
-// Existing stored scene slugs remain authoritative; this only derives a new path.
+// Slugs remain database labels; public URLs use the independent scene number.
 export function sceneSlug(name) {
     return topicSlug(String(name ?? '').replaceAll('+', ' plus ').replaceAll('#', ' sharp '));
 }
@@ -83,9 +92,17 @@ export function isReservedTopicSlug(value) {
     return reservedSlugs.has(slug) || compactReservedSlugs.has(slug.replaceAll('-', ''));
 }
 
-export function topicURL(ID, name, isPrivate = false, slug = topicSlug(name)) {
-    if (!Number.isSafeInteger(Number(ID)) || Number(ID) < 1) throw new TypeError('Invalid topic ID');
-    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug) || slug.length > 80) throw new TypeError('Invalid topic slug');
-    if (!isPrivate && slug !== topicSlug(name)) throw new TypeError('Topic slug must match its name');
-    return isPrivate ? `/personal/${Number(ID)}` : `/${slug}`;
+export function topicURL(identity, _name, isPrivate = false) {
+    let ID = identity;
+    if (identity && typeof identity === 'object') {
+        isPrivate = identity.isPrivate === true || identity.owner_user_ID != null;
+        ID = isPrivate ? identity.privateID ?? identity.private_ID
+            : identity.publicID ?? identity.public_ID;
+    }
+    if (isPrivate) {
+        if (typeof ID !== 'string' || !/^[A-Za-z0-9]{12,64}$/.test(ID)) throw new TypeError('Invalid private topic ID');
+        return `/private/${ID}`;
+    }
+    if (!Number.isSafeInteger(Number(ID)) || Number(ID) < 1) throw new TypeError('Invalid public topic ID');
+    return `/${Number(ID)}`;
 }

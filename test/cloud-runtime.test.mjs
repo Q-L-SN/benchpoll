@@ -59,7 +59,9 @@ test('cloud preview serves the real homepage and synthetic APIs on all IPv4 inte
 test('fixture writes remain in memory and reset on restart', async t => {
     const first = await startCloudPreview({ port: 0, host: '127.0.0.1' });
     try {
-        const created = await post(first, 'create_topic', { expectedUserID: '42', name: 'Cloud smoke topic', isPrivate: false });
+        const { csrfToken } = await (await post(first, 'get_privacy_status')).json();
+        const created = await post(first, 'save_private_topic', { expectedUserID: '42', csrfToken, name: 'Cloud smoke topic',
+            description: 'A topic used only in the local smoke fixture.', scenes: [], defaultSceneKey: null });
         assert.equal(created.status, 201);
         assert.equal(first.state.created.length, 1);
     } finally { await first.close(); }

@@ -4,10 +4,11 @@ import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 import { createDiscussionAutoLoader, isDiscussionSentinelNear } from '../public/js/shared/discussion-auto-load.js';
 import { createAccountWriteScope, isAccountWriteError } from '../public/js/shared/account-identity.js';
-import { scenePath, topicSlug } from '../public/js/shared/topics.js';
+import { scenePath, parseTopicPath } from '../public/js/shared/topics.js';
 import { readRankingContext } from '../public/js/shared/ranking-url.js';
 import { orderedScenes } from '../public/js/navigation/scenes.js';
 import { profileAvatarURL } from '../public/js/shared/profile-editor.js';
+import { profileURL } from '../public/js/shared/profile-identity.js';
 import { hasAADisplayRestriction, AA_DISPLAY_MESSAGE } from '../public/js/shared/aa-ranking-policy.js';
 
 const loadingSource = (await readFile(new URL('../public/js/shared/loading.js', import.meta.url), 'utf8')).replace(/^export /gm, '');
@@ -131,7 +132,8 @@ class Element {
     scrollIntoView(options) { this.scrolled = options; }
 }
 
-const scenes = [{ ID: 11, name: 'General', isDefault: true }, { ID: 10, name: 'Standard', isDefault: false }];
+const scenes = [{ ID: 11, sceneNumber: 1, url: '/7/1', name: 'General', isDefault: true },
+    { ID: 10, sceneNumber: 2, url: '/7/2', name: 'Standard', isDefault: false }];
 const customAvatar = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNQSQv4DwADZgHaE5klaQAAAABJRU5ErkJggg==';
 const makePost = (ID, parentID = null, contextValues = {}) => ({ ID, parentID, categoryID: 1, categoryName: 'Language models',
     contextValues, authorName: 'Fixture', authorAvatarURL: null, text: `Post ${ID}`, createdAt: '2026-10-01T00:00:00Z', mentions: [],
@@ -151,12 +153,12 @@ function discussionHarness(request = (body => pageData(body, Array.from({ length
         if (!elements.has(id)) elements.set(id, new Element());
         return elements.get(id);
     };
-    const sidebar = new Element(), workspace = new Element(), sort = [new Element('button'), new Element('button')];
-    sort[0].dataset.sort = 'hot'; sort[1].dataset.sort = 'new';
+    const sidebar = new Element(), workspace = new Element();
+    $('discussion-sort-toggle').append(new Element('i'), new Element('span'));
     sidebar.parts = { '.bp-brand': $('brand') }; sidebar.append($('brand'));
     $('context-actions').append($('discussion-entry'), $('workspace-refresh'));
     $('benchmark-information').parts = { '.benchmark-information-meta': $('benchmark-meta') };
-    for (const id of ['discussion-compose-fields', 'benchmark-scores-view']) $(id).hidden = true;
+    $('benchmark-scores-view').hidden = true;
     const auto = { active: false, setActive(value) { this.active = value; } };
     let autoOptions, viewChanged;
     const scope = createAccountWriteScope();
@@ -165,7 +167,6 @@ function discussionHarness(request = (body => pageData(body, Array.from({ length
             addEventListener(name, callback) { listeners.set(`document:${name}`, callback); },
             querySelector: selector => selector === '.bp-shell > .bp-sidebar' ? sidebar : selector === '.bp-workspace' ? workspace : $('sort'),
             querySelectorAll(selector) {
-                if (selector === '[data-sort]') return sort;
                 if (selector === '.bp-discussion-author[data-profile-self="true"]') return [$('thread-root'), $('discussion-feed')]
                     .flatMap(host => host.querySelectorAll('.bp-discussion-author')).filter(author => author.dataset.profileSelf === 'true');
                 return [];
@@ -175,7 +176,7 @@ function discussionHarness(request = (body => pageData(body, Array.from({ length
             addEventListener(name, callback) { listeners.set(name, callback); }, dispatchEvent() {} },
         CustomEvent: class { constructor(type) { this.type = type; } },
         location: new URL('http://localhost/?categoryID=1'), URL, URLSearchParams, structuredClone, console, AbortController,
-        readDiscussionEntryContext: () => null, readRankingContext, orderedScenes, scenePath, topicSlug, pageAccountWriteScope: scope, isAccountWriteError, profileAvatarURL,
+        readDiscussionEntryContext: () => null, readRankingContext, orderedScenes, scenePath, parseTopicPath, pageAccountWriteScope: scope, isAccountWriteError, profileAvatarURL, profileURL,
         hasAADisplayRestriction, AA_DISPLAY_MESSAGE,
         createDiscussionAutoLoader(options) { autoOptions = options; return auto; },
         createBenchmarkScoresView({ onViewChange }) {
@@ -200,7 +201,7 @@ function discussionHarness(request = (body => pageData(body, Array.from({ length
         .replace("if (params.get('discussion') === '1') await openDiscussion(new URL(location.href));", '');
     vm.runInContext(`${loadingSource}\n${actionSource}\n${code}\nthis.ui = { state, load, openDiscussion, closeDiscussion, renderPost,
         paging: () => ({ loading, hasMore, retryAppend, feedLoaded }) };`, sandbox);
-    return { $, reads, writes, auto, scope, sort, listeners, ...sandbox.ui,
+    return { $, reads, writes, auto, scope, listeners, ...sandbox.ui,
         open(extra = '') { return sandbox.ui.openDiscussion(new URL(`http://localhost/?discussion=1&categoryID=1${extra}`)); },
         async event(id, type = 'click', value = '') { await $(id).events.get(type)?.({ target: { value }, preventDefault() {} }); await flush(); },
         async scene(value) {
@@ -257,7 +258,7 @@ for (const action of ['sort', 'scope', 'context', 'open', 'close', 'scores', 'pr
         await h.open('&benchmarkID=101&conditionID=1');
         h.$('discussion-text').value = 'Keep this draft';
         const append = h.load(true);
-        if (action === 'sort') { h.sort[1].events.get('click')(); await flush(); }
+        if (action === 'sort') await h.event('discussion-sort-toggle');
         if (action === 'scope') await h.event('discussion-scope-toggle');
         if (action === 'context') await h.scene(10);
         if (action === 'open') await h.open('&threadID=901');
@@ -311,7 +312,7 @@ test('an obsolete failure cannot clear a newer busy read or expose an error', as
     const h = discussionHarness((body, count) => count === 2 ? old.promise : count === 3 ? current.promise : pageData(body, [makePost(801)]));
     await h.open();
     const append = h.load(true);
-    h.sort[1].events.get('click')();
+    h.$('discussion-sort-toggle').events.get('click')();
     old.reject(new Error('Obsolete append failure')); await append;
     assert.equal(h.$('discussion-feed').getAttribute('aria-busy'), 'true');
     assert.equal(h.$('discussion-error').hidden, true);

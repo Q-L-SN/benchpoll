@@ -1,0 +1,95 @@
+import assert from 'node:assert/strict';
+import { mkdir } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { chromium } from 'playwright';
+import { startProfilePagesFixture } from './fixtures/profile-pages-server.mjs';
+
+const output = resolve(process.env.PROFILE_PAGES_OUTPUT || '/workspace/benchpoll-work/artifacts/profiles');
+await mkdir(output, { recursive: true });
+const fixture = await startProfilePagesFixture();
+const executablePath = process.env.CHROMIUM_EXECUTABLE_PATH || (existsSync(chromium.executablePath()) ? undefined : '/usr/bin/chromium');
+const browser = await chromium.launch({ headless: true, executablePath, args: ['--no-sandbox'] });
+const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+const page = await context.newPage(), errors = [];
+page.on('pageerror', error => errors.push(error.message));
+await page.route('https://**/*', route => route.abort());
+try {
+    await page.goto(fixture.origin + '/me');
+    await page.getByRole('heading', { name: 'Avery Chen' }).waitFor();
+    assert.equal(await page.getByRole('link', { name: 'Settings', exact: true }).getAttribute('href'), '/settings');
+    assert.equal(await page.getByRole('link', { name: 'History', exact: true }).getAttribute('href'), '/me/history');
+    await page.getByRole('tab', { name: 'Favorited topics, only you' }).click();
+    assert.equal(await page.locator('.bp-profile-topic-card').count(), 2);
+    assert.match(await page.locator('.bp-profile-topic-card').first().getByRole('link', { name: 'Report this topic' }).getAttribute('href'), /^\/contribute\/topics\/7\/report/);
+    assert.equal(await page.locator('.bp-profile-topic-card').nth(1).getByRole('link', { name: 'Sam Rivera' }).getAttribute('href'), '/@2');
+    const favorite = page.locator('.bp-profile-topic-card').first().getByRole('button', { name: /Remove favorite/ });
+    await favorite.click();
+    await page.waitForFunction(() => document.querySelector('.bp-topic-favorite').getAttribute('aria-pressed') === 'false');
+    await page.screenshot({ path: output + '/profile-desktop.png', fullPage: true });
+
+    await page.goto(fixture.origin + '/settings/profile');
+    await page.getByLabel('User ID', { exact: true }).waitFor();
+    await page.getByLabel('Avatar', { exact: true }).setInputFiles({ name: 'image.svg', mimeType: 'image/svg+xml', buffer: Buffer.from('<svg/>') });
+    await page.getByText('Choose a valid PNG, JPEG or WebP image.').waitFor();
+    const png = await page.evaluate(() => {
+        const canvas = document.createElement('canvas'); canvas.width = canvas.height = 64;
+        const context = canvas.getContext('2d'); context.fillStyle = '#7d9272'; context.fillRect(0, 0, 64, 64);
+        return canvas.toDataURL('image/png').split(',')[1];
+    });
+    await page.getByLabel('Avatar', { exact: true }).setInputFiles({ name: 'image.png', mimeType: 'image/png', buffer: Buffer.from(png, 'base64') });
+    await page.locator('.pf-avatar img').waitFor();
+    await page.getByLabel('User ID', { exact: true }).fill('2');
+    await page.getByRole('button', { name: 'Save profile', exact: true }).click();
+    await page.getByText('That user ID is already taken. Choose another.').waitFor();
+    assert.equal(await page.getByLabel('User ID', { exact: true }).inputValue(), '2');
+    await page.getByLabel('User ID', { exact: true }).fill('Avery');
+    await page.getByLabel('Bio', { exact: true }).fill('<img src=x onerror="window.profileXSS=1">\nI compare models.');
+    await page.getByRole('switch', { name: 'Show GitHub profile link' }).check();
+    await page.getByRole('button', { name: 'Save profile', exact: true }).click();
+    await page.getByText('Profile saved.', { exact: true }).waitFor();
+    assert.equal(fixture.state.profiles.get('10').hasCustomAvatar, 1);
+    await page.goto(fixture.origin + '/me');
+    await page.locator('.pf-handle').filter({ hasText: '@avery' }).waitFor();
+    assert.equal(await page.locator('.pf-bio img').count(), 0);
+    assert.equal(await page.evaluate(() => window.profileXSS), undefined);
+    assert.equal(await page.getByRole('link', { name: 'GitHub', exact: true }).getAttribute('href'), 'https://github.com/avery-fixture');
+
+    await page.goto(fixture.origin + '/settings/privacy');
+    await page.getByRole('switch', { name: 'Publish my favorites' }).check();
+    await page.getByRole('button', { name: 'Save privacy settings' }).click();
+    await page.getByText('Privacy settings saved.', { exact: true }).waitFor();
+    fixture.state.viewerID = null;
+    await page.goto(fixture.origin + '/@avery');
+    await page.getByRole('heading', { name: 'Avery Chen' }).waitFor();
+    assert.equal(await page.getByRole('tab').count(), 2);
+    assert.equal(await page.getByRole('tab', { name: 'Configured topics' }).count(), 0);
+    assert.equal(await page.getByRole('link', { name: 'Settings', exact: true }).count(), 0);
+    await page.getByRole('tab', { name: 'Favorited topics', exact: true }).click();
+    await page.setViewportSize({ width: 320, height: 760 });
+    await page.screenshot({ path: output + '/profile-mobile.png', fullPage: true });
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+
+    fixture.state.viewerID = '10';
+    await page.goto(fixture.origin + '/settings/profile');
+    await page.getByLabel('User ID', { exact: true }).waitFor();
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+    await page.screenshot({ path: output + '/settings-mobile.png', fullPage: true });
+    await page.goto(fixture.origin + '/me/history');
+    await page.getByRole('link', { name: 'Coding / Python', exact: true }).waitFor();
+    assert.equal(await page.locator('#history-list li').count(), 2);
+    await page.getByRole('button', { name: 'Clear browsing history' }).click();
+    await page.getByText('Browsing history cleared.', { exact: true }).waitFor();
+    assert.equal(await page.locator('#history-list li').count(), 0);
+
+    await page.goto(fixture.origin + '/settings/privacy');
+    await page.getByRole('switch', { name: 'Publish my favorites' }).waitFor();
+    await page.evaluate(() => window.dispatchEvent(new StorageEvent('storage', { key: 'user-profile-update', newValue: 'null' })));
+    assert.equal(await page.getByRole('button', { name: 'Save privacy settings' }).isDisabled(), true);
+    await page.goto(fixture.origin + '/me');
+    await page.getByRole('tab', { name: 'Configured topics, only you' }).click();
+    await page.evaluate(() => window.dispatchEvent(new StorageEvent('storage', { key: 'user-profile-update', newValue: 'null' })));
+    assert.equal(await page.locator('.bp-profile-topic-card').count(), 0);
+    assert.deepEqual(errors, []);
+    console.log(JSON.stringify({ passed: true, screenshots: output, checks: ['self/public privacy', 'unique IDs', 'plain-text bio', 'separate GitHub link', 'favorite action', 'private history', 'account changes', '320px overflow'] }));
+} finally { await browser.close(); await fixture.close(); }

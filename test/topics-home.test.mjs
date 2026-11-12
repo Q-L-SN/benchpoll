@@ -10,11 +10,11 @@ import { fixtureWeights } from '../scripts/frontend/topics-home-fixtures.mjs';
 import { readHomeModelFocusIntent } from '../public/js/workspace/model-focus.js';
 import { createWeightTreemapLayout } from '../public/js/workspace/weight-treemap-layout.js';
 
-test('54 stays first, without regrouping other flat topics', () => {
-    assert.equal(FEATURED_TOPIC_ID, 54);
-    assert.deepEqual(orderTopics([{ ID: 8 }, { ID: '54' }, { ID: 1 }]).map(topic => topic.ID), ['54', 8, 1]);
+test('topic collections preserve the delivered popularity order without promoting Intelligence', () => {
+    assert.equal(FEATURED_TOPIC_ID, 1);
+    assert.deepEqual(orderTopics([{ ID: 8 }, { ID: '54' }, { ID: 1 }]).map(topic => topic.ID), [8, '54', 1]);
     const serverOrder = [{ ID: 9, heat: 1 }, { ID: 2, heat: 50 }, { ID: 54 }, { ID: 99, isNew: true }, { ID: 1, heat: 200 }];
-    assert.deepEqual(orderTopics(serverOrder).map(topic => topic.ID), [54, 9, 2, 99, 1], 'heat/exploration order belongs to the server');
+    assert.deepEqual(orderTopics(serverOrder).map(topic => topic.ID), [9, 2, 54, 99, 1], 'favorite/recent order belongs to the server');
 });
 
 test('Other uses a strict deterministic 1% threshold and retains every basis point/member', () => {
@@ -288,7 +288,7 @@ test('selectable tile theme, top exposure/fade and full unmasked weights are exp
     assert.doesNotMatch(css, /border-(?:left|right|top):[^;]*(?:accent|fill|purple)/);
     const html = await readFile(new URL('../private/index.html', import.meta.url), 'utf8');
     assert.doesNotMatch(html, /sidebar|home-workspace\.js|src="\/js\/home\.js/);
-    assert.match(html, /<span class="th-headline-phrase">Define Super Intelligence,<\/span> <span class="th-headline-phrase th-headline-accent">democratically\.<\/span>/);
+    assert.match(html, /Define <span class="th-headline-nowrap">Super Intelligence,<\/span>/);
     assert.match(html, /<p class="th-intro-copy">Choose what matters\. Shape the weights together\.<\/p>/);
     assert.match(html, /<meta name="description" content="Define Super Intelligence, democratically\. Compare AI models with community-weighted benchmarks, explore public rankings, and build your own AI index\.">/);
     assert.match(html, /<script src="\/js\/topics-home\.js" type="module"><\/script>/);
@@ -297,7 +297,7 @@ test('selectable tile theme, top exposure/fade and full unmasked weights are exp
     assert.doesNotMatch(html, /th-eyebrow|th-intro-actions|data-open-mine|Explore topics|Our weights\./);
 });
 
-test('the integrated header has four collections, Mine private creation and a proposal link', async () => {
+test('the integrated header has four collections and direct topic creation', async () => {
     const html = await readFile(new URL('../private/index.html', import.meta.url), 'utf8');
     const source = await readFile(new URL('../public/js/topics-home.js', import.meta.url), 'utf8');
     const shared = await readFile(new URL('../public/js/shared/site-header.js', import.meta.url), 'utf8');
@@ -306,11 +306,10 @@ test('the integrated header has four collections, Mine private creation and a pr
     assert.match(html, /class="th-header-inner th-container"/);
     assert.deepEqual([...html.matchAll(/data-topics-view="([^"]+)"/g)].map(match => match[1]), ['popular', 'recent', 'configured', 'search']);
     assert.match(html, /id="topic-search-toggle"[^>]*aria-expanded="false"/);
-    assert.match(shared, /<a id="new-topic" class="th-quiet"[^>]*href="\/topic-proposals"/);
-    assert.match(shared, /aria-label="Proposal hall"/);
-    assert.match(html, /id="mine-actions"[^>]*hidden><button id="new-private-topic"/);
-    assert.match(source, /\$\('#mine-actions'\)\.hidden = next !== 'configured'/);
-    assert.match(html, /<button id="new-private-topic"[^>]*aria-label="New private topic"/);
+    assert.doesNotMatch(shared, /topic-proposals|Proposal hall/);
+    assert.ok(html.indexOf('id="new-private-topic"') > html.indexOf('id="topic-search-toggle"'));
+    assert.doesNotMatch(html, /id="mine-actions"/);
+    assert.match(html, /<button id="new-private-topic"[^>]*aria-label="Create topic"/);
     assert.doesNotMatch(source, /\$\('#new-topic'\)\.addEventListener/);
     assert.match(source, /createPrivateTopicEditor/);
     assert.doesNotMatch(source, /th-pagination-status|th-card-meta|benchmarks \/|\$\{total\} model/);
@@ -321,7 +320,7 @@ test('the frosted header appears after the introductory header scrolls away', as
     const html = await readFile(new URL('../private/index.html', import.meta.url), 'utf8');
     const css = await readFile(new URL('../public/css/topics-home.css', import.meta.url), 'utf8');
     const source = await readFile(new URL('../public/js/topics-home.js', import.meta.url), 'utf8');
-    assert.match(html, /id="topics-filters" class="th-filter-bar"[^>]*hidden/);
+    assert.match(html, /id="topics-filters" class="th-filter-bar is-collapsed"[^>]*hidden/);
     const header = html.match(/<header class="th-header">[\s\S]*?<\/header>/)?.[0];
     assert.match(header, /id="topics-navigation"[\s\S]*class="th-header-links"/);
     assert.ok(html.indexOf('id="topics-filters"') > html.indexOf('</header>'));
@@ -342,25 +341,25 @@ test('collections intersect authorized metadata, account flags and account-scope
     const topics = [{ ID: 4, isMine: false, configured: true }, { ID: 54, isMine: true, configured: false },
         { ID: 8, isMine: true, isPrivate: true, configured: false }, { ID: 9, isPrivate: true, isMine: false }, { ID: 5, isMine: true }];
     const recent = [{ categoryID: 5 }, { categoryID: 8 }, { categoryID: 4 }, { categoryID: 4 }, { categoryID: 9 }, { categoryID: 777 }];
-    assert.deepEqual(topicCollection(topics, 'popular', recent, '42').map(topic => topic.ID), [54, 4, 8, 5]);
+    assert.deepEqual(topicCollection(topics, 'popular', recent, '42').map(topic => topic.ID), [4, 54, 8, 5]);
     assert.deepEqual(topicCollection(topics, 'mine', recent, '42').map(topic => topic.ID), [4, 8]);
     assert.deepEqual(topicCollection(topics, 'configured', recent, '42').map(topic => topic.ID), [4, 8]);
     assert.deepEqual(topicCollection(topics, 'recent', recent, '42').map(topic => topic.ID), [5, 8, 4]);
     assert.deepEqual(topicCollection(topics, 'recent', recent, null).map(topic => topic.ID), [5, 4]);
     assert.deepEqual(topicCollection(topics, 'mine', recent, null), []);
     assert.deepEqual(topicCollection(topics, 'configured', recent, null), []);
-    assert.deepEqual(topicCollection(topics, 'search', recent, null).map(topic => topic.ID), [54, 4, 5]);
+    assert.deepEqual(topicCollection(topics, 'search', recent, null).map(topic => topic.ID), [4, 54, 5]);
 });
 
-test('model links preserve canonical slug/query/hash and carry the exact ranking focus contract', () => {
+test('model links preserve public and private identity paths with the exact ranking focus contract', () => {
     const identity = JSON.stringify([['model', true, 12], ['field:2', true, 'A & B / test']]);
-    const href = modelTargetURL('/server-canonical?source=home&mode=personal#results', { modelID: 12, comparisonIdentity: identity },
+    const href = modelTargetURL('/81/2?source=home&mode=personal#results', { modelID: 12, comparisonIdentity: identity },
         { scoreMode: 'range', reasoning: true, harness: false });
     const url = new URL(href, 'https://fixture.local');
-    assert.equal(url.pathname, '/server-canonical'); assert.equal(url.hash, '#results');
+    assert.equal(url.pathname, '/81/2'); assert.equal(url.hash, '#results');
     assert.deepEqual(Object.fromEntries(url.searchParams), { source: 'home', mode: 'public', focusModel: identity,
         scoreMode: 'range', compareReasoning: '1', compareHarness: '0' });
-    const fallback = new URL(modelTargetURL('/personal/8', { modelID: '34' }, { scoreMode: 'available', reasoning: false, harness: true }, true), url);
+    const fallback = new URL(modelTargetURL('/private/FixturePrivate8', { modelID: '34' }, { scoreMode: 'available', reasoning: false, harness: true }, true), url);
     assert.equal(fallback.searchParams.get('focusModel'), '34'); assert.equal(fallback.searchParams.get('compareHarness'), '1');
     assert.equal(fallback.searchParams.get('mode'), 'personal');
     assert.deepEqual(readHomeModelFocusIntent(fallback.href), { valid: true, targetModel: '34', scoreMode: 'available', mode: 'personal',
@@ -412,11 +411,12 @@ test('percentage symbols are smaller and numbers may crop within their tile rath
 test('Outline remains fixed and pagination belongs to the plot', async () => {
     const source = await readFile(new URL('../public/js/topics-home.js', import.meta.url), 'utf8');
     assert.match(source, /frame\.append\(state\.pagination\)/);
-    assert.match(source, /card\.append\(heading, visual, meta, referenceNotice, sceneToggle\)/);
-    assert.match(source, /createTopicCreator\(topic\.creator, 'th-creator'\)/);
+    assert.match(source, /card\.append\(heading, visual, footer, meta, referenceNotice\)/);
+    assert.match(source, /createTopicCreator\(topic\.isOfficial \? \{ isOfficial: true \} : topic\.creator, 'th-creator'\)/);
     const identity = await readFile(new URL('../public/js/shared/topic-identity.js', import.meta.url), 'utf8');
     assert.match(identity, /bp-topic-byline-prefix', 'by'/);
-    assert.doesNotMatch(source, /th-card-footer/);
+    assert.match(source, /author\.append\(creator, createCardReport\(topic\)\)/);
+    assert.match(source, /footer\.append\(author, topicMeta, sceneToggle\)/);
     const html = await readFile(new URL('../private/index.html', import.meta.url), 'utf8');
     assert.match(html, /class="th-header-inner th-container"/);
     assert.match(html, /data-weight-theme="frost-hatch" data-card-style="outline"/);
@@ -426,17 +426,16 @@ test('Outline remains fixed and pagination belongs to the plot', async () => {
     assert.match(html, /aria-label="Mine"[^>]*>[\s\S]*?fa-user/);
 });
 
-test('home integrates the shared account center and handles canonical-name errors without touching shared modules', async () => {
+test('home links to the profile page and handles canonical-name errors without a popup', async () => {
     const source = await readFile(new URL('../public/js/topics-home.js', import.meta.url), 'utf8');
-    assert.match(source, /import\('\.\/shared\/account-center\.js'\)/);
-    assert.match(source, /openAccountCenter\(\{ profile, onProfileSaved:/);
-    assert.match(source, /onSignedOut: accountSignedOut/);
+    assert.doesNotMatch(source, /openAccountCenter|account-center\.js/);
+    assert.match(source, /account\.href = '\/me'/);
     const editor = await readFile(new URL('../public/js/shared/private-topic-editor.js', import.meta.url), 'utf8');
     assert.match(editor, /reserved_topic_name/); assert.match(editor, /topic_name_exists/);
     assert.match(source, /readRecentTopics\(profile\?\.userID \?\? null\)/);
     assert.doesNotMatch(source, /openProfileEditor|bar\.known < 25/);
     const html = await readFile(new URL('../private/index.html', import.meta.url), 'utf8');
-    assert.match(html, /href="\/css\/ui\/account-center\.css" data-bp-account-center/);
+    assert.doesNotMatch(html, /account-center\.css/);
 });
 
 test('the official D3 distribution remains executable in an esbuild browser ESM bundle', async () => {

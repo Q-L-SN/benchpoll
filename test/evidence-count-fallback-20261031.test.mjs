@@ -52,16 +52,31 @@ test('counts share a focusable FontAwesome component and the existing tooltip co
     assert.doesNotMatch(styles, /border-(left|right|top|bottom):|box-shadow|::before|::after/);
 });
 
-test('workspace heading names the selected block and preserves evidence and public participant counts', () => {
+test('workspace links the selected block and shows model counts beside its name plus a public saved-set count', () => {
     const source = read('public/js/home-workspace.js');
-    assert.match(source, /createEvidenceCount\(object\.scoreCount, \{ modelCount: object\.isBenchmarkGroup \? undefined : object\.scoredModelCount \}\)/);
+    assert.match(source, /createEvidenceCount\(object\.scoredModelCount \?\? object\.scoreCount, \{ kind: object\.scoredModelCount == null \? 'scores' : 'models' \}\)/);
     assert.match(source, /!isTopicReference\(selected\) && typeof selected.scoredModelCount === 'number'/);
     assert.match(source, /updateEvidenceCount\(pieModelCount, selected.scoredModelCount, \{ kind: 'models' \}\)/);
     assert.match(source, /pieModelCount\.parentElement !== pieContextNote/);
-    assert.match(source, /pieInstruction.textContent = selected \? benchmarkAccessibleName\(selected\) : ''/);
-    assert.match(source, /publicPieCount\.textContent = `\$\{state\.publicParticipantCount\.toLocaleString\('en-US'\)\}/);
+    assert.match(source, /personalPieGuidance\.hidden = !selected \|\| personalPieStart\.isOpen/);
+    assert.match(source, /pieInstruction\.replaceChildren\(\)/);
+    assert.match(source, /if \(selected\) pieInstruction\.append\(createBenchmarkInformationLink\(selected, \{/);
+    assert.match(source, /className: 'bp-selected-weight-link'/);
+    assert.match(source, /publicPieCount\.textContent = state\.publicParticipantCount\.toLocaleString\('en-US'\)/);
+    assert.match(source, /publicPieSummary\.dataset\.tooltip = `[^`]*saved weight[^`]*shape these public weights\./);
+    assert.match(source, /publicPieSummary\.setAttribute\('aria-label', publicPieSummary\.dataset\.tooltip\)/);
+    const html = read('private/home.html');
+    assert.match(html, /id="personal-pie-guidance"[^>]*>[\s\S]*?<p id="pie-instruction"><\/p>\s*<p id="pie-context-note"><\/p>/);
+    const publicCount = html.match(/<div id="public-pie-summary"[^>]*>[\s\S]*?<\/div>/)?.[0];
+    assert.match(publicCount, /role="img" tabindex="0"/);
+    assert.match(publicCount, /<i class="fa-solid fa-users"[^>]*><\/i><span id="public-pie-count"/);
+    assert.doesNotMatch(publicCount, /circle-question|public-pie-tooltip|<strong>/);
+    const styles = read('public/css/ui/workspace-redesign.css');
+    assert.match(styles, /\.bp-pie-tools-row \.bp-pie-guidance \{[^}]*display: flex;[^}]*flex-wrap: nowrap;[^}]*align-items: baseline;[^}]*justify-content: flex-start/);
     assert.doesNotMatch(source, /Tap a block, then swipe to adjust\./);
-    assert.match(source, /Select a weight block to inspect its benchmark\./);
+    const heading = source.slice(source.indexOf('function renderSelectedWeightHeading()'), source.indexOf('function renderReferenceState()'));
+    assert.doesNotMatch(heading, /Select a weight block to inspect its benchmark\./);
+    assert.match(source, /<strong>No benchmark selected<\/strong><span>Select a weight block to inspect its benchmark\.<\/span>/);
     assert.doesNotMatch(source, /Tap a slice|Select a slice|Select a weight slice|scoreCount\.textContent/);
 });
 

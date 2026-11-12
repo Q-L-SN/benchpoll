@@ -2,18 +2,18 @@ import { setLoading } from './shared/loading.js';
 import { postJSON } from './shared/http.js';
 import { loginWithGitHub } from './global.js';
 import { buildContributionURL } from './shared/contribution-navigation.js?v=clean-20260908';
-import { animateContent, setVisible, mountDisclosureMotion, setDisclosureOpen } from './shared/motion.js?v=workspace-ui-20261008';
+import { animateContent, mountDisclosureMotion, setDisclosureOpen } from './shared/motion.js?v=workspace-ui-20261008';
 import { readRankingContext } from './shared/ranking-url.js';
 import { orderedScenes } from './navigation/scenes.js';
-import { scenePath, topicSlug } from './shared/topics.js';
+import { scenePath, parseTopicPath } from './shared/topics.js';
 import { relativeDateAge } from './shared/relative-date.js';
 import { createBenchmarkScoresView } from './workspace/benchmark-scores.js?v=model-name-translation-20261006';
 import { pageAccountWriteScope, isAccountWriteError } from './shared/account-identity.js';
 import { setDiscussionEntryView, readDiscussionEntryContext } from './workspace/discussion-entry.js';
 import { createDiscussionAutoLoader } from './shared/discussion-auto-load.js';
-import { createAction, mountDisclosureChevron, mountSegmentedControl } from './shared/ui-components.js';
+import { createAction, mountSegmentedControl } from './shared/ui-components.js';
 import { profileAvatarURL } from './shared/profile-editor.js';
-import { publicGitHubURL } from './shared/topic-identity.js';
+import { profileURL } from './shared/profile-identity.js';
 import { hasAADisplayRestriction, AA_DISPLAY_MESSAGE } from './shared/aa-ranking-policy.js';
 
 const $ = id => document.getElementById(id);
@@ -69,7 +69,6 @@ function renderSceneScope() {
 const text = $('discussion-text');
 const panel = $('discussion-panel');
 mountDisclosureMotion(panel, '#benchmark-information-differences');
-mountDisclosureChevron($('discussion-compose-toggle'));
 const sidebar = document.querySelector('.bp-shell > .bp-sidebar');
 const brand = sidebar.querySelector('.bp-brand');
 const workspace = document.querySelector('.bp-workspace');
@@ -131,12 +130,6 @@ function restoreDraft() {
     $('composer-status').textContent = draft?.error || '';
     renderMentions();
 }
-function setComposerExpanded(expanded, focus = false) {
-    setVisible($('discussion-compose-fields'), expanded, { collapse: true });
-    $('discussion-compose-toggle').setAttribute('aria-expanded', String(expanded));
-    if (!expanded) closeSuggestions();
-    if (focus) (expanded ? text : $('discussion-compose-toggle')).focus({ preventScroll: true });
-}
 function updatePanelAccess() {
     const embedded = isMobilePage();
     if (embedded && panel.parentElement !== mobileDiscussionPage) mobileDiscussionPage.append(panel);
@@ -145,8 +138,6 @@ function updatePanelAccess() {
     else document.body.classList.remove('discussion-open');
     if (isOpen && !embedded) $('discussion-brand-slot').append(brand);
     else sidebar.prepend(brand);
-    const entry = $('discussion-entry');
-    $('workspace-refresh').before(entry);
     sidebar.inert = isOpen && !embedded;
     sidebar.setAttribute('aria-hidden', String(sidebar.inert));
     workspace.inert = isOpen && mobile.matches && !embedded;
@@ -202,8 +193,11 @@ async function openDiscussion(url, trigger = null, { allCategories = false, navi
     const query = url.searchParams;
     informationOnly = workspaceContext?.isPrivate === true;
     state.categoryID = query.has('categoryID') ? Number(query.get('categoryID')) : workspaceContext?.categoryID ?? null;
-    const namedScene = [...discussionScenes, ...(workspaceContext?.scenes ?? [])]
-        .find(scene => (scene.slug || topicSlug(scene.name)) === url.pathname.split('/').filter(Boolean).at(-1));
+    const address = parseTopicPath(url.pathname);
+    const knownScenes = [...(Number(sceneTabScope) === Number(state.categoryID) ? discussionScenes : []),
+        ...(Number(workspaceContext?.categoryID) === Number(state.categoryID) ? workspaceContext?.scenes ?? [] : [])];
+    const namedScene = address?.sceneNumber == null ? null
+        : knownScenes.find(scene => Number(scene.sceneNumber) === address.sceneNumber);
     state.contextValues = namedScene ? { scene: String(namedScene.ID) } : url.pathname === location.pathname && workspaceContext
         && Number(state.categoryID) === Number(workspaceContext.categoryID)
         ? { ...contextValues, ...workspaceContext.contextValues } : contextValues;
@@ -215,7 +209,6 @@ async function openDiscussion(url, trigger = null, { allCategories = false, navi
     state.allScenes = query.get('allScenes') === '1';
     renderDiscussionScope();
     restoreDraft();
-    setComposerExpanded(Boolean(state.threadID || text.value || state.mentions.length));
     if (!isOpen) {
         returnFocus = trigger || $('discussion-entry');
         workspaceScrollY = window.scrollY;
@@ -346,7 +339,6 @@ async function loadBenchmarkInformation() {
     else { discussionView.setAttribute('role', 'tabpanel'); discussionView.setAttribute('aria-labelledby', 'benchmark-scores-back'); }
     host.setAttribute('aria-busy', String(!host.hidden));
     $('benchmark-discussion-heading').hidden = host.hidden || informationOnly;
-    $('category-path').hidden = !host.hidden;
     $('discussion-title').textContent = host.hidden ? 'Discussion' : 'Benchmark';
     for (const id of ['benchmark-information-name', 'benchmark-information-condition', 'benchmark-information-description', 'benchmark-information-updated', 'benchmark-information-age']) $(id).textContent = '';
     $('benchmark-information-change').hidden = true;
@@ -414,9 +406,10 @@ function contextLabel(values) {
     return Object.values(values).filter(Boolean).join(' / ');
 }
 function discussionURL(extra = {}) {
-    const url = new URL(location.pathname, location.origin);
     const scene = discussionScenes.find(item => String(item.ID) === state.contextValues.scene);
-    if (scene) url.pathname = scenePath(url.pathname, scene);
+    const url = new URL(scene?.url ?? location.pathname, location.origin);
+    const sceneURL = scene && scenePath(url.pathname, scene);
+    if (sceneURL) url.pathname = sceneURL;
     url.searchParams.set('discussion', '1');
     if (state.allScenes) url.searchParams.set('allScenes', '1');
     if (state.categoryID) url.searchParams.set('categoryID', state.categoryID);
@@ -425,13 +418,12 @@ function discussionURL(extra = {}) {
     return url.pathname + url.search;
 }
 let currentPublicProfile = null;
-function renderAuthorIdentity(host, displayName, avatarURL, githubURL = null) {
+function renderAuthorIdentity(host, displayName, avatarURL, publicID = null) {
     host.replaceChildren();
-    const github = githubURL ? publicGitHubURL(githubURL) : null;
-    const identity = github ? node('a', 'bp-public-github-link') : host;
-    if (github) {
-        identity.href = github; identity.target = '_blank'; identity.rel = 'noopener noreferrer nofollow';
-        identity.referrerPolicy = 'no-referrer';
+    const href = profileURL(publicID);
+    const identity = href ? node('a', 'bp-profile-link') : host;
+    if (href) {
+        identity.href = href;
         host.append(identity);
     }
     const url = profileAvatarURL(avatarURL);
@@ -453,7 +445,7 @@ document.addEventListener('benchpoll:profile-updated', event => {
     currentPublicProfile = profile;
     document.querySelectorAll('.bp-discussion-author[data-profile-self="true"]').forEach(author => {
         renderAuthorIdentity(author, profile.userName, profile.userProfilePictureURL,
-            profile.showGitHubProfile === true ? profile.githubURL : null);
+            profile.publicID);
     });
 });
 function renderPost(post, isRoot = false) {
@@ -478,7 +470,7 @@ function renderPost(post, isRoot = false) {
     }
     renderAuthorIdentity(author, updatedProfile?.userName ?? post.authorName,
         post.isDeleted ? null : updatedProfile ? updatedProfile.userProfilePictureURL : post.authorAvatarURL,
-        post.isDeleted ? null : updatedProfile ? updatedProfile.showGitHubProfile === true ? updatedProfile.githubURL : null : post.githubURL);
+        post.isDeleted ? null : updatedProfile ? updatedProfile.publicID : post.authorPublicID);
     meta.append(author, time);
     const taskValues = Object.fromEntries(Object.entries(post.contextValues).filter(([, value]) => value && value !== 'any'));
     const metadata = [state.allCategories ? post.categoryName : '', Object.keys(taskValues).length ? contextLabel(taskValues) : ''].filter(Boolean);
@@ -565,7 +557,6 @@ function renderContext(data, requestedContextValues) {
     if (JSON.stringify(state.contextValues) === JSON.stringify(requestedContextValues)) {
         state.contextValues = { ...(data.root?.contextValues ?? data.context.contextValues) };
     }
-    $('category-path').textContent = data.context.categoryName ?? data.context.lineage?.at(-1)?.name ?? (data.context.categoryPath ?? '').replaceAll('/', ' / ');
     $('posting-context').replaceChildren();
     $('posting-context').hidden = !state.contextValues.scene;
     if (data.root) {
@@ -590,7 +581,7 @@ function renderContext(data, requestedContextValues) {
                 filter.dataset.sceneAnimated = 'true';
                 for (const tab of filter.children) tab.setAttribute('aria-selected', String(tab === button));
                 refreshSceneTabs(true);
-                restoreDraft(); setComposerExpanded(Boolean(text.value || state.mentions.length)); void load();
+                restoreDraft(); void load();
             });
         }
         button.firstChild.textContent = scene.name;
@@ -662,7 +653,6 @@ async function load(append = false) {
             renderContext(data, requestedContextValues);
             if (previousDraftKey !== draftKey() && !text.value && !state.mentions.length) {
                 restoreDraft();
-                if (text.value || state.mentions.length) setComposerExpanded(true);
             }
         }
         const feed = $('discussion-feed');
@@ -788,11 +778,11 @@ $('discussion-composer').addEventListener('submit', async event => {
         if (!isOpen || draftKey() !== submittedDraft) return;
         if (unchanged) {
             text.value = ''; state.mentions = []; renderMentions();
-            setComposerExpanded(false, !$('discussion-composer').hidden);
+            if (!$('discussion-composer').hidden) text.focus({ preventScroll: true });
         }
         $('composer-status').textContent = unchanged ? 'Posted.' : 'Posted. Your new draft has been kept.';
         state.sort = 'new';
-        document.querySelectorAll('[data-sort]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.sort === state.sort)));
+        renderSortToggle();
         let sequence = await load();
         const canRevealPost = () => sequence === loadSequence && canReadDiscussion() && draftKey() === submittedDraft && !text.value;
         // Replies are oldest-first; advance to the submitted reply without bypassing paging guards.
@@ -810,12 +800,23 @@ $('discussion-composer').addEventListener('submit', async event => {
     finally { button.disabled = false; }
 });
 $('post-discussion').addEventListener('click', event => { if (!state.authenticated) { event.preventDefault(); loginWithGitHub(); } });
-document.querySelectorAll('[data-sort]').forEach(button => button.addEventListener('click', () => {
+function renderSortToggle() {
+    const toggle = $('discussion-sort-toggle');
+    const newest = state.sort === 'new';
+    toggle.dataset.sort = state.sort;
+    toggle.setAttribute('aria-pressed', String(newest));
+    toggle.setAttribute('aria-label', newest ? 'Show hot discussions' : 'Show newest discussions');
+    toggle.dataset.tooltip = newest ? 'Showing newest discussions · switch to hot' : 'Showing hot discussions · switch to newest';
+    toggle.querySelector('i').className = `fa-solid fa-${newest ? 'clock' : 'fire'}`;
+    toggle.querySelector('span').textContent = newest ? 'Newest' : 'Hot';
+}
+renderSortToggle();
+$('discussion-sort-toggle').addEventListener('click', () => {
     viewSequence++;
-    state.sort = button.dataset.sort;
-    document.querySelectorAll('[data-sort]').forEach(item => item.setAttribute('aria-pressed', String(item === button)));
+    state.sort = state.sort === 'hot' ? 'new' : 'hot';
+    renderSortToggle();
     load();
-}));
+});
 $('discussion-context').addEventListener('keydown', event => {
     if (state.allScenes) return;
     const tabs = [...event.currentTarget.querySelectorAll('[role="tab"]')], index = tabs.indexOf(event.target);
@@ -850,7 +851,6 @@ $('discussion-more').addEventListener('click', () => {
     if (!loading && canReadDiscussion() && (retryAppend !== null || hasMore)) void load(retryAppend ?? true);
 });
 $('discussion-close').addEventListener('click', closeDiscussion);
-$('discussion-compose-toggle').addEventListener('click', () => setComposerExpanded($('discussion-compose-fields').hidden, true));
 mobile.addEventListener('change', updatePanelAccess);
 window.addEventListener('keydown', event => {
     if (!isOpen || event.defaultPrevented || !panel.contains(document.activeElement)) return;

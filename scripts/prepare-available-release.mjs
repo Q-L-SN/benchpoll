@@ -92,7 +92,8 @@ const paths = sidebarCoverage ? ['private/home.html', 'public/css/ui/navigation.
     'public/js/workspace/showcase-view.js', 'public/js/workspace/chart-workspace.js', 'public/js/workspace/model-bar-chart.js',
     'public/js/workspace/model-list.js', 'public/js/workspace/model-scores.js', 'public/js/workspace/benchmark-scores.js',
     'public/js/workspace/family-view.js', 'public/js/workspace/fallback-picker.js',
-    'public/js/workspace/fallback-picker-scroll.js', 'public/js/workspace/version-group-dialog.js', 'public/js/workspace/public-composition.js', 'public/js/workspace/comparison-controls.js',
+    'public/js/shared/choice-pager.js', 'public/js/shared/exclusive-disclosure.js', 'public/css/ui/choice-pager.css',
+    'public/js/workspace/version-group-dialog.js', 'public/js/workspace/public-composition.js', 'public/js/workspace/comparison-controls.js',
     'public/js/workspace/comparison-settings.js', 'public/js/workspace/comparison-profile-menu.js',
     'public/js/shared/feedback-templates.js', 'public/js/shared/http.js', 'public/js/contribution/fields.js',
     'public/js/contribution/score-fields.js', 'public/css/ui/showcase.css', 'public/css/ui/chart-workspace.css', 'public/css/ui/fallback-picker.css']

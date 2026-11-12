@@ -3,7 +3,7 @@ import { createWeightTreemapLayout } from '../workspace/weight-treemap-layout.js
 
 // The pinned UMD exposes a global in native modules and exports in the bundle.
 const { hierarchy, treemap, treemapSlice, treemapDice, treemapSquarify } = hierarchyModule.hierarchy ? hierarchyModule : hierarchyModule.default ?? globalThis.d3;
-export const FEATURED_TOPIC_ID = 54;
+export { FEATURED_TOPIC_ID } from '../shared/topics.js';
 export const OTHER_THRESHOLD = .01;
 export const MAX_BAR_RATIO = .65;
 export const TREEMAP_FADE = Object.freeze({ start: .32, end: .76 });
@@ -55,7 +55,8 @@ export function scoreLabelLayout(labelWidth, barWidth, barHeight, comparable = t
 }
 
 export function orderTopics(topics) {
-    return [...topics].sort((a, b) => Number(Number(b.ID) === FEATURED_TOPIC_ID) - Number(Number(a.ID) === FEATURED_TOPIC_ID));
+    // Popular order comes from the service; recent order comes from navigation history.
+    return [...topics];
 }
 
 export function modelKey(model) {
@@ -214,17 +215,18 @@ export function modelColumnOpacity(index, scrollLeft, { slot, visible }) {
     return fraction * fraction * (3 - 2 * fraction);
 }
 
-export function columnLayout(availableWidth, loadedCount, totalCount = loadedCount, minimumSlot = 0, edgeInset = 0) {
+export function columnLayout(availableWidth, loadedCount, totalCount = loadedCount, minimumSlot = 0, edgeInset = 0, compact = false) {
     if (availableWidth <= 0 || !loadedCount) return { visible: 0, slot: 0, width: 0, barWidth: 0 };
     const inset = Math.min(Math.max(0, edgeInset), Math.max(0, (availableWidth - 48) / 2));
     availableWidth -= inset * 2;
     const requested = Number.isFinite(minimumSlot) ? Math.max(0, Math.ceil(minimumSlot)) : 0;
-    const preferred = Math.max(totalCount <= 4 ? 80 : totalCount <= 10 ? 56 : 48, requested);
+    const minimum = compact ? 38 : 48;
+    const preferred = Math.max(totalCount <= 4 ? (compact ? 62 : 80) : totalCount <= 10 ? (compact ? 42 : 56) : minimum, requested);
     const visible = Math.min(loadedCount, Math.max(1, Math.floor(availableWidth / preferred)));
     const ceiling = requested ? Math.min(availableWidth, Math.max(96, requested)) : 96;
-    const slot = Math.min(availableWidth, ceiling, Math.max(48, Math.floor(availableWidth / visible)));
+    const slot = Math.min(availableWidth, ceiling, Math.max(minimum, Math.floor(availableWidth / visible)));
     return { visible, slot, width: slot * visible, inset, frameWidth: slot * visible + inset * 2,
-        barWidth: Math.min(slot, Math.max(28, Math.min(36, Math.floor(slot * .58)))) };
+        barWidth: Math.min(slot, Math.max(compact ? 24 : 28, Math.min(36, Math.floor(slot * .58)))) };
 }
 
 export function modelBarScale(preview, scoreMode) {

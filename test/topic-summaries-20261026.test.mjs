@@ -37,7 +37,7 @@ test('backfill covers all official topics while keeping private and authored sum
 });
 
 test('directory, configured locations and current-context identities share summaries without ordinary public creator credits', () => {
-    const row = { ID: 54, name: 'Intelligence', description: 'Useful reasoning.', is_active: 1, owner_user_ID: null,
+    const row = { ID: 54, public_ID: 1, is_official: 1, name: 'Intelligence', description: 'Useful reasoning.', is_active: 1, owner_user_ID: null,
         creator_name: 'BenchPoll', creator_avatar: '/assets/benchpoll-mark.svg' };
     const topic = serializeTopic(row), publicEntry = buildCategoryNavigation([row])[0];
     const personalEntry = buildPersonalNavigation([{ contextID: 1, categoryID: 54, contextValues: {}, weightCount: 1,

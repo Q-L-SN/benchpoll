@@ -9,26 +9,26 @@ import { createSearchPresentation, searchHead, discoveryRobots, discoverySitemap
 import { topicSearchMetadata, updateTopicSearchMetadata } from '../public/js/shared/search-metadata.js';
 
 const origin = 'https://benchpoll.com';
-const topic = { ID: 54, name: 'Intelligence', url: '/intelligence', description: 'Reasoning and knowledge.',
+const topic = { ID: 54, publicID: 1, name: 'Intelligence', url: '/1', description: 'Reasoning and knowledge.',
     isPrivate: false, hasWeights: true, scenes: [
-        { ID: 101, name: 'Overall', description: 'Overall capability.', isDefault: true },
-        { ID: 102, name: 'Real-time', description: 'Real-time capability.', isDefault: false }
+        { ID: 101, sceneNumber: 1, name: 'Overall', description: 'Overall capability.', isDefault: true },
+        { ID: 102, sceneNumber: 2, name: 'Real-time', description: 'Real-time capability.', isDefault: false }
     ] };
-const privateTopic = { ...topic, ID: 55, name: 'Secret project', url: '/personal/55', isPrivate: true };
+const privateTopic = { ...topic, ID: 55, name: 'Secret project', url: '/private/AbCdEf123456', isPrivate: true };
 const snapshot = { models: [
     { modelName: 'Model A', lower: 75.32, coverage: 82.5, comparable: true },
     { modelName: 'Unranked', lower: 0, coverage: 0, comparable: false },
     { modelName: 'Invalid', lower: NaN, coverage: 0, comparable: true }
 ], weights: [{ name: 'Test A', conditionName: 'v1', weightBasisPoints: 10000 }] };
 
-test('all scenes have named canonical paths, including the default', () => {
-    assert.equal(topicSearchMetadata(topic).path, '/intelligence/overall');
-    assert.equal(topicSearchMetadata(topic, 101).path, '/intelligence/overall');
-    assert.equal(topicSearchMetadata(topic, 102).path, '/intelligence/real-time');
+test('all scenes have numeric canonical paths, including the default', () => {
+    assert.equal(topicSearchMetadata(topic).path, '/1/1');
+    assert.equal(topicSearchMetadata(topic, 101).path, '/1/1');
+    assert.equal(topicSearchMetadata(topic, 102).path, '/1/2');
     assert.equal(topicSearchMetadata(topic, 102).title, 'Intelligence: Real-time AI Index | BenchPoll');
     assert.match(topicSearchMetadata(topic, 102).description, /^Real-time capability/);
     assert.equal(selectSearchScene(topic, new URLSearchParams()).ID, 101);
-    assert.equal(selectSearchScene(topic, new URLSearchParams(), 'real-time').ID, 102);
+    assert.equal(selectSearchScene(topic, new URLSearchParams(), '2').ID, 102);
     for (const query of ['scene=102', 'context_scene=101', 'scene=', 'scene=0', 'scene=103', 'scene=101&scene=102', 'scene=01', 'scene=-1', 'scene=9007199254740993']) {
         assert.throws(() => selectSearchScene(topic, new URLSearchParams(query)), error => error.status === 404, query);
     }
@@ -37,15 +37,15 @@ test('all scenes have named canonical paths, including the default', () => {
 test('public discovery excludes private records and emits only canonical scene addresses', () => {
     for (const render of [discoverySitemap, discoveryText, renderTopicDirectory]) {
         const text = render([topic, privateTopic], origin);
-        assert.doesNotMatch(text, /Secret project|personal\/55/);
-        assert.match(text, /intelligence\/real-time/);
+        assert.doesNotMatch(text, /Secret project|private\/AbCdEf123456/);
+        assert.match(text, /1\/2/);
         assert.doesNotMatch(text, /scene=101/);
     }
     const xml = discoverySitemap([topic], origin);
     assert.equal([...xml.matchAll(/<url>/g)].length, PUBLIC_DOCUMENTS.length + 2);
     assert.match(xml, /<lastmod>2026-11-04<\/lastmod>/);
     const robots = discoveryRobots(origin);
-    assert.match(robots, /Disallow: \/personal\//);
+    assert.match(robots, /Disallow: \/private\//);
     assert.match(robots, /Sitemap: https:\/\/benchpoll.com\/sitemap.xml/);
     assert.doesNotMatch(robots, /Disallow: \/(?:js|css|assets)/);
     assert.match(discoveryText([topic], origin), /Benchmark evidence supplies measured results/);
@@ -69,7 +69,7 @@ test('public snapshot uses percentage units and only eligible comparable rows in
     assert.match(result, /Measured coverage/);
     assert.match(result, />82.5%<\/td>/);
     assert.doesNotMatch(result, /8250%|Unranked|Invalid|NaN/);
-    assert.match(result, /href="https:\/\/benchpoll.com\/intelligence\/real-time"/);
+    assert.match(result, /href="https:\/\/benchpoll.com\/1\/2"/);
     assert.match(result, /Test A<small>v1<\/small>/);
     const graph = JSON.parse(result.match(/type="application\/ld\+json">([\s\S]*?)<\/script>/)[1])['@graph'];
     assert.deepEqual(graph.find(item => item['@type'] === 'ItemList').itemListElement.map(item => item.name), ['Model A']);
@@ -113,19 +113,19 @@ test('crawler previews are public-only, bounded, deduplicated and do not block o
 });
 
 test('private/action pages send noindex while public pages and assets remain crawlable', () => {
-    for (const path of ['/personal/5', '/account/privacy', '/api/get_weights', '/contribute', '/sign-in', '/topic-proposals', '/dialogPage', '/adminlogin', '/github_callback']) {
+    for (const path of ['/private/AbCdEf123456', '/settings/privacy', '/api/get_weights', '/contribute', '/sign-in', '/me', '/dialogPage', '/adminlogin', '/github_callback']) {
         const headers = {};
         searchIndexingHeaders({ path }, { set: (key, value) => { headers[key] = value; } }, () => {});
         assert.equal(headers['X-Robots-Tag'], 'noindex, nofollow, nosnippet', path);
     }
-    for (const path of ['/', '/intelligence', '/terms', '/js/topics-home.js']) {
+    for (const path of ['/', '/1', '/terms', '/js/topics-home.js']) {
         searchIndexingHeaders({ path }, { set() { assert.fail(path); } }, () => {});
     }
 });
 
 test('metadata follows scene navigation without retaining a stale ranking or breadcrumb', () => {
     const nodes = new Map();
-    const canonical = { href: origin + '/intelligence' };
+    const canonical = { href: origin + '/1' };
     const structured = { textContent: JSON.stringify({ '@graph': [
         { '@type': 'WebPage', '@id': canonical.href + '#page', url: canonical.href, mainEntity: {}, breadcrumb: {} },
         { '@type': 'ItemList' }, { '@type': 'BreadcrumbList' }, { '@type': 'Organization' }
@@ -134,11 +134,11 @@ test('metadata follows scene navigation without retaining a stale ranking or bre
     const root = { querySelector: selector => nodes.get(selector) };
     updateTopicSearchMetadata(topic, 102, root);
     assert.equal(root.title, 'Intelligence: Real-time AI Index | BenchPoll');
-    assert.equal(canonical.href, origin + '/intelligence/real-time');
+    assert.equal(canonical.href, origin + '/1/2');
     const graph = JSON.parse(structured.textContent)['@graph'];
     assert.equal(graph.length, 2); assert.equal(graph[0].mainEntity, undefined); assert.equal(graph[0].breadcrumb, undefined);
     updateTopicSearchMetadata(topic, 101, root);
-    assert.equal(canonical.href, origin + '/intelligence/overall');
+    assert.equal(canonical.href, origin + '/1/1');
 });
 
 test('legal and methodology pages have canonical social metadata without changing their no-script content', async () => {

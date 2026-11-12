@@ -2232,3 +2232,4 @@ body.bp-contribute {
 .score-field-editor .picker-menu { position: relative; }
 .score-field-editor .picker-panel { z-index: 20; }
 .score-field-row .soft-icon-button { flex: 0 0 auto; }
+.contribution-account a.bp-user-profile { color: inherit; text-decoration: none; }

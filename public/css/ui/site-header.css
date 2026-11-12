@@ -16,6 +16,7 @@
 .bp-site-links .th-social { width: 44px; }
 .bp-site-links .th-x-mark { display: inline-block; transform: translateY(-2px); font: normal 18px/1 'Segoe UI Symbol', sans-serif; }
 .bp-site-links .th-more { position: relative; flex: 0 0 44px; }
+.bp-site-links .th-more[hidden] { display: none !important; }
 .bp-site-links .th-more summary { width: 44px; list-style: none; }
 .bp-site-links .th-more summary::-webkit-details-marker { display: none; }
 .bp-site-links .th-more nav { position: absolute; top: 100%; right: 0; z-index: 2; display: grid; box-sizing: border-box; width: 204px; padding: 6px; border: 1px solid #dce1e6; border-radius: 6px; background: #fff; box-shadow: 0 8px 24px #252d371f; }

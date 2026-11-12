@@ -5,6 +5,7 @@ import { readSidebarPreferences, writeSidebarPreferences, readRecentTopics, writ
 import { postJSON } from '../shared/http.js';
 import { isAccountWriteError, accountWriteError, pageAccountWriteScope } from '../shared/account-identity.js';
 import { animateContent, setVisible } from '../shared/motion.js';
+import { createFavoriteButton, createConfiguredIndicator } from '../shared/topic-actions.js';
 import { normalizeTopicSummary, sceneSummary } from '../shared/topics.js';
 import { sceneURL, searchTopicGroups, sceneMatchSummary } from './scenes.js';
 
@@ -95,11 +96,11 @@ export function createSidebarNavigation({ onNavigate, onLogin, onSessionChange, 
             && (force || !accessiblePrivateTopics.has(record.categoryID))).map(record => [record.categoryID, record])).values()];
         await Promise.all(records.map(async record => {
             try {
-                const topic = await postJSON('/api/get_private_category', { categoryID: record.categoryID });
+                const topic = await postJSON('/api/get_topic', { categoryID: record.categoryID });
                 if (sequence !== privateValidation || owner !== account || pageAccountWriteScope.capture() !== owner) return;
                 const ID = Number(topic.categoryID ?? topic.ID), name = topic.categoryName ?? topic.name;
                 if (ID !== record.categoryID || typeof name !== 'string') return;
-                accessiblePrivateTopics.set(ID, entryFromContext({ categoryID: ID, isPrivate: true,
+                accessiblePrivateTopics.set(ID, entryFromContext({ ...topic, categoryID: ID, isPrivate: topic.isPrivate,
                     description: topic.description, creator: topic.creator, scenes: topic.scenes,
                     lineage: [{ ID, name }], contextValues: {} }));
             } catch {
@@ -127,16 +128,21 @@ export function createSidebarNavigation({ onNavigate, onLogin, onSessionChange, 
     }
 
     function topicLink(entry, className) {
-        const link = document.createElement('a');
-        link.className = className;
-        link.href = locationURL(entry);
+        const link = document.createElement('div');
+        link.className = className; link.tabIndex = -1;
+        const destination = document.createElement('a'); destination.className = 'bp-topic-navigation-link';
+        destination.href = locationURL(entry);
         link.dataset.categoryId = String(entry.categoryID);
         link.dataset.key = keyFor(entry);
         if (entry.contextValues?.scene) link.dataset.sceneId = entry.contextValues.scene;
         link.dataset.private = String(entry.isPrivate === true);
         const copy = document.createElement('span'); copy.className = 'bp-topic-copy';
         const name = document.createElement('span'); name.textContent = entry.isScene ? `${entry.categoryName} / ${entry.sceneName}` : entry.categoryName;
-        copy.append(name);
+        const configured = createConfiguredIndicator(entry);
+        configured.dataset.tooltip = entry.contextValues?.scene ? 'You have personal weights in this scene' : 'You have personal weights in this topic';
+        configured.setAttribute('aria-label', configured.dataset.tooltip);
+        const heading = document.createElement('span'); heading.className = 'bp-topic-row-heading';
+        heading.append(configured, name); copy.append(heading);
         if (entry.description) {
             const summary = document.createElement('small'); summary.className = 'bp-topic-summary';
             summary.textContent = entry.description; copy.append(summary);
@@ -147,12 +153,15 @@ export function createSidebarNavigation({ onNavigate, onLogin, onSessionChange, 
         if (categories.filter(topic => topic.categoryName === entry.categoryName).length > 1) {
             const identity = document.createElement('small'); identity.textContent = `Topic ${entry.categoryID}`; copy.append(identity);
         }
-        link.append(copy);
+        destination.append(copy); link.append(destination);
+        const favorite = createFavoriteButton(entry, { onChange(updated) { Object.assign(entry, updated); },
+            onError(_error, message) { feedback.textContent = message; feedback.hidden = false; } });
+        favorite.addEventListener('click', event => event.preventDefault());
+        link.append(favorite);
         if (entry.isPrivate) {
             const lock = document.createElement('i'); lock.className = 'fa-solid fa-lock bp-private-category-mark';
-            lock.setAttribute('aria-label', 'Private topic'); link.append(lock);
+            lock.setAttribute('aria-label', 'Private topic'); destination.append(lock);
         }
-        link.dataset.tooltip = [entry.categoryName, entry.description, entry.contextLabel].filter(Boolean).join('\n');
         link.dataset.metadata = JSON.stringify([entry.categoryName, entry.description, entry.contextLabel, entry.isPrivate]);
         link.addEventListener('click', async event => {
             if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
@@ -183,10 +192,12 @@ export function createSidebarNavigation({ onNavigate, onLogin, onSessionChange, 
         if (!sameRows) {
             const top = viewport.scrollTop;
             const focusedKey = tree.contains(document.activeElement) ? document.activeElement.closest('[data-key]')?.dataset.key : null;
+            tree.querySelectorAll('.bp-topic-favorite').forEach(button => button.dispose?.());
             tree.replaceChildren(...entries.map(entry => topicLink(entry, 'bp-topic-row')));
             viewport.scrollTop = top;
             if (focusedKey) [...tree.children].find(row => row.dataset.key === focusedKey)?.focus({ preventScroll: true });
         }
+        if (sameRows) entries.forEach((entry, index) => tree.children[index].querySelector('.bp-topic-favorite')?.updateTopic(entry));
         if (!entries.length) topicStatus(tree, preferences.view === 'recent'
             ? !accountKnown || categoryLoading ? 'Loading recent topics...' : 'No recently viewed topics.'
             : categoryLoading ? 'Loading topics...' : categoryError ? 'Could not load topics.' : 'No topics yet.',
@@ -202,6 +213,7 @@ export function createSidebarNavigation({ onNavigate, onLogin, onSessionChange, 
         const active = preferences.view === 'search';
         searchResults.hidden = !active;
         tree.hidden = ['configured', 'search'].includes(preferences.view);
+        searchResults.querySelectorAll('.bp-topic-favorite').forEach(button => button.dispose?.());
         searchResults.replaceChildren();
         if (!active) return;
         const matches = searchTopicGroups(visibleTopics(), search.value);
@@ -225,7 +237,6 @@ export function createSidebarNavigation({ onNavigate, onLogin, onSessionChange, 
             if (summary) {
                 const matches = document.createElement('small'); matches.className = 'bp-scene-matches'; matches.textContent = summary;
                 link.querySelector('.bp-topic-copy').append(matches);
-                link.dataset.tooltip += '\n' + summary;
             }
         }
         updateTreeMarkers();
@@ -328,16 +339,6 @@ export function createSidebarNavigation({ onNavigate, onLogin, onSessionChange, 
     }
     document.getElementById('config-sidebar')?.addEventListener('sidebar:beforeopen', revealCurrentTopic);
 
-    function mark(configured, label) {
-        const icon = document.createElement('span');
-        icon.className = 'bp-config-mark';
-        icon.classList.toggle('is-configured', configured);
-        icon.setAttribute('role', 'img');
-        icon.setAttribute('aria-label', label);
-        icon.dataset.tooltip = label;
-        return icon;
-    }
-
     function updateTreeMarkers() {
         const categories = new Set(items.map(item => item.categoryID));
         const configuredContexts = new Set(items.map(keyFor));
@@ -348,9 +349,9 @@ export function createSidebarNavigation({ onNavigate, onLogin, onSessionChange, 
             row.classList.toggle('selected', selected);
             row.setAttribute('aria-current', selected ? 'page' : 'false');
             row.dataset.configured = String(configured);
-            const existing = row.querySelector('.bp-config-mark');
-            if (!configured) existing?.remove();
-            else if (!existing) row.append(mark(true, 'Personal weights configured in this topic'));
+            const indicator = row.querySelector('.bp-topic-configured-dot');
+            if (indicator) indicator.hidden = !configured;
+            row.querySelector('a')?.setAttribute('aria-current', selected ? 'page' : 'false');
         }
     }
 
@@ -378,7 +379,7 @@ export function createSidebarNavigation({ onNavigate, onLogin, onSessionChange, 
         for (const row of rows) {
             let link = existing.get(row.key);
             if (!link) {
-                link = document.createElement('a');
+                link = document.createElement('div');
                 link.className = 'bp-configured-row';
                 link.dataset.key = row.key;
                 link.addEventListener('click', async event => {
@@ -403,17 +404,20 @@ export function createSidebarNavigation({ onNavigate, onLogin, onSessionChange, 
             link.style.setProperty('--navigation-depth', String(Math.min(row.depth, 3)));
             link.setAttribute('aria-current', row.current ? 'page' : 'false');
             link.setAttribute('aria-disabled', String(!row.available));
-            link.tabIndex = 0;
-            const fullName = [row.lineage.map(category => category.name).join(' / '), row.contextLabel].filter(Boolean).join(' / ');
-            link.dataset.tooltip = row.available ? fullName : `${fullName}\nThis Pie is unavailable because its topic or task options changed.`;
-            if (row.available) link.href = locationURL(row);
-            else link.removeAttribute('href');
+            link.tabIndex = -1;
+            const destination = document.createElement('a'); destination.className = 'bp-topic-navigation-link';
+            if (row.available) destination.href = locationURL(row);
+            else { destination.tabIndex = -1; destination.setAttribute('aria-disabled', 'true'); }
             const copy = document.createElement('span');
             copy.className = 'bp-configured-copy';
             const name = document.createElement('span');
             name.className = 'bp-configured-name';
             name.textContent = row.categoryName;
-            copy.append(name);
+            const configured = createConfiguredIndicator(row);
+            configured.dataset.tooltip = row.contextValues?.scene ? 'You have personal weights in this scene' : 'You have personal weights in this topic';
+            configured.setAttribute('aria-label', configured.dataset.tooltip);
+            const heading = document.createElement('span'); heading.className = 'bp-topic-row-heading';
+            heading.append(configured, name); copy.append(heading);
             if (row.description) {
                 const summary = document.createElement('small'); summary.className = 'bp-topic-summary';
                 summary.textContent = row.description; copy.append(summary);
@@ -425,13 +429,16 @@ export function createSidebarNavigation({ onNavigate, onLogin, onSessionChange, 
                 detail.textContent = text;
                 copy.append(detail);
             }
-            const icon = row.isPrivate ? document.createElement('i') : mark(row.configured, !row.available ? 'Pie unavailable'
-                : row.configured ? 'You have a Pie here' : 'No personal weights for this task');
-            if (row.isPrivate) { icon.className = 'fa-solid fa-lock bp-private-category-mark'; icon.dataset.tooltip = 'Private topic'; icon.setAttribute('aria-label', 'Private topic'); }
-            icon.classList.toggle('is-unavailable', !row.available);
-            link.replaceChildren(copy, icon);
+            destination.append(copy);
+            link.querySelectorAll('.bp-topic-favorite').forEach(button => button.dispose?.());
+            const favorite = createFavoriteButton(row, { onChange(updated) { Object.assign(row, updated); },
+                onError(_error, message) { feedback.textContent = message; feedback.hidden = false; } });
+            favorite.addEventListener('click', event => event.preventDefault());
+            if (!row.available) favorite.hidden = true;
+            link.replaceChildren(destination, favorite);
             fragment.append(link);
         }
+        for (const [key, old] of existing) if (!rowEntries.has(key)) old.querySelectorAll('.bp-topic-favorite').forEach(button => button.dispose?.());
         list.replaceChildren(fragment);
         list.setAttribute('aria-label', `Mine: ${rows.length}`);
         const mineFailed = failed || catalogError;

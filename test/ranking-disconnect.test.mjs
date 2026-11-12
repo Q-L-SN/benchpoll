@@ -18,15 +18,21 @@ const deferred = () => {
     return { promise, resolve, reject };
 };
 
-for (const repetition of [1, 2]) for (const phase of ['identity', 'workspace', 'normal']) {
+for (const repetition of [1, 2]) for (const phase of ['identity', 'workspace', 'access', 'normal']) {
     test(`real HTTP ${phase} lifetime avoids snapshots after disconnection (${repetition})`, { timeout: 10000 }, async () => {
         const blocked = deferred(), entered = deferred(), finished = deferred(), closed = deferred();
-        const calls = { identity: 0, builds: 0, snapshots: 0, json: 0 };
+        const calls = { identity: 0, builds: 0, access: 0, snapshots: 0, json: 0 };
         let handler, server, client, seenResponse;
-        const workspace = { context: { isPrivate: false }, exact: ['same', -2, null] };
+        const workspace = { context: { categoryID: 1, isPrivate: false }, benchmarks: [], exact: ['same', -2, null] };
         const context = vm.createContext({ API: { post(path, value) { assert.equal(path, '/get_weighted_workspace'); handler = value; } },
             db: {}, normalizeRankingResume, AbortController, rankingCache: null,
             async activeSessionUserID() { calls.identity++; if (phase === 'identity') { entered.resolve(); await blocked.promise; } return null; },
+            async assertTopicAccess(_db, userID, IDs) {
+                calls.access++;
+                assert.equal(userID, null);
+                assert.deepEqual(Array.from(IDs), [1]);
+                if (phase === 'access') { entered.resolve(); await blocked.promise; }
+            },
             async getRankingWorkspace(_db, options) {
                 calls.builds++;
                 assert.equal(options.scoreMode, 'range');
@@ -67,7 +73,7 @@ for (const repetition of [1, 2]) for (const phase of ['identity', 'workspace', '
                 await finished.promise;
                 assert.equal(result.status, 200);
                 assert.deepEqual(JSON.parse(result.data), { result: workspace.exact });
-                assert.deepEqual(calls, { identity: 1, builds: 1, snapshots: 1, json: 1 });
+                assert.deepEqual(calls, { identity: 1, builds: 1, access: 1, snapshots: 1, json: 1 });
             } else {
                 await entered.promise;
                 client.destroy();
@@ -76,6 +82,7 @@ for (const repetition of [1, 2]) for (const phase of ['identity', 'workspace', '
                 blocked.resolve();
                 await finished.promise;
                 assert.equal(calls.builds, phase === 'identity' ? 0 : 1);
+                assert.equal(calls.access, phase === 'access' ? 1 : 0);
                 assert.equal(calls.snapshots, 0, 'A disconnected client must not consume snapshot capacity');
                 assert.equal(calls.json, 0, 'Do not attempt to serialize or send a closed response');
             }

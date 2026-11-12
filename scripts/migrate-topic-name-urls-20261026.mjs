@@ -4,7 +4,7 @@ import mysql from 'mysql2/promise';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { topicSlug, isReservedTopicSlug } from '../public/js/shared/topics.js';
-import { legacyTopicRouteKey } from '../topic-service.js';
+import { legacyTopicRouteKey } from './historical-topic-route-key.mjs';
 import { verifySlugBackup } from './migrate-topic-slugs-20261023.mjs';
 
 export const TOPIC_NAME_URL_MIGRATION = 'topic_name_urls_20261026';
