@@ -18,25 +18,27 @@ test('reconciliation retains semantic identities, preserves General configuratio
     scenes: [scene(2, 219, 'General', { is_default: 1 }), scene(3, 219, 'English'),
         scene(4, 191, 'General', { is_default: 1 }), scene(5, 191, 'With Reference Image')] };
     const before = structuredClone(state), plan = planOfficialTopicReconciliation(state);
-    assert.equal(plan.topics.length, 23); assert.equal(plan.untouchedUserTopicCount, 2);
+    assert.equal(plan.topics.length, 26); assert.equal(plan.preservedUserTopicCount, 2);
     const intelligence = plan.topics.find(topic => topic.name === 'Intelligence');
-    assert.equal(intelligence.categoryID, 54); assert.equal(intelligence.publicID, 64); assert.equal(intelligence.rootContextID, 1);
+    assert.equal(intelligence.categoryID, 54); assert.equal(intelligence.publicID, 1);
+    assert.equal(intelligence.previousPublicID, 64); assert.equal(intelligence.rootContextID, 1);
     const language = plan.topics.find(topic => topic.name === 'Natural Language');
     assert.equal(language.categoryID, 219); assert.equal(language.slug, 'natural-language-official');
     assert.equal(language.scenes[0].contextID, 2); assert.equal(language.scenes[1].contextID, 3);
     assert.equal(language.scenes[1].sceneNumber, 3);
-    const creation = plan.topics.find(topic => topic.name === '3D Creation');
+    const creation = plan.topics.find(topic => topic.name === '3D Generation');
     assert.equal(creation.categoryID, 191); assert.equal(creation.rootContextID, 4);
     assert.deepEqual(creation.retireSceneIDs, [4, 5]); assert.deepEqual(creation.scenes, []);
     assert.deepEqual(plan.retireTopics, [{ categoryID: 216, name: 'Teaching' }]);
     assert.deepEqual(state, before);
 });
 
-test('read-only pre-schema plans derive official ownership without changing current IDs', () => {
+test('read-only pre-schema plans show the requested public numbers without changing storage IDs', () => {
     const plan = planOfficialTopicReconciliation({ categories: [category(54, 'Intelligence', { is_official: undefined, public_ID: undefined }),
         category(100, 'Mine', { is_official: undefined, created_by_user_ID: '42' })], contexts: [], scenes: [] });
-    assert.equal(plan.topics[0].categoryID, 54); assert.equal(plan.topics[0].publicID, null);
-    assert.equal(plan.untouchedUserTopicCount, 1);
+    assert.equal(plan.topics[0].categoryID, 54); assert.equal(plan.topics[0].publicID, 1);
+    assert.equal(plan.topics[0].previousPublicID, null);
+    assert.equal(plan.preservedUserTopicCount, 1);
 });
 
 test('ambiguous official matches stop the plan rather than silently replacing configuration', () => {

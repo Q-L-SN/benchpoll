@@ -6,10 +6,16 @@ import { EMPTY_TOPIC_CONTEXT_HASH, sceneContext, ensureTopicRootContext, insertT
     lockTopicReferenceGraph } from './topic-scenes-service.js';
 
 export const OFFICIAL_TOPIC_RENAMES = Object.freeze({
-    Office: ['Office Documents & Data Processing'],
+    ASI: ['AGI'],
+    'Professional Work': ['Office', 'Office Documents & Data Processing'],
     Cybersecurity: ['Cybersecurity & Cryptography'],
+    Medicine: ['Medical Diagnosis'],
     'Natural Language': ['Language'],
-    '3D Creation': ['3D Generation'],
+    '3D Generation': ['3D Creation'],
+    'Knowledge Retrieval': ['Knowledge & Retrieval'],
+    'Creative Writing': ['Writing'],
+    'Long Context': ['Memory & Long Context'],
+    'Factual Accuracy': ['Low Hallucination'],
     'Business Management': ['Management', 'Business'],
     'GUI Operation': ['Computer Use'],
     Robotics: ['Robot Operation']
@@ -70,21 +76,37 @@ export function planOfficialTopicReconciliation(state) {
                 sceneNumber: selected?.scene_number == null ? null : Number(selected.scene_number),
                 existingScene: Boolean(selected), description: selected?.description ?? '' };
         });
-        return { categoryID, publicID: current?.public_ID == null ? null : Number(current.public_ID),
+        return { categoryID, publicID: position + 1, previousPublicID: current?.public_ID == null ? null : Number(current.public_ID),
             previousName: current?.name ?? null, name: definition.name, description: definition.description, slug, position,
             rootContextID, scenes: desiredScenes,
             retireSceneIDs: live.filter(row => !used.has(ID(row))).map(ID),
             supersededRootIDs: contexts.filter(row => row.context_hash === EMPTY_TOPIC_CONTEXT_HASH && ID(row) !== rootContextID).map(ID) };
     });
-    return { version: '20261112-official-catalogue', topics,
+    return { version: '20261112-official-catalogue-reordered', topics,
         retireTopics: existing.filter(row => active(row) && !retained.has(ID(row))).map(row => ({ categoryID: ID(row), name: row.name })),
-        untouchedUserTopicCount: state.categories.filter(row => !official(row)).length };
+        preservedUserTopicCount: state.categories.filter(row => !official(row)).length,
+        numbering: 'Official public IDs follow catalogue order; all other topics follow in creation order. Internal IDs and private URLs stay unchanged.' };
+}
+
+async function renumberPublicTopics(connection, topics) {
+    const [rows] = await connection.query('SELECT ID, public_ID FROM categories ORDER BY created_at, ID FOR UPDATE');
+    const officialIDs = new Set(topics.map(topic => topic.categoryID));
+    const orderedIDs = [...topics.map(topic => topic.categoryID), ...rows.filter(row => !officialIDs.has(Number(row.ID))).map(row => Number(row.ID))];
+    const desired = new Map(orderedIDs.map((id, position) => [id, position + 1]));
+    const changed = rows.filter(row => Number(row.public_ID) !== desired.get(Number(row.ID)));
+    // NULL is permitted by the unique index, so ID swaps cannot collide. The
+    // caller's transaction keeps intermediate values invisible to readers.
+    for (const row of changed) await connection.execute('UPDATE categories SET public_ID = NULL WHERE ID = ?', [row.ID]);
+    for (const row of changed) await connection.execute('UPDATE categories SET public_ID = ? WHERE ID = ?', [desired.get(Number(row.ID)), row.ID]);
+    await connection.execute('UPDATE topic_id_sequence SET next_public_ID = ? WHERE ID = 1', [orderedIDs.length + 1]);
+    return changed.length;
 }
 
 // Caller owns the transaction. The shared graph lock prevents a concurrent
 // scene edit/reference save from observing half of the catalogue change.
 export async function reconcileOfficialTopics(connection) {
     await lockTopicReferenceGraph(connection);
+    await connection.execute('SELECT next_public_ID FROM topic_id_sequence WHERE ID = 1 FOR UPDATE');
     const plan = planOfficialTopicReconciliation(await readOfficialTopicState(connection, { lock: true }));
     for (const retired of plan.retireTopics) {
         await connection.execute('UPDATE topic_scenes SET is_active = 0, is_default = 0 WHERE category_ID = ?', [retired.categoryID]);
@@ -92,12 +114,12 @@ export async function reconcileOfficialTopics(connection) {
     }
     const topics = [];
     for (const item of plan.topics) {
-        let categoryID = item.categoryID, publicID = item.publicID;
+        let categoryID = item.categoryID;
         if (categoryID == null) {
-            const identity = await allocateTopicIdentity(connection); publicID = identity.publicID;
+            const identity = await allocateTopicIdentity(connection);
             const [inserted] = await connection.execute(`INSERT INTO categories
                 (name, slug, description, public_ID, private_ID, is_official, position)
-                VALUES (?, ?, ?, ?, ?, 1, ?)`, [item.name, item.slug, item.description, publicID, identity.privateID, item.position]);
+                VALUES (?, ?, ?, ?, ?, 1, ?)`, [item.name, item.slug, item.description, identity.publicID, identity.privateID, item.position]);
             categoryID = Number(inserted.insertId);
         } else {
             await connection.execute(`UPDATE categories SET name = ?, slug = ?, description = ?, position = ?, is_active = 1
@@ -137,7 +159,8 @@ export async function reconcileOfficialTopics(connection) {
                 }
             }
         }
-        topics.push({ categoryID, publicID, name: item.name });
+        topics.push({ categoryID, publicID: item.publicID, name: item.name });
     }
-    return { ...plan, topics, applied: true };
+    const renumberedTopics = await renumberPublicTopics(connection, topics);
+    return { ...plan, topics, renumberedTopics, applied: true };
 }

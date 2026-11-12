@@ -68,11 +68,14 @@ segment. A topic with scenes redirects its root to its default scene. Named and
 query-based scene URLs are no longer served. A private alias survives publication
 and redirects to the public URL; unpublishing invalidates the public route.
 
-The new official catalogue contains 23 topics and the requested language,
+The revised official catalogue contains 26 topics and the requested language,
 programming-language and media-reference scenes. Existing-catalogue reconciliation
-retains matching topic/context identities and configurations, creates missing
-entries and retires obsolete official entries. Authored and private topics remain
-separate. See [topic platform migration](../topic-platform-20261112.md).
+retains matching internal topic/context identities and configurations, creates
+missing entries and retires obsolete official entries. The follow-up request
+reorders official public IDs to 1–26; other topics follow in creation order,
+with their content and private identifiers preserved. See the [current
+catalogue](../official-topics-20261112.md) and [topic platform
+migration](../topic-platform-20261112.md).
 
 ## Schema and rollout boundary
 

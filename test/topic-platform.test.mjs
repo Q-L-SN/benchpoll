@@ -116,11 +116,15 @@ test('scene URL number survives reinsert and creation allocates monotonically', 
 });
 
 test('official catalogue contains all requested topics and retains ten coding/eight language scenes', () => {
-    assert.equal(OFFICIAL_TOPIC_CATALOGUE.length, 23);
-    assert.equal(OFFICIAL_TOPIC_CATALOGUE[0].name, 'Intelligence');
+    assert.deepEqual(OFFICIAL_TOPIC_CATALOGUE.map(topic => topic.name), [
+        'Intelligence', 'Agents', 'Coding', 'ASI', 'Professional Work', 'Academic Research', 'Natural Language', 'RSI',
+        'Image Generation', 'Video Generation', 'Cybersecurity', 'Medicine', 'Knowledge Retrieval', 'Engineering Design',
+        'Multimodal Understanding', 'GUI Operation', 'Robotics', 'Creative Writing', 'Business Management', 'Law', 'Finance',
+        '3D Generation', 'Long Context', 'Foresight', 'Factual Accuracy', 'Probabilistic Decision-Making'
+    ]);
     const find = name => OFFICIAL_TOPIC_CATALOGUE.find(topic => topic.name === name);
     assert.deepEqual(find('Coding').scenes.map(scene => scene.name), ['General', 'Frontend', 'Python', 'JavaScript', 'TypeScript', 'Java', 'C', 'C++', 'C#', 'Go', 'Rust', 'PHP']);
-    assert.equal(find('Natural Language').scenes.length, 9);
+    assert.deepEqual(find('Natural Language').scenes.map(scene => scene.name), ['General', 'English', 'Chinese', 'Japanese', 'Korean', 'Spanish', 'French', 'German', 'Arabic']);
     assert.deepEqual(find('Image Generation').scenes.map(scene => scene.name), ['General', 'Single Reference Image', 'Multiple Reference Images']);
     assert.deepEqual(find('Video Generation').scenes.map(scene => scene.name), ['General', 'With Reference Video', 'With Reference Image']);
     for (const topic of OFFICIAL_TOPIC_CATALOGUE.filter(topic => topic.scenes.length)) assert.equal(topic.scenes.filter(scene => scene.isDefault).length, 1);
