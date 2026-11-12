@@ -36,6 +36,7 @@ export function createPrivateTopicEditor({ beforeOpen = async () => true, onSave
     dialog.setAttribute('aria-labelledby', 'create-topic-title');
     dialog.innerHTML = `<form id="create-topic-form">
         <header><h2 id="create-topic-title">New private topic</h2><button type="button" data-close-create aria-label="Close topic editor"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button></header>
+        <p class="bp-topic-editor-hint">Create and publish immediately. No review required.</p>
         <label>Name<input id="new-topic-name" required maxlength="128" autocomplete="off"></label>
         <label>One-sentence summary<input id="new-topic-description" required maxlength="180" autocomplete="off"></label>
         <section class="bp-topic-scenes-editor" aria-labelledby="topic-scenes-title">
