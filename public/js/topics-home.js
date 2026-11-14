@@ -22,7 +22,7 @@ import { buildContributionURL } from './shared/contribution-navigation.js?v=taxo
 import { betaFeedbackTemplate } from './shared/feedback-templates.js';
 import { installSignInLinks, listenAccountChange } from './shared/sign-in.js';
 import { mountSiteActions } from './shared/site-header.js';
-import { TREEMAP_FADE, MAX_BAR_RATIO, WEIGHT_LABEL_METRICS, MODEL_LABEL_ANGLE, MODEL_IDENTITY_HEIGHT, HOME_WEIGHT_THEME, topicCollection, modelTargetURL,
+import { TREEMAP_FADE, MAX_BAR_RATIO, WEIGHT_LABEL_METRICS, MODEL_LABEL_ANGLE, MODEL_LABEL_METRICS, HOME_WEIGHT_THEME, topicCollection, modelTargetURL,
     scoreLabelLayout, orderTopics, modelKey, mergePreview, weightLayout, fitWeightLabel, columnLayout, modelColumnOpacity, modelLabelLayout, modelBarScale, barGeometry } from './topics-home/layout.js';
 
 const $ = selector => document.querySelector(selector);
@@ -116,20 +116,23 @@ function measure(text, kind = 'name') {
     }, 0);
 }
 
+const compactModelLabels = window.matchMedia('(max-width: 640px)');
+const modelLabelMetrics = () => compactModelLabels.matches ? MODEL_LABEL_METRICS.compact : MODEL_LABEL_METRICS.desktop;
 function measureModelLabel(text) {
-    canvas.font = '400 11px Manrope';
+    canvas.font = `400 ${modelLabelMetrics().fontSize}px Manrope`;
     return canvas.measureText(text).width;
 }
 
 function modelColumns(preview, width, count = preview.models.length, total = Math.max(count, preview.pagination?.total ?? count)) {
+    const compact = compactModelLabels.matches, metrics = modelLabelMetrics();
     const parameters = preview.comparison?.keys?.some(key => key !== 'model');
     let slot = 0;
     if (parameters) for (const model of preview.models) {
-        const label = modelLabelLayout(comparisonDisplayParts(model, preview.comparison), measureModelLabel);
+        const label = modelLabelLayout(comparisonDisplayParts(model, preview.comparison), measureModelLabel, metrics);
         slot = Math.max(slot, label.height / Math.sin(MODEL_LABEL_ANGLE * Math.PI / 180) + 4);
     }
-    const compact = window.matchMedia('(max-width: 640px)').matches;
-    return columnLayout(width, count, total, Math.ceil(slot), parameters ? 30 : compact ? 20 : 32, compact);
+    const inset = parameters ? (compact ? 22 : 28) : (compact ? 18 : 22);
+    return columnLayout(width, count, total, Math.ceil(slot), inset, compact);
 }
 
 const visibility = 'IntersectionObserver' in window ? new globalThis.IntersectionObserver(entries => {
@@ -648,13 +651,14 @@ function renderModel(model, preview, geometry, plotHeight, scoreScale, topicHref
     plot.append(known);
     const identity = element('div', 'th-model-identity');
     const name = element('span', 'th-model-name'); renderComparisonName(name, model, preview.comparison, { fitParameters: false });
-    const labelLayout = modelLabelLayout(comparisonDisplayParts(model, preview.comparison), measureModelLabel);
+    const metrics = modelLabelMetrics();
+    const labelLayout = modelLabelLayout(comparisonDisplayParts(model, preview.comparison), measureModelLabel, metrics);
     const barCenter = barLeft + geometry.barWidth / 2;
     name.style.cssText = `width:${labelLayout.width}px;height:${labelLayout.height}px;left:${barCenter - labelLayout.anchorX}px;top:${labelLayout.top}px;transform:rotate(-${MODEL_LABEL_ANGLE}deg)`;
     [...name.children].forEach((part, index) => {
         part.dataset.lines = String(labelLayout.rows[index].lines);
         part.style.setProperty('--th-label-lines', String(labelLayout.rows[index].lines));
-        part.style.height = `${labelLayout.rows[index].lines * 13}px`;
+        part.style.height = `${labelLayout.rows[index].lines * metrics.lineHeight}px`;
         const text = part.querySelector('span');
         text.replaceChildren(...text.textContent.split(/(\s+)/).filter(Boolean).map(word =>
             /^\s+$/.test(word) ? document.createTextNode(word) : element('span', 'th-label-word', word)));
@@ -723,8 +727,13 @@ function renderChart(state) {
     state.geometry = geometry;
     const frameWidth = view === 'weights' || !models.length ? state.visual.clientWidth : geometry.frameWidth;
     const frame = element('div', 'th-chart-frame'); frame.style.width = `${frameWidth}px`;
-    state.identityHeight = preview.comparison?.keys?.some(key => key !== 'model') ? MODEL_IDENTITY_HEIGHT.compared : MODEL_IDENTITY_HEIGHT.normal;
+    const metrics = modelLabelMetrics();
+    state.identityHeight = preview.comparison?.keys?.some(key => key !== 'model') ? metrics.identityHeight.compared : metrics.identityHeight.normal;
     frame.style.setProperty('--th-identity-height', `${state.identityHeight}px`);
+    for (const [key, value] of Object.entries({ 'font-size': metrics.fontSize, 'line-height': metrics.lineHeight,
+        'label-gap': metrics.gap, 'mark-size': metrics.markSize, 'mark-gap': metrics.markGap })) {
+        frame.style.setProperty(`--th-model-${key}`, `${value}px`);
+    }
     frame.style.setProperty('--th-label-inset', `${geometry.inset ?? 0}px`);
     const treemap = element('div', 'th-treemap');
     const plotHeight = state.visual.clientHeight - (view === 'default' ? state.identityHeight + 1 : 0);

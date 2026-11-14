@@ -13,7 +13,13 @@ export const WEIGHT_LABEL_METRICS = Object.freeze({
 });
 export const WEIGHT_LAYOUT_POLICY = Object.freeze({ ceiling: .4, minWidth: 56, minHeight: 24, maxAspect: 12 });
 export const MODEL_LABEL_ANGLE = 66;
-export const MODEL_IDENTITY_HEIGHT = Object.freeze({ normal: 124, compared: 152 });
+export const MODEL_LABEL_METRICS = Object.freeze({
+    desktop: Object.freeze({ fontSize: 10, lineHeight: 12, gap: 1, offset: 32, maxWidth: 78, longWidth: 72,
+        markSize: 22, markGap: 5, identityHeight: Object.freeze({ normal: 110, compared: 136 }) }),
+    compact: Object.freeze({ fontSize: 9, lineHeight: 11, gap: 1, offset: 25, maxWidth: 64, longWidth: 58,
+        markSize: 18, markGap: 4, identityHeight: Object.freeze({ normal: 90, compared: 114 }) })
+});
+export const MODEL_IDENTITY_HEIGHT = MODEL_LABEL_METRICS.desktop.identityHeight;
 const labelSin = Math.sin(MODEL_LABEL_ANGLE * Math.PI / 180);
 const labelCos = Math.cos(MODEL_LABEL_ANGLE * Math.PI / 180);
 export const HOME_WEIGHT_THEME = Object.freeze({ id: 'frost-hatch', ink: '#111111', divider: '#bfc4cb', texture: 'hatch',
@@ -181,15 +187,15 @@ export function weightLayout(weights, width, height, view = 'default') {
         width: node.x1 - node.x0, height: node.y1 - node.y0 }));
 }
 
-export function modelLabelLayout(parts, measure = text => text.length * 6) {
+export function modelLabelLayout(parts, measure = text => text.length * 6, metrics = MODEL_LABEL_METRICS.desktop) {
     const parameters = parts.some(part => part.kind === 'parameter');
     const baseWidth = Math.ceil(measure(parts.find(part => part.kind !== 'parameter')?.text ?? ''));
-    const width = parameters ? 88 : baseWidth > 88 ? 82 : Math.max(16, baseWidth);
+    const width = parameters ? metrics.maxWidth : baseWidth > metrics.maxWidth ? metrics.longWidth : Math.max(16, baseWidth);
     const rows = parts.map(part => ({ lines: measure(part.text) > width - (part.kind === 'parameter' ? 15 : 0)
         && /\s/.test(part.text.trim()) ? 2 : 1 }));
-    const height = rows.reduce((sum, row) => sum + row.lines * 13, 0) + Math.max(0, rows.length - 1) * 2;
+    const height = rows.reduce((sum, row) => sum + row.lines * metrics.lineHeight, 0) + Math.max(0, rows.length - 1) * metrics.gap;
     return { width, height, rows, projectedWidth: width * labelCos + height * labelSin,
-        projectedHeight: width * labelSin + height * labelCos, top: 38 + width * labelSin,
+        projectedHeight: width * labelSin + height * labelCos, top: metrics.offset + width * labelSin,
         anchorX: width * labelCos + height * labelSin / 2 };
 }
 
@@ -220,13 +226,13 @@ export function columnLayout(availableWidth, loadedCount, totalCount = loadedCou
     const inset = Math.min(Math.max(0, edgeInset), Math.max(0, (availableWidth - 48) / 2));
     availableWidth -= inset * 2;
     const requested = Number.isFinite(minimumSlot) ? Math.max(0, Math.ceil(minimumSlot)) : 0;
-    const minimum = compact ? 38 : 48;
-    const preferred = Math.max(totalCount <= 4 ? (compact ? 62 : 80) : totalCount <= 10 ? (compact ? 42 : 56) : minimum, requested);
+    const minimum = compact ? 32 : 36;
+    const preferred = Math.max(totalCount <= 4 ? (compact ? 56 : 72) : totalCount <= 10 ? (compact ? 36 : 44) : minimum, requested);
     const visible = Math.min(loadedCount, Math.max(1, Math.floor(availableWidth / preferred)));
-    const ceiling = requested ? Math.min(availableWidth, Math.max(96, requested)) : 96;
+    const ceiling = requested ? Math.min(availableWidth, Math.max(80, requested)) : 80;
     const slot = Math.min(availableWidth, ceiling, Math.max(minimum, Math.floor(availableWidth / visible)));
     return { visible, slot, width: slot * visible, inset, frameWidth: slot * visible + inset * 2,
-        barWidth: Math.min(slot, Math.max(compact ? 24 : 28, Math.min(36, Math.floor(slot * .58)))) };
+        barWidth: Math.min(slot, Math.max(compact ? 22 : 24, Math.min(44, Math.floor(slot * .76)))) };
 }
 
 export function modelBarScale(preview, scoreMode) {

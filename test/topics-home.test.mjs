@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 import { FEATURED_TOPIC_ID, OTHER_THRESHOLD, MAX_BAR_RATIO, TREEMAP_FADE, HOME_WEIGHT_THEME,
     topicCollection, modelTargetURL, scoreLabelLayout, orderTopics,
-    weightEntries, weightLayout, weightChainLength, modelLabelLayout, MODEL_IDENTITY_HEIGHT, WEIGHT_LABEL_METRICS, fitWeightLabel, columnLayout, modelColumnOpacity, modelBarScale, barGeometry, mergePreview } from '../public/js/topics-home/layout.js';
+    weightEntries, weightLayout, weightChainLength, modelLabelLayout, MODEL_LABEL_METRICS, MODEL_IDENTITY_HEIGHT, WEIGHT_LABEL_METRICS, fitWeightLabel, columnLayout, modelColumnOpacity, modelBarScale, barGeometry, mergePreview } from '../public/js/topics-home/layout.js';
 import { fixtureWeights } from '../scripts/frontend/topics-home-fixtures.mjs';
 import { readHomeModelFocusIntent } from '../public/js/workspace/model-focus.js';
 import { createWeightTreemapLayout } from '../public/js/workspace/weight-treemap-layout.js';
@@ -145,29 +145,30 @@ test('the fixed treemap combines Frost colors with Hatch texture', () => {
 test('whole-column frames are centered-capable, bounded and use thicker slots for fewer models', () => {
     for (const width of [240, 292, 330, 480, 760, 1260]) for (const count of [1, 3, 8, 25, 100]) {
         const geometry = columnLayout(width, count, count);
-        assert.ok(geometry.slot >= 48 && geometry.slot <= 96);
+        assert.ok(geometry.slot >= 36 && geometry.slot <= 80);
         assert.ok(geometry.width <= width);
         assert.equal(geometry.width / geometry.slot, geometry.visible);
         assert.ok(geometry.visible <= count);
-        assert.ok(geometry.barWidth >= 28 && geometry.barWidth <= 36);
+        assert.ok(geometry.barWidth >= 24 && geometry.barWidth <= 44);
     }
     assert.ok(columnLayout(330, 3).barWidth > columnLayout(330, 37).barWidth);
     for (const width of [258, 330, 380, 1260]) {
         assert.ok(columnLayout(width, 25, 100).visible > Math.floor(width / 78), `${width}: expected more whole columns`);
-        assert.ok(columnLayout(width, 25, 100).barWidth <= 36, `${width}: bounded thicker bars`);
+        assert.ok(columnLayout(width, 25, 100).barWidth <= 44, `${width}: bounded thicker bars`);
     }
     assert.ok(columnLayout(17, 25, 100).width <= 17, 'an unusually narrow frame must still be bounded');
 });
 
 test('normal home columns show more complete models at phone, card and wide chart widths', () => {
-    for (const [width, visible] of [[258, 5], [320, 6], [400, 8], [1320, 27]]) {
+    for (const [width, visible] of [[258, 7], [320, 8], [400, 11], [1320, 36]]) {
         const columns = columnLayout(width, 100, 100);
         assert.equal(columns.visible, visible);
         assert.ok(columns.visible > Math.floor(width / 60), 'density must improve over the previous 60px spacing');
-        assert.ok(columns.slot >= 48, 'keep a usable full-column touch target');
+        assert.ok(columns.slot >= 36, 'keep a usable full-column touch target');
         assert.ok(columns.width <= width);
         assert.ok(width - columns.width < columns.visible);
-        assert.ok(columns.barWidth >= 28 && columns.barWidth <= 36);
+        assert.ok(columns.barWidth >= 24 && columns.barWidth <= 44);
+        assert.ok(columns.slot - columns.barWidth <= 12, 'dense charts reserve most of each column for the bar');
         assert.equal(scoreLabelLayout(23, columns.barWidth, 120).outside, false, '100 must still fit inside a tall dense bar');
     }
     assert.equal(columnLayout(240, 3, 3).visible, 3, 'few models should use the available space before paging');
@@ -182,19 +183,26 @@ test('diagonal model identities keep short names unbroken and bound longer names
     assert.doesNotMatch(css.match(/\.th-model-name[\s\S]*?\.th-visual\[data-view="weights"\]/)[0], /overflow-wrap: anywhere/);
     for (const text of ['GPT-5', 'a'.repeat(14), 'a'.repeat(40), 'Claude Opus Thinking Extra Long']) {
         const layout = modelLabelLayout([{ kind: 'model', text }]);
-        assert.equal(layout.rows[0].lines, text.length * 6 > 88 && text.includes(' ') ? 2 : 1);
-        assert.ok(layout.projectedHeight + 38 <= MODEL_IDENTITY_HEIGHT.normal);
+        assert.equal(layout.rows[0].lines, text.length * 6 > MODEL_LABEL_METRICS.desktop.maxWidth && text.includes(' ') ? 2 : 1);
+        assert.ok(layout.projectedHeight + MODEL_LABEL_METRICS.desktop.offset <= MODEL_IDENTITY_HEIGHT.normal);
         const angle = 66 * Math.PI / 180;
         assert.ok(Math.abs(layout.anchorX - layout.width * Math.cos(angle) - layout.height / 2 * Math.sin(angle)) < 1e-9);
     }
     const compared = modelLabelLayout([{ kind: 'model', text: 'a'.repeat(40) },
         { kind: 'parameter', text: 'a'.repeat(100) }, { kind: 'parameter', text: 'a'.repeat(100) }]);
-    assert.ok(compared.projectedHeight + 38 <= MODEL_IDENTITY_HEIGHT.compared);
+    assert.ok(compared.projectedHeight + MODEL_LABEL_METRICS.desktop.offset <= MODEL_IDENTITY_HEIGHT.compared);
+    for (const metrics of Object.values(MODEL_LABEL_METRICS)) {
+        const label = modelLabelLayout([{ kind: 'model', text: 'A very long model name' },
+            { kind: 'parameter', text: 'Reasoning effort: maximum' },
+            { kind: 'parameter', text: 'A long agent harness name' }], undefined, metrics);
+        assert.ok(label.projectedHeight + metrics.offset <= metrics.identityHeight.compared);
+        assert.ok(metrics.fontSize < 11 && metrics.markSize < 26);
+    }
     for (const width of [240, 324, 400, 1320]) {
         const columns = columnLayout(width, 100, 100, 0, 32);
         assert.ok(columns.frameWidth <= width);
         assert.equal(columns.frameWidth, columns.width + columns.inset * 2);
-        assert.equal(columns.visible, Math.floor((width - 64) / 48));
+        assert.equal(columns.visible, Math.floor((width - 64) / 36));
     }
 });
 
@@ -477,7 +485,7 @@ test('home input focus uses complete surfaces and does not suppress action-butto
 test('diagonal parameters use fixed readable type and bounded long-value rows', async () => {
     const css = await readFile(new URL('../public/css/topics-home.css', import.meta.url), 'utf8');
     const rule = css.match(/\.th-model-name \.bp-model-display-parameter > span\s*\{([^}]+)\}/)?.[1];
-    assert.match(rule, /font-size: 11px/);
+    assert.match(rule, /font-size: inherit/);
     assert.match(rule, /-webkit-line-clamp: var\(--th-label-lines, 1\)/);
     assert.doesNotMatch(rule, /font-size: min|--bp-parameter-font-size/);
 });

@@ -52,11 +52,19 @@ for (const engine of engines) for (const width of [320, 390, 1440]) {
                 summaryBelow: summary.getBoundingClientRect().top >= title.getBoundingClientRect().bottom,
                 landscape: visual.width > visual.height, islandWidth: document.querySelector('#topics-filters').style.getPropertyValue('--th-filter-width'),
                 phraseLines: document.querySelector('.th-headline-nowrap').getClientRects().length,
+                chartHeight: card.querySelector('.th-model-plot').clientHeight,
+                cardHeight: card.getBoundingClientRect().height,
+                labelSize: parseFloat(getComputedStyle(card.querySelector('.th-model-name')).fontSize),
+                markSize: card.querySelector('.th-vendor-mark').clientWidth,
+                modelCount: [...card.querySelectorAll('.th-model')].filter(node => Number(getComputedStyle(node).opacity) > .99).length,
                 createInHeader: document.querySelector('.th-header-links').contains(document.querySelector('#new-private-topic')) };
         });
         assert.deepEqual(initial.order.slice(0, 2), [1, 54], 'The service order survives the Intelligence feature treatment');
         assert.equal(initial.body, 'rgb(255, 255, 255)'); assert.ok(initial.overflow <= 1);
         assert.equal(initial.summaryBelow, true); assert.equal(initial.createInHeader, true);
+        assert.ok(initial.labelSize < 11 && initial.markSize < 26, 'All screen sizes use smaller identities');
+        assert.ok(initial.modelCount >= (width === 390 ? 9 : 7), `Denser chart at ${width}px: ${JSON.stringify(initial)}`);
+        if (width < 640) assert.ok(initial.cardHeight <= 344 && initial.chartHeight >= 130, 'Compact cards give their saved name space to the chart');
         if (width < 640) { assert.ok(initial.subtitle <= 14); assert.ok(initial.title >= 30); assert.equal(initial.landscape, true); assert.equal(initial.phraseLines, 1); }
         assert.equal(await page.locator('#topic-card-1 .bp-topic-official').innerText(), 'Official');
         assert.equal(await page.locator('#topics-grid .bp-topic-report').count(), 0);
