@@ -18,7 +18,7 @@ async function setup(t, engine, width, options = {}) {
     await page.addInitScript(() => localStorage.setItem('benchpoll:config-sidebar-collapsed', 'true'));
     if (options.initialMode) await page.addInitScript(mode => sessionStorage.setItem('benchpoll-workspace-preferences-v1',
         JSON.stringify({ mode, scoreMode: 'available' })), options.initialMode);
-    if (built) await page.route(url => url.origin === fixture.url && ['/', '/reasoning'].includes(url.pathname),
+    if (built) await page.route(url => url.origin === fixture.url && ['/1', '/2'].includes(url.pathname),
         async route => route.fulfill({ contentType: 'text/html', body: await readFile(new URL('../private/home-built.html', import.meta.url), 'utf8') }));
     await page.goto(fixture.url);
     await page.locator('#benchmark-card[aria-busy="false"]').waitFor();
@@ -84,14 +84,15 @@ for (const [engine, width] of built ? [[chromium, 390], [webkit, 390]] : [[chrom
             for (const name of ['models', 'discussion', 'mix']) {
                 await page.locator(`button[data-mobile-panel="${name}"]`).click();
                 await page.waitForFunction(name => document.querySelector('.bp-workspace').dataset.mobilePanel === name
-                    && [...document.querySelectorAll('#workspace-undo, #workspace-reset')].every(button => button.inert === (name !== 'mix')), name);
+                    && [...document.querySelectorAll('#workspace-undo, #workspace-reset')].every(button => Boolean(button.closest('[inert]')) === (name !== 'mix')), name);
                 const controls = await page.locator('#workspace-undo, #workspace-reset').evaluateAll(nodes => nodes.map(node => ({
                     width: node.getBoundingClientRect().width,
                     opacity: Number((Number(getComputedStyle(node).opacity) / (node.disabled ? .4 : 1)).toFixed(4)),
                     visibility: getComputedStyle(node).visibility
                 })));
-                assert.deepEqual(controls[0], controls[1], 'Undo and Reset use the same collapse/opacity progress');
-                assert.equal(controls[0].width, name === 'mix' ? 44 : 0);
+                assert.deepEqual(controls[0], controls[1], 'Undo and Reset move with the composition panel');
+                assert.equal(controls[0].width, 44);
+                assert.equal(controls[0].opacity, 1);
             }
         }
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
@@ -201,7 +202,7 @@ for (const engine of [chromium, webkit]) test(`${engine.name()}: the starting-po
     await overlay.waitFor();
     assert.equal(await overlay.getAttribute('data-step'), 'choose');
     assert.equal(saves().length, 0);
-    await page.goto(new URL('/reasoning', page.url()).href);
+    await page.goto(new URL('/2', page.url()).href);
     await overlay.waitFor();
     assert.equal(await overlay.getAttribute('data-step'), 'choose');
     assert.equal(await page.locator('#pie-mode-personal').getAttribute('aria-selected'), 'true');
@@ -250,7 +251,7 @@ test('a refreshed saved revision cancels an old reset confirmation', async t => 
     assert.equal(saves().length, 0, 'An obsolete confirmation never replaces refreshed weights');
 });
 
-test('mobile Reset and Undo shrink together while the finger is still moving', async t => {
+test('mobile Reset and Undo keep their size and opacity while the finger is still moving', async t => {
     const { page, saves } = await setup(t, chromium, 390);
     await page.locator('#pie-mode-personal').click();
     await page.locator('#workspace-reset').waitFor();
@@ -268,7 +269,8 @@ test('mobile Reset and Undo shrink together while the finger is still moving', a
                 opacity: Number((Number(getComputedStyle(node).opacity) / (node.disabled ? .4 : 1)).toFixed(4))
             })));
             assert.deepEqual(controls[0], controls[1]);
-            assert.ok(controls[0].width > 0 && controls[0].width < 44 && controls[0].opacity > 0 && controls[0].opacity < 1, JSON.stringify(controls));
+            assert.equal(controls[0].width, 44);
+            assert.equal(controls[0].opacity, 1);
         }
     }
     await send('touchEnd');

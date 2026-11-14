@@ -18,9 +18,9 @@
 .bp-home #workspace-brand-slot .bp-brand { width: 155px; margin: 0; }
 #config-mobile-home { display: none; }
 
-.bp-pie-focus-bar { position: sticky; top: 0; z-index: 12; padding-block: 10px 8px; background: #fff; border-radius: 10px 10px 0 0; }
+.bp-pie-focus-bar { position: sticky; top: 0; z-index: 12; padding-block: 10px 4px; background: #fff; border-radius: 10px 10px 0 0; }
 .bp-home .bp-pie-card { padding-top: 0; }
-.bp-pie-tools-row { flex-wrap: nowrap; align-items: center; gap: 6px; padding: 8px 12px 0; }
+.bp-pie-tools-row { flex-wrap: nowrap; align-items: center; gap: 6px; padding: 6px 12px 0; }
 .bp-pie-tools-row .bp-pie-guidance { display: flex; flex: 1 1 auto; flex-wrap: nowrap; align-items: baseline; justify-content: flex-start; gap: 5px; min-width: 0; padding: 0; }
 .bp-pie-tools-row .bp-pie-guidance[hidden] { display: none; }
 .bp-pie-guidance #pie-instruction { flex: 0 1 auto; min-width: 0; font-size: 13px; }
@@ -80,7 +80,7 @@
 }
 @media (max-width: 760px) and (max-height: 650px) {
     .bp-home:not(.is-showcase) .bp-workspace { padding-top: 6px; }
-    .bp-home .bp-pie-focus-bar { padding-top: 6px; padding-bottom: 5px; }
+    .bp-home .bp-pie-focus-bar { padding-top: 6px; padding-bottom: 2px; }
     .bp-home #pie-card .bp-mode-switch[data-ui-component="segmented"] > button { min-height: 32px; padding-block: 3px; }
     .bp-home .bp-pie-tools-row { padding-top: 4px; }
     .bp-home:not(.is-showcase) .bp-pie-tools > button { height: 34px; }

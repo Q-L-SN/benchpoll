@@ -7,9 +7,8 @@ import { rankingNumber } from './shared/ranking-number.js';
 import { modelBarColor } from './workspace/score-colors.js';
 import { referenceIssueMessage } from './workspace/topic-references.js';
 import { isTopicReference, topicLabelText, topicLabelParts, renderTopicLabel, TOPIC_ICON_FONT } from './shared/topic-label.js';
-import { readRecentTopics } from './navigation/preferences.js';
 import { orderedScenes, sceneURL, searchTopicGroups, sceneMatchSummary } from './navigation/scenes.js';
-import { mountSegmentedControl } from './shared/ui-components.js';
+import { mountProfilePreview } from './shared/profile-preview.js';
 import { mountFittedHeadline } from './shared/fitted-headline.js';
 import { createModelSearch } from './shared/model-search.js';
 import { createFloatingSearchLayer } from './shared/floating-search-layer.js';
@@ -17,7 +16,7 @@ import { normalizeModelFocusTarget } from './workspace/model-focus-target.js';
 import { topicURL } from './shared/topics.js';
 import { createPrivateTopicEditor } from './shared/private-topic-editor.js';
 import { createIdentityAvatar as avatar, createTopicCreator } from './shared/topic-identity.js';
-import { createFavoriteButton, createConfiguredIndicator, createTopicReportButton } from './shared/topic-actions.js';
+import { createFavoriteButton, createConfiguredIndicator } from './shared/topic-actions.js';
 import { AVAILABLE_INFERENCE_VERSION } from './shared/available-score.js';
 import { buildContributionURL } from './shared/contribution-navigation.js?v=taxonomy-20260929';
 import { betaFeedbackTemplate } from './shared/feedback-templates.js';
@@ -28,7 +27,8 @@ import { TREEMAP_FADE, MAX_BAR_RATIO, WEIGHT_LABEL_METRICS, MODEL_LABEL_ANGLE, M
 
 const $ = selector => document.querySelector(selector);
 mountFittedHeadline($('#home-title'));
-const siteNavigation = mountSiteActions($('.th-header-links'), { accountID: 'topics-account', moreID: 'topics-more' });
+const siteNavigation = mountSiteActions($('.th-header-links'), { accountID: 'topics-account', moreID: 'topics-more',
+    prioritizeAccount: true, extraActions: [$('#new-private-topic')] });
 const grid = $('#topics-grid');
 const listStatus = $('#topics-status');
 const announcement = $('#topics-announcement');
@@ -65,10 +65,13 @@ let topicsRefreshQueued = false;
 let topicsReadFailed = false;
 let featuredTopicID = null;
 let directoryView = 'popular';
-let previousDirectoryView = 'popular';
 let accountEpoch = 0;
 let boundAccountID = null;
 let accountSessionEnded = false;
+const accountPreview = mountProfilePreview(siteNavigation.account, {
+    getState: () => ({ profile, loading: topicsLoading || profileLoading, failed: topicsReadFailed,
+        topics: [...cards.values()].map(state => state.topic).filter(topic => topic.sceneID == null) })
+});
 
 function element(tag, className, text) {
     const node = document.createElement(tag);
@@ -198,14 +201,14 @@ function createCard(topic) {
     const meta = element('span', 'th-card-notice th-sr-only'); meta.setAttribute('role', 'status');
     const footer = element('footer', 'th-card-footer');
     const author = element('div', 'th-card-author');
-    author.append(creator, createCardReport(topic));
+    author.append(creator);
     const topicMeta = element('div', 'th-topic-meta');
     const configured = createConfiguredIndicator(topic);
     const coverage = element('span', 'th-topic-coverage');
     coverage.append(icon('chart-pie'), element('span'));
     coverage.hidden = true;
     const favorite = topic.sceneID == null ? createFavoriteButton(topic, {
-        onChange(updated) { const current = cards.get(cardKey(topic)); if (current) current.topic = { ...current.topic, isFavorited: updated.isFavorited, favoriteCount: updated.favoriteCount }; },
+        onChange(updated) { const current = cards.get(cardKey(topic)); if (current) current.topic = { ...current.topic, isFavorited: updated.isFavorited, favoriteCount: updated.favoriteCount }; accountPreview.refresh(); },
         onError(_error, message) { announcement.textContent = message; }
     }) : null;
     topicMeta.append(configured, coverage);
@@ -283,19 +286,12 @@ function updateCardMetadata(state, topic) {
     const creator = createTopicCreator(topic.isOfficial ? { isOfficial: true } : topic.creator, 'th-creator');
     if (topic.sceneID != null) creator.hidden = true;
     state.card.querySelector('.th-creator')?.replaceWith(creator);
-    state.card.querySelector('.th-topic-report')?.replaceWith(createCardReport(topic));
     state.topicMeta.querySelector('.bp-topic-configured-dot')?.replaceWith(createConfiguredIndicator(topic));
     state.favorite?.updateTopic(topic);
     renderTopicCoverage(state, topic.coverageIndex);
     const summary = state.card.querySelector('.th-topic-summary');
     if (summary) { summary.textContent = topic.description || ''; summary.dataset.tooltip = topic.description || ''; }
     state.visual.setAttribute('aria-label', `${topic.name} preview`);
-}
-
-function createCardReport(topic) {
-    return createTopicReportButton(topic.sceneID == null ? topic : { ...topic, name: topic.topicName }, {
-        className: 'th-topic-report', ...(topic.sceneID == null ? {} : { scene: { url: topic.url } })
-    });
 }
 
 function renderTopicCoverage(state, value) {
@@ -634,8 +630,7 @@ function renderModel(model, preview, geometry, plotHeight, scoreScale, topicHref
     const { outside } = scoreLayout;
     const score = element('span', 'th-model-score', label);
     score.style.fontSize = `${scoreLayout.fontSize}px`; score.style.lineHeight = `${scoreLayout.lineHeight}px`;
-    let barLeft = (geometry.slot - geometry.barWidth) / 2;
-    if (outside) barLeft = Math.max(2, (geometry.slot - geometry.barWidth - labelWidth - 4) / 2);
+    const barLeft = (geometry.slot - geometry.barWidth) / 2;
     const known = element('span', 'th-model-bar');
     known.style.cssText = `left:${barLeft}px;height:${bar.known}px`;
     known.dataset.scoreHeight = String(bar.known);
@@ -645,9 +640,9 @@ function renderModel(model, preview, geometry, plotHeight, scoreScale, topicHref
         range.dataset.scoreHeight = String(bar.upper); plot.append(range);
     }
     if (outside) {
-        score.classList.add('is-outside'); score.style.left = `${barLeft + geometry.barWidth + 3}px`;
-        score.style.bottom = `${Math.max(0, bar.known - 8)}px`;
-        score.style.fontSize = `${Math.min(12, 12 * (geometry.slot - barLeft - geometry.barWidth - 4) / Math.max(1, labelWidth))}px`;
+        score.classList.add('is-outside'); score.style.left = `${barLeft + geometry.barWidth / 2}px`;
+        score.style.bottom = `${bar.known + 3}px`;
+        score.style.fontSize = `${Math.min(12, 12 * (geometry.slot - 4) / Math.max(1, labelWidth))}px`;
         plot.append(score);
     } else known.append(score);
     plot.append(known);
@@ -855,8 +850,7 @@ function filterTopics() {
     const actionLabel = $('#topic-search').value ? 'Clear search' : 'Close search';
     searchAction.setAttribute('aria-label', actionLabel); searchAction.dataset.tooltip = actionLabel;
     const query = $('#topic-search').value.trim().toLocaleLowerCase();
-    const topics = topicCollection([...cards.values()].map(state => state.topic).filter(topic => topic.sceneID == null), directoryView,
-        readRecentTopics(profile?.userID ?? null), profile?.userID ?? null);
+    const topics = topicCollection([...cards.values()].map(state => state.topic).filter(topic => topic.sceneID == null), 'popular', [], profile?.userID ?? null);
     const groups = directoryView === 'search' ? searchTopicGroups(topics, query)
         : topics.filter(topic => `${topic.name} ${topic.description ?? ''} ${topic.creator?.name ?? ''}`.toLocaleLowerCase().includes(query))
             .map(topic => ({ topic, scenes: [] }));
@@ -916,14 +910,7 @@ function filterTopics() {
     if (!topicsLoading && !topicsReadFailed) {
         listStatus.hidden = count > 0;
         if (!count) {
-            const accountOnly = directoryView === 'configured' && !profile;
-            const message = query ? 'No topics match your search.' : accountOnly ? profileLoading ? 'Loading your account...'
-                : 'Sign in to see your topics.'
-                : directoryView === 'recent' ? 'No recent topics yet.'
-                    : directoryView === 'configured' ? 'No topics in Mine yet.' : 'No topics yet.';
-            if (!query && accountOnly && profileLoading) setLoading(listStatus, 'Loading your account');
-            else listStatus.replaceChildren(element('span', '', message));
-            if (accountOnly && !profileLoading) { const link = element('a', 'th-quiet', 'Sign in'); link.href = '/login'; listStatus.append(link); }
+            listStatus.replaceChildren(element('span', '', query ? 'No topics match your search.' : 'No topics yet.'));
             if (query) {
                 const clear = button('Clear search', 'xmark', 'th-state-action'); clear.append(element('span', '', 'Clear search'));
                 clear.addEventListener('click', clearSearch);
@@ -945,28 +932,19 @@ const topicSearchLayer = createFloatingSearchLayer({ anchor: topicSearchToggle, 
     onClose(reason) {
         $('#topics-navigation').classList.remove('is-searching');
         topicSearchToggle.setAttribute('aria-expanded', 'false');
-        if (reason === 'escape') selectDirectoryView(previousDirectoryView);
+        if (reason === 'escape') selectDirectoryView('popular');
     }
 });
 
-function selectDirectoryView(next, reveal = false) {
-    if (next === 'mine') next = 'configured';
-    if (next === 'search') {
-        if (directoryView !== 'search') previousDirectoryView = directoryView;
-    } else { previousDirectoryView = next; $('#topic-search').value = ''; }
+function selectDirectoryView(next) {
+    if (next !== 'search') $('#topic-search').value = '';
     directoryView = next;
     const searching = next === 'search';
     if (!searching) topicSearchLayer.close();
-    for (const tab of document.querySelectorAll('[data-topics-view]')) {
-        const selected = tab.dataset.topicsView === next;
-        tab.setAttribute('aria-selected', String(selected)); tab.tabIndex = selected ? 0 : -1;
-    }
-    if (searching) { grid.removeAttribute('aria-labelledby'); grid.setAttribute('aria-label', 'Search results'); }
-    else { grid.removeAttribute('aria-label'); grid.setAttribute('aria-labelledby', `topics-${next}`); }
+    grid.setAttribute('aria-label', searching ? 'Search results' : 'Topics');
     document.body.dataset.collection = next;
     filterTopics();
-    if (reveal) $('#topics').scrollIntoView({ block: 'start', behavior: 'auto' });
-    if (searching && document.body.classList.contains('is-scrolled') && topicSearchLayer.open()) {
+    if (searching && topicSearchLayer.open()) {
         $('#topics-navigation').classList.add('is-searching');
         topicSearchToggle.setAttribute('aria-expanded', 'true');
         $('#topic-search').focus({ preventScroll: true });
@@ -974,7 +952,7 @@ function selectDirectoryView(next, reveal = false) {
 }
 
 function closeSearch() {
-    selectDirectoryView(previousDirectoryView);
+    selectDirectoryView('popular');
     $('#topic-search-toggle').focus({ preventScroll: true });
 }
 
@@ -984,25 +962,14 @@ function clearSearch() {
     $('#topic-search').focus({ preventScroll: true });
 }
 
-mountSegmentedControl(document.querySelector('.th-topic-tabs'), { presentation: false });
-for (const tab of document.querySelectorAll('[data-topics-view]')) {
-    tab.addEventListener('click', () => {
-        if (tab.dataset.topicsView === 'search' && topicSearchLayer.isOpen) closeSearch();
-        else selectDirectoryView(tab.dataset.topicsView);
-    });
-    tab.addEventListener('keydown', event => {
-        if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
-        event.preventDefault();
-        const tabs = [...document.querySelectorAll('[data-topics-view]')], index = tabs.indexOf(tab);
-        const target = event.key === 'Home' ? tabs[0] : event.key === 'End' ? tabs.at(-1) : tabs[(index + (event.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length];
-        selectDirectoryView(target.dataset.topicsView); target.focus({ preventScroll: true });
-    });
-}
+topicSearchToggle.addEventListener('click', () => {
+    if (topicSearchLayer.isOpen) closeSearch();
+    else selectDirectoryView('search');
+});
 $('#topic-search-close').addEventListener('click', () => {
     if ($('#topic-search').value) clearSearch();
     else closeSearch();
 });
-for (const control of document.querySelectorAll('[data-open-mine]')) control.addEventListener('click', () => selectDirectoryView('mine', true));
 const filterBar = $('#topics-filters');
 const filterControls = $('#topics-filter-controls');
 const filterToggle = $('#topics-filters-toggle');
@@ -1061,6 +1028,7 @@ const headerPlaceholder = $('.th-header-placeholder');
 let headerVisible = false, headerMotion = [], headerMotionRevision = 0, headerReturnFocus = null, headerFocusOrigin = null;
 function setHeaderVisible(visible) {
     if (visible === headerVisible) return;
+    accountPreview.close();
     const floating = document.body.classList.contains('is-scrolled');
     const opacity = floating ? Number.parseFloat(getComputedStyle(header).opacity) : 0;
     const bodyStyle = getComputedStyle(document.body);
@@ -1111,7 +1079,6 @@ function syncHeader() {
         ? Math.max(restingHeight, header.getBoundingClientRect().height) : restingHeight;
     const passed = $('#home-hero').getBoundingClientRect().bottom <= threshold + 160;
     setHeaderVisible(passed);
-    if (!passed) topicSearchLayer.close({ reason: 'header-hidden' });
     document.documentElement.style.setProperty('--th-header-height', `${Math.ceil(header.getBoundingClientRect().height)}px`);
 }
 const headerResize = new globalThis.ResizeObserver(syncHeader);
@@ -1119,10 +1086,6 @@ headerResize.observe(header);
 window.addEventListener('scroll', syncHeader, { passive: true });
 window.addEventListener('resize', syncHeader);
 syncHeader();
-window.addEventListener('focus', () => { if (directoryView === 'recent') filterTopics(); });
-window.addEventListener('storage', () => {
-    if (directoryView === 'recent') filterTopics();
-});
 
 function loadTopics() {
     topicsRefreshQueued = true;
@@ -1172,7 +1135,7 @@ async function readTopics() {
         listStatus.replaceChildren(element('span', '', 'Could not load topics.'));
         const retry = button('Retry topics', 'rotate-right', 'th-state-action'); retry.append(element('span', '', 'Retry'));
         retry.addEventListener('click', loadTopics); listStatus.append(retry);
-    } finally { topicsLoading = false; grid.setAttribute('aria-busy', 'false'); }
+    } finally { topicsLoading = false; grid.setAttribute('aria-busy', 'false'); accountPreview.refresh(); }
 }
 
 function renderAccount() {
@@ -1180,13 +1143,16 @@ function renderAccount() {
     if (!profile) {
         account.href = '/login'; account.replaceChildren(icon('user'), element('span', '', 'Sign in'));
         account.removeAttribute('aria-haspopup'); account.setAttribute('aria-label', 'Sign in');
+        account.dataset.tooltip = 'Sign in'; accountPreview.refresh(); siteNavigation.refreshLayout();
         return;
     }
     account.href = '/me';
     account.removeAttribute('aria-haspopup');
     const name = profile.userName || 'Your account';
-    account.replaceChildren(avatar(name, profile.userProfilePictureURL), element('span', '', name));
+    account.replaceChildren(avatar(name, profile.userProfilePictureURL), element('span', '', 'My profile'));
     account.setAttribute('aria-label', `Open your profile: ${name}`);
+    delete account.dataset.tooltip;
+    accountPreview.refresh(); siteNavigation.refreshLayout();
 }
 
 async function loadProfile() {
@@ -1219,7 +1185,7 @@ async function loadProfile() {
         }
         else { profileReadFailed = true; profile = null; renderAccount(); }
     } finally {
-        if (requestAccount === accountEpoch) { profileLoading = false; filterTopics(); }
+        if (requestAccount === accountEpoch) { profileLoading = false; filterTopics(); accountPreview.refresh(); }
     }
 }
 

@@ -6,7 +6,7 @@ import './help-popover.js?v=help-popovers-20261008';
 
 // The same navigation is used in the home header and standalone page headers.
 export function mountSiteActions(nav, { accountID = 'site-account', moreID = 'site-more',
-    accountButton = false, manageAccount = false, extraActions = [], minimal = false } = {}) {
+    accountButton = false, manageAccount = false, extraActions = [], minimal = false, prioritizeAccount = false } = {}) {
     nav.classList.add('bp-site-links', 'th-header-links');
     nav.setAttribute('aria-label', 'About and account');
     nav.innerHTML = `<a class="th-quiet th-social" href="https://x.com/BenchPoll" target="_blank" rel="noopener noreferrer" aria-label="BenchPoll on X" data-tooltip="BenchPoll on X"><i class="th-x-mark" aria-hidden="true">&#120143;</i></a>
@@ -16,9 +16,10 @@ export function mountSiteActions(nav, { accountID = 'site-account', moreID = 'si
             <nav aria-label="More information"><a href="/terms">Terms</a><a href="/privacy">Privacy</a><a href="/cookies">Cookies</a><a href="/community-guidelines">Community guidelines</a></nav></details>`;
     const account = minimal ? null : nav.querySelector(accountButton ? 'button' : 'a[href="/login"]');
     if (account) { account.id = accountID; account.dataset.tooltip = 'Account'; }
+    if (prioritizeAccount && account) account.dataset.priorityAccount = 'true';
     const more = nav.querySelector('details');
     more.id = moreID;
-    for (const action of extraActions) nav.insertBefore(action, more);
+    for (const action of extraActions) nav.insertBefore(action, prioritizeAccount && account ? account : more);
     const inner = nav.parentElement;
     const actions = [...nav.children].filter(node => node !== more);
     const menu = more.querySelector('nav');
@@ -38,19 +39,28 @@ export function mountSiteActions(nav, { accountID = 'site-account', moreID = 'si
             const active = nav.getRootNode().activeElement;
             const wasActionFocused = actions.includes(active) || actions.some(action => action.contains(active));
             for (const action of actions) nav.insertBefore(action, more);
+            nav.classList.remove('has-compact-account');
             more.hidden = minimal;
             const visible = [...inner.children].filter(node => node !== nav && node.getClientRects().length);
             const gap = Number.parseFloat(getComputedStyle(inner).columnGap) || 0;
             const occupied = visible.reduce((total, node) => total + (node === directory
-                ? node.querySelector('.th-topic-tabs')?.scrollWidth ?? 0
+                ? node.querySelector('.th-directory-controls')?.scrollWidth ?? node.scrollWidth
                 : Math.max(node.getBoundingClientRect().width, node.scrollWidth)), 0);
             // The workspace supplies its own compact icon row and drawer. Keep
             // those primary controls in place instead of nesting them in More.
-            const compact = !minimal && occupied + nav.scrollWidth + gap * visible.length > inner.clientWidth + 1;
-            if (compact) {
+            const overflows = () => occupied + nav.scrollWidth + gap * visible.length > inner.clientWidth + 1;
+            if (!minimal && prioritizeAccount && account) {
+                for (const action of actions.filter(action => action !== account)) {
+                    if (!overflows()) break;
+                    menu.insertBefore(action, firstLegal);
+                }
+                if (overflows()) nav.classList.add('has-compact-account');
+                if (overflows()) menu.insertBefore(account, firstLegal);
+            } else if (!minimal && overflows()) {
                 more.hidden = false;
                 for (const action of actions) menu.insertBefore(action, firstLegal);
             }
+            const compact = actions.some(action => action.parentElement === menu);
             nav.classList.toggle('is-compact', compact);
             if (wasActionFocused && active?.isConnected) active.focus({ preventScroll: true });
             syncOverflow();

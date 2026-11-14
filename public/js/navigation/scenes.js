@@ -12,11 +12,7 @@ export function searchTopicGroups(topics, query) {
         const name = topic.name ?? topic.categoryName ?? '';
         const fields = [name, topic.description, topic.creator?.name];
         return [{ topic, scene: null, fields }, ...allScenes.flatMap(scene => {
-            const summary = searchText(scene.description);
-            // Inherited summaries and generated "Topic: Scene" prefixes are not scene matches.
-            const description = summary === searchText(topic.description) ? ''
-                : ` ${summary} `.replaceAll(` ${searchText(name)} `, ' ').trim();
-            const ownFields = [scene.name, description];
+            const ownFields = [scene.name];
             return [{ topic, scene, own: true, fields: ownFields },
                 { topic, scene, own: false, fields: [...ownFields, ...fields] }];
         })];
@@ -40,7 +36,7 @@ export function sceneMatchSummary(scenes) {
 export function matchingScenes(topic, query) {
     const text = String(query).trim().toLocaleLowerCase();
     return orderedScenes(topic.scenes).filter(scene => !text
-        || `${scene.name} ${scene.description ?? ''}`.toLocaleLowerCase().includes(text));
+        || scene.name.toLocaleLowerCase().includes(text));
 }
 
 export function sceneNavigationEntries(topics) {

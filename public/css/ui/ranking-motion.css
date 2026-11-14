@@ -20,10 +20,9 @@
 .bp-pie-transition[data-kind="fade"] .bp-pie-turntable { transform-style: flat; will-change: auto; }
 .bp-pie-transition[data-kind="fade"] .bp-pie-transition-face { transform: none; will-change: opacity; }
 .bp-mode-option { position: relative; }
-.bp-pie-mode-label { transition: opacity 160ms ease; }
-.bp-mode-option[aria-busy="true"] .bp-pie-mode-label { opacity: 0; }
-.bp-pie-mode-loading { position: absolute; left: 50%; top: 50%; width: 16px; height: 16px; transform: translate(-50%, -50%); display: grid; place-items: center; line-height: 1; }
-.bp-pie-mode-loading > i { font-size: 16px; }
+.bp-pie-mode-label { padding-inline: 10px; }
+.bp-pie-mode-loading { position: absolute; right: 3px; top: 50%; width: 10px; height: 10px; transform: translateY(-50%); display: grid; place-items: center; line-height: 1; }
+.bp-pie-mode-loading > i { font-size: 10px; }
 .bp-pie-mode-loading[hidden] { display: none; }
 .bp-model-inference-summary { flex-basis: 100%; margin: 8px 0 0; color: var(--bp-text); }
 .bp-model-inferred-heading { margin: 20px 0 10px; color: var(--bp-ink); font-size: 14px; }

@@ -268,7 +268,7 @@ test('private owner creates scenes and changes the default without changing the 
     assert.equal(new URL(page.url()).pathname, '/personal/998/vector-images');
     await page.getByRole('button', { name: 'Add scene', exact: true }).click();
     await page.locator('#scene-editor').getByLabel('Name', { exact: true }).fill('Photon design');
-    await page.locator('#scene-editor').getByLabel('One-sentence summary', { exact: true }).fill('Design precise optical diagrams.');
+    assert.equal(await page.locator('#scene-editor').getByLabel('One-sentence summary', { exact: true }).count(), 0);
     await page.getByRole('button', { name: 'Create scene', exact: true }).click();
     await page.waitForSelector('#scene-tab-99899[aria-selected="true"]');
     assert.equal(new URL(page.url()).pathname, '/personal/998/photon-design');

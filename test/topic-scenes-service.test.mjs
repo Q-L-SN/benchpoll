@@ -9,6 +9,7 @@ import { buildCategoryNavigation, buildPersonalNavigation } from '../navigation-
 import { selectSearchScene } from '../search-presentation.js';
 import { scenePath, topicSlug } from '../public/js/shared/topics.js';
 import { sceneDatabase } from './helpers/topic-scenes-fixture-20261031.mjs';
+import { normalizePrivateTopicEdit } from '../private-topic-service.js';
 
 const errorIs = code => error => error.body?.error === code;
 const raw = (contextID, defaults = {}) => ({ context_ID: contextID, category_ID: 172, scene_number: contextID, name: `Scene ${contextID}`,
@@ -16,9 +17,19 @@ const raw = (contextID, defaults = {}) => ({ context_ID: contextID, category_ID:
 const scenes = () => [serializeTopicScene(raw(101, { name: 'Vector output', legacy_context_values: { output: 'vector', realtime: 'any' } })),
     serializeTopicScene(raw(1095, { name: 'General', is_default: 1, legacy_context_values: { output: 'any', realtime: 'any' } }))];
 
+test('scenes have names and defaults but no independent summary in reads or writes', () => {
+    const scene = { categoryID: 1, name: 'General' };
+    assert.equal(normalizeTopicSceneRequest(scene).name, 'General');
+    assert.throws(() => normalizeTopicSceneRequest({ ...scene, description: 'A separate summary.' }), errorIs('invalid_topic_scene_request'));
+    assert.equal(Object.hasOwn(serializeTopicScene(raw(101)), 'description'), false);
+    const topic = { name: 'Useful work', description: 'Compare models on useful work.', scenes: [{ key: 'general', name: 'General' }], defaultSceneKey: 'general' };
+    assert.deepEqual(normalizePrivateTopicEdit(topic).scenes, [{ key: 'general', ID: null, name: 'General' }]);
+    assert.throws(() => normalizePrivateTopicEdit({ ...topic, scenes: [{ ...topic.scenes[0], description: 'Separate summary.' }] }));
+});
+
 test('long scene names keep numeric URL identities independent of stored slugs', async () => {
     const h = sceneDatabase(), prefix = 'a'.repeat(79), name = prefix + ' b';
-    const request = normalizeTopicSceneRequest({ categoryID: 172, name, description: 'A long scene name.' });
+    const request = normalizeTopicSceneRequest({ categoryID: 172, name });
     const storedSlug = topicSlug(request.name), expectedSlug = storedSlug + 'scene';
     assert.equal(storedSlug, prefix + '-');
     for (const categoryID of [172, 501]) {
@@ -50,8 +61,8 @@ test('creating and renaming accepted long scenes returns resolvable canonical pa
         const name = prefix + ' tail', slug = prefix + '-scene';
         const existing = h.state.scenes.find(scene => scene.name !== 'General');
         const result = existing
-            ? await updatePrivateTopicScene(h.pool, '42', { categoryID: 501, sceneID: existing.context_ID, name, description: 'Renamed scene.' })
-            : await createPrivateTopicScene(h.pool, '42', { categoryID: 501, name, description: 'New scene.' });
+            ? await updatePrivateTopicScene(h.pool, '42', { categoryID: 501, sceneID: existing.context_ID, name })
+            : await createPrivateTopicScene(h.pool, '42', { categoryID: 501, name });
         assert.equal(result.scene.name, name);
         assert.equal(result.scene.slug, slug);
         assert.equal(result.scene.url, '/private/PrivateToken123456/2');
@@ -94,7 +105,7 @@ test('malformed, inactive, cross-topic and mismatched scene selections fail clos
 
 test('private creation preserves root identity, uses canonical URLs and takes graph lock before user locks', async () => {
     const h = sceneDatabase();
-    const created = await createPrivateTopicScene(h.pool, '42', { categoryID: 501, name: 'Coding', description: 'Write useful software.' });
+    const created = await createPrivateTopicScene(h.pool, '42', { categoryID: 501, name: 'Coding' });
     assert.equal(created.defaultContextID, 99);
     assert.deepEqual(created.scenes.map(scene => scene.name), ['General', 'Coding']);
     assert.equal(created.scenes[0].url, '/private/PrivateToken123456/1');
@@ -107,12 +118,12 @@ test('private creation preserves root identity, uses canonical URLs and takes gr
 
 test('a first General scene reuses the root without creating a duplicate General', async () => {
     const h = sceneDatabase();
-    const result = await createPrivateTopicScene(h.pool, '42', { categoryID: 501, name: 'General', description: 'Overall work.' });
+    const result = await createPrivateTopicScene(h.pool, '42', { categoryID: 501, name: 'General' });
     assert.equal(result.sceneID, 99); assert.equal(result.scenes.length, 1); assert.equal(result.scene.isDefault, true);
 });
 
 test('private owner authentication, public restrictions and one-level shape are enforced', async () => {
-    const h = sceneDatabase(), request = { categoryID: 501, name: 'Coding', description: 'Write software.' };
+    const h = sceneDatabase(), request = { categoryID: 501, name: 'Coding' };
     await assert.rejects(createPrivateTopicScene(h.pool, null, request), errorIs('authentication_required'));
     await assert.rejects(createPrivateTopicScene(h.pool, '43', request), errorIs('private_topic_not_found'));
     await assert.rejects(createPrivateTopicScene(h.pool, '42', { ...request, categoryID: 172 }), errorIs('private_topic_not_found'));
@@ -124,18 +135,18 @@ test('private owner authentication, public restrictions and one-level shape are 
 
 test('scene updates and default changes retain identity and never remove the last default', async () => {
     const h = sceneDatabase();
-    const created = await createPrivateTopicScene(h.pool, '42', { categoryID: 501, name: 'Coding', description: 'Write software.' });
+    const created = await createPrivateTopicScene(h.pool, '42', { categoryID: 501, name: 'Coding' });
     const result = await updatePrivateTopicScene(h.pool, '42', { categoryID: 501, sceneID: created.sceneID,
-        name: 'Programming', description: 'Build programs.', isDefault: true });
+        name: 'Programming', isDefault: true });
     assert.equal(result.scenes[0].ID, created.sceneID); assert.equal(result.scene.name, 'Programming');
     await assert.rejects(updatePrivateTopicScene(h.pool, '42', { categoryID: 501, sceneID: created.sceneID,
-        name: 'Programming', description: 'Build programs.', isDefault: false }), errorIs('topic_scene_default_required'));
+        name: 'Programming', isDefault: false }), errorIs('topic_scene_default_required'));
     assert.equal((await setPrivateTopicDefaultScene(h.pool, '42', { categoryID: 501, sceneID: 99 })).defaultContextID, 99);
     await assert.rejects(setPrivateTopicDefaultScene(h.pool, '42', { categoryID: 501, sceneID: 172 }), errorIs('topic_scene_not_found'));
 });
 
 test('scene mutation is atomic and retries cannot create duplicate scenes', async () => {
-    const h = sceneDatabase(), body = { categoryID: 501, name: 'Coding', description: 'Write software.', isDefault: true };
+    const h = sceneDatabase(), body = { categoryID: 501, name: 'Coding', isDefault: true };
     const key = randomUUID(), first = await createPrivateTopicScene(h.pool, '42', body, key);
     assert.deepEqual(await createPrivateTopicScene(h.pool, '42', body, key), first);
     assert.equal(h.state.scenes.length, 2);
@@ -147,14 +158,14 @@ test('scene mutation is atomic and retries cannot create duplicate scenes', asyn
 
 test('concurrent defaults serialize on the shared graph lock and leave exactly one default', async () => {
     const h = sceneDatabase();
-    const result = await createPrivateTopicScene(h.pool, '42', { categoryID: 501, name: 'Coding', description: 'Write software.' });
+    const result = await createPrivateTopicScene(h.pool, '42', { categoryID: 501, name: 'Coding' });
     await Promise.all([setPrivateTopicDefaultScene(h.pool, '42', { categoryID: 501, sceneID: result.sceneID }),
         setPrivateTopicDefaultScene(h.pool, '42', { categoryID: 501, sceneID: 99 })]);
     assert.equal(h.state.scenes.filter(scene => scene.is_default).length, 1);
 });
 
 test('committed scene retries survive lost acknowledgements without repeating or undoing later edits/default changes', async () => {
-    const h = sceneDatabase(), body = { categoryID: 501, name: 'Coding', description: 'Write software.', isDefault: true };
+    const h = sceneDatabase(), body = { categoryID: 501, name: 'Coding', isDefault: true };
     const key = randomUUID();
     h.failWhen(sql => sql === 'COMMIT_ACK');
     await assert.rejects(createPrivateTopicScene(h.pool, '42', body, key), /commit_ack_lost/);
@@ -162,7 +173,7 @@ test('committed scene retries survive lost acknowledgements without repeating or
     const createdID = h.state.scenes.find(scene => scene.name === 'Coding').context_ID;
     h.failWhen(null);
     await updatePrivateTopicScene(h.pool, '42', { categoryID: 501, sceneID: createdID,
-        name: 'Programming', description: 'Build software.' }, randomUUID());
+        name: 'Programming' }, randomUUID());
     await setPrivateTopicDefaultScene(h.pool, '42', { categoryID: 501, sceneID: 99 }, randomUUID());
     const retry = await createPrivateTopicScene(h.pool, '42', body, key);
     assert.equal(retry.sceneID, createdID); assert.equal(retry.scene.name, 'Programming');
@@ -178,18 +189,18 @@ test('root creation rejects invalid insert identities', async () => {
 
 test('scene discovery is batched, includes roots, and search returns exact scene destinations', async () => {
     const h = sceneDatabase();
-    await createPrivateTopicScene(h.pool, '42', { categoryID: 501, name: 'Vector graphics', description: 'Scalable drawings.' });
+    await createPrivateTopicScene(h.pool, '42', { categoryID: 501, name: 'Vector graphics' });
     h.seedContext(172, 1095);
     const catalog = await loadTopicSceneCatalog(h.pool, [501, 172]);
     assert.equal(catalog.get(172).rootContextID, 1095);
     const topics = [{ ID: 501, name: 'My work', description: 'My daily work.', ...catalog.get(501) }];
-    const matches = searchTopicsAndScenes(topics, 'scalable');
+    const matches = searchTopicsAndScenes(topics, 'vector');
     assert.equal(matches.length, 1); assert.equal(matches[0].searchMatches[0].name, 'Vector graphics');
     assert.match(matches[0].searchMatches[0].url, /^\/private\/PrivateToken123456\/2$/);
     const parentMatch = searchTopicsAndScenes(topics, 'My work');
     assert.deepEqual(parentMatch[0].searchMatches, [], 'parent matches are not attributed to every child');
     assert.equal(parentMatch[0].scenes.length, topics[0].scenes.length, 'full catalogue remains available for explicit expansion');
-    assert.equal(searchTopicsAndScenes(topics, 'My work scalable')[0].searchMatches[0].name, 'Vector graphics');
+    assert.equal(searchTopicsAndScenes(topics, 'My work vector')[0].searchMatches[0].name, 'Vector graphics');
     const nav = buildCategoryNavigation([{ ...h.state.categories[0], position: 0 }], catalog);
     assert.equal(nav[0].rootContextID, 1095);
     const configured = buildPersonalNavigation([{ contextID: 99, categoryID: 501, contextValues: '{"scene":"99"}',

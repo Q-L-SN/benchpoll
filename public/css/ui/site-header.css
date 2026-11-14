@@ -13,6 +13,8 @@
 .bp-site-links .th-quiet > img { flex: 0 0 24px; width: 24px; height: 24px; aspect-ratio: 1; border-radius: 50%; object-fit: cover; }
 .bp-site-links .th-quiet > .bp-identity-avatar { --bp-avatar-size: 24px; }
 .bp-site-links .th-quiet > span:not(.bp-identity-avatar) { min-width: 0; max-width: 115px; overflow: hidden; text-overflow: ellipsis; }
+.bp-site-links.has-compact-account > [data-priority-account] { width: 44px; gap: 0; }
+.bp-site-links.has-compact-account > [data-priority-account] > span:not(.bp-identity-avatar) { display: none; }
 .bp-site-links .th-social { width: 44px; }
 .bp-site-links .th-x-mark { display: inline-block; transform: translateY(-2px); font: normal 18px/1 'Segoe UI Symbol', sans-serif; }
 .bp-site-links .th-more { position: relative; flex: 0 0 44px; }

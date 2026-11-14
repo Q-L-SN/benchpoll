@@ -132,7 +132,7 @@ test('fallback copy preserves explicit order, community inheritance, and real ze
 });
 
 test('account and evidence copy covers public/private creation and editable identity', () => {
-    assert.match(section('account'), /Publication is immediate/);
+    assert.match(section('account'), /Creation and publication are immediate and do not require review/);
     assert.match(section('account'), /up to three public topics at a time/);
     assert.match(section('account'), /make it private before deleting it/);
     assert.doesNotMatch(guide, /topic-proposals|collecting proposals|supporters|administrator review|proposal hall|Created by me|Configured by me/);

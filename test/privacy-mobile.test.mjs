@@ -112,7 +112,8 @@ test('legal pages publish owner-confirmed contact inboxes without inventing a le
 });
 
 test('policy distinguishes current public topics and removed tags from historical storage', () => {
-    assert.match(privacy, /Approved public topics[^.]*do not currently show a creator credit/i);
+    assert.match(privacy, /Public topics show their name, summary, scenes and creator profile/i);
+    assert.match(privacy, /official topics are labeled Official/i);
     assert.match(privacy, /Older benchmark tag records may remain in historical storage/i);
     assert.match(privacy, /current contribution forms and public benchmark views do not provide a tag feature/i);
     assert.doesNotMatch(privacy, /public creator credit are visible|source URLs, tags and object notes/i);

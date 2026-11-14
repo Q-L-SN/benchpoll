@@ -31,10 +31,11 @@ test('scene URLs use numeric paths and preserve focus while old scene queries ar
     assert.throws(() => rankingContextURL(url.href, [], { scene: '999' }, scenes));
 });
 
-test('default scene leads stable tabs; scene search uses names and descriptions', () => {
+test('default scene leads stable tabs; scene search uses names', () => {
     assert.deepEqual(orderedScenes(scenes).map(scene => scene.ID), [10, 20]);
     assert.deepEqual(scenes.map(scene => scene.ID), [20, 10]);
-    assert.deepEqual(matchingScenes(topic, 'editable').map(scene => scene.ID), [20]);
+    assert.deepEqual(matchingScenes(topic, 'vector').map(scene => scene.ID), [20]);
+    assert.deepEqual(matchingScenes(topic, 'editable'), []);
     const entries = sceneNavigationEntries([entryFromContext(topic)]);
     assert.equal(entries.length, 3);
     assert.equal(locationURL(entries[2]), '/11/2');
@@ -59,8 +60,8 @@ test('parent-only searches keep all scenes available without treating inherited 
     assert.deepEqual(searchTopicGroups([onlyParent], 'coding'), [{ topic: onlyParent, topicMatch: true, scenes: [] }]);
 });
 
-test('scene names, intrinsic descriptions and combined parent/scene queries remain directly searchable', () => {
-    for (const query of ['Vector', 'editable', 'Images Vector', 'Images editable', 'Véctor', 'Vetor']) {
+test('scene names and combined parent/scene queries remain directly searchable', () => {
+    for (const query of ['Vector', 'Images Vector', 'Véctor', 'Vetor']) {
         const [group] = searchTopicGroups([topic], query);
         assert.equal(group.topicMatch, false, query);
         assert.deepEqual(group.scenes.map(scene => scene.ID), [20], query);
@@ -70,7 +71,7 @@ test('scene names, intrinsic descriptions and combined parent/scene queries rema
     assert.equal(group.topicMatch, true);
     assert.deepEqual(group.scenes.map(scene => scene.ID), [20], 'a parent match does not hide directly matched scenes or reveal other siblings');
     const shared = { ...topic, scenes: scenes.map(scene => ({ ...scene, description: 'Shared goal' })) };
-    assert.deepEqual(searchTopicGroups([shared], 'Shared goal')[0].scenes.map(scene => scene.ID), [10, 20]);
+    assert.deepEqual(searchTopicGroups([shared], 'Shared goal'), []);
 });
 
 test('a language name expands neither all 184 sibling languages nor other topic scenes', () => {
@@ -95,11 +96,11 @@ test('reference chooser groups scenes but never exposes an ambiguous root select
     const root = { ...targets[0], contextID: 9, sceneID: null, sceneName: null };
     assert.deepEqual(referenceGroups([root, ...targets]).map(group => [group.name, group.hasScenes, group.targets.map(target => target.contextID)]),
         [['Images', true, [10, 20]], ['Coding', false, [30]]]);
-    assert.deepEqual(referenceGroups(targets, 'editable').flatMap(group => group.targets.map(target => target.contextID)), [20]);
+    assert.deepEqual(referenceGroups(targets, 'Vector').flatMap(group => group.targets.map(target => target.contextID)), [20]);
     assert.deepEqual(referenceGroups(targets, 'Images').flatMap(group => group.targets.map(target => target.contextID)), [10, 20]);
     assert.equal(referenceGroups(targets, 'Images')[0].collapsed, true);
     assert.equal(referenceGroups(targets, '')[0].collapsed, true);
-    assert.equal(referenceGroups(targets, 'editable')[0].collapsed, false);
+    assert.equal(referenceGroups(targets, 'Vector')[0].collapsed, false);
     assert.deepEqual(referenceGroups(targets, 'Images Vector')[0].targets.map(target => target.contextID), [20]);
     assert.deepEqual(referenceGroups([targets[1], { ...targets[0], isDefault: true }], 'Images')[0].targets.map(target => target.contextID), [10, 20]);
 });

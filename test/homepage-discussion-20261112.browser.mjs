@@ -52,16 +52,14 @@ for (const engine of engines) for (const width of [320, 390, 1440]) {
                 summaryBelow: summary.getBoundingClientRect().top >= title.getBoundingClientRect().bottom,
                 landscape: visual.width > visual.height, islandWidth: document.querySelector('#topics-filters').style.getPropertyValue('--th-filter-width'),
                 phraseLines: document.querySelector('.th-headline-nowrap').getClientRects().length,
-                createPrevious: document.querySelector('#new-private-topic').previousElementSibling.id };
+                createInHeader: document.querySelector('.th-header-links').contains(document.querySelector('#new-private-topic')) };
         });
         assert.deepEqual(initial.order.slice(0, 2), [1, 54], 'The service order survives the Intelligence feature treatment');
         assert.equal(initial.body, 'rgb(255, 255, 255)'); assert.ok(initial.overflow <= 1);
-        assert.equal(initial.summaryBelow, true); assert.equal(initial.createPrevious, 'topic-search-toggle');
+        assert.equal(initial.summaryBelow, true); assert.equal(initial.createInHeader, true);
         if (width < 640) { assert.ok(initial.subtitle <= 14); assert.ok(initial.title >= 30); assert.equal(initial.landscape, true); assert.equal(initial.phraseLines, 1); }
         assert.equal(await page.locator('#topic-card-1 .bp-topic-official').innerText(), 'Official');
-        const report = page.locator('#topic-card-1 .th-card-author .bp-topic-report');
-        assert.equal(new URL(await report.getAttribute('href'), fixture.url).pathname, '/contribute/topics/1/report');
-        assert.equal(await report.evaluate(node => node.previousElementSibling.classList.contains('th-creator')), true);
+        assert.equal(await page.locator('#topics-grid .bp-topic-report').count(), 0);
         assert.equal(await page.locator('#topic-card-1 .th-topic-coverage').innerText(), '89');
         assert.equal(await page.locator('#topic-card-1 .bp-topic-configured-dot').isVisible(), true);
         assert.match(await page.locator('#topic-card-1 .th-model').first().getAttribute('aria-label'), /87% benchmark coverage/);
@@ -103,7 +101,7 @@ for (const engine of engines) for (const width of [320, 390, 1440]) {
 
         await page.locator('#topic-search-toggle').click(); await page.locator('#topic-search').fill('Intelligence');
         assert.equal(await page.locator('.th-card.is-featured').count(), 0, 'Search uses an ordinary Intelligence card');
-        await page.locator('#topics-popular').click();
+        await page.locator('#topic-search-toggle').click();
         assert.equal(await page.locator('#topic-card-54').evaluate(node => node.classList.contains('is-featured')), true);
         const feedback = await page.locator('#topic-card-1 .bp-topic-favorite').evaluate(button => {
             const pulse = () => button.getAnimations().find(animation => animation.effect.getKeyframes().some(frame => frame.transform));
@@ -129,6 +127,7 @@ for (const engine of engines) for (const width of [320, 390, 1440]) {
         }
         await page.locator('#topic-scenes-close').click();
         await page.evaluate(() => { scrollTo(0, 420); dispatchEvent(new Event('scroll')); }); await settle(page);
+        if (!await page.locator('#new-private-topic').isVisible()) await page.locator('#topics-more summary').click();
         await page.locator('#new-private-topic').click();
         await page.locator('#new-topic-name').fill('My compact topic'); await page.locator('#new-topic-description').fill('A focused collection for my tests.');
         await page.locator('#create-topic-submit').click();

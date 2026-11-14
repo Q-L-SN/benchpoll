@@ -70,14 +70,15 @@ test('topic creation starts private and the editor publishes directly with a thr
     assert.match(sidebarForm, /<input type="hidden" name="visibility" value="private">/);
 });
 
-test('shared navigation has no proposal hall and Create topic remains beside directory Search', () => {
+test('shared navigation has no proposal hall and retains Search and Create topic', () => {
     assert.doesNotMatch(read('public/js/shared/site-header.js'), /topic-proposals/);
     assert.match(topics, /mountSiteActions\(\$\('\.th-header-links'\)/);
     assert.match(read('public/js/shared/page-header.js'), /mountSiteActions\(/);
     assert.match(workspace, /minimal: true, extraActions:/);
-    const actions = home.match(/<div class="th-topic-tabs"[\s\S]*?<\/div>/)?.[0];
+    const actions = home.match(/<div class="th-directory-controls"[\s\S]*?<\/div>/)?.[0];
     assert.ok(actions);
     assert.match(actions, /id="topic-search-toggle"[\s\S]*?<\/button>\s*<button id="new-private-topic"[^>]*aria-label="Create topic"/);
+    assert.match(topics, /prioritizeAccount: true, extraActions: \[\$\('#new-private-topic'\)\]/);
     assert.match(topics, /\$\('#new-private-topic'\)\.addEventListener\('click', event => void privateTopicEditor\.open\(null, event\.currentTarget\)\)/);
     assert.doesNotMatch(home, /id="mine-actions"|topic-proposals/);
 });
@@ -86,7 +87,7 @@ test('Official or real creator metadata sits in the card footer while the summar
     assert.equal((topics.match(/createTopicCreator\(topic\.isOfficial \? \{ isOfficial: true \} : topic\.creator, 'th-creator'\)/g) ?? []).length, 2);
     assert.equal((topics.match(/if \(topic\.sceneID != null\) creator\.hidden = true/g) ?? []).length, 2);
     assert.match(topics, /identity\.append\(title\);\s*if \(topic\.sceneID == null\) identity\.append\(summary\)/);
-    assert.match(topics, /author\.append\(creator, createCardReport\(topic\)\)/);
+    assert.match(topics, /author\.append\(creator\)/);
     assert.match(topics, /footer\.append\(author, topicMeta, sceneToggle\)/);
     const identity = read('public/js/shared/topic-identity.js');
     assert.match(identity, /if \(creator\?\.isOfficial\) \{[\s\S]*?fa-solid fa-circle-check[\s\S]*?'Official'/);
@@ -164,7 +165,7 @@ function rootAccountHooks(responses) {
         profile: null, profileReadFailed: false, profileLoading: false, accountEpoch: 0,
         boundAccountID: null, accountSessionEnded: false, cards: new Map(), visibility: null, scenesDialog: { close() {} },
         pageAccountWriteScope: scope, canonicalAccountID, location: { reload: () => { reloads++; } },
-        postJSON: async () => responses.shift(), renderAccount() {}, filterTopics() {}, loadTopics: async () => {}
+        postJSON: async () => responses.shift(), renderAccount() {}, accountPreview: { refresh() {} }, filterTopics() {}, loadTopics: async () => {}
     });
     return { ...hooks, scope, reloads: () => reloads };
 }

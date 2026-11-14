@@ -39,7 +39,7 @@
 .bp-profile-topic-attribution .bp-topic-report:hover { color: #405b40; }
 .bp-profile-topic-card .bp-topic-favorite { display: inline-flex; align-items: center; gap: 6px; min-width: 44px; min-height: 44px; padding: 5px 8px; border: 0; color: #6d7869; background: none; font: inherit; cursor: pointer; }
 .bp-profile-topic-card .bp-topic-favorite[aria-pressed="true"] { color: #8d6f33; }
-.bp-topic-configured-dot { width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%; background: #6f8d66; }
+.bp-topic-configured-dot { width: 8px; height: 8px; flex: 0 0 8px; border-radius: 50%; background: #6f8d66; }
 .pf-footer { display: flex; justify-content: center; flex-wrap: wrap; gap: 24px; padding: 24px; color: #788174; font-size: 13px; }
 .pf-back { display: inline-flex; gap: 8px; align-items: center; min-height: 44px; color: #6c7a6c; }
 .pf-settings h1, .pf-history h1 { font-size: 30px; font-weight: 650; margin: 16px 0 28px; }

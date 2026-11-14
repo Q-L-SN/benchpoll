@@ -137,7 +137,7 @@ test('new benchmark uses the fixed heading action and compact sidebar legal cont
 
 test('empty Public uses the creation card and empty Personal retains the shared mode switch', () => {
     assert.match(html, /id="personal-pie-create"[^>]*hidden/);
-    assert.match(html, /Rank AI your way/);
+    assert.match(html, /Rank AI <span class="bp-keep-together">your way<\/span>/);
     assert.doesNotMatch(html, /Choose what counts\. Set your weights\./);
     assert.doesNotMatch(html, /personal-empty-public-return|personal-empty-mode/);
     assert.match(workspace, /personalPieEmpty.hidden = !showEmptyPersonal/);

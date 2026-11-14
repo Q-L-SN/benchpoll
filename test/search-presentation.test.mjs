@@ -26,7 +26,7 @@ test('all scenes have numeric canonical paths, including the default', () => {
     assert.equal(topicSearchMetadata(topic, 101).path, '/1/1');
     assert.equal(topicSearchMetadata(topic, 102).path, '/1/2');
     assert.equal(topicSearchMetadata(topic, 102).title, 'Intelligence: Real-time AI Index | BenchPoll');
-    assert.match(topicSearchMetadata(topic, 102).description, /^Real-time capability/);
+    assert.ok(topicSearchMetadata(topic, 102).description.startsWith(topic.description));
     assert.equal(selectSearchScene(topic, new URLSearchParams()).ID, 101);
     assert.equal(selectSearchScene(topic, new URLSearchParams(), '2').ID, 102);
     for (const query of ['scene=102', 'context_scene=101', 'scene=', 'scene=0', 'scene=103', 'scene=101&scene=102', 'scene=01', 'scene=-1', 'scene=9007199254740993']) {

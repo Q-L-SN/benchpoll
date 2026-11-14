@@ -81,7 +81,8 @@ test('short explanations name current navigation and preserve practical scoring 
 test('contribution instructions distinguish pending requests, public data and run settings', () => {
     const form = read('private/contribute.html');
     assert.match(form, /You can reference your own pending additions while they are reviewed/);
-    assert.match(form, /Review comes before publication/);
+    assert.match(form, /A reviewer checks catalogue contributions before updating public data/);
+    assert.match(form, /Topics are created and published directly from Home without review/);
     assert.match(form, /Record model settings with the score/);
     assert.match(form, /explain the differences/);
     assert.match(form, /latest successful update/);
@@ -96,7 +97,7 @@ test('guide details remain concise and the first read stays light', () => {
     assert.ok(words(plain(main)) <= 1150, String(words(plain(main))));
     assert.ok(words(plain(main.replace(/<details[\s\S]*?<\/details>/g, ''))) <= 400);
     assert.match(main, /Create a private topic, then choose <strong>Make public<\/strong>/);
-    assert.match(main, /Publication is immediate\. You can have up to three public topics at a time\./);
+    assert.match(main, /Creation and publication are immediate and do not require review\. You can have up to three public topics at a time\./);
     assert.doesNotMatch(main, /Collection lasts 14 days|Proposal Hall|proposal hall/);
     assert.doesNotMatch(main, /72 hours|Public weight =|48 to 88/);
     assert.doesNotMatch(main, /<ol\b|<table\b|Full calculation rules|Expand all/);

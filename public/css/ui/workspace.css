@@ -346,6 +346,7 @@ button.bp-breadcrumb-current:focus-visible {
     line-height: 1.3;
     overflow-wrap: anywhere;
 }
+.bp-create-mix-copy .bp-keep-together { white-space: nowrap; }
 
 .bp-create-mix-copy > span {
     font-size: 11px;

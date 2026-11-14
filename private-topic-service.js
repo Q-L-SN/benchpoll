@@ -22,7 +22,7 @@ const expectedVersion = value => {
 
 export function privateTopicRevision(topic, scenes) {
     return createHash('sha256').update(JSON.stringify([topic.name, topic.description, topic.owner_user_ID == null,
-        scenes.map(scene => [scene.ID, scene.name, scene.description, scene.position, scene.isDefault])])).digest('hex');
+        scenes.map(scene => [scene.ID, scene.name, scene.position, scene.isDefault])])).digest('hex');
 }
 
 export function normalizePrivateTopicEdit(body) {
@@ -34,18 +34,15 @@ export function normalizePrivateTopicEdit(body) {
     if (!Array.isArray(body.scenes) || body.scenes.length > 512) fail(400, 'invalid_topic_scene_list');
     const seenKeys = new Set(), seenNames = new Set(), seenSlugs = new Set(), seenIDs = new Set();
     const scenes = body.scenes.map(item => {
-        record(item, ['key', 'ID', 'name', 'description']);
+        record(item, ['key', 'ID', 'name']);
         if (typeof item.key !== 'string' || !/^[A-Za-z0-9_-]{1,80}$/.test(item.key) || seenKeys.has(item.key)) fail(400, 'invalid_scene_key');
         const ID = item.ID == null ? null : topicID(item.ID);
         if (ID !== null && (categoryID === null || seenIDs.has(ID))) fail(400, 'invalid_scene_id');
-        const description = item.description === undefined ? '' : item.description;
-        if (typeof description !== 'string') fail(400, 'invalid_scene_description');
-        const normalized = normalizeTopicSceneRequest({ categoryID: categoryID ?? 1, name: item.name,
-            description: description.trim() || metadata.description });
+        const normalized = normalizeTopicSceneRequest({ categoryID: categoryID ?? 1, name: item.name });
         const nameKey = normalized.name.toLocaleLowerCase(), slug = sceneSlug(normalized.name);
         if (seenNames.has(nameKey) || seenSlugs.has(slug)) fail(409, 'topic_scene_exists');
         seenKeys.add(item.key); seenNames.add(nameKey); seenSlugs.add(slug); if (ID !== null) seenIDs.add(ID);
-        return { key: item.key, ID, name: normalized.name, description: description.trim() ? normalized.description : '' };
+        return { key: item.key, ID, name: normalized.name };
     });
     if (scenes.length ? !seenKeys.has(body.defaultSceneKey) : body.defaultSceneKey != null) fail(400, 'topic_scene_default_required');
     return { categoryID, expectedRevision, name: metadata.name, description: metadata.description,

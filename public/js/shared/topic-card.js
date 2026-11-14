@@ -1,5 +1,5 @@
 import { createTopicCreator } from './topic-identity.js';
-import { createFavoriteButton, createConfiguredIndicator, createTopicReportButton } from './topic-actions.js';
+import { createFavoriteButton, createConfiguredIndicator } from './topic-actions.js';
 
 // A compact topic card for profile collections; all card state/actions use the
 // same controls as the homepage and workspace topic headers.
@@ -19,7 +19,7 @@ export function createTopicCard(topic, { onError = () => {}, onFavoriteChange = 
     const footer = document.createElement('footer');
     const creator = createTopicCreator(topic.isOfficial ? { isOfficial: true } : topic.creator);
     const attribution = document.createElement('div'); attribution.className = 'bp-profile-topic-attribution';
-    attribution.append(creator, createTopicReportButton(topic));
+    attribution.append(creator);
     const favorite = createFavoriteButton(topic, { onChange: onFavoriteChange, onError });
     footer.append(attribution, favorite); card.append(heading, description, footer);
     card.dispose = () => favorite.dispose?.();

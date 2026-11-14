@@ -38,6 +38,15 @@ test('invalid and zero weights cannot corrupt geometry', () => {
     for (const size of [0, -1, NaN, Infinity]) assert.deepEqual(layout(entries([1]), size, 270), []);
     assert.throws(() => layout([...entries([1]), ...entries([1])], 360, 270), /Duplicate/);
 });
+test('the workspace can remove the extra top inset while keeping proportional tile areas', () => {
+    for (const width of [240, 390, 560]) {
+        const tiles = createWeightTreemapLayout({ paddingTop: 2 })(entries([6000, 2500, 1500]), width, width);
+        check(tiles, width, width);
+        assert.equal(Math.min(...tiles.map(tile => tile.y)), 2);
+        assert.equal(Math.min(...tiles.map(tile => tile.x)), 14);
+        assert.ok(Math.abs(Math.max(...tiles.map(tile => tile.y + tile.height)) - (width - 14)) < 1e-9);
+    }
+});
 test('configuration tiles favor wide, shallow shapes in a square canvas', () => {
     for (const width of [280, 360, 560]) {
         for (const weights of [Array(12).fill(1), [30, 20, 15, 12, 8, 6, 5, 4], [60, 25, 15]]) {

@@ -1,6 +1,5 @@
 import { orderedScenes } from '../navigation/scenes.js';
 import { createAction, mountSegmentedControl } from '../shared/ui-components.js';
-import { normalizeTopicSummary } from '../shared/topics.js';
 
 const element = (tag, className, text) => {
     const node = document.createElement(tag); node.className = className;
@@ -54,12 +53,9 @@ export function createSceneControls({ host, getState, onSelect, beforeWrite, wri
     const form = element('form', 'bp-scene-form');
     const nameLabel = element('label', '', 'Name'), name = element('input', 'bp-ui-input');
     name.type = 'text'; name.required = true; name.maxLength = 128; name.autocomplete = 'off'; name.id = 'scene-name'; nameLabel.htmlFor = name.id;
-    const descriptionLabel = element('label', '', 'One-sentence summary'), description = element('textarea', 'bp-ui-input');
-    description.required = true; description.maxLength = 180; description.rows = 3;
-    description.id = 'scene-description'; descriptionLabel.htmlFor = description.id;
     const message = element('p', 'bp-reference-status'); message.setAttribute('role', 'alert');
     const submit = createAction({ label: 'Create scene', icon: 'fa-solid fa-plus', variant: 'primary' }); submit.type = 'submit';
-    form.append(nameLabel, name, descriptionLabel, description, message, submit); dialog.append(heading, form); document.body.append(dialog);
+    form.append(nameLabel, name, message, submit); dialog.append(heading, form); document.body.append(dialog);
     const status = element('p', 'bp-scene-status'); status.setAttribute('role', 'status'); status.hidden = true; host.append(status);
     let busy = false, scope = null, draftScope = null, switching = false, editingID = null, returnFocus = create;
     const identity = () => `${getState().categoryID}:${getState().userID}`;
@@ -71,7 +67,7 @@ export function createSceneControls({ host, getState, onSelect, beforeWrite, wri
         if (!canManage(getState()) || busy || getState().loading) return;
         scope = identity();
         const key = `${scope}:${scene?.ID ?? 'new'}`;
-        if (draftScope !== key) { form.reset(); name.value = scene?.name ?? ''; description.value = scene?.description ?? ''; }
+        if (draftScope !== key) { form.reset(); name.value = scene?.name ?? ''; }
         editingID = scene?.ID ?? null;
         returnFocus = scene ? edit : create;
         title.textContent = scene ? 'Edit private scene' : 'Add private scene';
@@ -103,15 +99,12 @@ export function createSceneControls({ host, getState, onSelect, beforeWrite, wri
         if (busy || !canManage(getState()) || scope !== identity()) return;
         const value = name.value.trim().normalize('NFC');
         if (!value || /[\p{Cc}\p{Cf}]/u.test(value) || [...value].length > 128) { name.focus(); return; }
-        let summary;
-        try { summary = normalizeTopicSummary(description.value); }
-        catch { message.textContent = 'Write one sentence of up to 180 characters.'; description.focus(); return; }
-        busy = true; submit.disabled = true; close.disabled = true; name.disabled = true; description.disabled = true;
+        busy = true; submit.disabled = true; close.disabled = true; name.disabled = true;
         message.textContent = ''; render();
         try {
             if (!await beforeWrite() || scope !== identity()) return;
             const response = await write(editingID ? '/api/update_topic_scene' : '/api/create_topic_scene', {
-                categoryID: getState().categoryID, ...(editingID ? { sceneID: editingID } : {}), name: value, description: summary });
+                categoryID: getState().categoryID, ...(editingID ? { sceneID: editingID } : {}), name: value });
             if (scope !== identity()) return;
             const id = response.scene?.ID ?? response.sceneID ?? response.ID ?? editingID;
             if (!Number.isSafeInteger(id) || id < 1) throw new Error('The new scene could not be confirmed. Refresh before retrying.');
@@ -120,7 +113,7 @@ export function createSceneControls({ host, getState, onSelect, beforeWrite, wri
             if (scope === identity()) message.textContent = ['scene_name_exists', 'topic_scene_name_exists'].includes(error.payload?.error)
                 ? 'A scene with this name already exists.' : error.message || 'Could not save this scene. Your draft is kept.';
         } finally {
-            busy = false; submit.disabled = false; close.disabled = false; name.disabled = false; description.disabled = false; render();
+            busy = false; submit.disabled = false; close.disabled = false; name.disabled = false; render();
         }
     });
 

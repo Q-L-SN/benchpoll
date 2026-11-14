@@ -4,7 +4,7 @@ const { hierarchy, treemap, treemapResquarify } = hierarchyModule.hierarchy
     ? hierarchyModule : hierarchyModule.default ?? globalThis.d3;
 const horizontalShapeBias = 3;
 
-export function createWeightTreemapLayout({ padding: outerPadding = 14 } = {}) {
+export function createWeightTreemapLayout({ padding: outerPadding = 14, paddingTop = outerPadding } = {}) {
     let root = null;
     let identity = '';
     const layout = treemap().tile(treemapResquarify).round(false).padding(0);
@@ -27,10 +27,11 @@ export function createWeightTreemapLayout({ padding: outerPadding = 14 } = {}) {
         const h = Number.isFinite(height) ? Math.max(0, height) : 0;
         if (!root.value || !w || !h) return [];
         const padding = Math.min(outerPadding, w / 10, h / 10);
+        const top = Math.max(0, Math.min(paddingTop, padding));
         // Stretch the layout space vertically, then compress it to favor wide, shallow tiles without changing areas.
-        layout.size([w - padding * 2, (h - padding * 2) * horizontalShapeBias])(root);
+        layout.size([w - padding * 2, (h - padding - top) * horizontalShapeBias])(root);
         return root.leaves().map(node => ({ ...byID.get(node.data.id),
-            x: node.x0 + padding, y: node.y0 / horizontalShapeBias + padding,
+            x: node.x0 + padding, y: node.y0 / horizontalShapeBias + top,
             width: node.x1 - node.x0, height: (node.y1 - node.y0) / horizontalShapeBias, share: node.value / root.value }));
     };
 }

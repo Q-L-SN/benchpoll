@@ -297,14 +297,16 @@ test('selectable tile theme, top exposure/fade and full unmasked weights are exp
     assert.doesNotMatch(html, /th-eyebrow|th-intro-actions|data-open-mine|Explore topics|Our weights\./);
 });
 
-test('the integrated header has four collections and direct topic creation', async () => {
+test('the integrated header has search, Topics and priority profile access', async () => {
     const html = await readFile(new URL('../private/index.html', import.meta.url), 'utf8');
     const source = await readFile(new URL('../public/js/topics-home.js', import.meta.url), 'utf8');
     const shared = await readFile(new URL('../public/js/shared/site-header.js', import.meta.url), 'utf8');
     assert.doesNotMatch(html, /id="topic-count"|id="topics-title"|th-collection-heading|<h2[^>]*>Topics/);
     assert.doesNotMatch(source, /\$\('#topic-count'\)/);
     assert.match(html, /class="th-header-inner th-container"/);
-    assert.deepEqual([...html.matchAll(/data-topics-view="([^"]+)"/g)].map(match => match[1]), ['popular', 'recent', 'configured', 'search']);
+    assert.doesNotMatch(html, /data-topics-view=/);
+    assert.match(html, /id="topics-label" class="th-topics-wordmark">Topics<\/span>/);
+    assert.match(source, /prioritizeAccount: true/);
     assert.match(html, /id="topic-search-toggle"[^>]*aria-expanded="false"/);
     assert.doesNotMatch(shared, /topic-proposals|Proposal hall/);
     assert.ok(html.indexOf('id="new-private-topic"') > html.indexOf('id="topic-search-toggle"'));
@@ -327,7 +329,7 @@ test('the frosted header appears after the introductory header scrolls away', as
     assert.doesNotMatch(html, /th-island|th-directory-dock/);
     assert.match(css, /\.th-header \{[^}]*position: relative;/);
     assert.match(css, /\.is-scrolled \.th-header \{[^}]*position: fixed;/);
-    assert.match(css, /\.th-home:not\(\.is-scrolled\) \.th-directory-nav \{ display: none; \}/);
+    assert.match(css, /\.th-home:not\(\.is-scrolled\) \.th-topics-wordmark \{ display: none; \}/);
     assert.match(css, /backdrop-filter: blur\(20px\)/);
     assert.doesNotMatch(css.match(/\.th-card \{[^}]+\}/)?.[0], /(?:row-)?gap:/);
     assert.match(source, /filterBar\.hidden = !visible/);
@@ -415,7 +417,8 @@ test('Outline remains fixed and pagination belongs to the plot', async () => {
     assert.match(source, /createTopicCreator\(topic\.isOfficial \? \{ isOfficial: true \} : topic\.creator, 'th-creator'\)/);
     const identity = await readFile(new URL('../public/js/shared/topic-identity.js', import.meta.url), 'utf8');
     assert.match(identity, /bp-topic-byline-prefix', 'by'/);
-    assert.match(source, /author\.append\(creator, createCardReport\(topic\)\)/);
+    assert.match(source, /author\.append\(creator\)/);
+    assert.doesNotMatch(source, /createCardReport|createTopicReportButton/);
     assert.match(source, /footer\.append\(author, topicMeta, sceneToggle\)/);
     const html = await readFile(new URL('../private/index.html', import.meta.url), 'utf8');
     assert.match(html, /class="th-header-inner th-container"/);
@@ -423,7 +426,7 @@ test('Outline remains fixed and pagination belongs to the plot', async () => {
     assert.doesNotMatch(html, /treemap-theme-picker|card-style-picker/);
     assert.doesNotMatch(source, /appearancePicker|applyWeightTheme|applyCardStyle|benchpoll-topics-home-theme|benchpoll-topic-card-style/);
     assert.doesNotMatch(html, /Created by me|Configured by me|fa-pen-to-square|id="topics-mine"/);
-    assert.match(html, /aria-label="Mine"[^>]*>[\s\S]*?fa-user/);
+    assert.doesNotMatch(html, /aria-label="Mine"/);
 });
 
 test('home links to the profile page and handles canonical-name errors without a popup', async () => {
@@ -432,7 +435,7 @@ test('home links to the profile page and handles canonical-name errors without a
     assert.match(source, /account\.href = '\/me'/);
     const editor = await readFile(new URL('../public/js/shared/private-topic-editor.js', import.meta.url), 'utf8');
     assert.match(editor, /reserved_topic_name/); assert.match(editor, /topic_name_exists/);
-    assert.match(source, /readRecentTopics\(profile\?\.userID \?\? null\)/);
+    assert.match(source, /mountProfilePreview\(siteNavigation\.account/);
     assert.doesNotMatch(source, /openProfileEditor|bar\.known < 25/);
     const html = await readFile(new URL('../private/index.html', import.meta.url), 'utf8');
     assert.doesNotMatch(html, /account-center\.css/);
@@ -479,10 +482,10 @@ test('diagonal parameters use fixed readable type and bounded long-value rows', 
     assert.doesNotMatch(rule, /font-size: min|--bp-parameter-font-size/);
 });
 
-test('inside scores center on their colored bar; short/outside labels retain independent positioning', async () => {
+test('inside scores center on their colored bar; outside scores center above it', async () => {
     const css = await readFile(new URL('../public/css/topics-home.css', import.meta.url), 'utf8');
     assert.match(css, /\.th-model-score\s*\{[^}]*top: 50%;[^}]*width: 100%;[^}]*transform: translateY\(-50%\)/s);
-    assert.match(css, /\.th-model-score\.is-outside\s*\{[^}]*top: auto;[^}]*transform: none;[^}]*color: #28313e/s);
+    assert.match(css, /\.th-model-score\.is-outside\s*\{[^}]*top: auto;[^}]*transform: translateX\(-50%\);[^}]*color: #28313e/s);
 });
 
 test('model hover changes only the plot background, not the bar or identity', async () => {

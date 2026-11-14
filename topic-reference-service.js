@@ -8,7 +8,7 @@ export const MAX_REFERENCE_NODES = 256;
 export async function loadTopicReferenceTargets(db, userID = null, { includeMetadata = false } = {}) {
     const [rows] = await db.execute(`SELECT rc.ID AS context_ID, c.ID AS category_ID,
         c.name AS topic_name, c.slug, c.public_ID, c.private_ID, c.description AS topic_description, c.owner_user_ID,
-        s.context_ID AS scene_ID, s.scene_number, s.name AS scene_name, s.slug AS scene_slug, s.description AS scene_description,
+        s.context_ID AS scene_ID, s.scene_number, s.name AS scene_name, s.slug AS scene_slug,
         s.is_default,
         EXISTS(SELECT 1 FROM personal_pies p JOIN users u ON u.ID = p.user_ID
             WHERE p.context_ID = rc.ID AND u.deleted_at IS NULL
@@ -33,8 +33,7 @@ export async function loadTopicReferenceTargets(db, userID = null, { includeMeta
         return { contextID, categoryID, publicID, ...(isPrivate ? { privateID } : {}), sceneID, sceneNumber, topicName: row.topic_name,
             sceneName: row.scene_name ?? null,
             name: sceneID === null ? row.topic_name : `${row.topic_name} / ${row.scene_name}`,
-            description: sceneSummary({ name: row.topic_name, description: row.topic_description },
-                { name: row.scene_name, description: row.scene_description }),
+            description: sceneSummary({ description: row.topic_description }),
             isDefault: Boolean(Number(row.is_default)), isPrivate, hasWeights: Boolean(Number(row.has_weights)),
             ...(topic ? { favoriteCount: topic.favoriteCount, isFavorited: topic.isFavorited,
                 configured: topic.configuredContextIDs.includes(contextID), configuredContextIDs: topic.configuredContextIDs,

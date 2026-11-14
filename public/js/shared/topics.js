@@ -26,14 +26,8 @@ export function scenePath(input, scene = null) {
     return url.pathname + url.search + url.hash;
 }
 
-export function sceneSummary(topic, scene) {
-    const description = String(scene?.description ?? '').trim();
-    const name = String(scene?.name ?? scene?.sceneName ?? '').trim();
-    const topicName = String(topic?.name ?? topic?.categoryName ?? topic?.topicName ?? '').trim();
-    const normalized = value => value.normalize('NFC').toLocaleLowerCase().replace(/[.。]+$/, '').trim();
-    const placeholder = !description || [name, `${topicName}: ${name}`, `${topicName} / ${name}`]
-        .some(value => normalized(value) === normalized(description));
-    return placeholder ? String(topic?.description ?? topic?.topicDescription ?? '').trim() : description;
+export function sceneSummary(topic) {
+    return String(topic?.description ?? topic?.topicDescription ?? '').trim();
 }
 export const TOPIC_SUMMARY_MAX_LENGTH = 180;
 

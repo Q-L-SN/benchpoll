@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { canonicalAccountID } from './public/js/shared/account-identity.js';
-import { topicSlug, topicURL, normalizeTopicSummary, scenePath, sceneSlug } from './public/js/shared/topics.js';
+import { topicSlug, topicURL, scenePath, sceneSlug } from './public/js/shared/topics.js';
 import { claimWriteIntent, completeWriteIntent } from './write-idempotency.js';
 import { startTransactionConnection, commitTransactionConnection, rollbackTransactionConnection,
     releaseTransactionConnection } from './db-transaction.js';
@@ -46,7 +46,7 @@ export function serializeTopicScene(row, topic = null) {
     const categoryID = sceneIdentity(Number(row.category_ID ?? row.categoryID));
     const legacy = row.legacy_context_values == null ? null : valuesRecord(row.legacy_context_values);
     const scene = { ID, contextID: ID, sceneID: ID, sceneNumber: sceneIdentity(Number(row.scene_number ?? row.sceneNumber)), categoryID, name: row.name, slug: sceneURLSlug(row),
-        description: row.description ?? '', position: Number(row.position ?? 0),
+        position: Number(row.position ?? 0),
         isDefault: Boolean(Number(row.is_default)), isActive: row.is_active == null || Boolean(Number(row.is_active)),
         ...sceneContext(ID), legacyContextValues: legacy };
     if (topic) scene.url = topicSceneURL(topic, scene);
@@ -64,7 +64,7 @@ export async function loadTopicSceneCatalog(db, categoryIDs) {
     const IDs = [...new Set(categoryIDs.map(sceneIdentity))];
     if (!IDs.length) return new Map();
     const [rows] = await db.execute(`SELECT rc.ID AS contextID, rc.category_ID, rc.context_hash,
-        s.context_ID AS scene_context_ID, s.scene_number, s.name, s.slug, s.description, s.position,
+        s.context_ID AS scene_context_ID, s.scene_number, s.name, s.slug, s.position,
         s.is_default, s.is_active, s.legacy_context_values,
         c.name AS category_name, c.slug AS category_slug, c.owner_user_ID, c.public_ID, c.private_ID
         FROM ranking_contexts rc JOIN categories c ON c.ID = rc.category_ID
@@ -133,19 +133,17 @@ export async function resolveTopicScene(db, category, contextValues = {}, opts =
 }
 
 export function normalizeTopicSceneRequest(body, { update = false } = {}) {
-    const allowed = ['categoryID', 'name', 'description', 'isDefault', ...(update ? ['sceneID', 'position'] : [])];
+    const allowed = ['categoryID', 'name', 'isDefault', ...(update ? ['sceneID', 'position'] : [])];
     if (!body || typeof body !== 'object' || Array.isArray(body)
         || Object.keys(body).some(key => !allowed.includes(key))) fail(400, 'invalid_topic_scene_request');
     const categoryID = sceneIdentity(body.categoryID);
     const name = typeof body.name === 'string' ? body.name.trim().normalize('NFC') : '';
     if (!name || [...name].length > 128 || /[\p{Cc}\p{Cf}]/u.test(name)) fail(400, 'invalid_scene_name');
-    let description;
-    try { description = normalizeTopicSummary(body.description); } catch { fail(400, 'invalid_scene_description'); }
     if (body.isDefault !== undefined && typeof body.isDefault !== 'boolean') fail(400, 'invalid_scene_default');
     if (body.position !== undefined && (!Number.isSafeInteger(body.position) || body.position < 0 || body.position > 1000000)) {
         fail(400, 'invalid_scene_position');
     }
-    return { categoryID, name, description, isDefault: body.isDefault,
+    return { categoryID, name, isDefault: body.isDefault,
         ...(update ? { sceneID: sceneIdentity(body.sceneID), position: body.position } : {}) };
 }
 
@@ -199,7 +197,7 @@ export async function insertTopicScene(connection, categoryID, request, { contex
     await connection.execute(`INSERT INTO topic_scenes
         (context_ID, category_ID, scene_number, name, slug, description, position, is_default, is_active, legacy_context_values)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`, [contextID, categoryID, sceneNumber, request.name, sceneSlug(request.name),
-        request.description, position, Number(request.isDefault === true), legacyValues === null ? null : JSON.stringify(legacyValues)]);
+        '', position, Number(request.isDefault === true), legacyValues === null ? null : JSON.stringify(legacyValues)]);
     return contextID;
 }
 
@@ -215,7 +213,7 @@ export async function addTopicSceneInTransaction(connection, topic, request) {
                 { contextID: rootID, legacyValues: {}, position: 0 });
             return { contextID: rootID, sceneID: rootID, categoryID };
         }
-        await insertTopicScene(connection, categoryID, { name: 'General', description: topic.description,
+        await insertTopicScene(connection, categoryID, { name: 'General',
             isDefault: true }, { contextID: rootID, legacyValues: {}, position: 0 });
         scenes = [{ ID: rootID, position: 0, isDefault: true }];
     }
@@ -269,7 +267,7 @@ export async function updatePrivateTopicScene(db, userID, body, key = null) {
         if (request.isDefault) await connection.execute('UPDATE topic_scenes SET is_default = 0 WHERE category_ID = ? AND is_default = 1', [request.categoryID]);
         await connection.execute(`UPDATE topic_scenes SET name = ?, slug = ?, description = ?, position = ?, is_default = ?
             WHERE context_ID = ? AND category_ID = ? AND is_active = 1`,
-        [request.name, sceneSlug(request.name), request.description, request.position ?? scene.position,
+        [request.name, sceneSlug(request.name), '', request.position ?? scene.position,
             Number(request.isDefault ?? scene.isDefault), scene.ID, request.categoryID]);
         return { sceneID: scene.ID, contextID: scene.ID, categoryID: request.categoryID };
     });

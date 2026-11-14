@@ -54,7 +54,7 @@ export function createPrivateTopicEditor({ beforeOpen = async () => true, onSave
     const sceneList = $('#topic-editor-scenes'), submit = $('#create-topic-submit');
     let topic = null, scenes = [], defaultKey = null, busy = false, ready = false, owner = null, sequence = 0, trigger = null, savedDraft = '';
     const payload = () => ({ ...(topic ? { categoryID: topic.ID, expectedRevision: topic.editRevision } : {}),
-        name: name.value, description: description.value, scenes: scenes.map(({ key, ID, name, description }) => ({ key, ID, name, description })), defaultSceneKey: defaultKey });
+        name: name.value, description: description.value, scenes: scenes.map(({ key, ID, name }) => ({ key, ID, name })), defaultSceneKey: defaultKey });
     const message = value => { status.textContent = value; status.hidden = !value; };
     const report = error => message(messages[error.payload?.error] ?? error.message ?? 'Could not save this topic. Your draft is kept.');
     function setBusy(value, action = 'save') {
@@ -82,9 +82,7 @@ export function createPrivateTopicEditor({ beforeOpen = async () => true, onSave
             const sceneName = element('input', ''); sceneName.required = true; sceneName.maxLength = 128; sceneName.placeholder = 'Scene name'; sceneName.value = scene.name;
             sceneName.setAttribute('aria-label', 'Scene name ' + (index + 1));
             sceneName.addEventListener('input', () => { scene.name = sceneName.value; radio.setAttribute('aria-label', 'Default scene: ' + (scene.name || 'Untitled')); });
-            const summary = element('input', ''); summary.maxLength = 180; summary.placeholder = 'Use topic summary'; summary.value = scene.description;
-            summary.setAttribute('aria-label', 'Scene summary ' + (index + 1)); summary.addEventListener('input', () => { scene.description = summary.value; });
-            fields.append(sceneName, summary);
+            fields.append(sceneName);
             const controls = element('div', 'bp-topic-scene-actions');
             for (const [step, label, icon] of [[-1, 'Move scene up', 'arrow-up'], [1, 'Move scene down', 'arrow-down']]) {
                 const button = action(label, icon, () => { [scenes[index], scenes[index + step]] = [scenes[index + step], scenes[index]]; renderScenes(scene.key); });
@@ -108,7 +106,7 @@ export function createPrivateTopicEditor({ beforeOpen = async () => true, onSave
     }
     $('#topic-editor-add-scene').addEventListener('click', () => {
         if (busy || scenes.length >= 512) return;
-        const scene = { key: 'new-' + globalThis.crypto.randomUUID(), ID: null, name: '', description: '' };
+        const scene = { key: 'new-' + globalThis.crypto.randomUUID(), ID: null, name: '' };
         scenes.push(scene); defaultKey ??= scene.key; renderScenes(scene.key);
     });
     for (const close of dialog.querySelectorAll('[data-close-create]')) close.addEventListener('click', () => { if (!busy) dialog.close(); });
@@ -174,7 +172,7 @@ export function createPrivateTopicEditor({ beforeOpen = async () => true, onSave
                 const result = await postJSON('/api/get_private_topic_editor', { categoryID }, { timeoutMs: 20000, requireJSON: true });
                 if (request !== sequence || pageAccountWriteScope.capture() !== owner) return;
                 topic = result; ready = true; name.value = topic.name; description.value = topic.description;
-                scenes = topic.scenes.map(scene => ({ key: String(scene.ID), ID: scene.ID, name: scene.name, description: scene.description }));
+                scenes = topic.scenes.map(scene => ({ key: String(scene.ID), ID: scene.ID, name: scene.name }));
                 defaultKey = topic.scenes.find(scene => scene.isDefault)?.ID?.toString() ?? null;
                 $('#topic-editor-delete').hidden = !topic.isPrivate;
                 $('#topic-editor-publish').hidden = false;

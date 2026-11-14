@@ -41,12 +41,10 @@
         <div class="th-header-inner th-container">
             <a class="th-brand" href="/" aria-label="BenchPoll home"><img src="/assets/benchpoll-logo.svg" alt="BenchPoll" width="330" height="67"></a>
             <nav id="topics-navigation" class="th-directory-nav" aria-label="Topic directory">
-                <div class="th-topic-tabs" role="tablist" aria-label="Topic collections">
-                    <button id="topics-popular" type="button" role="tab" data-topics-view="popular" aria-selected="true" aria-controls="topics-grid" aria-label="Popular" data-tooltip="Popular"><i class="fa-solid fa-fire" aria-hidden="true"></i><span>Popular</span></button>
-                    <button id="topics-recent" type="button" role="tab" data-topics-view="recent" aria-selected="false" aria-controls="topics-grid" aria-label="Recent" data-tooltip="Recent" tabindex="-1"><i class="fa-solid fa-clock" aria-hidden="true"></i><span>Recent</span></button>
-                    <button id="topics-configured" type="button" role="tab" data-topics-view="configured" aria-selected="false" aria-controls="topics-grid" aria-label="Mine" data-tooltip="Mine" tabindex="-1"><i class="fa-solid fa-user" aria-hidden="true"></i><span>Mine</span></button>
-                    <button id="topic-search-toggle" type="button" role="tab" data-topics-view="search" aria-label="Search topics" data-tooltip="Search topics" aria-selected="false" aria-controls="topic-search-panel topics-grid" aria-expanded="false" tabindex="-1"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i><span>Search</span></button>
-                    <button id="new-private-topic" type="button" aria-label="Create topic" data-tooltip="Create topic"><i class="fa-solid fa-plus" aria-hidden="true"></i><span>Create topic</span></button>
+                <div class="th-directory-controls">
+                    <span id="topics-label" class="th-topics-wordmark">Topics</span>
+                    <button id="topic-search-toggle" class="th-icon" type="button" aria-label="Search topics" data-tooltip="Search topics" aria-controls="topic-search-panel topics-grid" aria-expanded="false"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i></button>
+                    <button id="new-private-topic" class="th-quiet" type="button" aria-label="Create topic" data-tooltip="Create topic"><i class="fa-solid fa-plus" aria-hidden="true"></i><span>Create topic</span></button>
                 </div>
             </nav>
             <nav class="th-header-links" aria-label="About and account"></nav>
@@ -74,7 +72,7 @@
         </section>
         <section id="topics" class="th-topics" aria-label="Topic previews">
             <div id="topics-status" class="th-list-status" role="status"><span class="bp-loading-indicator" role="status"><span class="bp-spinner" aria-hidden="true"></span><span class="bp-loading-label">Loading topics...</span></span></div>
-            <div id="topics-grid" class="th-grid" role="tabpanel" aria-labelledby="topics-popular" aria-busy="false"><!--bp:directory--><!--/bp:directory--></div>
+            <div id="topics-grid" class="th-grid" role="region" aria-label="Topics" aria-busy="false"><!--bp:directory--><!--/bp:directory--></div>
             <p id="topics-announcement" class="th-sr-only" role="status" aria-live="polite"></p>
         </section>
     </main>

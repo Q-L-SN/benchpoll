@@ -56,11 +56,13 @@ test('total coverage includes all models before pagination and counts 100 percen
     }
 });
 
-test('scene summaries inherit the topic sentence only when their own text is empty or a legacy name placeholder', () => {
+test('every scene inherits the topic sentence, including after a topic summary edit', () => {
     const topic = { name: 'Research', description: 'Compare models on scientific research tasks.' };
     for (const description of ['', 'Research: Physics.', 'Physics', 'Research / Physics']) {
         assert.equal(sceneSummary(topic, { name: 'Physics', description }), topic.description);
     }
     assert.equal(sceneSummary(topic, { name: 'Physics', description: 'Solve experimental physics problems.' }),
-        'Solve experimental physics problems.');
+        topic.description);
+    topic.description = 'The updated research topic summary.';
+    assert.equal(sceneSummary(topic, { name: 'Physics', description: 'Old scene summary.' }), topic.description);
 });

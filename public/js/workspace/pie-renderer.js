@@ -9,7 +9,7 @@ export function createPieRenderer({ state, pieSvg, pieHoverTooltip, orderedPieEn
     const measure = document.createElement('canvas').getContext('2d');
     const labelMetrics = new Map();
     const labelLayout = createPieLabelLayout(metricsOf);
-    const tileLayout = createWeightTreemapLayout();
+    const tileLayout = createWeightTreemapLayout({ paddingTop: coveragePreview ? 14 : 2 });
     const prefix = `bp-weight-${window.crypto.randomUUID()}`;
     const nodes = new Map();
     let visualTiles = new Map(), hoveredID = null, disposed = false;
