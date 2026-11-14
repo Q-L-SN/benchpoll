@@ -3,7 +3,7 @@ import test from 'node:test';
 import { readRankingContext, rankingContextURL } from '../public/js/shared/ranking-url.js';
 import { orderedScenes, matchingScenes, sceneNavigationEntries, searchTopicGroups } from '../public/js/navigation/scenes.js';
 import { entryFromContext, locationURL, validateNavigationPayload } from '../public/js/navigation/model.js';
-import { referenceGroups, validateReferenceTargets, referenceIssueMessage } from '../public/js/workspace/topic-references.js';
+import { referenceGroups, validateReferenceTargets, referenceIssueMessage, topicReferenceUnavailable } from '../public/js/workspace/topic-references.js';
 import { createWeightTreemapLayout } from '../public/js/workspace/weight-treemap-layout.js';
 import { createWorkspaceState } from '../public/js/workspace/state.js';
 import { createPersonalPieRecovery } from '../public/js/workspace/pie-recovery.js';
@@ -19,6 +19,17 @@ const targets = [{ contextID: 10, categoryID: 54, sceneID: 10, name: 'Images / G
     publicID: 11, sceneNumber: 2, url: '/11/2', description: 'Editable output', isPrivate: false, hasWeights: true },
 { contextID: 30, categoryID: 55, sceneID: null, name: 'Coding', topicName: 'Coding', sceneName: null,
     publicID: 2, url: '/2', description: 'Software development', isPrivate: false, hasWeights: true }];
+
+test('reference eligibility blocks only self, empty targets and private visibility mismatches', () => {
+    assert.match(topicReferenceUnavailable(targets[0], 10, false), /same scene or topic/);
+    assert.match(topicReferenceUnavailable({ ...targets[1], hasWeights: false }, 10, false), /no weights yet/);
+    assert.equal(topicReferenceUnavailable(targets[1], 10, false), '', 'Another scene can be referenced');
+    assert.equal(topicReferenceUnavailable(targets[2], 10, false), '', 'Another topic can be referenced');
+    assert.equal(topicReferenceUnavailable({ ...targets[2], references: [10] }, 10, false), '', 'An indirect loop does not block adding');
+    assert.match(topicReferenceUnavailable({ ...targets[2], isPrivate: true }, 10, false), /Private topics/);
+    assert.equal(topicReferenceUnavailable({ ...targets[2], isPrivate: true }, 10, true), '');
+    assert.match(topicReferenceUnavailable({ ID: -10, type: 'topic', hasWeights: true }, 10, false), /same scene or topic/);
+});
 
 test('scene URLs use numeric paths and preserve focus while old scene queries are rejected', () => {
     assert.deepEqual(readRankingContext('?focusModel=91', []), {});

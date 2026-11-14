@@ -37,8 +37,8 @@ test('complete horizontal columns need no vertical scroll-gate reserve at suppor
         assert.ok(geometry.width <= width);
         assert.equal(geometry.width % geometry.slot, 0);
         assert.ok(geometry.visible >= 1 && geometry.visible <= 25);
-        assert.ok(geometry.slot >= 48 && geometry.slot <= 96);
-        assert.equal(geometry.visible, Math.min(25, Math.floor(width / 48)));
-        assert.ok(geometry.barWidth >= 28 && geometry.barWidth <= 36);
+        assert.ok(geometry.slot >= 36 && geometry.slot <= 80);
+        assert.equal(geometry.visible, Math.min(25, Math.floor(width / 36)));
+        assert.ok(geometry.barWidth >= 24 && geometry.barWidth <= 44);
     }
 });

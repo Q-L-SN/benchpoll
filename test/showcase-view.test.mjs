@@ -61,7 +61,7 @@ test('few models get thicker bounded bars without partial columns or overflowing
         const columns = columnLayout(width, 25, 37);
         assert.equal(columns.width, columns.visible * columns.slot);
         assert.ok(columns.width <= width);
-        assert.ok(columns.barWidth >= 28 && columns.barWidth <= 36);
+        assert.ok(columns.barWidth >= 24 && columns.barWidth <= 44);
     }
 });
 

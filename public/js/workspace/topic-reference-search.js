@@ -1,7 +1,7 @@
 import { setLoading } from '../shared/loading.js';
 import { createAction, mountDisclosureChevron } from '../shared/ui-components.js';
 import { setVisible } from '../shared/motion.js';
-import { referenceGroups, validateReferenceTargets } from './topic-references.js';
+import { referenceGroups, validateReferenceTargets, topicReferenceUnavailable } from './topic-references.js';
 import { referenceLabel, topicLabelText, renderTopicLabel } from '../shared/topic-label.js';
 import { sceneURL } from '../navigation/scenes.js';
 
@@ -77,8 +77,7 @@ export function createTopicReferenceSearch({ request, getScope, getCurrentContex
                 row.append(copy);
                 if (canAdd()) {
                     const added = getEntries().some(entry => Number(entry.conditionID) === -target.contextID);
-                    const unavailable = target.contextID === getCurrentContextID() ? 'Cannot reference this same scene or topic'
-                        : !target.hasWeights ? 'This topic has no weights yet' : '';
+                    const unavailable = topicReferenceUnavailable(target, getCurrentContextID(), isPrivate());
                     const add = createAction({ label: added ? 'Added' : 'Add', icon: added ? 'fa-solid fa-check' : 'fa-solid fa-plus', variant: 'quiet' });
                     add.disabled = Boolean(added || unavailable || adding);
                     if (unavailable) { row.dataset.tooltip = unavailable; row.tabIndex = 0; }

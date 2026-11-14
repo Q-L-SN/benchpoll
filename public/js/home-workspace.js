@@ -49,7 +49,7 @@ import { comparisonProfileKey } from './shared/comparison-profile-key.js';
 import { animateContent, setVisible, flipPie } from './shared/motion.js?v=workspace-ui-20261008';
 import { createSceneControls } from './workspace/scenes.js';
 import { createPrivateTopicEditor } from './shared/private-topic-editor.js';
-import { renderTopicReferences, isTopicReference, topicReferenceError } from './workspace/topic-references.js';
+import { renderTopicReferences, isTopicReference, topicReferenceError, topicReferenceUnavailable } from './workspace/topic-references.js';
 import { mergeBenchmarkWeights } from './workspace/expanded-weights.js';
 import { createReferenceCoverage } from './workspace/reference-coverage.js';
 import { BENCHMARK_GROUPS, benchmarkConditionGroup } from './shared/benchmark-condition-groups.js?v=fallback-discovery-20261005';
@@ -1693,6 +1693,8 @@ addFallbackBenchmarkButton.addEventListener('click', () => {
 });
 
 function addObjectToPersonalPie(object) {
+    const unavailable = isTopicReference(object) ? topicReferenceUnavailable(object, state.contextID, state.contextIsPrivate) : '';
+    if (unavailable) { setStatus(unavailable); return false; }
     if (excludedFromRanking(object) || object.familyEntries?.some(excludedFromRanking)) {
         return false;
     }
@@ -2027,12 +2029,12 @@ function renderBenchmarks() {
             if (!alreadyAdded && !unavailable) {
                 const add = document.createElement('button'); add.type = 'button';
                 add.className = 'bp-benchmark-add'; add.dataset.benchmarkControl = 'add';
-                const missingReference = isTopicReference(object) && !object.hasWeights;
-                const excluded = excludedFromRanking(object) || object.familyEntries?.some(excludedFromRanking) || missingReference;
+                const referenceError = isTopicReference(object) ? topicReferenceUnavailable(object, state.contextID, state.contextIsPrivate) : '';
+                const excluded = excludedFromRanking(object) || object.familyEntries?.some(excludedFromRanking) || Boolean(referenceError);
                 add.setAttribute('aria-disabled', String(Boolean(excluded)));
                 const target = fallbackTargetActive ? 'Fallback' : 'Personal Weights';
                 const label = `Add ${accessibleName} to ${target}`;
-                const exclusionMessage = missingReference ? 'This topic has no weights yet.' : '';
+                const exclusionMessage = referenceError;
                 if (!excluded || exclusionMessage) add.dataset.tooltip = exclusionMessage || label;
                 add.setAttribute('aria-label', exclusionMessage ? `${label}. ${exclusionMessage}` : label);
                 add.innerHTML = '<i class="fa-solid fa-plus" aria-hidden="true"></i>';

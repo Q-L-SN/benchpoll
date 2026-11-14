@@ -12,8 +12,15 @@ const error = code => value => {
 };
 const order = entries => [...entries].sort((a, b) => a.conditionID - b.conditionID);
 
-function database(options = {}) {
+function database({ seedReferences = true, ...options } = {}) {
+    const sourcePies = options.pies ?? (options.revision === 0 ? [] : [{ ID: 70, user_ID: '7', context_ID: 10,
+        revision: options.revision ?? 1, weights: [weight(1)] }]);
+    const targetPies = seedReferences ? [20, 50, 51, 70].map(contextID => ({
+        ID: 900 + contextID, user_ID: contextID === 70 ? '7' : '9', context_ID: contextID,
+        weights: [weight(1)]
+    })) : [];
     return createPieSaveDatabase({
+        users: [{ ID: '7' }, { ID: '8' }, { ID: '9' }],
         topics: [{ ID: 1 }, { ID: 2 }, { ID: 3, owner_user_ID: '7' }, { ID: 4, owner_user_ID: '8' },
             { ID: 5 }, { ID: 6, is_active: 0 }, { ID: 7, owner_user_ID: '7' }],
         contexts: [1, 2, 3, 4, 6, 7].map(ID => ({ ID: ID * 10, category_ID: ID, context_values: {} })).concat([
@@ -25,7 +32,7 @@ function database(options = {}) {
         scenes: [{ context_ID: 50, category_ID: 5, name: 'General', is_default: 1 },
             { context_ID: 51, category_ID: 5, name: 'Focused' },
             { context_ID: 53, category_ID: 5, name: 'Retired', is_active: 0 }],
-        ...options
+        ...options, pies: [...sourcePies, ...targetPies]
     });
 }
 
@@ -148,11 +155,9 @@ for (const reverse of [false, true]) test(`concurrent opposing references both c
     assert.equal(db.stored.receipts.size, 2); assert.equal(db.mutations, 2);
 });
 
-test('self and transitive references can be saved with stable scene identities', async () => {
+test('transitive references across topics can be saved with stable scene identities', async () => {
     const db = database();
-    await savePersonalPie(db, request({ entries: [weight(-10)] }));
-    assert.deepEqual((await loadPersonalPie(db, 10, '7')).entries, [weight(-10)]);
-    await savePersonalPie(db, request({ expectedRevision: 2 }));
+    await savePersonalPie(db, request());
     await savePersonalPie(db, request({ categoryID: 2, userID: '8', expectedRevision: 0, entries: [weight(-51)] }));
     await savePersonalPie(db, request({ categoryID: 5, contextValues: { scene: '51' }, expectedRevision: 0,
         entries: [weight(-10)] }));
@@ -160,6 +165,8 @@ test('self and transitive references can be saved with stable scene identities',
 });
 
 for (const [label, extra, code] of [
+    ['direct self topic', { entries: [weight(-10)] }, 'topic_reference_self'],
+    ['direct self scene', { categoryID: 5, contextValues: { scene: '51' }, expectedRevision: 0, entries: [weight(-51)] }, 'topic_reference_self'],
     ['missing target', { entries: [weight(-999)] }, 'topic_reference_not_found'],
     ['topic ID instead of context ID', { entries: [weight(-2)] }, 'topic_reference_not_found'],
     ['inactive topic', { entries: [weight(-60)] }, 'topic_reference_not_found'],
@@ -173,6 +180,13 @@ for (const [label, extra, code] of [
 ]) test(`save rejects ${label} atomically`, async () => {
     const db = database(), before = db.stored;
     await assert.rejects(savePersonalPie(db, request(extra)), error(code));
+    assert.deepEqual(db.stored, before);
+    assert.equal(db.mutations, 0); assert.equal(db.stored.receipts.size, 0);
+});
+
+test('empty references are rejected without changing the source pie or saving a receipt', async () => {
+    const db = database({ seedReferences: false }), before = db.stored;
+    await assert.rejects(savePersonalPie(db, request()), error('topic_reference_empty'));
     assert.deepEqual(db.stored, before);
     assert.equal(db.mutations, 0); assert.equal(db.stored.receipts.size, 0);
 });

@@ -82,8 +82,7 @@ export function createPieSaveDatabase({ revision = 1, failCompletion = false, lo
                 const hasScenes = [...state.scenes.values()].some(item => item.category_ID === topic.ID && item.is_active);
                 if (!activeScene && (Object.keys(context.context_values).length || hasScenes)) return [];
                 const hasWeights = [...state.pies.values()].some(pie => pie.context_ID === context.ID
-                    && activeUser(state.users.get(pie.user_ID)) && (pie.weights.length || pie.topicWeights.length)
-                    && (topic.owner_user_ID != null || new Date(pie.updated_at).getTime() >= Date.now() - 14 * 86400000));
+                    && activeUser(state.users.get(pie.user_ID)) && (pie.weights.length || pie.topicWeights.length));
                 return [{ context_ID: context.ID, category_ID: topic.ID, topic_name: topic.name, slug: topic.slug,
                     public_ID: topic.public_ID, private_ID: topic.private_ID, topic_description: topic.description, owner_user_ID: topic.owner_user_ID,
                     scene_ID: activeScene?.context_ID ?? null, scene_number: activeScene?.scene_number, scene_name: activeScene?.name,

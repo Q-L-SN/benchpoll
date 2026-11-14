@@ -78,9 +78,10 @@ export async function validateTopicReferences(db, source, entries, userID) {
     for (const ID of IDs) {
         const target = catalogue.get(ID);
         if (!target) fail(404, 'topic_reference_not_found', { targetContextID: ID });
+        if (ID === Number(source.ID ?? source.contextID)) fail(409, 'topic_reference_self', { targetContextID: ID });
         if (!source.isPrivate && target.isPrivate) fail(409, 'private_topic_reference_not_public');
+        if (!target.hasWeights) fail(409, 'topic_reference_empty', { targetContextID: ID });
     }
-
 }
 
 function chainKey(family) {

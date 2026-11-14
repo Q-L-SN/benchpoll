@@ -5,11 +5,20 @@ import { orderedScenes, sceneURL, searchTopicGroups } from '../navigation/scenes
 import { isTopicReference, referenceLabel, topicLabelText, renderTopicLabel } from '../shared/topic-label.js';
 
 export { isTopicReference, referenceLabel };
+export function topicReferenceUnavailable(target, currentContextID, sourceIsPrivate) {
+    const targetID = Number(target.referenceContextID ?? target.contextID ?? -(target.conditionID ?? target.ID));
+    if (targetID === Number(currentContextID)) return 'Cannot reference this same scene or topic';
+    if (target.isPrivate && !sourceIsPrivate) return 'Private topics cannot enter public-topic weights';
+    if (!target.hasWeights) return 'This topic has no weights yet';
+    return '';
+}
 export function topicReferenceError(error) {
     return {
         topic_reference_depth_limit: 'This reference chain is too deep. Choose a more direct topic.',
         topic_reference_size_limit: 'This reference graph is too large. Remove a reference before saving.',
         topic_reference_not_found: 'A referenced topic is no longer available. Remove it or choose another.',
+        topic_reference_self: 'Cannot reference this same scene or topic.',
+        topic_reference_empty: 'This topic has no weights yet.',
         private_topic_reference_not_public: 'Private topics cannot be referenced by public-topic weights.'
     }[error?.payload?.error] || '';
 }
@@ -99,8 +108,7 @@ export function createTopicReferencePicker({ request, getScope, getCurrentContex
         copy.append(name);
         if (target.description) copy.append(node('small', '', target.description));
         const alreadyAdded = getEntries().some(entry => Number(entry.conditionID) === -target.contextID);
-        const unavailable = target.isPrivate && !isPrivate() ? 'Private topics cannot enter public-topic weights'
-                : !target.hasWeights ? 'This topic has no weights yet' : '';
+        const unavailable = topicReferenceUnavailable(target, getCurrentContextID(), isPrivate());
         const add = createAction({ label: alreadyAdded ? 'Added' : 'Add', icon: alreadyAdded ? 'fa-solid fa-check' : 'fa-solid fa-plus', variant: 'quiet' });
         add.disabled = Boolean(alreadyAdded || unavailable || adding);
         if (unavailable) { row.dataset.tooltip = unavailable; row.tabIndex = 0; }
