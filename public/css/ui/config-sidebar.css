@@ -134,15 +134,31 @@ body.bp-home .bp-navigation-views[data-ui-component="segmented"] > button {
     .bp-home #workspace-brand-slot {
         display: flex;
         align-items: center;
-        width: 0;
-        height: 40px;
+        width: auto;
+        height: 0;
+        margin: 0;
         min-width: 0;
         overflow: hidden;
         flex: 0 0 auto;
-        transition: width 300ms cubic-bezier(.2, .7, .2, 1);
+        opacity: 0;
+        visibility: hidden;
+        transition: height 300ms cubic-bezier(.2, .7, .2, 1), margin-bottom 300ms cubic-bezier(.2, .7, .2, 1), opacity 200ms ease, visibility 0s 300ms;
     }
-    .bp-home.config-brand-in-header #workspace-brand-slot { width: 175px; }
-    .bp-home #workspace-brand-slot .bp-brand { width: 155px; flex-shrink: 0; margin: 0; }
+    .bp-home.config-brand-in-header #workspace-brand-slot {
+        height: 32px;
+        margin-bottom: 10px;
+        opacity: 1;
+        visibility: visible;
+        transition-delay: 0s;
+    }
+    .bp-home #workspace-brand-slot .bp-brand {
+        width: 155px;
+        flex-shrink: 0;
+        margin: 0;
+        transform: translateY(-6px);
+        transition: transform 300ms cubic-bezier(.2, .7, .2, 1);
+    }
+    .bp-home.config-brand-in-header #workspace-brand-slot .bp-brand { transform: translateY(0); }
     .bp-home:is(.config-sidebar-collapsed, .discussion-open) .bp-config-header-account { display: block; }
     body.bp-home #config-sidebar-toggle {
         min-width: 0;
@@ -242,5 +258,5 @@ body.bp-home .bp-navigation-views[data-ui-component="segmented"] > button {
 
 @media (prefers-reduced-motion: reduce) {
     .bp-home .bp-shell, .bp-home .bp-shell > .bp-sidebar, .bp-home #workspace-brand-slot,
-    body.bp-home #config-sidebar-toggle { transition: none; }
+    .bp-home #workspace-brand-slot .bp-brand, body.bp-home #config-sidebar-toggle { transition: none; }
 }

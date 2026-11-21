@@ -1,5 +1,5 @@
 .bp-home .bp-page-heading { align-items: center; gap: 14px; margin-bottom: 4px; }
-.bp-heading-stack { flex: 1; min-width: 0; display: grid; gap: 10px; }
+.bp-heading-stack { flex: 1; min-width: 0; display: grid; gap: 0; }
 .bp-heading-topic-row { display: flex; flex-direction: column; align-items: flex-start; gap: 5px; min-width: 0; }
 .bp-home .bp-page-heading #workspace-headline { flex: 0 1 auto; }
 .bp-home .bp-page-heading #workspace-topic-summary { display: block; flex: 0 1 auto; max-width: none; font-size: 13px; line-height: 1.5; }
@@ -14,8 +14,6 @@
 .bp-home .bp-context-actions { margin-left: auto; gap: 10px; }
 .bp-header-layout-test { --ui-control-height: 32px; display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--bp-muted); }
 .bp-header-layout-test select { min-height: 28px; padding: 3px 6px; width: auto; border: 1px solid var(--bp-line); border-radius: 5px; font: inherit; background: white; }
-.bp-home #workspace-brand-slot { display: block; width: auto; height: 32px; margin: 0; overflow: visible; }
-.bp-home #workspace-brand-slot .bp-brand { width: 155px; margin: 0; }
 #config-mobile-home { display: none; }
 
 .bp-pie-focus-bar { position: sticky; top: 0; z-index: 12; padding-block: 10px 4px; background: #fff; border-radius: 10px 10px 0 0; }

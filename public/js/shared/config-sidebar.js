@@ -50,13 +50,20 @@ export function createConfigSidebar() {
         toggle.disabled = transitioning || discussionOpen();
     }
 
+    function updateHeaderBrand() {
+        const visible = !mobile.matches && (collapsed || discussionOpen());
+        body.classList.toggle('config-brand-in-header', visible);
+        headerSlot.inert = !visible;
+        headerSlot.setAttribute('aria-hidden', String(!visible));
+    }
+
     function settle() {
         ++sequence;
         animation?.cancel();
         animation = null;
         transitioning = false;
         body.classList.toggle('config-sidebar-collapsed', collapsed);
-        body.classList.toggle('config-brand-in-header', !mobile.matches);
+        updateHeaderBrand();
         placeBrand(discussionOpen() ? discussionSlot : sidebar);
         brand.style.opacity = '';
         body.dataset.configSidebarPhase = 'idle';
@@ -78,6 +85,7 @@ export function createConfigSidebar() {
         updateAccess();
         body.dataset.configSidebarPhase = 'sidebar';
         body.classList.toggle('config-sidebar-collapsed', collapsed);
+        updateHeaderBrand();
         await wait(SIDEBAR_MS);
         if (token === sequence) settle();
     }
