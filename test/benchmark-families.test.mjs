@@ -1,7 +1,8 @@
+import { pairedModels } from './helpers/fallback-pairs.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { familyKey, resolveFamilyScore, groupSmallFamilies } from '../public/js/shared/benchmark-families.js';
+import { familyKey, resolveFallbackChain, groupSmallFamilies } from '../public/js/shared/benchmark-families.js';
 import { parseFamilyRows, ensureBenchmarkFamily } from '../benchmark-family-service.js';
 import { scoreModels, buildBenchmarkList, savePersonalPie } from '../ranking-service.js';
 import { convertWeightedRules } from '../scripts/migrate-ordered-benchmark-families.mjs';
@@ -21,20 +22,21 @@ test('family identity includes condition IDs and exact order, not labels or perc
     for (const entries of [[{ conditionID: 1 }], [{ conditionID: 2 }, { conditionID: 2 }], [{ conditionID: '2' }]]) assert.throws(() => familyKey(1, entries));
 });
 
-test('first present wins, even when another fallback is higher', () => {
+test('the first calibratable backup wins and direct scores bypass calibration', () => {
     const scores = model([[2, 20], [3, 90]]);
-    assert.equal(resolveFamilyScore(scores, 1, rule(1, [2, 3]).entries).normalizedScore, 20);
-    assert.equal(resolveFamilyScore(scores, 1, rule(1, [3, 2]).entries).normalizedScore, 90);
-    assert.equal(resolveFamilyScore(scores, 1, rule(1, [4, 3]).entries).conditionID, 3);
+    const predict = (ID, score) => ({ sourceConditionID: ID, normalizedScore: score - 5 });
+    assert.equal(resolveFallbackChain(scores, [1, 2, 3], predict).prediction.normalizedScore, 15);
+    assert.equal(resolveFallbackChain(scores, [1, 3, 2], predict).prediction.normalizedScore, 85);
+    assert.equal(resolveFallbackChain(scores, [1, 4, 3], predict).attemptedCount, 3);
 });
 
 test('zero, negative, and overflow are actual scores and stop the chain', () => {
     for (const value of [0, -35, 140]) {
-        const resolved = resolveFamilyScore(model([[1, value], [2, 95]]), 1, [{ conditionID: 2 }]);
+        const resolved = resolveFallbackChain(model([[1, value], [2, 95]]), [1, 2], () => assert.fail('direct score wins'));
         assert.equal(resolved.normalizedScore, value);
-        assert.deepEqual(resolved.attemptedConditionIDs, [1]);
+        assert.equal(resolved.attemptedCount, 1);
     }
-    assert.throws(() => resolveFamilyScore(model([[1, NaN]]), 1));
+    assert.throws(() => resolveFallbackChain(model([[1, NaN]]), [1]));
 });
 
 test('chains do not recursively follow another entrance configuration', () => {
@@ -46,8 +48,8 @@ test('chains do not recursively follow another entrance configuration', () => {
 
 test('no artificial fallback-length limit; late alternatives are resolved', () => {
     const IDs = Array.from({ length: 2000 }, (_, index) => index + 2);
-    const [scored] = scoreModels([model([[2001, 60]])], [{ conditionID: 1, weightBasisPoints: 10000 }], 10000, { fallbackRules: [rule(1, IDs)] });
-    assert.equal(scored.lower, 60); assert.equal(scored.coverage, 100);
+    const [scored] = scoreModels([model([[2001, 60]]), ...pairedModels(1, 2001, 60, -5, null)], [{ conditionID: 1, weightBasisPoints: 10000 }], 10000, { scoreMode: 'available', fallbackRules: [rule(1, IDs)] });
+    assert.equal(scored.lower, 55); assert.equal(scored.coverage, 0);
 });
 
 test('long-chain storage batches SQL parameters and preserves the global position order', async () => {
@@ -74,33 +76,27 @@ test('long-chain storage batches SQL parameters and preserves the global positio
     assert.deepEqual(parseFamilyRows(stored)[0].entries, entries);
 });
 
-test('both score modes use the same family result; unavailable references do not invent missing scores', () => {
+test('both modes preserve the missing primary, and only the supported backup supplies a point estimate', () => {
     const entries = [{ conditionID: 1, weightBasisPoints: 7000 }, { conditionID: 4, weightBasisPoints: 3000 }];
-    const scores = model([[2, 80], [3, 99]]);
-    const [range] = scoreModels([scores], entries, 10000, { fallbackRules: [rule(1, [2, 3])] });
-    const [available] = scoreModels([scores], entries, 10000, { fallbackRules: [rule(1, [2, 3])], scoreMode: 'available' });
-    assert.deepEqual([range.lower, range.upper, range.coverage], [56, 86, 70]);
-    const expected = Number((80 * 5 * .7 / (1 + 4 * .7)).toFixed(2));
-    assert.deepEqual([available.lower, available.upper, available.coverage], [expected, expected, 70]);
-    assert.equal(available.availableInference.observedScore, 80);
-    assert.ok(Math.abs(available.availableInference.unresolvedFraction - .3) < 1e-9);
-    assert.deepEqual(available.inferredScores, []);
-    assert.equal(range.calculationScores[0].conditionID, 2);
-    assert.equal(available.calculationScores[0].conditionID, 2);
-    assert.equal(range.calculationScores[0].fallbackFor, 1);
-    assert.deepEqual(range.calculationScores[0].familyConditionIDs, [1, 2, 3]);
+    const models = [model([[2, 80], [3, 99]]), ...pairedModels(1, 2, 80, -5, null)];
+    const rules = { fallbackRules: [rule(1, [2, 3])] };
+    const [range] = scoreModels(models, entries, 10000, rules);
+    const [available] = scoreModels(models, entries, 10000, { ...rules, scoreMode: 'available' });
+    assert.deepEqual([range.lower, range.upper, range.coverage], [0, 100, 0]);
+    assert.equal(available.lower, Number((75 * 3.5 / 3.8).toFixed(2)));
+    assert.deepEqual(available.inferredScores.map(row => [row.conditionID, row.sourceConditionID, row.originalWeight]), [[1, 2, 70]]);
+    assert.deepEqual(available.calculationScores, []);
 });
 
-test('public families remain separate and no-fallback holders retain missing weight', () => {
+test('public chains and no-fallback holders retain independent fractions', () => {
     const families = [family([2, 3], 6000), family([3, 2], 2000, 2), family([], 2000)];
-    const options = { fallbackScope: 'public', familyComposition: [{ primaryConditionID: 1, families }] };
-    const [result] = scoreModels([model([[2, 80], [3, 50]])], [{ conditionID: 1, weightBasisPoints: 10000 }], 10000, options);
-    assert.deepEqual([result.lower, result.upper, result.coverage], [58, 78, 80]);
-    assert.deepEqual(result.calculationScores.map(score => [score.conditionID, score.weightBasisPoints]), [[2, 6000], [3, 2000]]);
-    const [available] = scoreModels([model([[2, 80], [3, 50]])], [{ conditionID: 1, weightBasisPoints: 10000 }], 10000, { ...options, scoreMode: 'available' });
-    assert.equal(available.lower, Number((72.5 * 5 * .8 / (1 + 4 * .8)).toFixed(2)));
-    assert.equal(available.availableInference.observedScore, 72.5);
-    assert.deepEqual(available.inferredScores, []);
+    const models = [model([[2, 80], [3, 50]]), ...pairedModels(1, 2, 80, -5, null)];
+    const [result] = scoreModels(models, [{ conditionID: 1, weightBasisPoints: 10000 }], 10000,
+        { scoreMode: 'available', fallbackScope: 'public', familyComposition: [{ primaryConditionID: 1, families }] });
+    assert.equal(result.coverage, 0);
+    assert.equal(result.fallbackCoverage, 80);
+    assert.deepEqual(result.inferredScores.map(s => [s.sourceConditionID, s.originalWeight]), [[2, 60], [2, 20]]);
+    assert.ok(Math.abs(result.availableInference.unresolvedFraction - .2) < 1e-9);
 });
 
 test('public direct score occupies the entrance once, not once plus its family weight', () => {

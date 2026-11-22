@@ -10,12 +10,13 @@ import { loadGlobalConditionWeights } from './global-topic-weights.js';
 import { topicURL, sceneSummary } from './public/js/shared/topics.js';
 import { currentScoreSQL } from './score-aggregation.js';
 import { scoreEvidenceHash } from './score-evidence.js';
-import { FALLBACK_RULE_MODE, familyKey, resolvedFamilyConditionIDs } from './public/js/shared/benchmark-families.js';
+import { FALLBACK_RULE_MODE, familyKey, resolvedFamilyConditionIDs, resolveFallbackChain } from './public/js/shared/benchmark-families.js';
 import { FALLBACK_SELECTION_SOURCES } from './public/js/shared/fallback-choice.js';
 import { loadBenchmarkFamilies, ensureBenchmarkFamily, parseFamilyRows, pruneUnusedBenchmarkFamilies } from './benchmark-family-service.js';
-import { availableResultInference, normalizeAvailableInferenceVersion,
+import { normalizeAvailableInferenceVersion,
     AVAILABLE_INFERENCE_VERSION } from './public/js/shared/available-score.js';
-import { createPairwiseReference } from './pairwise-score.js';
+import { createFallbackCalibration } from './fallback-calibration.js';
+import { fallbackInference } from './public/js/shared/fallback-inference.js';
 import { DEFAULT_ESTIMATION_ALGORITHM, normalizeEstimationAlgorithm } from './public/js/shared/estimation-algorithms.js';
 import { benchmarkVersionTieOrder, benchmarkEvaluationOrder } from './public/js/shared/benchmark-version-order.js';
 import { communityVersionComposition, expandCommunityVersions } from './public/js/shared/benchmark-version-choice.js';
@@ -1073,10 +1074,9 @@ function measuredFraction(weight, total) {
     return Math.abs(fraction - 1) <= 32 * Number.EPSILON ? 1 : Math.min(1, Math.max(0, fraction));
 }
 
-export function scoreModels(models, weightedEntries, totalBasisPoints, { fallbackRules = [], familyComposition = [], fallbackScope = 'personal', scoreMode = 'range', availableInferenceVersion = AVAILABLE_INFERENCE_VERSION, estimationAlgorithm = DEFAULT_ESTIMATION_ALGORITHM, percentileReference = null, comparisonScoreIndexes = null, deferMetadata = false, excludedConditionIDs = new Set() } = {}) {
+export function scoreModels(models, weightedEntries, totalBasisPoints, { fallbackRules = [], familyComposition = [], fallbackScope = 'personal', scoreMode = 'range', availableInferenceVersion = AVAILABLE_INFERENCE_VERSION, estimationAlgorithm = DEFAULT_ESTIMATION_ALGORITHM, fallbackCalibration = null, comparisonScoreIndexes = null, deferMetadata = false, excludedConditionIDs = new Set() } = {}) {
     currentInferenceVersion(availableInferenceVersion);
     currentEstimationAlgorithm(estimationAlgorithm);
-    const missingOnly = estimationAlgorithm !== DEFAULT_ESTIMATION_ALGORITHM;
     if (!['range', 'available'].includes(scoreMode)) {
         throw { status: 400, body: { error: 'invalid_score_mode' } };
     }
@@ -1087,14 +1087,14 @@ export function scoreModels(models, weightedEntries, totalBasisPoints, { fallbac
     if (fallbackScope === 'public' && fallbackRules.length) throw new TypeError('Public scoring requires whole family shares');
     const fallbackRulesByPrimary = indexFallbackRules(fallbackRules);
     const publicFamilies = indexPublicFamilies(familyComposition);
-    const reference = scoreMode === 'available' ? percentileReference ?? createPairwiseReference(models) : null;
+    let calibration = fallbackCalibration;
     const plans = weightedEntries.filter(entry => entry.weightBasisPoints > 0).map(entry => {
         const rule = fallbackRulesByPrimary.get(entry.conditionID);
         const families = fallbackScope === 'public' || !rule ? publicFamilies.get(entry.conditionID) : null;
         return { entry, families: (families ?? [{ familyID: rule?.familyID ?? null,
             entries: rule?.entries ?? [], weightBasisPoints: 10000 }]).map(family => ({
             family, fraction: family.weightBasisPoints / 10000,
-            chain: entry.conditionID < 0 ? []
+            chain: entry.conditionID < 0 || excludedConditionIDs.has(entry.conditionID) ? []
                 : resolvedFamilyConditionIDs(entry.conditionID, family.entries).filter(ID => !excludedConditionIDs.has(ID))
         })) };
     });
@@ -1102,21 +1102,19 @@ export function scoreModels(models, weightedEntries, totalBasisPoints, { fallbac
         let lower = 0;
         let upper = 0;
         let coveredBasisPoints = 0;
-        let fallbackCoveredBasisPoints = 0;
+        let calibratedBasisPoints = 0;
         const resultKeys = new Set();
         const fallbackResolutions = [];
         const calculationScores = [];
         const coverageEntries = [];
         const inferredScores = [];
-        const estimate = reference?.estimate(model);
-        let inferredBasisPoints = 0;
         const comparisonScores = comparisonScoreIndexes?.get(model)
             ?? new Map((model.comparisonScores ?? []).map(score => [Number(score.conditionID), score]));
-        const recordScore = (conditionID, normalizedScore, weightBasisPoints, fallbackFor = null, familyID = null, chain = []) => {
+        const recordScore = (conditionID, normalizedScore, weightBasisPoints, familyID, chain) => {
             if (weightBasisPoints <= 0) return;
             const comparison = comparisonScores.get(Number(conditionID));
             calculationScores.push({ conditionID: Number(conditionID), normalizedScore,
-                weightBasisPoints, fallbackFor, familyID, familyConditionIDs: deferMetadata ? chain : [...chain],
+                weightBasisPoints, fallbackFor: null, familyID: familyID ?? null, familyConditionIDs: deferMetadata ? chain : [...chain],
                 memberIDs: comparison ? deferMetadata ? comparison.memberIDs : [...comparison.memberIDs] : [model.ID],
                 matchedCount: comparison?.matchedCount ?? null,
                 memberWeights: (deferMetadata ? comparison?.memberWeights : comparison?.memberWeights.map(item => ({ ...item }))) ?? [{ ID: model.ID, weight: 1 }] });
@@ -1124,59 +1122,51 @@ export function scoreModels(models, weightedEntries, totalBasisPoints, { fallbac
         };
         for (const { entry, families } of plans) {
             const entryFraction = entry.weightBasisPoints / totalBasisPoints;
-            let measuredWeight = 0, measuredContribution = 0;
+            let measuredScore = null;
             for (const { family, fraction, chain } of families) {
-                let conditionID = null, normalizedScore = null, attemptedCount = chain.length;
-                for (let index = 0; index < chain.length; index++) {
-                    const result = model.results.get(resultKey(chain[index]));
-                    if (!result || result.normalizedScore === null || result.normalizedScore === undefined) continue;
-                    if (!Number.isFinite(result.normalizedScore)) throw new TypeError('Invalid normalized family score');
-                    conditionID = chain[index]; normalizedScore = result.normalizedScore; attemptedCount = index + 1; break;
-                }
-                const resolved = { conditionID, normalizedScore };
-                if (resolved.conditionID === null) {
-                    upper += entryFraction * fraction * 100;
-                    const prediction = entry.conditionID > 0 ? reference?.predict(model, entry.conditionID) : null;
-                    if (prediction) {
-                        const weight = entry.weightBasisPoints * fraction;
-                        inferredBasisPoints += weight;
-                        inferredScores.push({ conditionID: entry.conditionID, familyID: family.familyID,
-                            ...prediction, ...(missingOnly ? { normalizedScore: Math.min(100, Math.max(0, prediction.normalizedScore)),
-                                rawNormalizedScore: prediction.normalizedScore } : {}), weightBasisPoints: weight,
-                            originalWeight: weight / totalBasisPoints * 100 });
-                    }
-                } else {
-                    lower += entryFraction * fraction * resolved.normalizedScore;
-                    upper += entryFraction * fraction * resolved.normalizedScore;
-                    const weight = entry.weightBasisPoints * fraction;
-                    coveredBasisPoints += weight;
-                    measuredWeight += weight;
-                    measuredContribution += weight * resolved.normalizedScore;
-                    resultKeys.add(resultKey(resolved.conditionID));
-                    const isFallback = resolved.conditionID !== entry.conditionID;
-                    if (isFallback) fallbackCoveredBasisPoints += weight;
-                    recordScore(resolved.conditionID, resolved.normalizedScore, weight, isFallback ? entry.conditionID : null,
-                        family.familyID, chain);
-                }
-                if (family.entries.length && resolved.conditionID !== entry.conditionID) fallbackResolutions.push({
-                    primaryConditionID: entry.conditionID, familyID: family.familyID,
-                    conditionID: resolved.conditionID, normalizedScore: resolved.normalizedScore,
-                    attemptedConditionIDs: chain.slice(0, attemptedCount),
-                    weightBasisPoints: entry.weightBasisPoints * fraction
+                const weight = entry.weightBasisPoints * fraction;
+                const { normalizedScore: direct, prediction, attemptedCount } = resolveFallbackChain(model, chain, (sourceID, source) => {
+                    calibration ??= createFallbackCalibration(models);
+                    return calibration.predict(model, entry.conditionID, sourceID, source, comparisonScores.get(sourceID)?.memberIDs);
                 });
+                if (direct !== null) {
+                    lower += entryFraction * fraction * direct;
+                    upper += entryFraction * fraction * direct;
+                    coveredBasisPoints += weight;
+                    measuredScore = direct;
+                    resultKeys.add(resultKey(entry.conditionID));
+                    recordScore(entry.conditionID, direct, weight, family.familyID, chain);
+                    continue;
+                }
+                upper += entryFraction * fraction * 100;
+                if (prediction) {
+                    resultKeys.add(resultKey(prediction.sourceConditionID));
+                    calibratedBasisPoints += weight;
+                    if (scoreMode === 'available') {
+                        const raw = prediction.normalizedScore;
+                        const normalizedScore = estimationAlgorithm === DEFAULT_ESTIMATION_ALGORITHM ? raw : Math.max(0, Math.min(100, raw));
+                        inferredScores.push({ conditionID: entry.conditionID, familyID: family.familyID ?? null,
+                            familyConditionIDs: chain, ...prediction, normalizedScore,
+                            ...(normalizedScore !== raw ? { rawNormalizedScore: raw } : {}),
+                            weightBasisPoints: weight, originalWeight: weight / totalBasisPoints * 100 });
+                    }
+                }
+                if (family.entries.length) fallbackResolutions.push({ primaryConditionID: entry.conditionID,
+                    familyID: family.familyID ?? null, conditionID: prediction?.sourceConditionID ?? null,
+                    normalizedScore: prediction?.normalizedScore ?? null, sourceScore: prediction?.sourceScore ?? null,
+                    attemptedConditionIDs: chain.slice(0, attemptedCount), weightBasisPoints: weight });
             }
             coverageEntries.push({ conditionID: entry.conditionID, weightBasisPoints: entry.weightBasisPoints,
-                coveredWeightBasisPoints: Math.min(entry.weightBasisPoints, measuredWeight), coverage: measuredFraction(measuredWeight, entry.weightBasisPoints) * 100,
-                normalizedScore: measuredWeight > 0 ? measuredContribution / measuredWeight : null });
+                coveredWeightBasisPoints: measuredScore === null ? 0 : entry.weightBasisPoints,
+                coverage: measuredScore === null ? 0 : 100, normalizedScore: measuredScore });
         }
         const observedFraction = measuredFraction(coveredBasisPoints, totalBasisPoints);
-        const availableInference = scoreMode === 'available' && coveredBasisPoints > 0
-            ? availableResultInference(calculationScores.reduce((sum, score) => sum
-                + score.normalizedScore * (score.weightBasisPoints / coveredBasisPoints), 0), observedFraction,
-            inferredScores.map(score => ({ normalizedScore: score.normalizedScore, weightFraction: score.weightBasisPoints / totalBasisPoints })),
-            estimate.percentile, estimate.sourceCount, estimationAlgorithm) : null;
+        const availableInference = scoreMode === 'available' ? fallbackInference(
+            calculationScores.reduce((sum, score) => sum + score.normalizedScore * (score.weightBasisPoints / coveredBasisPoints), 0),
+            observedFraction, inferredScores.map(score => ({ normalizedScore: score.normalizedScore,
+                weightFraction: score.weightBasisPoints / totalBasisPoints })), estimationAlgorithm) : null;
         const availableScore = availableInference ? roundTo(availableInference.totalScore) : null;
-        const scoringBasisPoints = scoreMode === 'available' && !missingOnly ? coveredBasisPoints + inferredBasisPoints : totalBasisPoints;
+        const scoringBasisPoints = availableInference ? totalBasisPoints * availableInference.supportedFraction : totalBasisPoints;
         const weightedScore = score => ({ ...score, effectiveWeight: score.weightBasisPoints / scoringBasisPoints * 100,
             contribution: score.normalizedScore * (score.weightBasisPoints / scoringBasisPoints) });
         const response = {
@@ -1194,11 +1184,11 @@ export function scoreModels(models, weightedEntries, totalBasisPoints, { fallbac
             coverageFraction: observedFraction,
             coverageEntries,
             availableInference,
-            inferredScores: coveredBasisPoints > 0 ? inferredScores.map(weightedScore) : [],
+            inferredScores: inferredScores.map(weightedScore),
             resultCount: resultKeys.size,
             fallbackUsageCount: new Set(fallbackResolutions.filter(resolution => resolution.conditionID !== null)
                 .map(resolution => resolution.primaryConditionID)).size,
-            fallbackCoverage: roundTo(fallbackCoveredBasisPoints / totalBasisPoints * 100),
+            fallbackCoverage: roundTo(calibratedBasisPoints / totalBasisPoints * 100),
             fallbackResolutions,
             calculationScores: deferMetadata ? null : calculationScores.map(weightedScore),
             missingWeight: Math.max(0, totalBasisPoints - coveredBasisPoints) / totalBasisPoints * 100
@@ -1218,16 +1208,14 @@ export function aggregateCoverageIndex(models) {
 
 export function scoreComparison(models, entries, total, rules, options, preparedGroups = null) {
     if (!Number.isFinite(total) || total <= 0 || entries.length === 0) return [];
-    const grouped = preparedGroups ?? groupComparisonModels(models, options, entries, { includeReferenceVersions: rules.scoreMode === 'available' });
+    const grouped = preparedGroups ?? groupComparisonModels(models, options, entries);
     const groupsByID = new Map(grouped.map(group => [group.ID, group]));
     const scoreMode = rules.scoreMode ?? 'range';
     const availableInferenceVersion = currentInferenceVersion(rules.availableInferenceVersion);
-    // A model display limit keeps the comparison peers needed for missing-score estimates.
-    const referenceOptions = { ...options, filters: (options.filters ?? []).filter(filter => filter.key !== 'model') };
-    const reference = scoreMode === 'available' ? rules.percentileReference ?? createPairwiseReference(
-        referenceOptions.filters.length === (options.filters ?? []).length ? grouped
-            : groupComparisonModels(models, referenceOptions, entries, { includeReferenceVersions: true })) : null;
-    const scores = scoreModels(grouped, entries, total, { ...(options.mode === 'matched' ? { scoreMode } : rules), percentileReference: reference,
+    // Pair raw runs, including peers hidden by a model display filter. Each calibration uses the
+    // exact run settings of the source measurement selected by the comparison.
+    const fallbackCalibration = rules.fallbackCalibration ?? createFallbackCalibration(models);
+    const scores = scoreModels(grouped, entries, total, { ...(options.mode === 'matched' ? { scoreMode } : rules), fallbackCalibration,
         availableInferenceVersion, estimationAlgorithm: rules.estimationAlgorithm,
         excludedConditionIDs: rules.excludedConditionIDs,
         comparisonScoreIndexes: rules.comparisonScoreIndexes, deferMetadata: rules.jsonMemberMetadata === true });
@@ -1704,8 +1692,6 @@ async function buildRankingWorkspace(db, {
             resolvedFamilyConditionIDs(group.primaryConditionID, family.entries)))
     ])].filter(ID => ID > 0 && !conditionsByID.get(ID)?.excludedFromRanking).sort((a, b) => a - b);
     const excludedConditionIDs = new Set([...conditionsByID].filter(([, condition]) => condition.excludedFromRanking).map(([ID]) => ID));
-    const modelConditionIDs = scoreMode === 'available' && scoringConditionIDs.length
-        ? [...conditionsByID.keys()].filter(ID => ID > 0 && !excludedConditionIDs.has(ID)).sort((a, b) => a - b) : scoringConditionIDs;
     const definitionsFor = IDs => IDs.map(ID => {
         const condition = conditionsByID.get(ID);
         return { benchmark_condition_ID: ID, uses_percentage_scale: condition.usesPercentageScale,
@@ -1717,12 +1703,11 @@ async function buildRankingWorkspace(db, {
     const allModels = hasRankingReadCache(db) ? await cachedRankingRead(db, 'data', `models:${universeKey}`,
         () => loadModels(db, fields, { conditionIDs: universeIDs, conditionDefinitions: definitionsFor(universeIDs) }),
         models => models.reduce((sum, model) => sum + model.results.size, 0)) : null;
-    const modelScope = new Set(modelConditionIDs.map(resultKey));
+    const modelScope = new Set(scoringConditionIDs.map(resultKey));
     const models = allModels && comparison?.mode !== 'matched' ? allModels : allModels
         ? allModels.map(model => ({ ...model, results: new Map([...model.results].filter(([key]) => modelScope.has(key))) }))
-        : await loadModels(db, fields, { conditionIDs: modelConditionIDs,
-        evidenceConditionIDs: scoringConditionIDs,
-        conditionDefinitions: definitionsFor(modelConditionIDs) });
+        : await loadModels(db, fields, { conditionIDs: scoringConditionIDs,
+            conditionDefinitions: definitionsFor(scoringConditionIDs) });
     const compareOptions = comparisonOptions(models, comparison, fields);
     const personalScoringEntries = context.ID === null && !previewPersonalPie
         ? []
@@ -1738,18 +1723,8 @@ async function buildRankingWorkspace(db, {
     const comparisonScoreIndexes = preparedGroups
         ? await cachedRankingRead(db, 'data', `score-indexes:${comparisonKey}`, () => new WeakMap(preparedGroups.map(group => [group,
             new Map(group.comparisonScores.map(score => [Number(score.conditionID), score]))]))) : null;
-    const percentileReference = scoreMode === 'available' && preparedGroups
-        ? await cachedRankingRead(db, 'data', `inference:${availableInferenceVersion}:${comparisonKey}`, () => {
-            const referenceOptions = { ...compareOptions, filters: compareOptions.filters.filter(filter => filter.key !== 'model') };
-            const peers = referenceOptions.filters.length === compareOptions.filters.length ? preparedGroups
-                : groupComparisonModels(models, referenceOptions, [], { includeReferenceVersions: true });
-            const reference = createPairwiseReference(peers), estimates = new WeakMap();
-            if (reference.predict) return reference;
-            return { distributions: reference.distributions, estimate(model) {
-                if (!estimates.has(model)) estimates.set(model, reference.estimate(model));
-                return estimates.get(model);
-            } };
-        }, reference => reference.cellCount ?? 0) : null;
+    // Scope the lazily built pair tables to this workspace read. Both pies may reuse a pair.
+    const fallbackCalibration = createFallbackCalibration(models);
     const calculate = async (scope, entries, total, rules) => {
         const build = () => scoreComparison(models, entries, total, rules, compareOptions, preparedGroups);
         if (!jsonMemberMetadata || !preparedGroups) return build();
@@ -1761,16 +1736,16 @@ async function buildRankingWorkspace(db, {
     };
     const personalRanking = await calculate('personal', personalScoringEntries, PIE_TOTAL_BASIS_POINTS,
         { fallbackRules: personalExpanded ? [] : personalFallbackRules, familyComposition: personalEffectiveComposition,
-            scoreMode, availableInferenceVersion, estimationAlgorithm, percentileReference, comparisonScoreIndexes, jsonMemberMetadata, excludedConditionIDs });
+            scoreMode, availableInferenceVersion, estimationAlgorithm, fallbackCalibration, comparisonScoreIndexes, jsonMemberMetadata, excludedConditionIDs });
     const publicRanking = await calculate('public', publicEffectiveEntries,
         publicExpanded ? PIE_TOTAL_BASIS_POINTS : publicPie.participantCount * PIE_TOTAL_BASIS_POINTS,
         { familyComposition: publicEffectiveComposition, fallbackScope: 'public', scoreMode, availableInferenceVersion, estimationAlgorithm,
-            percentileReference, comparisonScoreIndexes, jsonMemberMetadata, excludedConditionIDs });
+            fallbackCalibration, comparisonScoreIndexes, jsonMemberMetadata, excludedConditionIDs });
 
     const decorateReferenceComposition = item => {
         const ranked = scoreComparison(models, item.entries, PIE_TOTAL_BASIS_POINTS,
             { scoreMode: 'range', familyComposition: item.familyComposition, fallbackScope: 'public',
-                excludedConditionIDs, jsonMemberMetadata: true }, compareOptions, preparedGroups);
+                excludedConditionIDs, fallbackCalibration, jsonMemberMetadata: true }, compareOptions, preparedGroups);
         return { ...item, entries: decoratePieEntries(item.entries, conditionsByID),
             coverageIndex: aggregateCoverageIndex(ranked) };
     };

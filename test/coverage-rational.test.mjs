@@ -45,7 +45,7 @@ test('rational scoring keeps zero-coverage models unranked and never affects ran
     ];
     const weights = [{ conditionID: 1, weightBasisPoints: 3000 }, { conditionID: 2, weightBasisPoints: 7000 }];
     const rational = scoreModels(models, weights, 10000, { scoreMode: 'available' });
-    assert.equal(rational[0].availableInference.method, PAIRWISE_RATIONAL_COVERAGE_FACTOR_METHOD);
+    assert.equal(rational[0].availableInference.method, 'calibrated-fallback');
     close(rational[0].availableInference.coverageFactor, 1.5 / 2.2);
     assert.equal(rational[1].lower, null);
     assert.equal(rational[1].availableInference, null);
@@ -53,13 +53,13 @@ test('rational scoring keeps zero-coverage models unranked and never affects ran
         scoreModels(models, weights, 10000, { scoreMode: 'range', availableInferenceVersion: 4 }));
 });
 
-test('coverage has no preference API and all supported stale request versions upgrade to v7', () => {
+test('coverage has no preference API and all supported stale request versions upgrade to v8', () => {
     assert.deepEqual(Object.keys(coveragePenalty).sort(), ['RATIONAL_COVERAGE_A', 'coverageMultiplier']);
-    assert.equal(AVAILABLE_INFERENCE_VERSION, 7);
-    assert.equal(createWorkspaceState().availableInferenceVersion, 7);
-    assert.equal(normalizeAvailableInferenceVersion(), 7);
-    for (const version of [1, 2, 3, 4, 5, 6, 7]) assert.equal(normalizeAvailableInferenceVersion(version), 7);
-    for (const version of [0, 8, '5', null, NaN]) assert.throws(() => normalizeAvailableInferenceVersion(version));
+    assert.equal(AVAILABLE_INFERENCE_VERSION, 8);
+    assert.equal(createWorkspaceState().availableInferenceVersion, 8);
+    assert.equal(normalizeAvailableInferenceVersion(), 8);
+    for (const version of [1, 2, 3, 4, 5, 6, 7]) assert.equal(normalizeAvailableInferenceVersion(version), 8);
+    for (const version of [0, 9, '5', null, NaN]) assert.throws(() => normalizeAvailableInferenceVersion(version));
 });
 
 test('the fresh inference API cannot opt back into the retired formula', () => {
@@ -83,7 +83,7 @@ test('stored v4 evidence is still validated with its recorded factors, independe
     assert.throws(() => validateWorkspacePayload(changed), /Invalid workspace response/);
 });
 
-test('fresh and stale Home requests share only v7 cache and pagination, including concurrent reads', async () => {
+test('fresh and stale Home requests share only v8 cache and pagination, including concurrent reads', async () => {
     const versions = [];
     const db = { async execute(sql, parameters) {
         assert.match(sql, /SELECT ID FROM categories WHERE ID IN/);
@@ -99,10 +99,10 @@ test('fresh and stale Home requests share only v7 cache and pagination, includin
     const [fresh, stale, explicit] = await Promise.all([service.preview(null, { categoryID: 54 }),
         service.preview(null, { categoryID: 54, availableInferenceVersion: 4 }),
         service.preview(null, { categoryID: 54, availableInferenceVersion: 5 })]);
-    assert.deepEqual(versions, [7]);
+    assert.deepEqual(versions, [8]);
     assert.equal(fresh, stale); assert.equal(fresh, explicit);
-    assert.equal(fresh.models[0].lower, 7);
+    assert.equal(fresh.models[0].lower, 8);
     const page = await service.preview(null, { categoryID: 54, availableInferenceVersion: 4, snapshotID: fresh.pagination.snapshotID });
     assert.equal(page.pagination.snapshotID, fresh.pagination.snapshotID);
-    for (const value of [0, 8, '5', null]) assert.throws(() => normalizeTopicPreview({ categoryID: 54, availableInferenceVersion: value }));
+    for (const value of [0, 9, '5', null]) assert.throws(() => normalizeTopicPreview({ categoryID: 54, availableInferenceVersion: value }));
 });

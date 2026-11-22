@@ -12,8 +12,6 @@ export function createEstimationControl(host, { onChange }) {
     return { render({ scoreMode, estimationAlgorithm }) {
         host.hidden = scoreMode !== 'available'; select.value = estimationAlgorithm;
         const selected = ESTIMATION_ALGORITHMS.find(item => item.ID === estimationAlgorithm);
-        setHelpText(help, selected.description + ' Applies to this tab.'
-            + (estimationAlgorithm === 'current' ? ''
-                : ' Predictions use a 0–100 range, with a fixed midpoint of 50 for unresolved gaps.'));
+        setHelpText(help, selected.description + ' Applies to this tab. Unresolved weights are left out of the estimate.');
     } };
 }

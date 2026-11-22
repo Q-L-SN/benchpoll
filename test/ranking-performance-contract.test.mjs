@@ -1,3 +1,4 @@
+import { pairedModels } from './helpers/fallback-pairs.mjs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { loadModels, scoreComparison } from '../ranking-service.js';
@@ -78,6 +79,7 @@ test('matched evidence is scoped independently for personal/public weights', () 
 test('deferred HTTP metadata retains exact scoring and fallback evidence in both modes', () => {
     const models = [1, 2].map(ID => ({ ID, modelID: ID, modelName: `M${ID}`, condition: { parameters: {} },
         results: new Map([[ID === 1 ? '21' : '22', { normalizedScore: ID * 30 }]]) }));
+    models.push(...pairedModels(21, 22, 60));
     const entries = [{ conditionID: 21, weightBasisPoints: 10000 }];
     const rules = { fallbackRules: [{ primaryConditionID: 21, mode: 'ordered', entries: [{ conditionID: 22 }] }] };
     const options = comparisonOptions(models, { mode: 'best', keys: ['model'] });
@@ -87,7 +89,7 @@ test('deferred HTTP metadata retains exact scoring and fallback evidence in both
         const deferred = scoreComparison(models, entries, 10000, { ...rules, scoreMode, jsonMemberMetadata: true }, options, grouped);
         assert.equal(typeof Object.getOwnPropertyDescriptor(deferred[0], 'calculationScores').get, 'function');
         assert.deepEqual(JSON.parse(JSON.stringify(deferred)), JSON.parse(JSON.stringify(eager)));
-        deferred[1].calculationScores[0].memberIDs.length = 0;
+        deferred[0].calculationScores[0].memberIDs.length = 0;
         deferred[0].members[0].condition.parameters.unsafe = true;
         assert.deepEqual(JSON.parse(JSON.stringify(scoreComparison(models, entries, 10000,
             { ...rules, scoreMode, jsonMemberMetadata: true }, options, grouped))), JSON.parse(JSON.stringify(eager)));

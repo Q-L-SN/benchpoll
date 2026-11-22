@@ -180,7 +180,7 @@ test('matched totals are null without matching evidence and do not use fallback'
     const models = [model(1, 1, { harness: 'a' }, { 20: 70 }), model(2, 2, { harness: 'a' }, { 20: 90 })];
     const rules = { fallbackRules: [{ primaryConditionID: 10, mode: 'ordered', entries: [{ conditionID: 20 }] }] };
     const best = scoreComparison(models, weights, 10000, rules, comparisonOptions(models));
-    assert.deepEqual(best.map(item => item.lower), [70, 90]);
+    assert.ok(best.every(item => item.lower === null && item.fallbackUsageCount === 0));
     const matched = scoreComparison(models, weights, 10000, rules, comparisonOptions(models, { keys: ['model'], mode: 'matched' }));
     assert.ok(matched.every(item => item.lower === null && item.upper === null && item.fallbackUsageCount === 0));
 });

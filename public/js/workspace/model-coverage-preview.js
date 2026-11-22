@@ -5,7 +5,7 @@ import { createPieRenderer } from './pie-renderer.js';
 const blockKey = entry => entry.conditionID < 0 ? 'unresolved' : `benchmark:${entry.benchmarkID ?? entry.conditionID}`;
 
 // These are presentation blocks, never inputs to the ranking or personal weights.
-// Coverage rows describe the resolved entrance, including the actual fallback used.
+// Coverage rows describe direct measurements on each weighted benchmark version.
 export function buildModelCoverageEntries(entries, coverageEntries, versions = []) {
     if (!Array.isArray(entries) || !Array.isArray(coverageEntries)) return null;
     const coverageByID = new Map();

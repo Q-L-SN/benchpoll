@@ -60,7 +60,7 @@ test('short explanations name current navigation and preserve practical scoring 
     assert.match(fallback[2], /Backup versions are selected explicitly/);
     assert.match(fallback[2], /New versions never join an existing order automatically/);
     assert.match(fallback[2], /Added benchmarks <strong>follow the community<\/strong>/);
-    assert.match(fallback[2], /deselect your configuration to follow the community again/);
+    assert.match(fallback[2], /Deselect to follow the community/);
     for (const [, , content] of sections) {
         for (const [, paragraph] of content.matchAll(/<p(?:\s[^>]*)?>([\s\S]*?)<\/p>/g)) assert.ok(words(plain(paragraph)) <= 55);
     }

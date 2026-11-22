@@ -1,3 +1,4 @@
+import { pairedModels } from './helpers/fallback-pairs.mjs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { comparisonOptions, groupComparisonModels } from '../model-comparison.js';
@@ -38,10 +39,10 @@ test('per-benchmark matched cohorts do not change when missing results are estim
         model(2, 2, { harness: 'same' }, { 10: 60 }), model(3, 3, { harness: 'same' }, { 11: 70 })];
     const { range, available } = bothModes(models, weights([10, 4000], [11, 6000]), { mode: 'matched', keys: ['model'] });
     assert.deepEqual(range.map(row => [row.lower, row.upper]), [[62, 62], [24, 84], [42, 82]]);
-    assert.deepEqual(available.map(row => row.lower), [62, 41.54, 65.29]);
-    assert.deepEqual(available.slice(1).map(row => row.inferredScores[0].normalizedScore), [50, 80]);
-    assert.deepEqual(available.slice(1).map(row => row.availableInference.method), ['pairwise-anchored-rational-coverage-factor', 'pairwise-anchored-rational-coverage-factor']);
-    assert.deepEqual(available.slice(1).map(row => row.availableInference.unresolvedFraction), [0, 0]);
+    assert.deepEqual(available.map(row => row.lower), [62, 46.15, 61.76]);
+    assert.ok(available.slice(1).every(row => row.inferredScores.length === 0));
+    assert.deepEqual(available.slice(1).map(row => row.availableInference.method), ['calibrated-fallback', 'calibrated-fallback']);
+    assert.deepEqual(available.slice(1).map(row => row.availableInference.unresolvedFraction), [.6, .4]);
     assert.ok(range.every(row => row.comparable));
 });
 
@@ -68,7 +69,7 @@ test('strict fair-comparison control matching is unchanged by score mode', () =>
 });
 
 test('ordered family evidence is identical between score modes for both personal and public', () => {
-    const models = [model(1, 1, {}, { 10: 0, 20: 90 }), model(2, 2, {}, { 20: 120 }), model(3, 3, {}, {})];
+    const models = [model(1, 1, {}, { 10: 0, 20: 90 }), model(2, 2, {}, { 20: 120 }), model(3, 3, {}, {}), ...pairedModels(10, 20, 120, -50)];
     const entries = weights([10, 8000], [11, 2000]);
     const personal = { fallbackRules: [{ primaryConditionID: 10, mode: 'ordered', entries: [{ conditionID: 20 }, { conditionID: 30 }] }] };
     const publicRules = { fallbackScope: 'public', familyComposition: [
@@ -78,12 +79,10 @@ test('ordered family evidence is identical between score modes for both personal
     for (const rules of [personal, publicRules]) {
         const { range, available } = bothModes(models, entries, undefined, rules);
         assert.equal(range[0].fallbackUsageCount, 0, 'A direct zero must beat fallback');
-        assert.equal(range[1].lower, 96);
-        assert.equal(range[1].upper, 116);
-        assert.equal(available[1].lower, 114.29);
-        assert.equal(available[1].availableInference.observedScore, 120);
-        assert.deepEqual(available[1].inferredScores, []);
-        assert.equal(range[1].calculationScores[0].fallbackFor, 10);
+        assert.deepEqual([range[1].lower, range[1].upper], [0, 100]);
+        assert.equal(available[1].lower, 66.67);
+        assert.deepEqual(available[1].inferredScores.map(row => [row.conditionID, row.normalizedScore]), [[10, 70]]);
+        assert.deepEqual(range[1].calculationScores, []);
     }
 });
 

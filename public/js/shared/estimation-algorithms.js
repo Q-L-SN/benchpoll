@@ -2,7 +2,7 @@ import { coverageMultiplier } from './coverage-penalty.js';
 
 export const DEFAULT_ESTIMATION_ALGORITHM = 'current';
 export const ESTIMATION_ALGORITHMS = Object.freeze([
-    { ID: 'current', label: 'Current · whole score', description: 'The existing rational coverage adjustment applies to the whole score.' },
+    { ID: 'current', label: 'Current · whole score', description: 'The coverage adjustment uses the weight supported by direct scores and calibrated fallbacks.' },
     { ID: 'missing-raw', label: 'Missing · unadjusted', description: 'Keep measured contributions fixed and use missing-score estimates without attenuation.' },
     { ID: 'missing-rational', label: 'Missing · rational', description: 'Keep measured contributions fixed. Multiply the missing contribution by 5c / (1 + 4c), where c is measured coverage.' },
     { ID: 'missing-linear', label: 'Missing · linear', description: 'Keep measured contributions fixed. Multiply the missing contribution by measured coverage.' },

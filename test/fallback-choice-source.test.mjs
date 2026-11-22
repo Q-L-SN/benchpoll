@@ -1,3 +1,4 @@
+import { pairedModels } from './helpers/fallback-pairs.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -47,9 +48,10 @@ test('unsupported selection sources fail before changing weights or casting a ch
 
 test('source metadata has no effect on fallback scoring', () => {
     const models = [{ ID: 1, name: 'Model', results: new Map([['2', { normalizedScore: 65 }]]) }];
+    models.push(...pairedModels(1, 2, 65, 0, null));
     const entries = [{ conditionID: 1, weightBasisPoints: 10000 }];
     const base = { primaryConditionID: 1, mode: 'ordered', entries: [{ conditionID: 2 }] };
-    assert.equal(scoreModels(models, entries, 10000, { fallbackRules: [base] })[0].lower, 65);
+    assert.equal(scoreModels(models, entries, 10000, { scoreMode: 'available', fallbackRules: [base] })[0].lower, 65);
     assert.deepEqual(scoreModels(models, entries, 10000, { fallbackRules: [{ ...base, selectionSource: 'custom' }], fallbackScope: 'personal' }),
         scoreModels(models, entries, 10000, { fallbackRules: [{ ...base, selectionSource: 'selected' }], fallbackScope: 'personal' }));
 });

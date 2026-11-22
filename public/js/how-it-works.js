@@ -67,10 +67,10 @@ scoreButtons.forEach(button => button.addEventListener('click', () => {
     const range = button.dataset.howScore === 'range';
     scoreExample.dataset.mode = button.dataset.howScore;
     scoreButtons.forEach(other => other.setAttribute('aria-pressed', String(other === button)));
-    document.getElementById('how-score-number').textContent = range ? '48–88' : '60';
-    const caption = range ? 'Measured results stay fixed. The range reflects missing results.' : 'An illustrative score after coverage adjustment.';
+    document.getElementById('how-score-number').textContent = range ? '64–84' : '79';
+    const caption = range ? 'Measured results stay fixed. The range reflects missing results.' : 'A backup score of 85 estimates 75 on a benchmark worth 20%.';
     document.getElementById('how-score-caption').textContent = caption;
-    document.getElementById('how-score-status').textContent = `${range ? 'Score range 48 to 88' : 'Estimated score 60'}. Measured coverage 60%.`;
+    document.getElementById('how-score-status').textContent = `${range ? 'Score range 64 to 84' : 'Estimated score 79'}. Measured coverage 80%.`;
 }));
 
 const links = [...document.querySelectorAll('[data-how-link]')];

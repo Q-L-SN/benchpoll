@@ -97,18 +97,15 @@ test('score copy distinguishes normalized measurements, estimates and unresolved
     const scores = section('rankings');
     assert.match(scores, /test's score range and direction/);
     assert.match(scores, /same qualifying measurements/);
-    assert.match(scores, /Fallback is resolved first/);
-    assert.match(scores, /Estimated score:[\s\S]*shared-test estimates/);
-    assert.match(scores, /Isolated extreme results have less influence on estimates/);
-    assert.match(scores, /incomplete measured coverage reduces the whole total/);
+    assert.match(scores, /chosen benchmark version takes priority/);
+    assert.match(scores, /Estimated score:[\s\S]*calibrated fallback estimates/);
+    assert.match(scores, /Unresolved weights are excluded from the average/);
     assert.match(scores, /missing scores count as 0 at the lower end and 100 at the upper end; measured scores stay fixed/);
     assert.match(scores, /Models rank by the lower end/);
-    assert.match(scores, /missing scores count as 0 at the lower end and 100 at the upper end/);
     assert.match(scores, /Coverage is the share of weight with measured results/);
-    assert.match(scores, /including successful fallbacks/);
-    assert.match(scores, /Estimates do not increase coverage/);
-    assert.match(scores, /Unresolved gaps are left out/);
-    assert.match(scores, /Without a real result on a weighted test, a model cannot rank/);
+    assert.match(scores, /on selected versions/);
+    assert.match(scores, /Unmeasured versions keep their full score range/);
+    assert.match(scores, /direct score or a reliable fallback qualifies a model to rank/);
     assert.match(scores, /effort or harness to rank settings separately/);
     assert.match(scores, /best qualifying score per test/);
     assert.match(scores, /Missing settings stay in an unknown group/);
@@ -117,13 +114,16 @@ test('score copy distinguishes normalized measurements, estimates and unresolved
 test('fallback copy preserves explicit order, community inheritance, and real zero and negative results', () => {
     const fallback = section('fallback');
     assert.match(fallback, /choose a saved (?:fallback )?order or edit your own/);
-    assert.match(fallback, /chosen version first, then backups in order/);
-    assert.match(fallback, /first available score counts/);
+    assert.match(fallback, /try backups in order/);
+    assert.match(fallback, /Each estimates the chosen version directly/);
+    assert.match(fallback, /five other models measured on both versions with matching run settings/);
+    assert.match(fallback, /Their backup scores must bracket yours within 10 points/);
+    assert.match(fallback, /Held-out predictions must average at most five points of error/);
     assert.match(fallback, /including zero and negative scores/);
-    assert.match(fallback, /No fallback uses the chosen version alone, with estimation still available/);
+    assert.match(fallback, /No fallback uses the chosen version alone/);
     assert.match(fallback, /Explicit choices updated within 14 days shape version and fallback proportions per topic\/scene, weighted by benchmark allocation/);
     assert.match(fallback, /Following adds no vote/);
-    assert.match(fallback, /deselect your configuration to follow the community again/);
+    assert.match(fallback, /Deselect to follow the community/);
     assert.match(fallback, /Added benchmarks <strong>follow the community<\/strong>/);
     assert.match(fallback, /If nobody has chosen, the index works normally without backups/);
     assert.match(fallback, /Backup versions are selected explicitly/);
@@ -186,13 +186,13 @@ test('short score explanation agrees with current conversion and range endpoints
     assert.equal(row.inferredScores.length, 0);
 });
 
-test('Estimated score really uses shared-test estimates and the current coverage multiplier', () => {
+test('Without a chosen backup, unrelated tests do not estimate missing weight', () => {
     const models = [model(1, { 1: 80 }), model(2, { 1: 60, 2: 50 }), model(3, { 1: 100, 2: 90 }),
         model(4, { 1: 70, 2: 65 }), model(5, { 1: 90, 2: 80 })];
     const [range] = scoreModels(models, weights, 10000, { scoreMode: 'range' });
     const [available] = scoreModels(models, weights, 10000, { scoreMode: 'available' });
-    assert.equal(available.availableInference.method, 'pairwise-anchored-rational-coverage-factor');
-    assert.equal(available.inferredScores.length, 1);
+    assert.equal(available.availableInference.method, 'calibrated-fallback');
+    assert.equal(available.inferredScores.length, 0);
     assert.equal(available.coverage, 60, 'The estimate must not increase measured coverage');
     assert.deepEqual(available.calculationScores.map(score => [score.conditionID, score.normalizedScore]),
         range.calculationScores.map(score => [score.conditionID, score.normalizedScore]));
@@ -215,17 +215,16 @@ test('unresolved gaps stay unmeasured and incomplete coverage does not improve n
     assert.equal(unranked.lower, null);
 });
 
-test('both score modes resolve the first fallback before totals, including zero and negative scores', () => {
+test('uncalibrated backup scores including zero and negative leave the primary unresolved', () => {
     const fallbackRules = [{ primaryConditionID: 2, mode: 'ordered', familyID: 9,
         entries: [{ conditionID: 3 }, { conditionID: 4 }] }];
     for (const value of [0, -20]) {
         for (const scoreMode of ['range', 'available']) {
             const [row] = scoreModels([model(1, { 1: 80, 3: value, 4: 90 })], weights, 10000, { scoreMode, fallbackRules });
-            assert.equal(row.coverage, 100);
-            assert.equal(row.lower, 48 + value * .4);
-            assert.equal(row.upper, row.lower);
-            assert.deepEqual(row.calculationScores.map(score => score.conditionID), [1, 3]);
-            assert.deepEqual(row.fallbackResolutions[0].attemptedConditionIDs, [2, 3]);
+            assert.equal(row.coverage, 60);
+            assert.deepEqual([row.lower, row.upper], scoreMode === 'range' ? [48, 88] : [70.59, 70.59]);
+            assert.deepEqual(row.calculationScores.map(score => score.conditionID), [1]);
+            assert.deepEqual(row.fallbackResolutions[0].attemptedConditionIDs, [2, 3, 4]);
             assert.equal(row.inferredScores.length, 0);
         }
     }

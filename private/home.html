@@ -361,7 +361,7 @@
                                             <div class="bp-inline-fallback-frame">
                                                 <div id="inline-fallback-chart" class="bp-inline-fallback-chart" role="group" aria-label="Fallback order" tabindex="-1" hidden></div>
                                                 <div class="bp-fallback-add-actions" role="group" aria-label="Add fallback options">
-                                                    <button id="inline-fallback-add-benchmark" type="button" hidden aria-pressed="false" aria-label="Add a benchmark to Fallback" data-help-action="follow" data-help-text="Choose backups using + in Evaluation items. When this benchmark has no score, backups are tried in order using its existing weight."><i class="fa-solid fa-plus" aria-hidden="true"></i><span>Add fallback benchmark</span></button>
+                                                    <button id="inline-fallback-add-benchmark" type="button" hidden aria-pressed="false" aria-label="Add a benchmark to Fallback" data-help-action="follow" data-help-text="Choose backups using + in Evaluation items. When this benchmark has no score, the first reliable backup estimates its score at the selected weight."><i class="fa-solid fa-plus" aria-hidden="true"></i><span>Add fallback benchmark</span></button>
                                                 </div>
                                             </div>
                                         </div>
@@ -426,7 +426,7 @@
                         <div class="bp-scoring-switch" role="group" aria-label="Missing benchmark scores" data-ui-component="segmented" data-mode="available">
                             <button type="button" data-score-mode="available" aria-pressed="true" aria-label="Estimated score" data-tooltip="Estimated score"><i class="fa-solid fa-wand-magic-sparkles bp-score-mode-icon" aria-hidden="true"></i><span>Estimated score</span></button>
                             <button type="button" data-score-mode="range" aria-pressed="false" aria-label="Score range" data-tooltip="Score range"><i class="fa-solid fa-arrows-left-right bp-score-mode-icon" aria-hidden="true"></i><span>Score range</span></button>
-                            <button class="bp-scoring-help bp-help-trigger" type="button" aria-label="About missing scores" data-help-text="Estimated score combines available results and estimates, then adjusts the whole index for measured coverage. Score range keeps measured results fixed and fills gaps with 0 or 100."><i class="fa-regular fa-circle-question" aria-hidden="true"></i></button>
+                            <button class="bp-scoring-help bp-help-trigger" type="button" aria-label="About missing scores" data-help-text="Estimated score combines direct scores with reliable estimates from the selected fallback chains. Score range keeps measured results fixed and fills gaps with 0 or 100."><i class="fa-regular fa-circle-question" aria-hidden="true"></i></button>
                         </div>
                         <div class="bp-quick-comparison" role="group" aria-label="Compare separately">
                             <button class="bp-comparison-icon" type="button" data-quick-comparison="reasoning" aria-label="Compare reasoning effort separately" data-tooltip="Compare reasoning effort separately" aria-pressed="false" disabled><i class="fa-solid fa-brain" aria-hidden="true"></i></button>

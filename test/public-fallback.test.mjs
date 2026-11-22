@@ -1,3 +1,4 @@
+import { pairedModels } from './helpers/fallback-pairs.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
@@ -39,7 +40,7 @@ const load = (weights, rules, IDs = [1, 2, 3, 4]) => loadPublicPie(database(weig
     { categoryID: 1, dimensions: [], contextValues: {} }, new Map(IDs.map(ID => [ID, { conditionID: ID, benchmarkID: ID, isPrimaryCondition: true, scoreCount: 1 }])));
 const modelWith = entries => ({ ID: 1, modelID: 1, name: 'Fixture model',
     results: new Map(entries.map(([ID, normalizedScore]) => [String(ID), { normalizedScore, sampleCount: 1 }])) });
-const publicScore = (pie, model, scoreMode = 'range') => scoreModels([model], pie.scoringEntries, pie.participantCount * 10000,
+const publicScore = (pie, model, scoreMode = 'range', peers = []) => scoreModels([model, ...peers], pie.scoringEntries, pie.participantCount * 10000,
     { familyComposition: pie.familyComposition, fallbackScope: 'public', scoreMode })[0];
 
 test('public scoring keeps complete ordered families separate, including the no-fallback share', async () => {
@@ -47,9 +48,11 @@ test('public scoring keeps complete ordered families separate, including the no-
         weight(1, 1, 6000), weight(1, 4, 4000), weight(2, 1, 2000), weight(2, 4, 8000),
         weight(3, 1, 2000), weight(3, 4, 8000), weight(4, 4, 10000)
     ], [...chainRows(1, 1, [2, 3]), ...chainRows(2, 1, [3, 2]), noFallback(3, 1)]);
-    const result = publicScore(pie, modelWith([[2, 80], [3, 20], [4, 40]]));
+    const peers = pairedModels(1, 2, 80, 0, null);
+    peers.forEach(p => p.results.set('3', { normalizedScore: p.results.get('2').normalizedScore - 60 }));
+    const result = publicScore(pie, modelWith([[2, 80], [3, 20], [4, 40]]), 'range', peers);
     assert.equal(Object.hasOwn(pie, 'composition'), false);
-    assert.deepEqual([result.lower, result.upper, result.coverage], [43, 48, 95]);
+    assert.deepEqual([result.lower, result.upper, result.coverage], [30, 55, 75]);
     assert.equal(result.fallbackCoverage, 20);
     assert.equal(result.fallbackUsageCount, 1);
     assert.equal(result.resultCount, 3);
@@ -94,11 +97,11 @@ test('public scoring without a matching community composition uses only the orig
 test('no-fallback holders do not inherit another family when their entrance is missing', async () => {
     const pie = await load([weight(1, 1, 10000), weight(2, 1, 10000)], [...chainRows(1, 1, [2]), noFallback(2, 1)]);
     const result = publicScore(pie, modelWith([[2, 80]]));
-    assert.deepEqual([result.lower, result.upper, result.coverage], [40, 90, 50]);
-    const available = publicScore(pie, modelWith([[2, 80]]), 'available');
+    assert.deepEqual([result.lower, result.upper, result.coverage], [0, 100, 0]);
+    const available = publicScore(pie, modelWith([[2, 80]]), 'available', pairedModels(1, 2, 80, 0, null));
     assert.equal(available.lower, 66.67);
     assert.equal(available.availableInference.unresolvedFraction, .5);
-    assert.deepEqual(available.inferredScores, []);
+    assert.deepEqual(available.inferredScores.map(row => row.originalWeight), [50]);
     assert.deepEqual([publicScore(pie, modelWith([])).lower, publicScore(pie, modelWith([])).upper], [0, 100]);
 });
 
@@ -181,7 +184,12 @@ test('fractional sub-percent public shares and an unlimited number of families r
     const small = families.find(f => f.entries[0].conditionID === 2).weightBasisPoints;
     assert.ok(small > 0 && small < 100 && !Number.isInteger(small));
     assert.ok(Math.abs(families.reduce((sum, f) => sum + f.weightBasisPoints, 0) - 10000) < 1e-6);
-    assert.equal(publicScore(pie, modelWith(Array.from({ length: 130 }, (_, i) => [i + 2, 80]))).lower, 79.39);
+    const peers = pairedModels(1, 2, 80, 0, null);
+    for (const p of peers) for (let id = 3; id <= 131; id++) p.results.set(String(id), p.results.get('2'));
+    const result = publicScore(pie, modelWith(Array.from({ length: 130 }, (_, i) => [i + 2, 80])), 'available', peers);
+    assert.equal(result.coverage, 0);
+    assert.equal(result.inferredScores.length, 130);
+    assert.ok(Math.abs(result.inferredScores.reduce((sum, row) => sum + row.originalWeight, 0) - result.fallbackCoverage) < .01);
 });
 
 test('flat families can reference other entrance conditions without recursive cross-family substitution', async () => {
@@ -210,18 +218,20 @@ test('unconfigured holders inherit a mixed electorate without enlarging or dilut
     assert.deepEqual(group.families.map(f => [f.entries.map(e => e.conditionID), f.weightBasisPoints]),
         [[[2], 6000], [[3], 3000], [[], 1000]]);
     const model = modelWith([[2, 80], [3, 20]]);
+    const peers = pairedModels(1, 2, 80, -10, null);
+    peers.forEach(p => p.results.set('3', { normalizedScore: p.results.get('2').normalizedScore - 60 }));
     const inputs = [{ conditionID: 1, weightBasisPoints: 10000 }];
     for (const scoreMode of ['range', 'available']) {
         const options = { familyComposition: pie.familyComposition, scoreMode };
-        const inherited = scoreModels([model], inputs, 10000, options)[0];
-        assert.deepEqual([inherited.lower, inherited.upper, inherited.coverage], scoreMode === 'range' ? [54, 64, 90] : [58.7, 58.7, 90]);
-        const own = scoreModels([model], inputs, 10000, { ...options,
+        const inherited = scoreModels([model, ...peers], inputs, 10000, options)[0];
+        assert.deepEqual([inherited.lower, inherited.upper, inherited.coverage], scoreMode === 'range' ? [0, 100, 0] : [68.48, 68.48, 0]);
+        const own = scoreModels([model, ...peers], inputs, 10000, { ...options,
             fallbackRules: [{ primaryConditionID: 1, mode: 'ordered', entries: [{ conditionID: 3 }] }] })[0];
-        assert.deepEqual([own.lower, own.upper, own.coverage], [20, 20, 100]);
-        const none = scoreModels([model], inputs, 10000, { ...options,
+        assert.deepEqual([own.lower, own.upper, own.coverage], scoreMode === 'range' ? [0, 100, 0] : [70, 70, 0]);
+        const none = scoreModels([model, ...peers], inputs, 10000, { ...options,
             fallbackRules: [{ primaryConditionID: 1, mode: 'ordered', entries: [] }] })[0];
         assert.deepEqual([none.lower, none.upper, none.coverage], scoreMode === 'range' ? [0, 100, 0] : [null, null, 0]);
-        assert.equal(publicScore(pie, model, scoreMode).lower, inherited.lower);
+        assert.equal(publicScore(pie, model, scoreMode, peers).lower, inherited.lower);
     }
     assert.equal((await load(weights, [noFallback(10, 1)])).familyComposition[0].configuredPieCount, 1);
 });

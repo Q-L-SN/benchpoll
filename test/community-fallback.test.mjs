@@ -1,3 +1,4 @@
+import { pairedModels } from './helpers/fallback-pairs.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { loadPersonalPie, scoreModels } from '../ranking-service.js';
@@ -57,10 +58,10 @@ test('inherited chains remain flat and recalculate when the community changes', 
     const model = { ID: 1, results: new Map([['2', { normalizedScore: 20 }], ['3', { normalizedScore: 80 }]]) };
     const composition = conditionID => [{ primaryConditionID: 1, families: [{ primaryConditionID: 1,
         familyID: conditionID, entries: [{ conditionID }], weightBasisPoints: 10000 }] }];
-    const score = (id, fallbackRules = []) => scoreModels([model], entries, 10000,
-        { familyComposition: composition(id), fallbackRules })[0];
-    assert.equal(score(2).lower, 20);
-    assert.equal(score(3).lower, 80);
+    const score = (id, fallbackRules = []) => scoreModels([model, ...pairedModels(1, id, id === 2 ? 20 : 80, -5, null)], entries, 10000,
+        { scoreMode: 'available', familyComposition: composition(id), fallbackRules })[0];
+    assert.equal(score(2).lower, 15);
+    assert.equal(score(3).lower, 75);
     assert.equal(score(3, [none]).coverage, 0);
     model.results.set('1', { normalizedScore: 0 });
     assert.equal(score(3).lower, 0);

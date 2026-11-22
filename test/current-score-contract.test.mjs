@@ -57,7 +57,7 @@ test('historical results cannot affect medians, coverage, fallback or available-
     assert.equal(available.lower, expected);
     assert.equal(available.upper, expected);
     assert.equal(available.availableInference.observedScore, 20);
-    assert.equal(available.availableInference.sourceCount, 0);
+    assert.equal(available.availableInference.inferredFraction, 0);
     assert.deepEqual(available.inferredScores, []);
     const fallback = { fallbackRules: [{ primaryConditionID: 23, mode: 'ordered',
         entries: [{ conditionID: 22 }] }] };

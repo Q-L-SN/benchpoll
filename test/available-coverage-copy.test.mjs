@@ -1,3 +1,4 @@
+import { FALLBACK_INFERENCE_METHOD } from '../public/js/shared/fallback-inference.js';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
@@ -18,7 +19,7 @@ function summary(inference, coverage = .5, comparable = true, overrides = {}) {
     const render = vm.runInNewContext(`${scores.slice(start, end)}\nrenderCalculationResults`, {
         modelScoresSummary, modelScoresList: { append() {} },
         document: { createElement: () => ({ textContent: '', append(...nodes) { this.textContent += nodes.map(node => node.textContent).join(' '); } }) },
-        rankingNumber, isMissingInferenceMethod, syncExpand() {}, filterScores() {}, expansionNoun: ''
+        rankingNumber, isMissingInferenceMethod, FALLBACK_INFERENCE_METHOD, syncExpand() {}, filterScores() {}, expansionNoun: ''
     });
     render({ lower: inference?.totalScore ?? null, coverage: coverage * 100,
         missingWeight: (1 - coverage) * 100, comparable, availableInference: inference, calculationScores: [], ...overrides });
@@ -33,19 +34,17 @@ function factorInference(raw, coverage, inferredFraction = 0) {
         coverageFactor, appliedFactor, unpenalizedScore: raw, totalScore: raw * appliedFactor };
 }
 
-test('brief help distinguishes shared-test estimates from measured weighted coverage', () => {
+test('brief help distinguishes calibrated fallback estimates from measured weighted coverage', () => {
     const brief = guide.match(/<section id="rankings"[\s\S]*?<\/section>/)?.[0];
     assert.ok(brief);
-    assert.match(brief, /Estimated score:[\s\S]*shared-test estimates/);
-    assert.match(brief, /Isolated extreme results have less influence on estimates/);
-    assert.match(brief, /incomplete measured coverage reduces the whole total/);
-    assert.match(brief, /Estimates do not increase coverage/);
+    assert.match(brief, /Estimated score:[\s\S]*calibrated fallback estimates/);
+    assert.match(brief, /Unresolved weights are excluded from the average/);
+    assert.match(brief, /Unmeasured versions keep their full score range/);
     assert.match(brief, /Coverage is the share of weight with measured results/);
-    assert.match(brief, /reduces the whole total/);
-    assert.match(brief, /including successful fallbacks/);
+    assert.match(brief, /share supported by direct scores and calibrated fallbacks/);
+    assert.match(brief, /on selected versions/);
     assert.match(brief, /5c\/\(1\+4c\)/);
-    assert.match(brief, /Nonnegative totals use f\(c\), negatives 2-f\(c\)/);
-    assert.match(brief, /full coverage is unchanged/);
+    assert.match(brief, /Negative totals use 2−f\(c\)/);
     assert.doesNotMatch(guide, /Power 0\.35|experiment|<select|compares Power/i);
     assert.doesNotMatch(guide, /deduct(?:s|ion)?|2 points (?:for every|per) missing 10%|20\s*(?:points|\*)/i);
 });
@@ -54,17 +53,17 @@ test('short score help preserves range endpoints, unresolved gaps and fallback-f
     const brief = guide.match(/<section id="rankings"[\s\S]*?<\/section>/)?.[0];
     assert.ok(brief);
     assert.match(brief, /same qualifying measurements, converted using each test's score range and direction/);
-    assert.match(brief, /Fallback is resolved first/);
+    assert.match(brief, /chosen benchmark version takes priority/);
     assert.match(brief, /missing scores count as 0 at the lower end and 100 at the upper end; measured scores stay fixed/);
     assert.match(brief, /Models rank by the lower end/);
-    assert.match(brief, /missing scores count as 0 at the lower end and 100 at the upper end/);
-    assert.match(brief, /Unresolved gaps are left out of Estimated score/);
-    assert.match(brief, /Without a real result on a weighted test, a model cannot rank/);
+    assert.match(brief, /Unresolved weights are excluded from the average/);
+    assert.match(brief, /direct score or a reliable fallback qualifies a model to rank/);
     const fallback = guide.match(/<section id="fallback"[\s\S]*?<\/section>/)?.[0];
     assert.ok(fallback);
-    assert.match(fallback, /chosen version first, then backups in order/);
-    assert.match(fallback, /first available score counts, including zero and negative scores/);
-    assert.match(fallback, /No fallback uses the chosen version alone, with estimation still available/);
+    assert.match(fallback, /try backups in order/);
+    assert.match(fallback, /Each estimates the chosen version directly/);
+    assert.match(fallback, /Direct scores count, including zero and negative scores/);
+    assert.match(fallback, /No fallback uses the chosen version alone/);
 });
 
 test('model details show before and after scores while the formula stays in the guide', () => {
@@ -98,7 +97,7 @@ test('full coverage stays unchanged and zero scores do not need the negative exc
     }
     assert.doesNotMatch(summary(factorInference(0, .25), .25), /Negative scores/);
     const incomparable = summary(null, 0, false);
-    assert.match(incomparable, /Not ranked: no measured result matches these weights and settings/);
+    assert.match(incomparable, /No qualifying ranking evidence/);
     assert.doesNotMatch(incomparable, /Coverage factor:|deduction/);
 });
 

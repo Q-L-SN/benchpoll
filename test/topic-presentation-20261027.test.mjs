@@ -35,8 +35,8 @@ test('sidebar defaults to collapsed without writing or replacing any saved boole
     }
 });
 
-test('only the rational inference version is used; neither page exposes experiment controls', () => {
-    assert.equal(AVAILABLE_INFERENCE_VERSION, 7);
+test('only the calibrated fallback version is used; neither page exposes experiment controls', () => {
+    assert.equal(AVAILABLE_INFERENCE_VERSION, 8);
     for (const source of [topics, workspace]) {
         assert.match(source, /import \{ AVAILABLE_INFERENCE_VERSION \} from '\.\/shared\/available-score\.js'/);
         assert.match(source, /availableInferenceVersion\s*[:=]\s*AVAILABLE_INFERENCE_VERSION/);
@@ -44,8 +44,8 @@ test('only the rational inference version is used; neither page exposes experime
     }
     for (const html of [home, configuration]) assert.doesNotMatch(html, /coverage-experiment|coverage-penalty|Power 0\.35/);
     assert.doesNotMatch(read('public/css/ui/topic-identity.css'), /coverage-experiment/);
-    assert.match(configuration, /adjusts the whole index for measured coverage/);
-    assert.match(read('private/how-it-works.html'), /f\(c\)=5c\/\(1\+4c\)[^\n]*negatives 2-f\(c\)/);
+    assert.match(configuration, /reliable estimates from the selected fallback chains/);
+    assert.match(read('private/how-it-works.html'), /f\(c\)=5c\/\(1\+4c\)[^\n]*Negative totals use 2−f\(c\)/);
 });
 
 test('topic creation starts private and the editor publishes directly with a three-public-topic limit', () => {

@@ -90,23 +90,12 @@ test('version 3 retains exact pairwise predictions and real traces, subtracting 
     assert.deepEqual(models, before);
 });
 
-test('successful real fallback counts as measured, including separate fractional Public configurations', () => {
-    const models = [model(1, { 3: 25 }), model(2, { 1: 50, 2: 60, 3: 50 }), model(3, { 1: 75, 2: 80, 3: 75 }),
-        model(4, { 1: 62, 2: 70, 3: 62 })];
-    const rule = { primaryConditionID: 1, familyID: 10, mode: 'ordered', entries: [{ conditionID: 3 }] };
-    const [personal] = score(models, weights, { fallbackRules: [rule] });
-    assert.equal(personal.coverage, 50);
-    assert.equal(personal.availableInference.coveragePenalty, 10);
-    assert.equal(personal.calculationScores[0].fallbackFor, 1);
-    const [shared] = score(models, weights, { fallbackScope: 'public', familyComposition: [
-        { primaryConditionID: 1, families: [{ ...rule, weightBasisPoints: 6000 },
-            { primaryConditionID: 1, familyID: null, entries: [], weightBasisPoints: 4000 }] },
-        { primaryConditionID: 2, families: [{ primaryConditionID: 2, familyID: null, entries: [], weightBasisPoints: 10000 }] }
-    ] });
-    assert.equal(shared.coverage, 30);
-    assert.equal(shared.availableInference.coveragePenalty, 14);
-    close(shared.availableInference.inferredFraction, .7);
-    assert.equal(shared.inferredScores.length, 2);
+test('the archived deduction formula can still express fractional historical coverage', () => {
+    for (const [coverage, penalty] of [[.3, 14], [.5, 10]]) {
+        const trace = infer(25, coverage, [{ normalizedScore: 60, weightFraction: 1 - coverage }], 2);
+        close(trace.coveragePenalty, penalty);
+        close(trace.inferredFraction, 1 - coverage);
+    }
 });
 
 test('unresolved shares are still penalized and extra unweighted sources never increase coverage', () => {
@@ -150,9 +139,9 @@ test('fresh legacy-version requests no longer select archived deduction algorith
             assert.ok(rows.every(row => !Object.hasOwn(row.availableInference, 'coveragePenalty')));
         }
     }
-    assert.equal(AVAILABLE_INFERENCE_VERSION, 7);
-    assert.equal(rankingReadBody('/api/get_weighted_workspace', {}).availableInferenceVersion, 7);
-    for (const version of [1, 2, 5, 6]) assert.equal(rankingReadBody('/api/get_weighted_workspace', { availableInferenceVersion: version }).availableInferenceVersion, 7);
+    assert.equal(AVAILABLE_INFERENCE_VERSION, 8);
+    assert.equal(rankingReadBody('/api/get_weighted_workspace', {}).availableInferenceVersion, 8);
+    for (const version of [1, 2, 5, 6]) assert.equal(rankingReadBody('/api/get_weighted_workspace', { availableInferenceVersion: version }).availableInferenceVersion, 8);
 });
 
 test('workspace validation requires an accurate separate deduction and pre-deduction contribution trace', () => {
@@ -174,13 +163,13 @@ test('workspace validation requires an accurate separate deduction and pre-deduc
 
 test('current help describes the factor while calculation details keep before and after scores', () => {
     const read = path => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
-    assert.match(read('private/home.html'), /adjusts the whole index for measured coverage/);
+    assert.match(read('private/home.html'), /reliable estimates from the selected fallback chains/);
     const guide = read('private/how-it-works.html');
     assert.doesNotMatch(guide, /deduct 2 points for every missing 10% of weight/);
-    assert.match(guide, /shared-test estimates/);
-    assert.match(guide, /incomplete measured coverage reduces the whole total/);
-    assert.match(guide, /Estimates do not increase coverage/);
-    assert.match(guide, /Unresolved gaps are left out of Estimated score/);
+    assert.match(guide, /calibrated fallback estimates/);
+    assert.match(guide, /Unresolved weights are excluded from the average/);
+    assert.match(guide, /Unmeasured versions keep their full score range/);
+    assert.match(guide, /Unresolved weights are excluded from the average/);
     assert.match(guide, /missing scores count as 0 at the lower end and 100 at the upper end/);
     const details = read('public/js/workspace/model-scores.js');
     assert.match(details, /Before adjustment:/);

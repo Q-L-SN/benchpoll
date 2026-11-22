@@ -1,3 +1,4 @@
+import { pairedModels } from './helpers/fallback-pairs.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { expandTopicReferences, loadTopicReferenceTargets, publicReferenceWeights } from '../topic-reference-service.js';
@@ -118,7 +119,7 @@ test('an unavailable reference affects range and coverage without being estimate
     assert.equal(range.coverage, 50);
     let predictions = 0;
     const [estimated] = scoreModels([model], weights, 10000, { scoreMode: 'available',
-        percentileReference: { estimate: () => ({ percentile: null, sourceCount: 1 }),
+        fallbackCalibration: {
             predict() { predictions++; throw new Error('Do not infer a topic as a benchmark'); } } });
     assert.equal(predictions, 0);
     assert.equal(estimated.coverage, 50);
@@ -225,9 +226,10 @@ test('cyclic paths merge repeated benchmarks while retaining fallback alternativ
     const choices = result.familyComposition[0].families;
     assert.ok(Math.abs(choices[0].weightBasisPoints - 20000 / 3) < 1e-9);
     assert.ok(Math.abs(choices[1].weightBasisPoints - 10000 / 3) < 1e-9);
-    const [score] = scoreModels([{ ID: 1, name: 'A', results: new Map([['12', { normalizedScore: 60 }]]) }],
+    const [score] = scoreModels([{ ID: 1, name: 'A', results: new Map([['12', { normalizedScore: 60 }]]) }, ...pairedModels(10, 12, 60, -5, null)],
         result.entries, 10000, { familyComposition: result.familyComposition, fallbackScope: 'public' });
-    assert.equal(score.lower, 40); assert.equal(score.coverage, 66.67);
+    assert.equal(score.lower, 0); assert.equal(score.upper, 100);
+    assert.equal(score.coverage, 0); assert.equal(score.fallbackCoverage, 66.67);
 });
 
 test('scenes are separate graph states and target selection is specific to each index mode', async () => {

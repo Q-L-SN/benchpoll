@@ -23,17 +23,17 @@ export function resolvedFamilyConditionIDs(primaryConditionID, entries = []) {
     return [primaryConditionID, ...entries.map(entry => entry.conditionID)];
 }
 
-export function resolveFamilyScore(model, primaryConditionID, entries = []) {
-    familyKey(primaryConditionID, entries);
-    const attemptedConditionIDs = [];
-    for (const conditionID of resolvedFamilyConditionIDs(primaryConditionID, entries)) {
-        attemptedConditionIDs.push(conditionID);
-        const result = model.results.get(String(conditionID));
-        if (!result || result.normalizedScore === null || result.normalizedScore === undefined) continue;
-        if (!Number.isFinite(result.normalizedScore)) throw new TypeError('Invalid normalized family score');
-        return { conditionID, normalizedScore: result.normalizedScore, attemptedConditionIDs };
+// The caller supplies a calibration for the primary and each actual backup score.
+export function resolveFallbackChain(model, chain, predict) {
+    for (const [index, conditionID] of chain.entries()) {
+        const normalizedScore = model.results.get(String(conditionID))?.normalizedScore;
+        if (normalizedScore == null) continue;
+        if (!Number.isFinite(normalizedScore)) throw new TypeError('Invalid normalized family score');
+        if (index === 0) return { normalizedScore, prediction: null, attemptedCount: 1 };
+        const prediction = predict(conditionID, normalizedScore);
+        if (prediction) return { normalizedScore: null, prediction, attemptedCount: index + 1 };
     }
-    return { conditionID: null, normalizedScore: null, attemptedConditionIDs };
+    return { normalizedScore: null, prediction: null, attemptedCount: chain.length };
 }
 
 export function groupSmallFamilies(families, threshold = SMALL_FAMILY_SHARE_BASIS_POINTS) {

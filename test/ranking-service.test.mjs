@@ -1,3 +1,4 @@
+import { pairedModels } from './helpers/fallback-pairs.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
@@ -65,12 +66,12 @@ test('model coverage partitions retain adopted scores, fallback shares, and unre
     ] }];
     const [model] = scoreModels(models, entries, 10000, { fallbackScope: 'public', familyComposition });
     assert.deepEqual(model.coverageEntries, [
-        { conditionID: 10, weightBasisPoints: 6000, coveredWeightBasisPoints: 1500, coverage: 25, normalizedScore: 80 },
+        { conditionID: 10, weightBasisPoints: 6000, coveredWeightBasisPoints: 0, coverage: 0, normalizedScore: null },
         { conditionID: 20, weightBasisPoints: 2000, coveredWeightBasisPoints: 2000, coverage: 100, normalizedScore: 0 },
         { conditionID: -30, weightBasisPoints: 2000, coveredWeightBasisPoints: 0, coverage: 0, normalizedScore: null }
     ]);
-    assert.equal(model.coverageFraction, .35);
-    assert.equal(aggregateCoverageIndex([model, model]), .7);
+    assert.equal(model.coverageFraction, .2);
+    assert.equal(aggregateCoverageIndex([model, model]), .4);
     const [tiny] = scoreModels(models, [{ conditionID: 20, weightBasisPoints: .1 },
         { conditionID: -30, weightBasisPoints: 9999.9 }], 10000);
     assert.equal(tiny.coverage, 0);
@@ -241,7 +242,7 @@ test('available-results mode excludes unresolved weights from inference but stil
     assert.equal(scored.availableInference.unpenalizedScore, 60);
     assert.equal(scored.availableInference.coverageFactor, 3.5 / 3.8);
     assert.equal(scored.availableInference.observedScore, 60);
-    assert.equal(scored.availableInference.sourceCount, 0);
+    assert.equal(scored.availableInference.inferredFraction, 0);
     assert.deepEqual(scored.inferredScores, []);
     assert.equal(scored.coverage, 70);
     assert.equal(scored.resultCount, 2);
@@ -272,10 +273,11 @@ test('ordered fallback resolves the whole entrance and leaves exhausted chains m
         { ID: 1, modelID: 1, name: 'First wins', results: new Map([['22', { normalizedScore: 80 }], ['23', { normalizedScore: 99 }]]) },
         { ID: 2, modelID: 2, name: 'Missing', results: new Map() }
     ];
+    models.push(...pairedModels(21, 22, 80, -5, null));
     const available = scoreModels(models, entries, 10000, { fallbackRules, scoreMode: 'available' });
-    assert.deepEqual(available.map(row => [row.lower, row.upper, row.coverage]), [[80, 80, 100], [null, null, 0]]);
+    assert.deepEqual(available.slice(0, 2).map(row => [row.lower, row.upper, row.coverage]), [[75, 75, 0], [null, null, 0]]);
     const range = scoreModels(models, entries, 10000, { fallbackRules });
-    assert.deepEqual(range.map(row => [row.lower, row.upper, row.coverage]), [[80, 80, 100], [0, 100, 0]]);
+    assert.deepEqual(range.slice(0, 2).map(row => [row.lower, row.upper, row.coverage]), [[0, 100, 0], [0, 100, 0]]);
     assert.equal(range[0].fallbackUsageCount, 1);
     assert.equal(range[1].fallbackUsageCount, 0);
     assert.deepEqual(range[1].fallbackResolutions[0].attemptedConditionIDs, [21, 22, 23]);

@@ -1,3 +1,4 @@
+import { FALLBACK_INFERENCE_METHOD, fallbackInference, MIN_PAIRED_MODELS, MAX_HELD_OUT_ERROR } from '../shared/fallback-inference.js';
 import { FALLBACK_RULE_MODE } from './constants.js';
 import { expandCommunityVersions } from '../shared/benchmark-version-choice.js';
 import { familyKey, resolvedFamilyConditionIDs } from '../shared/benchmark-families.js';
@@ -177,6 +178,19 @@ function requireFamilyEntry(entry, path) {
     return requireWorkspaceConditionIdentity(entry, path);
 }
 
+function validPredictionSource(score, inference, chain, pairwise) {
+    if (chain) {
+        const path = score.familyConditionIDs;
+        return Number.isSafeInteger(score.sourceConditionID) && score.sourceConditionID > 0
+            && Number.isFinite(score.sourceScore) && Number.isFinite(score.validationError)
+            && score.validationError >= 0 && score.validationError <= MAX_HELD_OUT_ERROR
+            && Array.isArray(path) && path[0] === score.conditionID && path.indexOf(score.sourceConditionID) > 0;
+    }
+    if (!pairwise) return score.percentile === inference.percentile;
+    return Number.isFinite(score.percentile) && score.percentile >= 0 && score.percentile <= 1
+        && Number.isSafeInteger(score.sourceCount) && score.sourceCount > 0 && score.sourceCount <= inference.sourceCount;
+}
+
 function requireRankedModel(value, path, scoreMode) {
     const model = requireWorkspaceObject(value, path);
     if (!Number.isSafeInteger(model.ID) || model.ID === 0 || typeof model.name !== 'string' || !model.name) {
@@ -210,17 +224,17 @@ function requireRankedModel(value, path, scoreMode) {
     });
     const inferredScores = requireWorkspaceArray(model.inferredScores, `${path}.inferredScores`);
     let traceScore = model.lower;
-    if (scoreMode === 'available' && scores.length) {
+    if (scoreMode === 'available' && (scores.length || inferredScores.length)) {
         const inference = requireWorkspaceObject(model.availableInference, `${path}.availableInference`);
+        const chain = inference.method === FALLBACK_INFERENCE_METHOD;
+        if (chain && scores.some(score => score.fallbackFor !== null)) throw invalidWorkspaceResponse(path, 'must count only direct measurements as observed');
         const missingOnly = isMissingInferenceMethod(inference.method);
         const pairwise = missingOnly || [PAIRWISE_INFERENCE_METHOD, PAIRWISE_COVERAGE_METHOD, PAIRWISE_COVERAGE_FACTOR_METHOD, PAIRWISE_RATIONAL_COVERAGE_FACTOR_METHOD].includes(inference.method);
         inferredScores.forEach((score, index) => {
             if (!Number.isSafeInteger(score.conditionID) || score.conditionID < 1
                 || !Number.isFinite(score.normalizedScore)
-                || (pairwise ? !Number.isFinite(score.percentile) || score.percentile < 0 || score.percentile > 1
-                    || !Number.isSafeInteger(score.sourceCount) || score.sourceCount < 1 || score.sourceCount > inference.sourceCount
-                    : score.percentile !== inference.percentile)
-                || !Number.isSafeInteger(score.referenceCount) || score.referenceCount < (pairwise ? 2 : 1)
+                || !validPredictionSource(score, inference, chain, pairwise)
+                || !Number.isSafeInteger(score.referenceCount) || score.referenceCount < (chain ? MIN_PAIRED_MODELS : pairwise ? 2 : 1)
                 || !Number.isFinite(score.originalWeight) || score.originalWeight <= 0 || score.originalWeight > 100 + 1e-6
                 || !Number.isFinite(score.effectiveWeight) || score.effectiveWeight <= 0 || score.effectiveWeight > 100 + 1e-6
                 || !Number.isFinite(score.contribution) || Math.abs(score.contribution - score.normalizedScore * (score.effectiveWeight / 100)) > .000001
@@ -229,17 +243,19 @@ function requireRankedModel(value, path, scoreMode) {
             }
         });
         let expected;
-        try { expected = storedAvailableResultInference(inference.observedScore, inference.coverageFraction,
-            inferredScores.map(score => ({ normalizedScore: score.normalizedScore, weightFraction: score.originalWeight / 100 })),
+        const estimates = inferredScores.map(score => ({ normalizedScore: score.normalizedScore, weightFraction: score.originalWeight / 100 }));
+        try { expected = chain ? fallbackInference(inference.observedScore, inference.coverageFraction, estimates, inference.algorithm)
+            : storedAvailableResultInference(inference.observedScore, inference.coverageFraction, estimates,
             inference.percentile, inference.sourceCount, { method: inference.method }); }
         catch { throw invalidWorkspaceResponse(path, 'has an invalid missing-score estimate'); }
+        if (!expected) throw invalidWorkspaceResponse(path, 'must have supported scoring evidence');
         for (const key of Object.keys(expected)) {
             if (typeof expected[key] === 'number' ? !Number.isFinite(inference[key]) || Math.abs(inference[key] - expected[key]) > 0.000001
                 : inference[key] !== expected[key]) {
                 throw invalidWorkspaceResponse(`${path}.availableInference.${key}`, 'must match the missing-score estimate');
             }
         }
-        const denominator = missingOnly ? 1 : inference.coverageFraction + inference.inferredFraction;
+        const denominator = chain ? inference.supportedFraction : missingOnly ? 1 : inference.coverageFraction + inference.inferredFraction;
         if (Math.abs(inference.coverageFraction * 100 - model.coverage) > 0.011
             || Math.abs(inference.totalScore - model.lower) > 0.011 || model.lower !== model.upper
             || Math.abs(scores.reduce((sum, score) => sum + score.contribution, 0) - inference.observedContribution) > .000001
@@ -247,7 +263,7 @@ function requireRankedModel(value, path, scoreMode) {
             || inferredScores.some(score => Math.abs(score.effectiveWeight - score.originalWeight / denominator) > .000001)) {
             throw invalidWorkspaceResponse(path, 'has an inconsistent inferred total');
         }
-        traceScore = missingOnly ? inference.observedContribution + inference.inferredContribution
+        traceScore = chain ? inference.unpenalizedScore : missingOnly ? inference.observedContribution + inference.inferredContribution
             : [PAIRWISE_COVERAGE_METHOD, PAIRWISE_COVERAGE_FACTOR_METHOD, PAIRWISE_RATIONAL_COVERAGE_FACTOR_METHOD].includes(inference.method)
                 ? inference.unpenalizedScore : inference.totalScore;
     } else if (model.availableInference !== null || inferredScores.length) {

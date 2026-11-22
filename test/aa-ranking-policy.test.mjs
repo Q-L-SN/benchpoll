@@ -1,3 +1,4 @@
+import { pairedModels } from './helpers/fallback-pairs.mjs';
 import assert from 'node:assert/strict';
 
 test('SciCode Verified is an AA variant, independent classic SciCode is not', () => {
@@ -60,7 +61,7 @@ for (const scope of ['personal', 'public']) test(`${scope} scoring skips AA fall
     const chain = [{ conditionID: 2 }, { conditionID: 3 }];
     const rules = scope === 'personal' ? { fallbackRules: [{ primaryConditionID: 1, mode: 'ordered', entries: chain }] }
         : { fallbackScope: 'public', familyComposition: [{ primaryConditionID: 1, families: [{ primaryConditionID: 1, entries: chain, weightBasisPoints: 10000 }] }] };
-    const [result] = scoreModels([model], entries, 10000, { ...rules, excludedConditionIDs: new Set([2]) });
+    const [result] = scoreModels([model, ...pairedModels(1, 3, 73, 0, null)], entries, 10000, { ...rules, scoreMode: 'available', excludedConditionIDs: new Set([2]) });
     assert.equal(result.lower, 73);
     assert.deepEqual(result.fallbackResolutions[0].attemptedConditionIDs, [1, 3]);
 });

@@ -1,3 +1,4 @@
+import { pairedModels } from './helpers/fallback-pairs.mjs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { benchmarkConditionGroup } from '../public/js/shared/benchmark-condition-groups.js';
@@ -76,25 +77,18 @@ test('calculation evidence identifies the winning configuration for each weighte
     assert.equal(score.missingWeight, 0);
 });
 
-test('trace reflects direct fallback weights and available-result renormalization', () => {
-    const model = { ...models[0], results: new Map([['2', { normalizedScore: -10 }]]) };
-    const entries = [{ conditionID: 1, weightBasisPoints: 8000 }, { conditionID: 4, weightBasisPoints: 2000 },
-        { conditionID: 3, weightBasisPoints: 0 }];
-    const rule = { primaryConditionID: 1, mode: 'ordered', entries: [
-        { conditionID: 2 }, { conditionID: 3 }] };
-    const [range] = scoreModels([model], entries, 10000, { fallbackRules: [rule] });
-    assert.equal(range.lower, -8);
-    assert.equal(range.calculationScores[0].fallbackFor, 1);
-    assert.equal(range.calculationScores[0].effectiveWeight, 80);
-    assert.equal(range.missingWeight, 20);
-    const [available] = scoreModels([model], entries, 10000, { fallbackRules: [rule], scoreMode: 'available' });
-    assert.equal(available.lower, Number((-10 * (2 - 5 * .8 / (1 + 4 * .8))).toFixed(2)));
-    assert.equal(available.availableInference.unpenalizedScore, -10);
-    assert.equal(available.availableInference.observedScore, -10);
+test('a calibrated backup retains its original share and leaves the score range open', () => {
+    const model = { ...models[0], results: new Map([['2', { normalizedScore: 80 }]]) };
+    const peers = pairedModels(1, 2, 80, -10, model.condition.parameters);
+    const entries = [{ conditionID: 1, weightBasisPoints: 8000 }, { conditionID: 4, weightBasisPoints: 2000 }];
+    const rule = { primaryConditionID: 1, mode: 'ordered', entries: [{ conditionID: 2 }, { conditionID: 3 }] };
+    const [range] = scoreModels([model, ...peers], entries, 10000, { fallbackRules: [rule] });
+    assert.deepEqual([range.lower, range.upper, range.missingWeight], [0, 100, 100]);
+    assert.deepEqual(range.calculationScores, []);
+    const [available] = scoreModels([model, ...peers], entries, 10000, { fallbackRules: [rule], scoreMode: 'available' });
+    assert.equal(available.lower, Number((70 * 4 / 4.2).toFixed(2)));
+    assert.deepEqual([available.inferredScores[0].originalWeight, available.inferredScores[0].effectiveWeight], [80, 100]);
     assert.ok(Math.abs(available.availableInference.unresolvedFraction - .2) < 1e-9);
-    assert.deepEqual(available.inferredScores, []);
-    assert.equal(available.calculationScores[0].effectiveWeight, 100);
-    assert.equal(available.calculationScores[0].contribution, -10);
 });
 
 test('search ranks exact names above prefixes, accepts reordered terms and conservative typos', () => {

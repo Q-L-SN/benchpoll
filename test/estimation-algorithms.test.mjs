@@ -1,3 +1,4 @@
+import { pairedModels } from './helpers/fallback-pairs.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { availableResultInference, storedAvailableResultInference } from '../public/js/shared/available-score.js';
@@ -58,19 +59,30 @@ test('square-root attenuation multiplies only the missing contribution by the sq
     assert.notEqual(trace.totalScore, 70 * Math.sqrt(.5));
 });
 
-test('measured fallback contributions keep their original weights; only predicted scores are bounded', () => {
-    const models = [model(1, { 3: -20 })];
-    const reference = { estimate: () => ({ percentile: null, sourceCount: 2 }),
-        predict: () => ({ normalizedScore: 180, percentile: .8, sourceCount: 2, referenceCount: 3 }) };
-    const rules = { fallbackRules: [{ primaryConditionID: 1, mode: 'ordered', entries: [{ conditionID: 3 }] }], percentileReference: reference };
-    for (const estimationAlgorithm of alternatives) {
-        const [score] = scoreModels(models, entries, 10000, { ...rules, estimationAlgorithm, scoreMode: 'available' });
+test('missing-only choices adjust a calibrated backup while keeping the measured portion fixed', () => {
+    const models = [model(1, { 1: -20, 3: 80 }), ...pairedModels(2, 3, 80, -10)];
+    const rules = { fallbackRules: [{ primaryConditionID: 2, mode: 'ordered', entries: [{ conditionID: 3 }] }] };
+    for (const algorithm of alternatives) {
+        const [score] = scoreModels(models, entries, 10000, { ...rules, estimationAlgorithm: algorithm, scoreMode: 'available' });
         assert.equal(score.coverage, 50); assert.equal(score.fallbackCoverage, 50);
         assert.equal(score.calculationScores[0].contribution, -10);
-        assert.equal(score.calculationScores[0].effectiveWeight, 50);
-        assert.equal(score.inferredScores[0].normalizedScore, 100);
-        assert.equal(score.inferredScores[0].rawNormalizedScore, 180);
-        assert.ok(score.lower >= -10 && score.lower <= 40);
+        assert.equal(score.inferredScores[0].normalizedScore, 70);
+        const factor = { 'missing-raw': 1, 'missing-rational': 5 / 6,
+            'missing-linear': .5, 'missing-sqrt': Math.sqrt(.5), 'missing-midpoint': .5 }[algorithm];
+        close(score.availableInference.totalScore, -10 + 35 * factor + (algorithm === 'missing-midpoint' ? 12.5 : 0));
+    }
+});
+
+test('experimental estimates respect the score bounds while actual observations retain their scale', () => {
+    const models = [model(1, { 1: -20, 3: 110 }), ...pairedModels(2, 3, 110, 10)];
+    const rules = { fallbackRules: [{ primaryConditionID: 2, mode: 'ordered', entries: [{ conditionID: 3 }] }] };
+    const [current] = scoreModels(models, entries, 10000, { ...rules, scoreMode: 'available' });
+    assert.equal(current.inferredScores[0].normalizedScore, 120);
+    for (const estimationAlgorithm of alternatives) {
+        const [row] = scoreModels(models, entries, 10000, { ...rules, scoreMode: 'available', estimationAlgorithm });
+        assert.equal(row.inferredScores[0].normalizedScore, 100);
+        assert.equal(row.inferredScores[0].rawNormalizedScore, 120);
+        assert.equal(row.calculationScores[0].normalizedScore, -20);
     }
 });
 
@@ -92,7 +104,7 @@ test('matched comparisons honor the selected method and do not fall back to the 
         const scores = scoreComparison(models, entries, 10000, { scoreMode: 'available', estimationAlgorithm },
             comparisonOptions(models, { mode: 'matched', keys: ['model'] }));
         assert.ok(scores.every(row => row.availableInference.algorithm === estimationAlgorithm));
-        assert.deepEqual(scores.map(row => row.availableInference.observedContribution), [40, 30]);
+        assert.deepEqual(scores.map(row => row.availableInference.observedContribution), [80, 60]);
     }
 });
 

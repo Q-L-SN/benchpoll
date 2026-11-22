@@ -92,7 +92,7 @@ test('startup reads real preferences for both boot paths and reuses the matching
     }
 });
 
-test('both startup paths always request v5 without reading a retired local coverage preference', async () => {
+test('both startup paths request calibrated fallback scoring without reading a retired local coverage preference', async () => {
     const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
     try {
         let readsFromStorage = 0;
@@ -105,7 +105,7 @@ test('both startup paths always request v5 without reading a retired local cover
             try {
                 await tick(); await tick();
                 const request = JSON.parse(calls.find(call => call.url === '/api/get_weighted_workspace').options.body);
-                assert.equal(request.availableInferenceVersion, 7);
+                assert.equal(request.availableInferenceVersion, 8);
                 assert.ok(await reads.take('/api/get_weighted_workspace', { ...body, availableInferenceVersion: 4 }));
             } finally { reads.stop(); }
         }

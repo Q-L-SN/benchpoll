@@ -121,7 +121,7 @@ function runPreparedRankingGCCheck(check) {
         import assert from 'node:assert/strict';
         import { scoreModels, scoreComparison } from ${moduleURL('../ranking-service.js')};
         import { comparisonOptions, groupComparisonModels } from ${moduleURL('../model-comparison.js')};
-        import { createPairwiseReference } from ${moduleURL('../pairwise-score.js')};
+        import { createFallbackCalibration } from ${moduleURL('../fallback-calibration.js')};
         import { createRankingPager, rankModels } from ${moduleURL('../ranking-pagination.js')};
         import { createRankingReadCache, cachedRankingRead, cachedRankingCalculation,
             withRankingReadCache } from ${moduleURL('../ranking-read-cache.js')};
@@ -139,7 +139,7 @@ function runPreparedRankingGCCheck(check) {
             });
             const options = comparisonOptions(models);
             const groups = groupComparisonModels(models, options, []);
-            const reference = createPairwiseReference(groups);
+            const reference = createFallbackCalibration(models);
             const indexes = new WeakMap(groups.map(group => [group,
                 new Map(group.comparisonScores.map(score => [score.conditionID, score]))]));
             return { models, groups, options, reference, indexes,
@@ -162,7 +162,7 @@ function runPreparedRankingGCCheck(check) {
             }).map(([key, value]) => [key, new WeakRef(value)]));
         }
         function scoreFixture(fixture, comparison, deferred) {
-            const rules = { scoreMode: 'available', percentileReference: fixture.reference,
+            const rules = { scoreMode: 'available', fallbackCalibration: fixture.reference,
                 comparisonScoreIndexes: fixture.indexes };
             return comparison
                 ? scoreComparison(fixture.models, fixture.entries, 10000,

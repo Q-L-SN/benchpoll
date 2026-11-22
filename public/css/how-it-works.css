@@ -85,12 +85,11 @@ body.bp-how-page { margin: 0; background: #fff; color: var(--bp-ink); font-famil
 #how-score-number { color: #3d4859; font-size: 62px; line-height: 1; font-weight: 650; letter-spacing: -.05em; font-variant-numeric: tabular-nums; }
 .hi-score-out-of { font-size: 14px; color: #9fa6b0; }
 .hi-score-track { position: relative; height: 20px; border-radius: 4px; background: #eef0f4; }
-.hi-score-measured { position: absolute; inset: 0 auto 0 0; width: 42.352941%; border-radius: 4px 0 0 4px; background: #9b87bf; transition: width 550ms cubic-bezier(.22,1,.36,1); }
-.hi-score-uncertain { position: absolute; left: 42.352941%; top: 0; bottom: 0; width: 17.647059%; background: #d4c7e7; transition: left 550ms, width 550ms cubic-bezier(.22,1,.36,1); }
-.hi-score-marker { position: absolute; top: -4px; bottom: -4px; left: 60%; width: 2px; background: #786295; transition: left 550ms, opacity 250ms; }
-.hi-score-art[data-mode="range"] .hi-score-measured { width: 48%; }
-.hi-score-art[data-mode="range"] .hi-score-uncertain { left: 48%; width: 40%; background: repeating-linear-gradient(120deg, #d9cfe8, #d9cfe8 3px, #f0eaf6 3px, #f0eaf6 6px); }
-.hi-score-art[data-mode="range"] .hi-score-marker { left: 88%; opacity: 0; }
+.hi-score-measured { position: absolute; inset: 0 auto 0 0; width: 64%; border-radius: 4px 0 0 4px; background: #9b87bf; transition: width 550ms cubic-bezier(.22,1,.36,1); }
+.hi-score-uncertain { position: absolute; left: 64%; top: 0; bottom: 0; width: 15%; background: #d4c7e7; transition: left 550ms, width 550ms cubic-bezier(.22,1,.36,1); }
+.hi-score-marker { position: absolute; top: -4px; bottom: -4px; left: 79%; width: 2px; background: #786295; transition: left 550ms, opacity 250ms; }
+.hi-score-art[data-mode="range"] .hi-score-uncertain { width: 20%; background: repeating-linear-gradient(120deg, #d9cfe8, #d9cfe8 3px, #f0eaf6 3px, #f0eaf6 6px); }
+.hi-score-art[data-mode="range"] .hi-score-marker { left: 84%; opacity: 0; }
 .hi-score-scale { display: flex; justify-content: space-between; margin-top: 8px; font-size: 9px; color: #9ba3af; }
 .hi-coverage { display: flex; justify-content: space-between; gap: 10px; margin-top: 26px; font-size: 11px; color: #78828e; }
 .hi-coverage i { margin-right: 5px; }

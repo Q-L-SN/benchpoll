@@ -1,3 +1,4 @@
+import { FALLBACK_INFERENCE_METHOD } from '../public/js/shared/fallback-inference.js';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
@@ -121,7 +122,7 @@ function calculationSummary(inference, coverage = 50) {
     const end = source.indexOf('function openApprovedModelResults(', start);
     const render = vm.runInNewContext(`${source.slice(start, end)}\nrenderCalculationResults`, {
         modelScoresSummary, modelScoresList: { append() {} }, document: { createElement: () => ({ textContent: '', append(...nodes) { this.textContent += nodes.map(node => node.textContent).join(' '); } }) },
-        rankingNumber, isMissingInferenceMethod, syncExpand() {}, filterScores() {}, expansionNoun: ''
+        rankingNumber, isMissingInferenceMethod, FALLBACK_INFERENCE_METHOD, syncExpand() {}, filterScores() {}, expansionNoun: ''
     });
     render({ lower: inference.totalScore, coverage, missingWeight: 100 - coverage,
         availableInference: inference, calculationScores: [] });

@@ -13,10 +13,10 @@ export const PAIRWISE_COVERAGE_FACTOR_METHOD = 'pairwise-anchored-coverage-facto
 export const PAIRWISE_RATIONAL_COVERAGE_FACTOR_METHOD = 'pairwise-anchored-rational-coverage-factor';
 export const AVAILABLE_COVERAGE_EXPONENT = .35;
 export const AVAILABLE_COVERAGE_PENALTY_POINTS = 20;
-export const AVAILABLE_INFERENCE_VERSION = 7;
+export const AVAILABLE_INFERENCE_VERSION = 8;
 
 export function normalizeAvailableInferenceVersion(version = AVAILABLE_INFERENCE_VERSION) {
-    if (![1, 2, 3, 4, 5, 6, 7].includes(version)) throw new TypeError('Invalid available inference version');
+    if (![1, 2, 3, 4, 5, 6, 7, 8].includes(version)) throw new TypeError('Invalid available inference version');
     // Stale clients may still send a retired version, but new calculations use the current one.
     return AVAILABLE_INFERENCE_VERSION;
 }

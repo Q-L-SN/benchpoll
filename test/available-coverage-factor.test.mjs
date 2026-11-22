@@ -1,6 +1,7 @@
+import { pairedModels } from './helpers/fallback-pairs.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { availableResultInference, PAIRWISE_RATIONAL_COVERAGE_FACTOR_METHOD, AVAILABLE_INFERENCE_VERSION, rankingReadBody } from '../public/js/shared/available-score.js';
+import { availableResultInference, AVAILABLE_INFERENCE_VERSION, rankingReadBody } from '../public/js/shared/available-score.js';
 import { coverageMultiplier, RATIONAL_COVERAGE_A } from '../public/js/shared/coverage-penalty.js';
 import { scoreModels, scoreComparison } from '../ranking-service.js';
 import { comparisonOptions } from '../model-comparison.js';
@@ -114,23 +115,21 @@ test('the rational factor uses exact coverage rather than the rounded displayed 
     assert.notEqual(row.availableInference.coverageFactor, coverageMultiplier(row.coverage / 100));
 });
 
-test('real fallback and fractional Public configurations count as coverage before applying the factor', () => {
-    const models = [model(1, { 3: 25 }), model(2, { 1: 50, 2: 60, 3: 50 }), model(3, { 1: 75, 2: 80, 3: 75 }),
-        model(4, { 1: 62, 2: 70, 3: 62 })];
+test('calibrated public shares support the point score while direct coverage stays separate', () => {
+    const models = [model(1, { 3: 75 }), ...pairedModels(1, 3, 75, -5, { harness: 'same' })];
     const rule = { primaryConditionID: 1, familyID: 10, mode: 'ordered', entries: [{ conditionID: 3 }] };
     const [personal] = score(models, weights, { fallbackRules: [rule] });
-    assert.equal(personal.coverage, 50);
+    assert.equal(personal.coverage, 0);
     close(personal.availableInference.coverageFactor, 5 / 6);
-    assert.equal(personal.calculationScores[0].fallbackFor, 1);
+    assert.equal(personal.inferredScores[0].normalizedScore, 70);
     const [shared] = score(models, weights, { fallbackScope: 'public', familyComposition: [
         { primaryConditionID: 1, families: [{ ...rule, weightBasisPoints: 6000 },
-            { primaryConditionID: 1, familyID: null, entries: [], weightBasisPoints: 4000 }] },
-        { primaryConditionID: 2, families: [{ primaryConditionID: 2, familyID: null, entries: [], weightBasisPoints: 10000 }] }
+            { primaryConditionID: 1, familyID: null, entries: [], weightBasisPoints: 4000 }] }
     ] });
-    assert.equal(shared.coverage, 30);
+    assert.equal(shared.coverage, 0);
     close(shared.availableInference.coverageFactor, 15 / 22);
-    close(shared.availableInference.inferredFraction, .7);
-    assert.equal(shared.inferredScores.length, 2);
+    close(shared.availableInference.inferredFraction, .3);
+    assert.equal(shared.inferredScores.length, 1);
 });
 
 test('fully covered totals and Score range remain unchanged; no weighted evidence stays incomparable', () => {
@@ -175,12 +174,12 @@ test('all legacy read versions and matched comparisons calculate only rational t
         for (const version of [1, 2, 3, 4, 5, 6, 7]) {
             const rows = score(models, weights, { availableInferenceVersion: version }, mode);
             assert.deepEqual(rows.map(row => row.lower), [66.67, 50]);
-            assert.ok(rows.every(row => row.availableInference.method === PAIRWISE_RATIONAL_COVERAGE_FACTOR_METHOD));
+            assert.ok(rows.every(row => row.availableInference.method === 'calibrated-fallback'));
         }
     }
-    assert.equal(AVAILABLE_INFERENCE_VERSION, 7);
-    assert.equal(rankingReadBody('/api/get_weighted_workspace', {}).availableInferenceVersion, 7);
-    for (const version of [1, 2, 3, 4, 5, 6]) assert.equal(rankingReadBody('/api/get_weighted_workspace', { availableInferenceVersion: version }).availableInferenceVersion, 7);
+    assert.equal(AVAILABLE_INFERENCE_VERSION, 8);
+    assert.equal(rankingReadBody('/api/get_weighted_workspace', {}).availableInferenceVersion, 8);
+    for (const version of [1, 2, 3, 4, 5, 6]) assert.equal(rankingReadBody('/api/get_weighted_workspace', { availableInferenceVersion: version }).availableInferenceVersion, 8);
 });
 
 test('rounding preserves finite extreme totals instead of overflowing them while forming a ranking', () => {

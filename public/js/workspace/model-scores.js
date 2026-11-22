@@ -1,3 +1,4 @@
+import { FALLBACK_INFERENCE_METHOD } from '../shared/fallback-inference.js';
 import { setLoading } from '../shared/loading.js';
 import { postJSON } from '../shared/http.js';
 import { isMissingInferenceMethod } from '../shared/estimation-algorithms.js';
@@ -461,7 +462,7 @@ export function createModelScoresView({ state, modelScoresDialog, modelScoresTit
     function renderCalculationResults(model) {
         const scores = model.calculationScores;
         const range = !model.availableInference && Number.isFinite(model.upper) && model.upper !== model.lower;
-        modelScoresSummary.textContent = model.comparable === false ? 'Not ranked: no measured result matches these weights and settings.'
+        modelScoresSummary.textContent = model.comparable === false ? 'No qualifying ranking evidence for these weights and settings.'
             : `${range ? `Score range ${rankingNumber(model.lower)} to ${rankingNumber(model.upper)}` : `Index score ${rankingNumber(model.lower)}`}; measured results cover ${rankingNumber(model.coverage)}% of the weight.`;
         if (range && model.comparable !== false) {
             const detail = document.createElement('p');
@@ -470,19 +471,20 @@ export function createModelScoresView({ state, modelScoresDialog, modelScoresTit
             modelScoresSummary.append(detail);
         }
         const inference = model.availableInference;
+        const calibrated = inference?.method === FALLBACK_INFERENCE_METHOD;
         const missingOnly = isMissingInferenceMethod(inference?.method);
         const usesCoverageFactor = inference && [inference.coverageFactor, inference.appliedFactor,
             inference.unpenalizedScore].every(Number.isFinite);
-        if (inference && (model.missingWeight > 0 || usesCoverageFactor || missingOnly)) {
+        if (inference && (model.missingWeight > 0 || usesCoverageFactor || missingOnly || calibrated)) {
             const detail = document.createElement('p');
             detail.className = 'bp-model-inference-summary';
             detail.textContent = model.missingWeight <= 0 ? '' : inference.inferredFraction > 0
-                ? `${(inference.inferredFraction * 100).toFixed(2)}% of the weight uses estimates from shared-test comparisons.`
+                ? `${(inference.inferredFraction * 100).toFixed(2)}% of the weight uses estimates from ${calibrated ? 'the selected fallback chains' : 'shared-test comparisons'}.`
                 : 'Estimates are unavailable for the missing results.';
             if (inference.unresolvedFraction > 0) detail.textContent += missingOnly
                 ? ` ${(inference.unresolvedFraction * 100).toFixed(2)}% of the weight has no measurement or prediction and starts at 50.`
                 : ` ${(inference.unresolvedFraction * 100).toFixed(2)}% of the weight has no measurement or estimate and is left out of the average.`;
-            if (usesCoverageFactor || missingOnly) {
+            if (usesCoverageFactor || missingOnly || calibrated) {
                 modelScoresSummary.append(detail);
                 const calculation = document.createElement('div');
                 calculation.className = 'bp-model-calculation-details';
@@ -611,20 +613,24 @@ export function createModelScoresView({ state, modelScoresDialog, modelScoresTit
         }
         if (model.inferredScores?.length) {
             const section = document.createElement('h3'); section.className = 'bp-model-inferred-heading';
-            section.textContent = 'Estimated missing results'; modelScoresList.append(section);
+            section.textContent = 'Estimated benchmark scores'; modelScoresList.append(section);
             for (const score of model.inferredScores) {
                 const benchmark = benchmarkDetails(score.conditionID);
                 const row = document.createElement('div'); row.className = 'bp-model-score-detail-row bp-model-inferred-row';
                 const title = benchmark ? informationLink(benchmark) : document.createElement('strong');
                 if (!benchmark) title.textContent = `Benchmark #${score.conditionID}`;
                 const description = document.createElement('small');
-                description.textContent = `Estimate for ${score.originalWeight.toFixed(2)}% of the Pie, based on ${score.referenceCount} comparison entries`;
+                if (calibrated) {
+                    const source = benchmarkDetails(score.sourceConditionID);
+                    description.append('Estimated from ', source ? informationLink(source) : `Benchmark #${score.sourceConditionID}`,
+                        ` (${rankingNumber(score.sourceScore)} measured). At least ${score.referenceCount} paired models · ${score.originalWeight.toFixed(2)}% weight.`);
+                } else description.textContent = `Estimate for ${score.originalWeight.toFixed(2)}% of the Pie, based on ${score.referenceCount} comparison entries`;
                 const value = document.createElement('strong'); value.textContent = score.normalizedScore.toFixed(2);
-                const contribution = document.createElement('span'); contribution.textContent = `${score.contribution.toFixed(2)} added to total`;
+                const contribution = document.createElement('span'); contribution.textContent = `${score.contribution.toFixed(2)} points before adjustment`;
                 row.append(title, value, description, contribution); modelScoresList.append(row);
             }
         }
-        if (!scores.length) {
+        if (!scores.length && !model.inferredScores?.length) {
             const empty = document.createElement('p');
             empty.textContent = 'No recorded scores contributed to this ranking.';
             modelScoresList.append(empty);

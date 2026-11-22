@@ -1,7 +1,8 @@
+import { pairedModels } from './helpers/fallback-pairs.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { familyKey, resolvedFamilyConditionIDs, resolveFamilyScore } from '../public/js/shared/benchmark-families.js';
+import { familyKey, resolvedFamilyConditionIDs, resolveFallbackChain } from '../public/js/shared/benchmark-families.js';
 import { parseFamilyRows, ensureBenchmarkFamily } from '../benchmark-family-service.js';
 import { scoreModels, savePersonalPie } from '../ranking-service.js';
 import { createEditHistory } from '../public/js/workspace/edit-history.js';
@@ -23,11 +24,13 @@ test('newly scored versions cannot silently join an existing chain', () => {
     const entries = [{ conditionID: 3 }, { conditionID: 2 }];
     const model = models([[4, 100], [2, 95], [3, 0]])[0];
     assert.deepEqual(resolvedFamilyConditionIDs(1, entries), [1, 3, 2]);
-    assert.equal(resolveFamilyScore(model, 1, entries).normalizedScore, 0);
+    const predict = (ID, value) => ({ sourceConditionID: ID, normalizedScore: value });
+    const resolve = () => resolveFallbackChain(model, resolvedFamilyConditionIDs(1, entries), predict);
+    assert.equal(resolve().prediction.normalizedScore, 0);
     model.results.delete('3');
-    assert.equal(resolveFamilyScore(model, 1, entries).normalizedScore, 95);
+    assert.equal(resolve().prediction.normalizedScore, 95);
     model.results.delete('2');
-    assert.equal(resolveFamilyScore(model, 1, entries).normalizedScore, null);
+    assert.equal(resolve().prediction, null);
 });
 
 test('personal and public scoring preserve the exact ordered concrete chain in both modes', () => {
@@ -36,10 +39,10 @@ test('personal and public scoring preserve the exact ordered concrete chain in b
         const weights = [{ conditionID: 1, weightBasisPoints: 10000 }];
         for (const rules of [{ fallbackRules: [rule] }, { fallbackScope: 'public',
             familyComposition: [{ primaryConditionID: 1, families: [{ ...rule, familyID: 7, weightBasisPoints: 10000 }] }] }]) {
-            const result = scoreModels(models([[2, 99], [3, 35]]), weights, 10000, { ...rules, scoreMode })[0];
-            assert.equal(result.lower, 35);
+            const result = scoreModels([...models([[2, 99], [3, 35]]), ...pairedModels(1, 3, 35, -5, null)], weights, 10000, { ...rules, scoreMode })[0];
+            assert.equal(result.lower, scoreMode === 'range' ? 0 : 30);
             assert.deepEqual(result.fallbackResolutions[0].attemptedConditionIDs, [1, 3]);
-            assert.deepEqual(result.calculationScores[0].familyConditionIDs, [1, 3, 2]);
+            if (scoreMode === 'available') assert.deepEqual(result.inferredScores[0].familyConditionIDs, [1, 3, 2]);
         }
     }
 });
