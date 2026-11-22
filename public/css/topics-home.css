@@ -117,7 +117,7 @@ body.th-home .bp-profile-editor input:focus { border-color: var(--bp-accent); ba
 .th-topic-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .th-topic-link > i { flex: 0 0 auto; color: #8a939d; font-size: 12px; }
 .th-card:hover .th-topic-link > i { color: var(--bp-accent); }
-.th-topic-summary { width: 100%; min-width: 0; margin: 0; overflow: hidden; color: #66717b; font-size: 13px; line-height: 20px; font-weight: 400; white-space: nowrap; -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent); }
+.th-topic-summary { width: 100%; min-width: 0; margin: -1px 0 1px; overflow: hidden; color: #66717b; font-size: 13px; line-height: 20px; font-weight: 400; white-space: nowrap; -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent); }
 .th-card-title a:hover { color: var(--bp-accent); }
 .th-card-title a:focus-visible { outline-offset: 1px; }
 .th-card-title > i { flex-shrink: 0; color: #7b8491; font-size: 12px; }
