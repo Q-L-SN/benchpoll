@@ -1,11 +1,11 @@
-export function createToast({ duration = 3500, avoid = null } = {}) {
+export function createToast({ duration = 3500, avoid = null, iconClass = 'fa-check' } = {}) {
     const root = document.createElement('div');
     root.className = 'bp-toast';
     root.setAttribute('role', 'status');
     root.setAttribute('aria-live', 'polite');
     root.setAttribute('aria-atomic', 'true');
     const icon = document.createElement('i');
-    icon.className = 'fa-solid fa-check';
+    icon.className = 'fa-solid ' + iconClass;
     icon.setAttribute('aria-hidden', 'true');
     const message = document.createElement('span');
     root.append(icon, message);

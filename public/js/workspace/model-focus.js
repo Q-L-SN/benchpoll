@@ -5,6 +5,7 @@ import { RANKING_PAGE_SIZE } from '../shared/ranking-resume.js';
 import { quickComparisonFields, readComparisonSettings, writeComparisonSettings } from './comparison-settings.js?v=comparison-experiment-20261007';
 import { runFieldKind } from '../shared/score-field-presets.js';
 import { modelWindowEdge } from './model-scroll-window.js';
+import { revealInPanel } from './reveal-in-panel.js';
 
 const HIGHLIGHT_MS = 1900;
 
@@ -273,7 +274,7 @@ export function createHomeModelFocus({ intent, state, rows, view, request, showR
                 }
                 focusAutomatically(row);
                 const reduced = win.matchMedia('(prefers-reduced-motion: reduce)').matches;
-                row.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'center', inline: 'center' });
+                revealInPanel(row, { behavior: reduced ? 'auto' : 'smooth', block: 'center', inline: 'center' });
                 row.classList.add('is-model-jump-focus');
                 highlighted = row;
                 highlightTimer = win.setTimeout(() => { clearHighlight(); scheduleEdges(); }, HIGHLIGHT_MS);

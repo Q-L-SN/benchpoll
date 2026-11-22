@@ -5,6 +5,7 @@ import { registerProfileRoutes } from '../../profile-routes.js';
 import { loadUserProfile, saveUserProfile } from '../../user-profile-service.js';
 import { requireAccountWriteOwner } from '../../public/js/shared/account-identity.js';
 import { LEGAL_VERSIONS } from '../../public/js/shared/legal-versions.js';
+import { parseTopicPath } from '../../public/js/shared/topics.js';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 
@@ -21,10 +22,10 @@ export async function startProfilePagesFixture({ viewerID = '10', port = 0 } = {
         { ID: 7, categoryID: 7, publicID: 1, name: 'Language', url: '/1', description: 'Understand language models across everyday tasks.',
             isOfficial: true, favoriteCount: 128, isFavorited: true, configured: true, rootContextID: 12, defaultContextID: 12, scenes: [] },
         { ID: 8, categoryID: 8, publicID: 2, name: 'Coding', url: '/2', description: 'Compare code generation and problem solving.',
-            isOfficial: false, creator: { handle: '2', name: 'Sam Rivera', avatarURL: null }, favoriteCount: 82, isFavorited: false,
+            isOfficial: false, creator: { handle: '2', name: 'Sam Rivera', avatarURL: null }, favoriteCount: 82, isFavorited: true,
             configured: false, rootContextID: 13, defaultContextID: 13, scenes: [{ ID: 13, contextID: 13, name: 'Python', sceneNumber: 1, url: '/2/1' }] },
         { ID: 9, categoryID: 9, publicID: 3, name: 'Research', url: '/3', description: 'A careful view of evidence and research capability.',
-            isOfficial: false, creator: { handle: '1', name: 'Avery Chen', avatarURL: null }, favoriteCount: 45, isFavorited: true,
+            isOfficial: false, creator: { handle: '1', name: 'Avery Chen', avatarURL: null }, favoriteCount: 45, isFavorited: false,
             configured: false, rootContextID: 14, defaultContextID: 14, scenes: [] }
     ];
     const state = { viewerID, profiles, topics, requests: [], queried: [], visits: [
@@ -85,8 +86,12 @@ export async function startProfilePagesFixture({ viewerID = '10', port = 0 } = {
         requireAuthForAPI: auth, discussionSameOrigin: sameOrigin, requireAccountWriteOwner,
         readProfileTopics: async (_db, options) => {
             state.queried.push(options);
-            return { published: options.userID === '10' ? [topics[2]] : [],
-                ...(options.includeFavorites ? { favorites: [topics[0], topics[1]] } : {}),
+            const created = options.userID === '10' ? [topics[2]] : [];
+            if (options.userID === '10' && options.viewerID === '10') created.push({ ID: 10, categoryID: 10, name: 'Private notebook',
+                isPrivate: true, url: '/private/OwnerDraft1234', description: '', favoriteCount: 0 });
+            return { created,
+                ...(options.includeFavorites ? { favorites: topics.filter(topic => topic.isFavorited)
+                    .map(topic => ({ ...topic, isFavorited: options.viewerID === '10' })) } : {}),
                 ...(options.includeConfigured ? { configured: [topics[0]] } : {}) };
         },
         getTopic: async (_db, _viewerID, id) => { const topic = topics.find(topic => topic.ID === id); if (!topic) throw { status: 404 }; return topic; }
@@ -106,7 +111,10 @@ export async function startProfilePagesFixture({ viewerID = '10', port = 0 } = {
         res.json({ categoryID: topic.ID, isFavorited: topic.isFavorited, favoriteCount: topic.favoriteCount });
     });
     app.use('/api', API); app.use(page); app.use(express.static(root + 'public'));
-    app.get(['/', '/login', '/:publicID', '/:publicID/:sceneNumber'], (_req, res) => res.send('<!doctype html><title>Fixture</title><a href="/me">Your profile</a>'));
+    app.get(['/', '/login', '/*any_path'], (req, res, next) => {
+        if (!['/', '/login'].includes(req.path) && !parseTopicPath(req.originalUrl)) return next();
+        res.send('<!doctype html><title>Fixture</title><a href="/me">Your profile</a>');
+    });
     app.use((error, _req, res, _next) => res.status(error.status || 500).json(error.body ?? { error: error.message }));
     const server = app.listen(port, '127.0.0.1'); await once(server, 'listening');
     return { state, origin: `http://127.0.0.1:${server.address().port}`, close: () => new Promise(resolve => server.close(resolve)) };

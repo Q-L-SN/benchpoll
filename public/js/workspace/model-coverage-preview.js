@@ -6,7 +6,7 @@ const blockKey = entry => entry.conditionID < 0 ? 'unresolved' : `benchmark:${en
 
 // These are presentation blocks, never inputs to the ranking or personal weights.
 // Coverage rows describe direct measurements on each weighted benchmark version.
-export function buildModelCoverageEntries(entries, coverageEntries, versions = []) {
+export function buildModelCoverageEntries(entries, coverageEntries, versions = [], estimates = []) {
     if (!Array.isArray(entries) || !Array.isArray(coverageEntries)) return null;
     const coverageByID = new Map();
     for (const item of coverageEntries) {
@@ -19,15 +19,34 @@ export function buildModelCoverageEntries(entries, coverageEntries, versions = [
         }
         coverageByID.set(item.conditionID, item);
     }
+    const estimatedByID = new Map();
+    const totalWeight = coverageEntries.reduce((sum, item) => sum + item.weightBasisPoints, 0);
+    for (const score of estimates) {
+        // Fallback resolutions identify the target as primaryConditionID; point estimates use conditionID.
+        const id = score.primaryConditionID ?? score.conditionID;
+        if (!coverageByID.has(id) || !Number.isFinite(score.normalizedScore)) continue;
+        const weight = score.weightBasisPoints ?? score.originalWeight / 100 * totalWeight;
+        if (!Number.isFinite(weight) || weight <= 0) continue;
+        const estimate = estimatedByID.get(id) ?? { weight: 0, contribution: 0 };
+        estimate.weight += weight;
+        estimate.contribution += weight * score.normalizedScore;
+        estimatedByID.set(id, estimate);
+    }
     const totals = new Map();
     for (const entry of entries) {
         if (!(entry.weightBasisPoints > 0)) continue;
-        const key = blockKey(entry), total = totals.get(key) ?? { covered: 0, contribution: 0 };
+        const key = blockKey(entry), total = totals.get(key) ?? { covered: 0, contribution: 0, estimated: 0, estimatedContribution: 0 };
         const adopted = entry.conditionID > 0 ? coverageByID.get(entry.conditionID) : null;
         // Repeated references to the same condition retain their proportional share.
         const covered = adopted ? entry.weightBasisPoints * adopted.coveredWeightBasisPoints / adopted.weightBasisPoints : 0;
         total.covered += covered;
         if (covered > 0) total.contribution += covered * adopted.normalizedScore;
+        const estimate = estimatedByID.get(entry.conditionID);
+        if (adopted && estimate) {
+            const share = entry.weightBasisPoints / adopted.weightBasisPoints;
+            total.estimated += share * estimate.weight;
+            total.estimatedContribution += share * estimate.contribution;
+        }
         totals.set(key, total);
     }
     return mergeBenchmarkWeights(entries, versions).map(entry => {
@@ -35,6 +54,7 @@ export function buildModelCoverageEntries(entries, coverageEntries, versions = [
         const coveredWeightBasisPoints = total?.covered ?? 0;
         return { ...entry, coveredWeightBasisPoints,
             coverage: Math.min(100, coveredWeightBasisPoints / entry.weightBasisPoints * 100),
+            estimatedNormalizedScore: total?.estimated > 0 ? total.estimatedContribution / total.estimated : null,
             adoptedNormalizedScore: coveredWeightBasisPoints > 0 ? total.contribution / coveredWeightBasisPoints : null };
     });
 }
@@ -82,7 +102,8 @@ export function createModelCoveragePreview({ state, pieSvg, getExpandedEntries, 
         watch();
         function render(resolved) {
             if (!current()) return false;
-            const entries = buildModelCoverageEntries(getExpandedEntries(), resolved?.coverageEntries, getVersions());
+            const estimates = state.scoreMode === 'range' ? resolved?.fallbackResolutions : resolved?.inferredScores;
+            const entries = buildModelCoverageEntries(getExpandedEntries(), resolved?.coverageEntries, getVersions(), estimates);
             if (!entries) return unavailable();
             const svg = document.createElementNS(SVG_NS, 'svg');
             svg.classList.add('bp-model-coverage-treemap');

@@ -59,9 +59,8 @@ body.th-home .bp-profile-editor input:focus { border-color: var(--bp-accent); ba
 .th-browse-tools { position: sticky; top: calc(var(--th-header-height, 64px) + 6px); z-index: 29; display: flex; align-items: center; gap: 8px; height: 50px; margin-block: 6px 0; pointer-events: none; }
 .th-browse-tools > * { pointer-events: auto; }
 .th-directory-nav { flex: 0 0 var(--th-picker-width); min-width: 0; }
-.th-directory-nav .bp-topic-collection { border-radius: 22px; box-shadow: 0 4px 16px #252d3712; }
-.th-directory-nav .bp-topic-collection :is(.bp-ui-select-trigger, .bp-topic-query) { border-radius: inherit; }
-.th-directory-nav .bp-ui-select { border-radius: inherit; }
+.th-browse-tools.is-choosing-collection { z-index: 35; }
+.th-browse-tools > .bp-collection-backdrop { position: fixed; }
 .th-topics-wordmark { color: var(--bp-accent); font: 800 var(--th-wordmark-size)/1 Manrope, 'Segoe UI', sans-serif; letter-spacing: -.7px; transform: translateY(2px); white-space: nowrap; }
 .th-profile-preview { margin: 0; padding: 16px; border: 1px solid var(--bp-line); border-radius: 12px; background: var(--bp-surface); color: var(--bp-text); box-shadow: 0 12px 36px #17212b21; font: 500 13px/1.5 Manrope, 'Segoe UI', sans-serif; }
 .th-profile-preview:not([hidden]) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }

@@ -1396,10 +1396,5 @@ body .bp-bar-endpoint-label[data-bar-label-overflow="true"][data-bar-label-fallb
         font-size: 9px;
     }
 }
-.bp-toast { position: fixed; z-index: 1200; left: 50%; bottom: var(--toast-bottom, calc(24px + env(safe-area-inset-bottom, 0px))); display: flex; align-items: center; gap: 10px; width: max-content; max-width: min(400px, calc(100vw - 32px)); padding: 12px 16px; box-sizing: border-box; border-radius: 6px; background: #282d35; color: white; font-size: 13px; line-height: 1.5; box-shadow: 0 4px 16px rgb(0 0 0 / 14%); opacity: 0; transform: translate(-50%, 8px); pointer-events: none; transition: opacity 180ms ease, transform 180ms ease; }
-.bp-toast > i { flex: 0 0 auto; }
-.bp-toast > span { min-width: 0; overflow-wrap: anywhere; }
-.bp-toast.is-visible { opacity: 1; transform: translate(-50%, 0); }
-@media (prefers-reduced-motion: reduce) { .bp-toast { transition: none; } }
 .bp-benchmark-discovery-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 14px; }
 .bp-benchmark-discovery-actions > .bp-ui-action { max-width: 100%; white-space: normal; text-align: left; }

@@ -9,7 +9,8 @@
 .bp-model-coverage-treemap { display: block; width: 100%; height: 100%; overflow: hidden; font-family: inherit; user-select: none; }
 .bp-model-coverage-treemap .bp-weight-tile { stroke: #fff; stroke-width: 1.5px; stroke-linejoin: round; }
 .bp-model-coverage-treemap .bp-weight-tile-labels { fill: var(--bp-ink); pointer-events: none; }
-.bp-model-coverage-treemap .is-uncovered { opacity: .24; }
+.bp-model-coverage-treemap .is-uncovered .bp-weight-tile { opacity: .24; }
+.bp-model-coverage-treemap .is-uncovered .bp-weight-tile-labels { fill: var(--bp-muted); }
 .bp-model-coverage-treemap [data-adopted-score] { fill: var(--bp-coverage-score, #583493); }
 .bp-model-coverage-figure { display: none; }
 .bp-model-coverage-unavailable { padding: 24px 12px; color: var(--bp-muted); font-size: 12px; }

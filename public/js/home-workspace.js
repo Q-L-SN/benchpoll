@@ -38,6 +38,7 @@ import { createBenchmarkRowFocus } from './workspace/benchmark-family-row.js?v=f
 import { createBenchmarkFallbackCatalogue } from './workspace/benchmark-fallback-catalogue.js?v=fallback-picker-20261008';
 import { createFallbackPicker } from './workspace/fallback-picker.js?v=fallback-controls-20261009';
 import { createBenchmarkSettings } from './workspace/benchmark-settings.js';
+import { revealInPanel } from './workspace/reveal-in-panel.js';
 import { createPersonalPieStart, publicWeightStart } from './workspace/personal-pie-start.js';
 import { fallbackStatusLabel } from './shared/fallback-choice.js';
 import { initializeFallbackAppearance } from './workspace/fallback-appearance.js?v=fallback-appearance-20261014';
@@ -66,7 +67,7 @@ import { excludedFromRanking } from './shared/aa-ranking-policy.js';
 import { mountSiteActions } from './shared/site-header.js';
 import { createUpdateIndicator } from './shared/update-indicator.js';
 import { mountDisclosureChevron } from './shared/disclosure-chevron.js';
-import { createFavoriteButton, createConfiguredIndicator, createTopicReportButton } from './shared/topic-actions.js';
+import { FAVORITE_EVENT, createFavoriteButton, createConfiguredIndicator, createTopicReportButton } from './shared/topic-actions.js';
 import { recordProfileVisit } from './shared/profile-history.js';
 import { createModelCoveragePreview } from './workspace/model-coverage-preview.js';
 
@@ -244,6 +245,13 @@ let personalStartContext = null;
 let benchmarkSearchTimer = null;
 let benchmarkSearchActive = false;
 let sceneTargets = [], sceneTargetsScope = '', sceneTargetsPending = null, sceneTargetsError = '';
+window.addEventListener(FAVORITE_EVENT, ({ detail: { categoryID, isFavorited, favoriteCount } }) => {
+    const fields = { isFavorited, favoriteCount };
+    if (Number(state.categoryID) === categoryID) state.topicMetadata = { ...state.topicMetadata, ...fields };
+    for (const source of [sceneTargets, state.benchmarks]) for (const target of source) {
+        if (Number(target.categoryID) === categoryID) Object.assign(target, fields);
+    }
+});
 let lowCoverageExpanded = false;
 let otherConditionsExpanded = false;
 
@@ -798,8 +806,7 @@ function renderBreadcrumb() {
     if (state.authenticated && state.hasSavedPersonalWeights) breadcrumb.append(createConfiguredIndicator({ configured: true }));
     if (state.categoryID && !state.contextIsPrivate) breadcrumb.append(createFavoriteButton({
         ...state.topicMetadata, ID: state.categoryID, categoryID: state.categoryID
-    }, { onChange: update => { state.topicMetadata = { ...state.topicMetadata, ...update }; },
-        onError: (_error, message) => additionToast.show(message) }));
+    }));
     breadcrumb.append(updateIndicator.element);
     if (state.contextIsPrivate) {
         const label = document.createElement('small'); label.className = 'bp-private-context-label'; label.textContent = 'Private';
@@ -1681,7 +1688,7 @@ inlineFallbackDone.addEventListener('click', finishInlineFallbackEditing);
 addFallbackBenchmarkButton.addEventListener('click', () => {
     if (!activateInlineFallbackTarget()) return;
     if (window.matchMedia('(hover: hover)').matches) benchmarkSearch.focus({ preventScroll: true });
-    benchmarkCard.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block: 'nearest' });
+    revealInPanel(benchmarkSearch, { behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block: 'nearest' });
 });
 
 function addObjectToPersonalPie(object) {
@@ -1983,9 +1990,7 @@ function renderBenchmarks() {
         if (isTopicReference(object)) {
             metadata.classList.add('bp-topic-metrics');
             if (object.configured) metadata.append(createConfiguredIndicator(object));
-            if (!object.isPrivate) metadata.append(createFavoriteButton({ ...object, ID: object.categoryID }, {
-                onError: (_error, message) => additionToast.show(message)
-            }));
+            if (!object.isPrivate) metadata.append(createFavoriteButton({ ...object, ID: object.categoryID }));
             if (!object.configured) {
                 const configurations = document.createElement('span'); configurations.className = 'bp-evidence-count';
                 configurations.tabIndex = 0; configurations.setAttribute('role', 'img');
@@ -3204,7 +3209,7 @@ document.getElementById('weight-add-benchmark').addEventListener('click', async 
         || scope !== workspaceContextFingerprint()) return;
     deactivateInlineFallbackTarget();
     benchmarkSearch.focus({ preventScroll: true });
-    benchmarkSearch.scrollIntoView({
+    revealInPanel(benchmarkSearch, {
         behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
         block: 'center'
     });

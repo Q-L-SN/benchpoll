@@ -128,8 +128,8 @@ test('account actions use settings pages and keep account deletion separately ac
     const account = await readFile(new URL('../public/js/profile-settings.js', import.meta.url), 'utf8');
     assert.doesNotMatch(account, /innerHTML|global-dialog-action|showModal/);
     assert.match(account, /I understand what will be retained/);
-    assert.match(account, /accountAction\('\/api\/logout'\)/);
-    assert.match(account, /accountAction\('\/api\/delete_account'\)/);
+    assert.match(account, /accountAction\(status, '\/api\/logout'\)/);
+    assert.match(account, /accountAction\(status, '\/api\/delete_account'\)/);
     assert.match(account, /pageAccountWriteScope\.write/);
     assert.doesNotMatch(html, /<global-dialog id="user-account-dialog"/);
 });

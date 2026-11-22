@@ -14,8 +14,21 @@
     <main id="settings-content" class="pf-main pf-settings" tabindex="-1">
         <a class="pf-back" href="/me"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i> Your profile</a>
         <h1 id="settings-title">Settings</h1>
-        <div class="pf-settings-layout"><nav class="pf-settings-nav" aria-label="Settings"><a href="/settings/profile">Profile</a><a href="/settings/privacy">Privacy</a><a href="/settings/delete-account">Delete account</a><a href="/settings/logout">Log out</a></nav>
-            <section id="settings-panel" aria-labelledby="settings-title"><p id="settings-status" class="pf-status" role="status"></p><div id="settings-view"></div></section>
+        <div class="pf-settings-layout">
+            <div class="pf-settings-nav" role="tablist" aria-label="Settings">
+                <button type="button" role="tab" id="tab-profile" aria-controls="settings-profile" aria-selected="true">Profile</button>
+                <button type="button" role="tab" id="tab-privacy" aria-controls="settings-privacy" aria-selected="false" tabindex="-1">Privacy</button>
+                <button type="button" role="tab" id="tab-delete" aria-controls="settings-delete" aria-selected="false" tabindex="-1">Delete account</button>
+                <button type="button" role="tab" id="tab-logout" aria-controls="settings-logout" aria-selected="false" tabindex="-1">Log out</button>
+            </div>
+            <div id="settings-panel"><p id="settings-status" class="pf-status" role="status"></p>
+                <div id="settings-view">
+                    <section role="tabpanel" id="settings-profile" aria-labelledby="tab-profile"></section>
+                    <section role="tabpanel" id="settings-privacy" aria-labelledby="tab-privacy" hidden></section>
+                    <section role="tabpanel" id="settings-delete" aria-labelledby="tab-delete" hidden></section>
+                    <section role="tabpanel" id="settings-logout" aria-labelledby="tab-logout" hidden></section>
+                </div>
+            </div>
         </div>
         <noscript>JavaScript is required to update settings.</noscript>
     </main>

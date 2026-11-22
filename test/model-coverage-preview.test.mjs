@@ -44,12 +44,25 @@ test('a display primary version does not replace the ranking selected version or
     assert.equal(block.adoptedNormalizedScore, 68.5, 'only the adopted score DTO supplies the value');
 });
 
-test('uncovered blocks never receive inferred or arbitrary raw score values', () => {
+test('uncovered blocks use only estimates from this ranking', () => {
     const [block] = buildModelCoverageEntries([{ ...entry(11, 1, 10000), normalizedScore: 88,
         inferredScores: [{ normalizedScore: 76 }] }], [adopted(11, 10000, 0, null)]);
     assert.equal(block.adoptedNormalizedScore, null);
+    assert.equal(block.estimatedNormalizedScore, null);
     assert.equal(block.coverage, 0);
     assert.equal(buildModelCoverageEntries([entry(11, 1, 10000)], undefined), null);
+});
+
+test('estimated blocks combine only their supported version and family weights, including zero estimates', () => {
+    const entries = [entry(11, 1, 1000), entry(11, 1, 1000), entry(12, 1, 2000), entry(21, 2, 6000)];
+    const coverage = [adopted(11, 2000, 0, null), adopted(12, 2000, 0, null), adopted(21, 6000, 0, null)];
+    const estimates = [{ conditionID: 11, normalizedScore: 0, originalWeight: 5 },
+        { conditionID: 11, normalizedScore: 40, weightBasisPoints: 1500 },
+        { conditionID: 12, normalizedScore: 60, weightBasisPoints: 1000 },
+        { primaryConditionID: 21, conditionID: 91, sourceScore: 35, normalizedScore: 0, weightBasisPoints: 6000 }];
+    const blocks = buildModelCoverageEntries(entries, coverage, [], estimates);
+    assert.deepEqual(blocks.map(b => [b.benchmarkID, b.coverage, b.adoptedNormalizedScore, b.estimatedNormalizedScore]),
+        [[2, 0, null, 0], [1, 0, null, 40]]);
 });
 
 test('malformed adopted summaries cannot produce fabricated coverage', () => {

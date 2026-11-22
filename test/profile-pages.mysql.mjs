@@ -55,8 +55,8 @@ test('real profile SQL keeps editable IDs unique, collections private and histor
     const load = viewerID => loadPublicUserProfile(db, { publicID: 'owner-updated', viewerID }, readProfileTopics);
     const own = await loadPublicUserProfile(db, { self: true, viewerID: '42' }, readProfileTopics);
     assert.equal(own.isSelf, true);
-    assert.deepEqual(own.tabs.map(item => [item.key, item.private]), [['published', false], ['favorites', true], ['configured', true]]);
-    assert.deepEqual(topicIDs(tab(own, 'published').topics), [published.ID]);
+    assert.deepEqual(own.tabs.map(item => [item.key, item.private]), [['created', false], ['favorites', true], ['configured', true]]);
+    assert.deepEqual(topicIDs(tab(own, 'created').topics), topicIDs([published, privateTopic]));
     for (const key of ['favorites', 'configured']) assert.deepEqual(topicIDs(tab(own, key).topics), topicIDs([favorite, privateTopic]));
     const anonymous = await load(null);
     assert.equal(anonymous.isSelf, false);

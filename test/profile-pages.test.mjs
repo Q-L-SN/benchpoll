@@ -90,7 +90,7 @@ test('existing users bootstrap deterministically without deleting users or prete
     assert.equal(f.calls.some(call => /DELETE|UPDATE users/.test(call.sql)), false);
 });
 
-function publicFixture({ owner = '10', publicID = 'alice', favorites = false, configured = false, published = [], github = false } = {}) {
+function publicFixture({ owner = '10', publicID = 'alice', favorites = false, configured = false, created = [], github = false } = {}) {
     const calls = [], queried = [];
     return { calls, queried, db: { execute: async (sql, args) => { calls.push({ sql, args }); return [[{
         userID: owner, publicID, userName: '<img src=x onerror=alert(1)>', userProfilePictureURL: null,
@@ -98,7 +98,7 @@ function publicFixture({ owner = '10', publicID = 'alice', favorites = false, co
         publishFavorites: Number(favorites), publishConfiguredTopics: Number(configured)
     }]]; } }, read: async (_db, options) => {
         queried.push(options);
-        return { published, ...(options.includeFavorites ? { favorites: [{ name: 'Favorite' }] } : {}),
+        return { created, ...(options.includeFavorites ? { favorites: [{ name: 'Favorite' }] } : {}),
             ...(options.includeConfigured ? { configured: [{ name: 'Configured' }] } : {}) };
     } };
 }
@@ -113,9 +113,12 @@ test('others never query or serialize disabled collections, and empty Published 
 });
 
 test('self sees both private collections with locks, and enabled public collections are independently visible', async () => {
-    const f = publicFixture({ published: [{ name: 'Published' }] });
+    const f = publicFixture({ created: [{ name: 'Published' }] });
     const own = await loadPublicUserProfile(f.db, { viewerID: '10', self: true }, f.read);
-    assert.deepEqual(own.tabs.map(tab => [tab.key, tab.private]), [['published', false], ['favorites', true], ['configured', true]]);
+    assert.deepEqual(own.tabs.map(tab => [tab.key, tab.private]), [['created', false], ['favorites', true], ['configured', true]]);
+    const empty = publicFixture();
+    const ownEmpty = await loadPublicUserProfile(empty.db, { viewerID: '10', publicID: 'alice' }, empty.read);
+    assert.deepEqual(ownEmpty.tabs[0], { key: 'created', label: 'Topics I created', private: false, topics: [] });
     const other = publicFixture({ favorites: true, github: true });
     const shared = await loadPublicUserProfile(other.db, { publicID: 'alice' }, other.read);
     assert.deepEqual(shared.tabs.map(tab => tab.key), ['favorites']);

@@ -18,8 +18,8 @@ test('workspace switches retain measured segmented geometry alongside the sideba
     for (const name of ['bp-mode-switch', 'bp-scoring-switch']) {
         assert.match(html, new RegExp(`class="[^"]*${name}[^>]+data-ui-component="segmented"`));
     }
-    assert.match(html, /<select id="sidebar-topic-collection" aria-label="Topic collection">/);
-    assert.match(read('public/js/navigation/collection-picker.js'), /mountCustomSelect\(select\)/);
+    assert.match(html, /<button id="sidebar-topic-collection"[^>]+aria-controls="sidebar-collection-options"/);
+    assert.doesNotMatch(read('public/js/navigation/collection-picker.js'), /mountCustomSelect/);
     const code = read('public/js/shared/ui-components.js');
     assert.match(code, /marker\.offsetLeft/);
     assert.match(code, /marker\.offsetWidth/);

@@ -82,3 +82,7 @@
         scroll-padding-bottom: var(--bp-dock-clearance);
     }
 }
+@media (max-width: 760px) and (max-height: 400px) {
+    /* The dock and a pinned toolbar can cover the entire chooser in a short viewport. */
+    .bp-home:not(.is-showcase) .is-starting-personal-weights .bp-pie-focus-bar { position: relative; }
+}

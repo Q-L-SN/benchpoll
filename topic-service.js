@@ -175,11 +175,12 @@ export async function readProfileTopics(db, { userID, viewerID = null, includeFa
     const owner = canonicalAccountID(userID);
     if (!owner) fail(404, 'profile_not_found');
     const visible = 'c.is_active = 1 AND c.owner_user_ID IS NULL';
-    const published = await queryTopics(db, viewerID, `${visible} AND c.created_by_user_ID = ?`, [owner]);
-    const result = { published };
     const isOwner = canonicalAccountID(viewerID) === owner;
     const collectionVisible = isOwner ? 'c.is_active = 1 AND (c.owner_user_ID IS NULL OR c.owner_user_ID = ?)' : visible;
     const parameters = isOwner ? [owner, owner] : [owner];
+    const authored = isOwner ? 'c.is_active = 1 AND (c.owner_user_ID = ? OR (c.owner_user_ID IS NULL AND c.created_by_user_ID = ?))'
+        : `${visible} AND c.created_by_user_ID = ?`;
+    const result = { created: await queryTopics(db, viewerID, authored, parameters) };
     if (includeFavorites) result.favorites = await queryTopics(db, viewerID, `${collectionVisible} AND EXISTS(SELECT 1 FROM topic_favorites own_favorite
         WHERE own_favorite.category_ID = c.ID AND own_favorite.user_ID = ? AND own_favorite.is_active = 1)`, parameters);
     if (includeConfigured) result.configured = await queryTopics(db, viewerID, `${collectionVisible} AND EXISTS(SELECT 1 FROM personal_pies own_pie

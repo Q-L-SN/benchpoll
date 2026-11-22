@@ -53,7 +53,9 @@ export function platformFixture(initialTopics = [makeTopic(1)]) {
                 if (sql.includes('WHERE c.ID = ?')) topics = topics.filter(topic => topic.ID === args[2]);
                 else if (sql.includes('WHERE c.public_ID = ?')) topics = topics.filter(topic => topic.public_ID === args[2] && topic.owner_user_ID == null);
                 else if (sql.includes('WHERE c.private_ID = ?')) topics = topics.filter(topic => topic.private_ID === args[2]);
-                else if (sql.includes('AND c.created_by_user_ID = ?')) topics = topics.filter(topic => topic.created_by_user_ID === args[2]);
+                else if (sql.includes('(c.owner_user_ID = ? OR (c.owner_user_ID IS NULL AND c.created_by_user_ID = ?))')) {
+                    topics = topics.filter(topic => topic.owner_user_ID === args[2] || topic.owner_user_ID == null && topic.created_by_user_ID === args[3]);
+                } else if (sql.includes('AND c.created_by_user_ID = ?')) topics = topics.filter(topic => topic.created_by_user_ID === args[2]);
                 if (sql.includes('WHERE c.is_active = 1 AND c.owner_user_ID IS NULL')) topics = topics.filter(topic => topic.owner_user_ID == null);
                 return [topics.map(topic => ({ ...topic, creator_public_id: String(topic.created_by_user_ID), creator_name: 'Person',
                     configured_context_ids: null, configuration_count: 0,

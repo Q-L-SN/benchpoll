@@ -85,12 +85,16 @@ test('owner editor metadata preserves favorites and the public creator identity'
     assert.match(editor.editRevision, /^[a-f0-9]{64}$/);
 });
 
-test('public profile omits private topics and does not query hidden tabs', async () => {
-    const db = platformFixture([makeTopic(1), makeTopic(2, '1', true)]);
+test('the creator sees their drafts while visitors see only their published topics', async () => {
+    const db = platformFixture([makeTopic(1), makeTopic(2, '1', true), makeTopic(3, '2')]);
     const result = await readProfileTopics(db, { userID: '1', viewerID: '1' });
-    assert.deepEqual(result.published.map(topic => topic.ID), [2]);
+    assert.deepEqual(result.created.map(topic => topic.ID).sort(), [1, 2]);
     assert.equal(Object.hasOwn(result, 'favorites'), false); assert.equal(Object.hasOwn(result, 'configured'), false);
     assert.equal(db.queries.filter(row => row.sql.startsWith('SELECT c.ID, c.name')).length, 1);
+    for (const viewerID of ['2', null]) {
+        const visitor = await readProfileTopics(db, { userID: '1', viewerID });
+        assert.deepEqual(visitor.created.map(topic => topic.ID), [2]);
+    }
 });
 
 test('featured topic identity is the official Intelligence storage ID regardless of its public number', async () => {

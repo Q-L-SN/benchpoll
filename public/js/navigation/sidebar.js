@@ -161,8 +161,7 @@ export function createSidebarNavigation({ onNavigate, onLogin, onSessionChange, 
             const identity = document.createElement('small'); identity.textContent = `Topic ${entry.categoryID}`; copy.append(identity);
         }
         destination.append(copy); link.append(destination);
-        const favorite = createFavoriteButton(entry, { onChange(updated) { Object.assign(entry, updated); },
-            onError(_error, message) { feedback.textContent = message; feedback.hidden = false; } });
+        const favorite = createFavoriteButton(entry, { onChange(updated) { Object.assign(entry, updated); } });
         favorite.addEventListener('click', event => event.preventDefault());
         link.append(favorite);
         if (entry.isPrivate) {
@@ -437,8 +436,7 @@ export function createSidebarNavigation({ onNavigate, onLogin, onSessionChange, 
             }
             destination.append(copy);
             link.querySelectorAll('.bp-topic-favorite').forEach(button => button.dispose?.());
-            const favorite = createFavoriteButton(row, { onChange(updated) { Object.assign(row, updated); },
-                onError(_error, message) { feedback.textContent = message; feedback.hidden = false; } });
+            const favorite = createFavoriteButton(row, { onChange(updated) { Object.assign(row, updated); } });
             favorite.addEventListener('click', event => event.preventDefault());
             if (!row.available) favorite.hidden = true;
             link.replaceChildren(destination, favorite);

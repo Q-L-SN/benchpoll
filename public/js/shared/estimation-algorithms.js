@@ -2,8 +2,8 @@ import { coverageMultiplier } from './coverage-penalty.js';
 
 export const DEFAULT_ESTIMATION_ALGORITHM = 'current';
 export const ESTIMATION_ALGORITHMS = Object.freeze([
-    { ID: 'current', label: 'Current · whole score', description: 'The coverage adjustment uses the weight supported by direct scores and calibrated fallbacks.' },
-    { ID: 'missing-raw', label: 'Missing · unadjusted', description: 'Keep measured contributions fixed and use missing-score estimates without attenuation.' },
+    { ID: 'current', label: 'Current · whole score', description: 'Estimate missing scores from the selected fallback chains and adjust the total for coverage. Choose Missing · unadjusted to use those estimates directly.' },
+    { ID: 'missing-raw', label: 'Missing · unadjusted', description: 'Use the calibrated estimates from the selected fallback chains directly and keep measured scores at full value.' },
     { ID: 'missing-rational', label: 'Missing · rational', description: 'Keep measured contributions fixed. Multiply the missing contribution by 5c / (1 + 4c), where c is measured coverage.' },
     { ID: 'missing-linear', label: 'Missing · linear', description: 'Keep measured contributions fixed. Multiply the missing contribution by measured coverage.' },
     { ID: 'missing-sqrt', label: 'Missing · square root', description: 'Keep measured contributions fixed. Multiply the missing contribution by the square root of measured coverage.' },

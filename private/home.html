@@ -128,7 +128,7 @@
     </global-dialog>
 
     <div class="bp-shell">
-        <aside id="config-sidebar" class="bp-sidebar" aria-label="Topics">
+        <aside id="config-sidebar" class="bp-sidebar" aria-label="Topics" data-collection-surface>
             <a class="bp-brand" href="/" aria-label="BenchPoll home">
                 <img class="bp-brand-lockup" src="/assets/benchpoll-logo.svg" alt="BenchPoll" width="155" height="32">
             </a>
@@ -144,8 +144,9 @@
             </button>
 
             <div class="bp-navigation-controls">
-                <div class="bp-topic-collection">
-                    <select id="sidebar-topic-collection" aria-label="Topic collection"></select>
+                <div class="bp-topic-collection" data-sidebar-swipe="ignore">
+                    <button id="sidebar-topic-collection" aria-label="Topic collection" class="bp-collection-trigger" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" aria-controls="sidebar-collection-options" aria-describedby="sidebar-collection-label"><span id="sidebar-collection-label">Popular</span><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></button>
+                    <div id="sidebar-collection-options" class="bp-topic-collection-options" role="listbox" aria-label="Topic collections" inert></div>
                     <div class="bp-topic-query" hidden>
                         <input id="configured-search" type="search" placeholder="Search" aria-label="Search topics" maxlength="200" autocomplete="off" data-ui-clearable="false">
                         <button id="navigation-search-close" type="button" aria-label="Close search"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
@@ -210,9 +211,9 @@
         <main class="bp-workspace" data-mobile-panel="mix">
             <noscript>
                 <style>
-                    html:has(>body.bp-home),body.bp-home{height:auto!important;overflow:auto!important}
+                    html:has(>body.bp-home),body.bp-home{position:static!important;height:auto!important;overflow:auto!important}
                     .bp-home .bp-sidebar,.bp-home .bp-pie-card,.bp-home .bp-page-heading,.bp-home .bp-context-actions,.bp-home .bp-mobile-panels,.bp-home .bp-model-controls,.bp-home .bp-benchmark-toolbar-actions,.bp-home .bp-scoring-toolbar{display:none!important}
-                    .bp-home .bp-shell{display:block!important;min-height:0}
+                    .bp-home .bp-shell{display:block!important;height:auto!important;min-height:0;overflow:visible!important}
                     .bp-home .bp-workspace{display:block!important;width:100%;height:auto!important;min-height:0;max-width:1200px;margin-inline:auto;padding:20px 16px!important;overflow:visible!important}
                     .bp-home .bp-context-row{position:static!important;margin:20px 0 16px;padding:0;transform:none}
                     .bp-home .bp-workspace-grid{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;gap:20px!important;overflow:visible!important}
@@ -441,7 +442,7 @@
                     <div id="estimation-test-control" class="bp-estimation-test">
                         <label for="estimation-algorithm">Test algorithm</label>
                         <select id="estimation-algorithm" aria-label="Test estimation algorithm"></select>
-                        <button type="button" class="bp-help-trigger" aria-label="About the test algorithm" data-help-text="Compare methods for estimating missing scores in this tab."><i class="fa-regular fa-circle-question" aria-hidden="true"></i></button>
+                        <button type="button" class="bp-help-trigger" aria-label="About the test algorithm" data-help-text="All methods use your fallback chains to estimate missing scores. Choose Missing · unadjusted to use those estimates directly."><i class="fa-regular fa-circle-question" aria-hidden="true"></i></button>
                     </div>
                     <div class="bp-model-head" aria-hidden="true">
                         <span>#</span>

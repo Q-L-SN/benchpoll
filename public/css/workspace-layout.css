@@ -9,10 +9,15 @@
 .discussion-open .bp-page-heading p { display: none; }
 #discussion-brand-slot { margin-bottom: 12px; }
 
+/* Only the content panes scroll. Focus and viewport changes must not pan the shell. */
+html:has(> body.bp-home:not(.is-showcase, .bp-contribute)), body.bp-home:not(.is-showcase, .bp-contribute) { height: 100%; overflow: clip; }
+body.bp-home:not(.is-showcase, .bp-contribute) { position: fixed; inset: 0; }
+.bp-home:not(.is-showcase, .bp-contribute) > .bp-shell { height: 100dvh; min-height: 0; overflow: clip; }
+.bp-home:not(.is-showcase, .bp-contribute) .bp-workspace { overflow: clip; }
+
 @media (min-width: 761px) {
-    html:has(> body.bp-home:not(.is-showcase, .bp-contribute)), body.bp-home:not(.is-showcase, .bp-contribute) { height: 100%; overflow: clip; }
     .bp-home .bp-shell { --discussion-width: 360px; height: 100dvh; overflow: hidden; }
-    .bp-home .bp-workspace { display: flex; flex-direction: column; height: 100dvh; min-height: 0; padding: 22px 20px 16px; overflow: hidden; }
+    .bp-home .bp-workspace { display: flex; flex-direction: column; height: 100dvh; min-height: 0; padding: 22px 20px 16px; }
     .bp-workspace > :not(.bp-workspace-grid) { flex-shrink: 0; }
     .bp-home .bp-workspace-grid { flex: 1; min-height: 0; grid-template-columns: minmax(0, 1.85fr) minmax(0, 1fr); align-items: stretch; gap: 14px; }
     .bp-home .bp-left-workspace { display: grid; grid-template-columns: minmax(0, .86fr) minmax(0, 1.14fr); height: 100%; min-height: 0; align-items: stretch; gap: 14px; }

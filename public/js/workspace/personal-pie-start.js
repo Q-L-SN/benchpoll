@@ -3,6 +3,7 @@ import { excludedFromRanking } from '../shared/aa-ranking-policy.js';
 import { distributeToTarget } from './weights.js';
 import { MIN_WEIGHT_BASIS_POINTS } from './constants.js';
 import { setLoading } from '../shared/loading.js';
+import { revealInPanel } from './reveal-in-panel.js';
 
 // Public proportions can contain fractional or sub-minimum allocations. Keep
 // benchmark-level weights while opting out of version and fallback votes.
@@ -121,13 +122,13 @@ export function createPersonalPieStart({ stage, getScope, getPublicStart, isPriv
         if (!isCurrent()) return;
         if (isPrivate() || !getPublicStart().entries.length) {
             overlay.hidden = !reset || !hasWeights();
-            if (reset && hasWeights() && canReveal()) stage.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' });
             choose('blank');
+            if (intent?.choice && canReveal()) revealInPanel(confirmation, { block: 'nearest', behavior: 'instant' });
             return;
         }
         overlay.hidden = false;
         if (!canReveal()) return;
-        stage.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' });
+        revealInPanel(choices, { block: 'nearest', behavior: 'instant' });
         (fromPublic.disabled ? blank : fromPublic).focus({ preventScroll: true });
     } };
 }

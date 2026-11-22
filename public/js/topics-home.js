@@ -189,7 +189,7 @@ function createCard(topic) {
     summary.dataset.tooltip = topic.description || '';
     identity.append(title);
     if (topic.sceneID == null) identity.append(summary);
-    const sceneToggle = button('Show scenes', 'arrow-up-right-from-square', 'th-scene-toggle');
+    const sceneToggle = button('Show scenes', 'list-ul', 'th-scene-toggle');
     sceneToggle.prepend(element('span'));
     sceneToggle.hidden = true;
     sceneToggle.setAttribute('aria-haspopup', 'dialog');
@@ -221,8 +221,7 @@ function createCard(topic) {
                 if (changed && directoryView === 'favorites') filterTopics();
             }
             accountPreview.refresh();
-        },
-        onError(_error, message) { announcement.textContent = message; }
+        }
     }) : null;
     topicMeta.append(configured, coverage);
     if (favorite) topicMeta.append(favorite);

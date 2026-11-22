@@ -4,11 +4,10 @@
 .bp-discussion-workspace { display: none; }
 
 @media (max-width: 760px) {
-    body.bp-home:not(.is-showcase) { overflow: hidden; }
     .bp-home:not(.is-showcase) .bp-workspace {
         --bp-dock-clearance: calc(82px + env(safe-area-inset-bottom, 0px));
         display: flex; flex-direction: column; height: calc(100dvh - 60px); min-height: 0;
-        padding: 12px 12px 0; overflow: hidden;
+        padding: 12px 12px 0;
     }
     .bp-home:not(.is-showcase) .bp-workspace > :not(.bp-workspace-grid) { flex-shrink: 0; }
     .bp-home:not(.is-showcase) .bp-page-heading { min-height: 0; margin-bottom: 4px; }

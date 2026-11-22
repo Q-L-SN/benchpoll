@@ -1,42 +1,170 @@
-import { mountCustomSelect } from '../shared/custom-select.js?v=custom-select-20261013';
 import { topicCollections } from './collections.js';
 
-// Search replaces the select in its own slot. Focusing during the selection
-// gesture also opens the software keyboard on iOS.
 export function mountTopicCollectionPicker(host, { onSelect, onQuery, onResults }) {
-    const select = host.querySelector('select');
+    const trigger = host.querySelector('.bp-collection-trigger');
+    const label = trigger.firstElementChild;
+    const list = host.querySelector('[role="listbox"]');
     const editor = host.querySelector('.bp-topic-query');
     const input = editor.querySelector('input');
     const action = editor.querySelector('button');
-    for (const [key, label] of Object.entries(topicCollections)) {
-        const option = document.createElement('option');
-        option.value = key; option.textContent = label;
-        select.append(option);
+    const surface = host.closest('[data-collection-surface]');
+    const backdrop = document.createElement('div');
+    backdrop.className = 'bp-collection-backdrop';
+    backdrop.setAttribute('aria-hidden', 'true');
+    backdrop.dataset.sidebarSwipe = 'ignore';
+    surface.append(backdrop);
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
+    let current = 'popular', previous = 'popular', active = null, flight = null;
+    let typed = '', lastTyped = 0;
+
+    function stopFlight() {
+        if (!flight) return;
+        flight.animation.cancel();
+        flight.text.remove();
+        host.classList.remove('is-landing');
+        flight = null;
     }
-    const control = mountCustomSelect(select);
-    control.popup.classList.add('bp-topic-collection-options');
-    let current = 'popular', previous = 'popular';
+
+    function positionList() {
+        if (list.inert) return;
+        const anchor = host.getBoundingClientRect(), backdropBounds = backdrop.getBoundingClientRect();
+        if (!anchor.height || surface.inert) { close(); return; }
+        const viewport = window.visualViewport;
+        const top = Math.max(viewport?.offsetTop ?? 0, backdropBounds.top);
+        const bottom = Math.min(viewport ? viewport.offsetTop + viewport.height : window.innerHeight, backdropBounds.bottom);
+        const below = bottom - anchor.bottom, above = anchor.top - top;
+        const openAbove = below < list.scrollHeight && above > below;
+        list.toggleAttribute('data-above', openAbove);
+        list.style.setProperty('--bp-collection-room', Math.max(0, (openAbove ? above : below) - 4) + 'px');
+    }
+
+    function highlight(option) {
+        active?.classList.remove('is-active');
+        active = option;
+        active.classList.toggle('is-active', active.dataset.view !== current);
+        trigger.setAttribute('aria-activedescendant', active.id);
+        if (active.dataset.view === current) { list.scrollTop = 0; return; }
+        const row = active.getBoundingClientRect(), bounds = list.getBoundingClientRect();
+        list.scrollTop += row.top < bounds.top ? row.top - bounds.top : Math.max(0, row.bottom - bounds.bottom);
+    }
+
+    function open() {
+        stopFlight();
+        const keys = [current, ...Object.keys(topicCollections).filter(key => key !== current)];
+        list.replaceChildren(...keys.map(key => {
+            const option = document.createElement('div'), text = document.createElement('span');
+            option.id = list.id + '-' + key;
+            option.className = 'bp-collection-option';
+            option.dataset.view = key;
+            option.setAttribute('role', 'option');
+            option.setAttribute('aria-selected', String(key === current));
+            text.textContent = topicCollections[key];
+            option.append(text);
+            return option;
+        }));
+        list.inert = false;
+        surface.classList.add('is-choosing-collection');
+        trigger.setAttribute('aria-expanded', 'true');
+        trigger.focus({ preventScroll: true });
+        positionList();
+        if (!list.inert) highlight(list.firstElementChild);
+    }
+
+    function close() {
+        list.inert = true;
+        active = null;
+        typed = '';
+        trigger.removeAttribute('aria-activedescendant');
+        trigger.setAttribute('aria-expanded', 'false');
+        surface.classList.remove('is-choosing-collection');
+    }
 
     function updateAction() {
-        const label = input.value ? 'Clear search' : 'Close search';
-        action.setAttribute('aria-label', label);
-        action.dataset.tooltip = label;
+        const name = input.value ? 'Clear search' : 'Close search';
+        action.setAttribute('aria-label', name);
+        action.dataset.tooltip = name;
     }
     function setView(view, { focus = false } = {}) {
+        stopFlight();
+        close();
         if (view === 'search' && current !== 'search') previous = current;
         current = view;
-        const searching = current === 'search';
-        select.value = current;
-        select.hidden = searching;
-        control.refresh();
+        const searching = view === 'search';
+        label.textContent = topicCollections[view];
+        trigger.hidden = searching;
         editor.hidden = !searching;
         if (!searching) input.value = '';
         updateAction();
-        if (focus) (searching ? input : control.trigger).focus({ preventScroll: true });
+        if (focus) (searching ? input : trigger).focus({ preventScroll: true });
     }
     function exitSearch() { onSelect(previous, { focus: true }); }
-    select.addEventListener('change', () => onSelect(select.value, { focus: true }));
-    input.addEventListener('input', () => { updateAction(); onQuery(); });
+
+    function choose(option) {
+        const view = option.dataset.view;
+        if (view === current) { close(); return; }
+        const text = option.firstElementChild, start = text.getBoundingClientRect();
+        // Keep focus inside the activation gesture so choosing Search opens the iOS keyboard.
+        onSelect(view, { focus: true });
+        if (reduced.matches) return;
+        // Carry the actual word to the anchor after filtering has settled the layout.
+        text.className = 'bp-collection-flight';
+        text.setAttribute('aria-hidden', 'true');
+        text.toggleAttribute('data-search', view === 'search');
+        host.append(text);
+        host.classList.add('is-landing');
+        const end = text.getBoundingClientRect();
+        const x = start.left - end.left, y = (start.top + start.bottom - end.top - end.bottom) / 2;
+        const animation = text.animate([{ transform: 'translate(' + x + 'px,' + y + 'px)' }, { transform: 'none' }],
+            { duration: 240, easing: 'cubic-bezier(.22,.75,.25,1)' });
+        flight = { text, animation };
+        animation.onfinish = () => { if (flight?.animation === animation) stopFlight(); };
+    }
+
+    trigger.addEventListener('click', () => { if (list.inert) open(); else close(); });
+    trigger.addEventListener('keydown', event => {
+        const { key } = event;
+        if (event.isComposing || event.ctrlKey || event.metaKey) return;
+        if (key === 'Tab') { close(); return; }
+        if (key === 'Escape' && !list.inert) { event.preventDefault(); event.stopPropagation(); close(); return; }
+        if (active && (key === 'Enter' || key === ' ' || key === 'ArrowUp' && event.altKey)) {
+            event.preventDefault(); choose(active); return;
+        }
+        const typing = key.length === 1 && key !== ' ' && !event.altKey;
+        if (!typing && !['ArrowDown', 'ArrowUp', 'Home', 'End', 'PageUp', 'PageDown'].includes(key)) return;
+        event.preventDefault();
+        if (list.inert) open();
+        if (!active) return;
+        const options = [...list.children], index = options.indexOf(active);
+        if (typing) {
+            const letter = key.toLocaleLowerCase(), now = performance.now();
+            const cycle = now - lastTyped > 650 || typed === letter || !typed;
+            typed = cycle ? letter : typed + letter;
+            lastTyped = now;
+            const start = index + Number(cycle);
+            const match = [...options.slice(start), ...options.slice(0, start)]
+                .find(option => option.textContent.toLocaleLowerCase().startsWith(typed));
+            if (match) highlight(match);
+            return;
+        }
+        typed = '';
+        const next = ['Home', 'PageUp'].includes(key) ? 0 : ['End', 'PageDown'].includes(key) ? options.length - 1
+            : (index + (key === 'ArrowDown' ? 1 : -1) + options.length) % options.length;
+        highlight(options[next]);
+    });
+    list.addEventListener('pointerdown', event => { if (event.pointerType === 'mouse') event.preventDefault(); });
+    list.addEventListener('click', event => {
+        const option = event.target.closest('[role="option"]');
+        if (option && !list.inert) choose(option);
+    });
+    backdrop.addEventListener('pointerdown', event => event.preventDefault());
+    document.addEventListener('click', event => { if (!list.inert && !host.contains(event.target)) close(); }, true);
+    host.addEventListener('focusout', event => { if (event.relatedTarget && !host.contains(event.relatedTarget)) close(); });
+    new ResizeObserver(positionList).observe(host);
+    window.addEventListener('resize', positionList);
+    window.visualViewport?.addEventListener('resize', positionList);
+    document.addEventListener('scroll', event => { if (event.target !== list) positionList(); }, { capture: true, passive: true });
+
+    input.addEventListener('input', () => { stopFlight(); updateAction(); onQuery(); });
     action.addEventListener('click', () => {
         if (!input.value) { exitSearch(); return; }
         input.value = '';

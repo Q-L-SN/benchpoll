@@ -320,6 +320,11 @@ for (const [engine, width] of [[chromium, 1440], [webkit, 390]]) for (const empt
             ...(emptyPublic ? { publicWeights: [] } : {}) });
         if (!emptyPublic) await overlay.getByRole('button', { name: 'From blank', exact: true }).click();
         await page.locator('#weight-add-benchmark').waitFor();
+        await page.waitForFunction(() => {
+            const control = document.querySelector('.bp-mode-switch'), personal = document.getElementById('pie-mode-personal');
+            return personal.getAttribute('aria-selected') === 'true'
+                && Math.abs(new DOMMatrix(getComputedStyle(control, '::before').transform).m41 - personal.offsetLeft) < .5;
+        });
         const frames = await page.evaluate(() => new Promise(resolve => {
             const control = document.querySelector('.bp-mode-switch'), create = document.getElementById('personal-pie-create');
             const frames = [], start = performance.now();
@@ -383,3 +388,46 @@ for (const engine of [chromium, webkit]) test(`${engine.name()}: workspace scrol
     const final = await root();
     assert.equal(final.top, 0); assert.ok(final.height <= final.viewport + 1);
 });
+
+for (const [engine, width] of [[webkit, 390], [chromium, 1440]]) {
+    test(`${engine.name()} ${width}: return to the weights after searching from a blank pie and resizing`, async t => {
+        const { page } = await setup(t, engine, width, { personalEntries: [] });
+        const mobile = width < 761;
+        const original = await page.locator('.bp-page-heading').boundingBox();
+        await page.locator('#personal-pie-create').click();
+        if (mobile) await page.setViewportSize({ width, height: 320 });
+        await page.locator('#personal-pie-start-blank').click();
+        await page.setViewportSize({ width, height: 568 });
+        await page.locator('#weight-add-benchmark').click();
+        const search = page.locator('#benchmark-search');
+        await search.focus(); await search.fill('a');
+        await page.locator('#benchmark-search-clear').click();
+        await page.locator('#benchmark-rows .bp-benchmark-row').first().waitFor({ state: 'attached' });
+        const scroller = page.locator(mobile ? '.bp-left-workspace' : '#benchmark-rows');
+        await scroller.evaluate(node => node.scrollTo(0, node.scrollHeight));
+        assert.ok(await scroller.evaluate(node => node.scrollTop > 0));
+        await page.setViewportSize({ width, height: 844 });
+        if (mobile) {
+            await page.locator('[data-mobile-panel="models"][type="button"]').click();
+            await page.locator('[data-mobile-panel="mix"][type="button"]').click();
+        }
+        await scroller.evaluate(node => node.scrollTo(0, 0));
+        const layout = await page.evaluate(() => {
+            const workspace = document.querySelector('.bp-workspace');
+            // Exercise overflow from temporarily oversized or transitioning content.
+            const extra = document.createElement('div');
+            extra.style.cssText = 'height:200vh;flex:none;pointer-events:none';
+            workspace.append(extra);
+            workspace.scrollTo(0, 150);
+            const offset = workspace.scrollTop;
+            extra.remove();
+            return { offset, root: window.scrollY, shell: document.querySelector('.bp-shell').scrollTop,
+                pager: document.getElementById('workspace-scene-panel').scrollTop,
+                bottom: document.querySelector('.bp-left-workspace').getBoundingClientRect().bottom,
+                top: document.querySelector('.bp-page-heading').getBoundingClientRect().top };
+        });
+        assert.deepEqual([layout.offset, layout.root, layout.shell, layout.pager], [0, 0, 0, 0]);
+        assert.ok(Math.abs(layout.top - original.y) <= 1);
+        if (mobile) assert.ok(Math.abs(layout.bottom - 844) <= 1);
+    });
+}

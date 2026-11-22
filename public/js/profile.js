@@ -3,6 +3,7 @@ import { pageAccountWriteScope } from './shared/account-identity.js';
 import { publicProfileID } from './shared/profile-identity.js';
 import { publicGitHubURL } from './shared/topic-identity.js';
 import { createTopicCard } from './shared/topic-card.js';
+import { FAVORITE_EVENT } from './shared/topic-actions.js';
 import { listenAccountChange } from './shared/sign-in.js';
 import { parseTopicPath } from './shared/topics.js';
 import { setLoading } from './shared/loading.js';
@@ -17,8 +18,10 @@ const panel = document.getElementById('profile-topics');
 let cards = [], blocked = false;
 let discussionRequest = null;
 let tabMotion = null;
+const profileEvents = new globalThis.AbortController();
 
 const tabAppearance = {
+    created: ['Topics I created', 'layer-group'],
     published: ['Published', 'layer-group'],
     favorites: ['Favorites', 'star'],
     configured: ['Configured', 'sliders'],
@@ -85,6 +88,8 @@ function renderProfile(data) {
     if (!publicProfileID(profile?.publicID) || !Array.isArray(data.tabs)) throw new Error('Invalid profile.');
     const discussion = { key: 'discussion', label: 'Discussion' };
     const tabs = [...data.tabs, discussion];
+    const ownFavorites = isSelf ? tabs.find(tab => tab.key === 'favorites') : null;
+    let activeTab;
     if (viewerID !== null) pageAccountWriteScope.bind(viewerID);
     document.title = `${profile.userName} · BenchPoll`;
     const intro = element('div', 'pf-profile-intro');
@@ -113,6 +118,7 @@ function renderProfile(data) {
     identity.hidden = false;
     status.textContent = '';
     const selectTab = selected => {
+        activeTab = selected;
         for (const button of tablist.children) {
             const active = button.dataset.key === selected.key;
             button.setAttribute('aria-selected', String(active)); button.tabIndex = active ? 0 : -1;
@@ -125,8 +131,7 @@ function renderProfile(data) {
         panel.classList.toggle('pf-topics', !showDiscussion);
         panel.classList.toggle('pf-discussion', showDiscussion);
         const url = new URL(location.href);
-        if (showDiscussion) url.searchParams.set('tab', discussion.key);
-        else if (url.searchParams.get('tab') === discussion.key) url.searchParams.delete('tab');
+        if (selected !== tabs[0] || url.searchParams.has('tab')) url.searchParams.set('tab', selected.key);
         if (url.href !== location.href) history.replaceState(history.state, '', url);
         if (showDiscussion) {
             renderDiscussion(profile.publicID);
@@ -136,18 +141,31 @@ function renderProfile(data) {
             const note = element('p', 'pf-collection-note pf-private-note', 'Only you can see this collection.');
             note.prepend(icon('lock')); panel.append(note);
         }
-        for (const topic of selected.topics) {
+        const topics = selected === ownFavorites ? selected.topics.filter(topic => topic.isFavorited) : selected.topics;
+        for (const topic of topics) {
             const card = createTopicCard(topic, { onError: (_error, message) => {
                 status.textContent = viewerID === null ? 'Sign in to favorite a topic.' : message;
                 if (viewerID === null) status.append(' ', link('/login', 'Sign in'));
-            },
-                onFavoriteChange: updated => { Object.assign(topic, updated); } });
+            } });
             cards.push(card); panel.append(card);
         }
-        if (!selected.topics.length) panel.append(element('p', 'pf-empty', {
-            published: 'No published topics yet.', favorites: 'No favorited topics yet.', configured: 'No configured topics yet.'
+        if (!topics.length) panel.append(element('p', 'pf-empty', {
+            created: 'You haven’t created any topics yet.', published: 'No published topics yet.',
+            favorites: 'No favorited topics yet.', configured: 'No configured topics yet.'
         }[selected.key] || 'No topics yet.'));
     };
+    window.addEventListener(FAVORITE_EVENT, ({ detail: { categoryID, isFavorited, favoriteCount } }) => {
+        const matches = topic => Number(topic.categoryID ?? topic.ID) === categoryID;
+        const previous = ownFavorites?.topics.find(matches);
+        const wasListed = previous?.isFavorited === true;
+        let source;
+        for (const tab of data.tabs) for (const topic of tab.topics.filter(matches)) {
+            Object.assign(topic, { isFavorited, favoriteCount });
+            source = topic;
+        }
+        if (ownFavorites && source && isFavorited && !previous) ownFavorites.topics.push(source);
+        if (ownFavorites && activeTab === ownFavorites && wasListed !== isFavorited) selectTab(ownFavorites);
+    }, { signal: profileEvents.signal });
     for (const tab of tabs) {
         const [label, symbol] = tabAppearance[tab.key] ?? [tab.label, ''];
         const button = element('button'); button.type = 'button'; button.id = `profile-tab-${tab.key}`;
@@ -171,12 +189,14 @@ function renderProfile(data) {
         tablist.append(button);
     }
     tablist.hidden = panel.hidden = false;
-    selectTab(new URLSearchParams(location.search).get('tab') === discussion.key ? discussion : tabs[0]);
+    const requested = new URLSearchParams(location.search).get('tab');
+    selectTab(tabs.find(tab => tab.key === requested) ?? tabs[0]);
     tabMotion = mountSegmentedControl(tablist);
 }
 
 listenAccountChange(() => {
     blocked = true; pageAccountWriteScope.invalidate();
+    profileEvents.abort();
     discussionRequest?.abort();
     discussionRequest = null;
     tabMotion?.destroy();

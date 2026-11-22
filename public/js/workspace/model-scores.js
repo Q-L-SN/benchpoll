@@ -449,10 +449,10 @@ export function createModelScoresView({ state, modelScoresDialog, modelScoresTit
         if (coveragePreview) {
             const figure = document.createElement('figure');
             figure.className = 'bp-model-coverage-figure';
-            figure.setAttribute('aria-label', 'Measured benchmark coverage in this ranking');
+            figure.setAttribute('aria-label', 'Measured and estimated benchmark scores');
             const stage = document.createElement('div');
             const caption = document.createElement('figcaption');
-            caption.textContent = 'Adopted scores / 100. Faded benchmarks have no measured score.';
+            caption.textContent = 'Scores are out of 100. Faded tiles show an estimate or a dash if none is available.';
             figure.append(stage, caption);
             modelScoresList.append(figure);
             coverageView = coveragePreview.renderInto(stage, model);

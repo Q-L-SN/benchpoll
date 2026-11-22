@@ -20,8 +20,7 @@ export function registerProfileRoutes({ page, API, db, currentDir, activeSession
         next();
     }, pageFile('profile'));
     page.get('/me', requireAccountPage, pageFile('profile'));
-    page.get(['/settings', '/settings/profile', '/settings/privacy', '/settings/delete-account', '/settings/logout'],
-        requireAccountPage, pageFile('profile-settings'));
+    page.get('/settings', requireAccountPage, pageFile('profile-settings'));
     page.get('/me/history', requireAccountPage, pageFile('profile-history'));
 
     API.post('/get_public_profile', async (req, res) => {

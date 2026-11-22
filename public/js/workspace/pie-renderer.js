@@ -128,10 +128,13 @@ export function createPieRenderer({ state, pieSvg, pieHoverTooltip, orderedPieEn
                 family => family.weightBasisPoints > 0 && family.entries?.length));
             const percent = Number(tile.weightBasisPoints) / state.limits.totalBasisPoints * 100;
             const covered = coveragePreview && Number.isFinite(tile.adoptedNormalizedScore);
-            const score = covered ? String(Number(tile.adoptedNormalizedScore.toFixed(2))) : null;
-            const description = `${benchmarkAccessibleName(tile)}: ${percent.toFixed(2)}%${hasFallback ? '. Fallback enabled' : ''}`
-                + (coveragePreview ? covered ? `. Adopted score ${score} / 100. Measured coverage ${Number(tile.coverage).toFixed(2)}%.`
-                    : '. No measured score in this ranking.' : '');
+            const estimated = coveragePreview && !covered && Number.isFinite(tile.estimatedNormalizedScore);
+            const score = covered ? Number(tile.adoptedNormalizedScore.toFixed(2)) : estimated ? Number(tile.estimatedNormalizedScore.toFixed(2)) : null;
+            const value = coveragePreview ? String(score ?? '—') : `${Math.round(percent)}%`;
+            const name = benchmarkAccessibleName(tile);
+            const description = coveragePreview
+                ? `${name}. ${covered ? `Adopted score ${score} / 100` : estimated ? `Estimated score ${score} / 100` : 'No measurement or estimate'}.`
+                : `${name}: ${percent.toFixed(2)}%${hasFallback ? '. Fallback enabled' : ''}`;
             attributesOf(node.group, { 'aria-label': description, ...(!coveragePreview ? { 'aria-pressed': selected } : {}) });
             if (coveragePreview) {
                 node.group.classList.toggle('is-uncovered', !covered);
@@ -151,20 +154,10 @@ export function createPieRenderer({ state, pieSvg, pieHoverTooltip, orderedPieEn
             attributesOf(node.clipRect, inner);
             const topic = isTopicReference(tile);
             const label = labelLayout.layout({ name: topic ? topicLabelText(tile) : tile.name, topic,
-                percent: `${Math.round(percent)}%`, width: tile.width, height: tile.height, fontFamily });
-            // Preserve the weight label's exact font, size, weight and position.
-            if (covered) {
-                const valueRow = label.rows.find(row => row.kind === 'percent');
-                const scoreWidth = valueRow && metricsOf(score, valueRow.size, valueRow.weight, fontFamily).width;
-                label.rows = label.rows.flatMap(row => {
-                    if (row.kind === 'percent') return scoreWidth <= inner.width
-                        ? [{ ...row, text: score, adoptedScore: true }] : [];
-                    if (row.kind === 'name' && label.mode === 'inline' && valueRow) {
-                        const clipWidth = scoreWidth <= inner.width ? Math.max(0, inner.width - scoreWidth - 8) : inner.width;
-                        return [{ ...row, clipWidth, clipped: metricsOf(row.text, row.size, row.weight, fontFamily).width > clipWidth }];
-                    }
-                    return [row];
-                });
+                percent: value, width: tile.width, height: tile.height, fontFamily });
+            if (coveragePreview && label.mode === 'truncated' && metricsOf(value, 15, 750, fontFamily).width <= inner.width) {
+                label.mode = 'score';
+                label.rows = [{ kind: 'percent', text: value, size: 15, weight: 750, y: (tile.height - 17) / 2 + 15 }];
             }
             const nameBox = { ...inner, width: label.rows.find(row => row.kind === 'name')?.clipWidth ?? inner.width };
             attributesOf(node.mask, nameBox);
@@ -172,14 +165,16 @@ export function createPieRenderer({ state, pieSvg, pieHoverTooltip, orderedPieEn
             attributesOf(node.gradient, { x1: nameBox.x + nameBox.width - Math.min(14, nameBox.width / 3),
                 x2: nameBox.x + nameBox.width, y1: 0, y2: 0 });
             node.group.dataset.labelMode = label.mode;
-            const signature = JSON.stringify(label.rows.map(row => [row.kind, row.text, row.size, row.weight, row.clipped, row.align, row.adoptedScore]));
+            const signature = JSON.stringify([covered, estimated, ...label.rows.map(row => [row.kind, row.text, row.size, row.weight, row.clipped, row.align])]);
             if (node.signature !== signature) {
                 node.signature = signature;
                 node.labels.replaceChildren(...label.rows.map(row => {
                     if (topic && row.kind === 'name') return topicNameRow(row);
-                    const text = element('text', { 'data-label-kind': row.kind, 'font-size': row.size, 'font-weight': row.weight,
+                    const scoreRow = coveragePreview && row.kind === 'percent';
+                    const text = element('text', { 'data-label-kind': scoreRow ? 'score' : row.kind, 'font-size': row.size, 'font-weight': row.weight,
                         'text-anchor': row.align ?? (row.clipped ? 'start' : 'middle'),
-                        ...(row.adoptedScore ? { 'data-adopted-score': true } : {}),
+                        ...(scoreRow && covered ? { 'data-adopted-score': true } : {}),
+                        ...(scoreRow && estimated ? { 'data-estimated-score': true } : {}),
                         ...(row.clipped ? { mask: `url(#${node.mask.id})` } : {}) });
                     text.textContent = row.text;
                     return text;
@@ -196,7 +191,7 @@ export function createPieRenderer({ state, pieSvg, pieHoverTooltip, orderedPieEn
             });
         });
         raiseActive();
-        pieSvg.setAttribute('aria-label', coveragePreview ? 'Measured benchmark coverage and adopted scores in this ranking'
+        pieSvg.setAttribute('aria-label', coveragePreview ? 'Measured and estimated benchmark scores in this ranking'
             : `${mode === 'personal' ? 'Personal' : 'Public'} index composition treemap`);
         visualTiles = new Map(tiles.map(tile => [Number(tile.conditionID), { ...tile }]));
         if (preview) return;

@@ -217,8 +217,8 @@ body .pf-profile-tabs[data-ui-component="segmented"] > button[aria-selected="tru
 .pf-settings h1, .pf-history h1 { font-size: 30px; font-weight: 800; margin: 12px 0 22px; }
 .pf-settings-layout { display: grid; grid-template-columns: 182px minmax(0, 640px); align-items: start; gap: 24px; }
 .pf-settings-nav { display: flex; flex-direction: column; align-items: stretch; gap: 3px; }
-.pf-settings-nav a { min-height: 44px; padding: 10px 14px; border-radius: 7px; }
-.pf-settings-nav a[aria-current="page"] { background: var(--bp-purple-soft); color: var(--bp-purple-dark); font-weight: 700; }
+.pf-settings-nav button { min-height: 44px; padding: 10px 14px; border: 0; border-radius: 7px; background: transparent; color: inherit; font: inherit; text-align: start; cursor: pointer; }
+.pf-settings-nav button[aria-selected="true"] { background: var(--bp-purple-soft); color: var(--bp-purple-dark); font-weight: 700; }
 #settings-panel { min-width: 0; padding: 20px; border: 1px solid var(--bp-line); border-radius: var(--pf-radius); background: var(--bp-surface); }
 .pf-settings form { display: grid; gap: 20px; }
 .pf-field { display: grid; gap: 7px; }
@@ -294,7 +294,7 @@ body .pf-profile-tabs[data-ui-component="segmented"] > button[aria-selected="tru
     .pf-discussion-item { padding: 15px 16px; }
     .pf-settings-layout { grid-template-columns: minmax(0, 1fr); }
     .pf-settings-nav { flex-direction: row; flex-wrap: wrap; }
-    .pf-settings-nav a { padding: 10px; }
+    .pf-settings-nav button { padding: 10px; }
     .pf-field :is(input:not([type="checkbox"]), textarea) { font-size: 16px; }
     .pf-history-list li { grid-template-columns: minmax(0, 1fr); }
     .pf-history-list time { grid-row: 3; }

@@ -19,7 +19,7 @@ test('public profile routes omit hidden tabs before the topic provider is querie
     assert.equal((await send(f, 'get_public_profile', { publicID: '1', userID: '10' })).status, 400);
     f.state.viewerID = '10';
     response = await send(f, 'get_public_profile', { self: true }); result = await response.json();
-    assert.deepEqual(result.tabs.map(tab => [tab.key, tab.private]), [['published', false], ['favorites', true], ['configured', true]]);
+    assert.deepEqual(result.tabs.map(tab => [tab.key, tab.private]), [['created', false], ['favorites', true], ['configured', true]]);
     assert.equal(result.isSelf, true);
 });
 

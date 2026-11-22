@@ -7,6 +7,10 @@ import { topicCollections } from '../public/js/navigation/collections.js';
 
 const built = process.env.TOPICS_HOME_BUILT === '1';
 const home = await startTopicsPreview({ built, authenticated: true });
+home.state.topics[0].scenes = [
+    { ID: 101, sceneNumber: 1, name: 'General', isDefault: true },
+    { ID: 102, sceneNumber: 2, name: 'Python' }
+];
 const workspace = await startPreview({ topics: [
     { ID: 1, publicID: 1, name: 'Intelligence' }, { ID: 2, publicID: 2, name: 'Coding', isMine: true },
     { ID: 3, publicID: 3, name: 'Language', scenes: [{ ID: 301, name: 'Italian', isDefault: true }] }
@@ -16,13 +20,70 @@ const names = Object.values(topicCollections);
 
 async function choose(page, value, keyboard = false) {
     const trigger = page.getByRole('combobox', { name: 'Topic collection' });
+    const current = await trigger.locator('span').innerText();
     await trigger.click();
     const options = page.locator('.bp-topic-collection-options:visible').getByRole('option');
-    assert.deepEqual(await options.allTextContents(), names);
+    assert.deepEqual(await options.allTextContents(), [current, ...names.filter(name => name !== current)]);
     const search = options.last();
     assert.notEqual(await search.evaluate(n => getComputedStyle(n).color), await options.nth(2).evaluate(n => getComputedStyle(n).color));
     if (keyboard) { await trigger.press('End'); await trigger.press('Enter'); }
     else await options.getByText(topicCollections[value], { exact: true }).click();
+    await page.waitForFunction(() => !document.querySelector('[data-collection-surface].is-choosing-collection'));
+}
+
+async function checkDisclosure(page, target) {
+    const trigger = page.getByRole('combobox', { name: 'Topic collection' });
+    const before = await trigger.textContent();
+    const quiet = await trigger.evaluate(el => {
+        const style = getComputedStyle(el);
+        return [style.borderTopWidth, style.backgroundColor, style.boxShadow, style.justifyContent];
+    });
+    assert.deepEqual(quiet, ['0px', 'rgba(0, 0, 0, 0)', 'none', 'flex-start']);
+    await trigger.click();
+    const backdrop = page.locator('.is-choosing-collection > .bp-collection-backdrop');
+    assert.match(await backdrop.evaluate(el => getComputedStyle(el).backdropFilter || getComputedStyle(el).webkitBackdropFilter), /blur/);
+    const point = await page.locator(target).first().boundingBox();
+    const x = point.x + point.width - 12, y = Math.min(point.y + 16, page.viewportSize().height - 12);
+    assert.equal(await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.classList.contains('bp-collection-backdrop'), [x, y]), true);
+    const url = page.url();
+    await page.mouse.click(x, y);
+    assert.equal(await trigger.getAttribute('aria-expanded'), 'false');
+    assert.equal(await trigger.textContent(), before);
+    assert.equal(page.url(), url);
+    await trigger.press('ArrowDown');
+    await trigger.press('Escape');
+    assert.equal(await trigger.getAttribute('aria-expanded'), 'false');
+    await trigger.press('r');
+    assert.match(await trigger.getAttribute('aria-activedescendant'), /-recent$/);
+    await trigger.press('Escape');
+}
+
+async function checkLanding(page) {
+    const trigger = page.getByRole('combobox', { name: 'Topic collection' });
+    await trigger.click();
+    const trajectory = await page.locator('.bp-collection-option[data-view="created"]').evaluate(async option => {
+        const word = option.firstElementChild;
+        await Promise.all(word.getAnimations().map(animation => animation.finished));
+        const start = word.getBoundingClientRect();
+        option.click();
+        const carried = document.querySelector('.bp-collection-flight');
+        const motion = carried?.getAnimations()[0];
+        if (carried !== word || !motion) return null;
+        motion.pause(); motion.currentTime = 0;
+        const from = word.getBoundingClientRect();
+        motion.currentTime = motion.effect.getTiming().duration;
+        const to = word.getBoundingClientRect(), anchor = document.querySelector('.bp-collection-trigger span').getBoundingClientRect();
+        motion.finish();
+        const center = box => box.top + box.height / 2;
+        return { from: Math.abs(center(start) - center(from)), to: Math.abs(center(anchor) - center(to)),
+            x: Math.abs(anchor.left - to.left), distance: Math.abs(center(from) - center(to)) };
+    });
+    assert.ok(trajectory && trajectory.from <= 1 && trajectory.to <= 1 && trajectory.x <= 1 && trajectory.distance > 20, JSON.stringify(trajectory));
+    await page.locator('.bp-collection-flight').waitFor({ state: 'detached' });
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await choose(page, 'popular');
+    assert.equal(await page.locator('.bp-collection-flight').count(), 0);
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
 }
 
 async function checkSearch(page, surface, query, matchingName) {
@@ -44,6 +105,23 @@ async function checkSearch(page, surface, query, matchingName) {
     assert.equal(await trigger.evaluate(node => node === document.activeElement), true);
 }
 
+async function checkFailedRemoval(page, row) {
+    const star = row.locator('.bp-topic-favorite');
+    const count = await star.textContent();
+    let hold;
+    const write = new Promise(resolve => { hold = resolve; });
+    await page.route('**/api/set_topic_favorite', route => { hold(route); });
+    await star.click();
+    const request = await write;
+    await row.waitFor({ state: 'hidden' });
+    await request.fulfill({ status: 503, contentType: 'application/json', body: '{}' });
+    await row.waitFor({ state: 'visible' });
+    assert.equal(await star.textContent(), count);
+    assert.equal(await star.getAttribute('aria-pressed'), 'true');
+    await page.locator('.bp-toast.is-visible').getByText(/Could not update your favorites/).waitFor();
+    await page.unroute('**/api/set_topic_favorite');
+}
+
 async function checkHome(page) {
     await page.goto(home.url);
     await page.locator('#topics-account[href="/me"]').waitFor();
@@ -52,6 +130,14 @@ async function checkHome(page) {
     const topics = home.state.topics;
     const ids = () => page.locator('#topics-grid .th-card:not([hidden])').evaluateAll(nodes => nodes.map(n => Number(n.dataset.topicId)));
     assert.deepEqual(await ids(), topics.filter(t => !t.isPrivate).map(t => t.ID));
+    await checkDisclosure(page, '#topics-grid .th-card');
+    await checkLanding(page);
+    const scenes = page.locator('#topics-grid .th-scene-toggle:not([hidden])').first();
+    assert.equal(await scenes.getAttribute('data-scene-count'), '2');
+    const glyph = await scenes.locator('i.fa-list-ul').evaluate(node => getComputedStyle(node, '::before').content);
+    assert.ok(glyph.includes('\uf0ca'), glyph);
+    await scenes.click(); await page.locator('#topic-scenes-dialog[open]').waitFor();
+    await page.locator('#topic-scenes-close').click();
     for (const [view, predicate] of [['favorites', t => t.isFavorited], ['configured', t => t.configured], ['created', t => t.isMine]]) {
         await choose(page, view);
         assert.deepEqual(await ids(), topics.filter(predicate).map(t => t.ID));
@@ -68,6 +154,7 @@ async function checkHome(page) {
     assert.ok(rect.y >= head.y + head.height - 1 && rect.y < head.height + 22 && rect.x <= 80);
     await choose(page, 'favorites');
     const old = await ids();
+    await checkFailedRemoval(page, page.locator('#topics-grid .th-card[data-topic-id="' + old[0] + '"]'));
     await page.locator('#topics-grid .th-card:not([hidden]) .bp-topic-favorite').first().click();
     await page.waitForFunction(ID => document.querySelector(`#topics-grid .th-card[data-topic-id="${ID}"]`).hidden, old[0]);
     assert.equal((await ids()).includes(old[0]), false);
@@ -79,6 +166,8 @@ async function checkSidebar(page) {
     await page.goto(workspace.url + '/1');
     await page.locator('#benchmark-rows .bp-benchmark-row').first().waitFor({ state: 'attached' });
     if (page.viewportSize().width <= 760) await page.locator('#taxonomy-toggle').click();
+    await checkDisclosure(page, '#config-sidebar .bp-brand');
+    await checkLanding(page);
     const treeIDs = () => page.locator('#tree-content > [data-category-id]').evaluateAll(nodes => nodes.map(n => Number(n.dataset.categoryId)));
     await choose(page, 'created');
     await page.locator('#sidebar-topic-creation:not([hidden])').waitFor();
@@ -87,6 +176,7 @@ async function checkSidebar(page) {
     await choose(page, 'favorites');
     await page.locator('#tree-content > [data-category-id="3"]').waitFor();
     assert.deepEqual(await treeIDs(), [3]);
+    await checkFailedRemoval(page, page.locator('#tree-content > [data-category-id="3"]'));
     await choose(page, 'configured');
     await page.locator('#configured-panel [data-location-category-id="1"]').waitFor();
     await choose(page, 'recent');

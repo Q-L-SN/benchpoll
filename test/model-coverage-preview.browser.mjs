@@ -4,7 +4,7 @@ import { createServer } from 'node:http';
 import { readFile, mkdir } from 'node:fs/promises';
 import { extname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { chromium } from 'playwright';
+import { chromium, webkit } from 'playwright';
 
 const output = process.env.COVERAGE_PREVIEW_OUTPUT || '/workspace/benchpoll-work/coverage-preview';
 const publicRoot = resolve(fileURLToPath(new URL('../public/', import.meta.url)));
@@ -39,8 +39,9 @@ before(async () => {
     });
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
     url = `http://127.0.0.1:${server.address().port}`;
-    browser = await chromium.launch({ headless: true,
-        ...(process.env.COVERAGE_CHROMIUM_EXECUTABLE ? { executablePath: process.env.COVERAGE_CHROMIUM_EXECUTABLE } : {}) });
+    const engine = process.env.BP_BROWSER_ENGINE === 'webkit' ? webkit : chromium;
+    browser = await engine.launch({ headless: true,
+        ...(engine === chromium && process.env.COVERAGE_CHROMIUM_EXECUTABLE ? { executablePath: process.env.COVERAGE_CHROMIUM_EXECUTABLE } : {}) });
 });
 after(async () => { await browser?.close(); await new Promise(resolve => server?.close(resolve)); });
 
@@ -77,6 +78,7 @@ async function setup(t, width = 1360) {
                 effectiveWeight: 25, contribution: 17.125, matchedCount: null, memberIDs: [1], memberWeights: [{ ID: 1, weight: 1 }],
                 memberEvidence: [{ ID: 1, hash: 'a'.repeat(64) }] }],
             members: [{ ID: 1, modelID: 1, name: 'Model A', condition: { scoreFields: [] } }],
+            fallbackResolutions: [{ primaryConditionID: 21, conditionID: 85, sourceScore: 86, normalizedScore: 74.25, weightBasisPoints: 3000 }],
             coverageEntries: [adopted(11, 2500, 2500, 68.5), adopted(12, 1500, 0, null),
                 adopted(21, 3000, 0, null), adopted(31, 3000, 3000, 0)] };
         const modelB = { ...modelA, ID: 2, name: 'Model B',
@@ -131,10 +133,10 @@ test('desktop row hover expands and merges coverage, preserves label typography,
     const preview = await page.evaluate(() => {
         const svg = document.querySelector('.bp-model-coverage-overlay svg');
         const blocks = [...svg.querySelectorAll('[data-object-id]')];
-        const score = svg.querySelector('[data-object-id="11"] [data-label-kind="percent"]');
+        const score = svg.querySelector('[data-object-id="11"] [data-adopted-score]');
         const weight = document.querySelector('#reference [data-object-id="11"] [data-label-kind="percent"]');
-        return { count: blocks.length, names: blocks.map(block => block.getAttribute('aria-label')),
-            faded: svg.querySelector('[data-object-id="21"]').classList.contains('is-uncovered'),
+        const opacity = id => Number(getComputedStyle(svg.querySelector(`[data-object-id="${id}"] .bp-weight-tile`)).opacity);
+        return { count: blocks.length, faded: opacity(21) < opacity(11),
             zeroCovered: !svg.querySelector('[data-object-id="31"]').classList.contains('is-uncovered'),
             score: score.textContent, fontSize: score.getAttribute('font-size'), fontWeight: score.getAttribute('font-weight'),
             sameSize: score.getAttribute('font-size') === weight.getAttribute('font-size'),
@@ -146,6 +148,8 @@ test('desktop row hover expands and merges coverage, preserves label typography,
     assert.equal(preview.faded, true);
     assert.equal(preview.zeroCovered, true);
     assert.equal(preview.score, '68.5');
+    assert.equal(await page.locator('.bp-model-coverage-overlay .is-uncovered [data-estimated-score]').textContent(), '74.25');
+    assert.equal(await page.locator('.bp-model-coverage-overlay [data-label-kind="percent"]').count(), 0);
     assert.equal(preview.sameSize, true);
     assert.equal(preview.sameWeight, true);
     assert.equal(preview.distinctColor, true);
@@ -160,6 +164,22 @@ test('desktop row hover expands and merges coverage, preserves label typography,
         return [qa.state.selectedObjectID, qa.state.selectedFamilyKey, qa.state.workspaceView, qa.state.topicsExpanded,
             qa.state.visualPieWeights === qa.visualWeights, qa.state.visualPieEntries === qa.visualEntries, qa.referenceState.selectedObjectID];
     }), [-10, 'original', 'focus', false, true, true, null]);
+});
+
+test('Estimated score shows the inferred benchmark value and leaves an unresolved gap as a dash', async t => {
+    const page = await setup(t);
+    await page.evaluate(() => {
+        const qa = window.coverageQA;
+        qa.state.scoreMode = 'available';
+        qa.modelA.inferredScores = [{ conditionID: 21, normalizedScore: 0, originalWeight: 30 }];
+    });
+    await page.locator('#row-a').hover();
+    assert.equal(await page.locator('.bp-model-coverage-overlay [data-object-id="21"] [data-estimated-score]').textContent(), '0');
+    assert.equal(await page.locator('.bp-model-coverage-overlay [data-object-id="31"] [data-adopted-score]').textContent(), '0');
+    assert.equal(await page.getByRole('img', { name: 'Beta test. Estimated score 0 / 100.', exact: true }).count(), 1);
+    assert.equal(await page.getByRole('img', { name: 'Gamma test. Adopted score 0 / 100.', exact: true }).count(), 1);
+    await page.locator('#row-b').hover();
+    assert.equal(await page.locator('.bp-model-coverage-overlay [data-object-id="31"] [data-label-kind="score"]').textContent(), '—');
 });
 
 test('out of order coverage requests, pointer leave and context changes cannot paint stale previews', async t => {
@@ -177,6 +197,7 @@ test('out of order coverage requests, pointer leave and context changes cannot p
     await page.evaluate(() => window.coverageQA.requests[1].resolve(window.coverageQA.modelB));
     await page.waitForSelector('.bp-model-coverage-overlay:not([hidden])');
     assert.equal(await page.locator('.bp-model-coverage-overlay [data-object-id="21"] [data-adopted-score]').textContent(), '80');
+    assert.equal(await page.locator('.bp-model-coverage-overlay [data-object-id="31"] [data-label-kind="score"]').textContent(), '—');
     await page.evaluate(() => { const qa = window.coverageQA; qa.slow.clear(); void qa.slow.show(qa.modelA); qa.state.categoryID = 2; qa.requests[2].resolve(qa.modelA); });
     await page.waitForSelector('.bp-model-coverage-overlay', { state: 'detached' });
     assert.equal(await page.locator('#weight-pie').evaluate(svg => getComputedStyle(svg).visibility), 'visible');
@@ -243,6 +264,7 @@ test('mobile Used in this ranking shows the same treemap in a fullscreen dialog 
     assert.ok(Math.abs(layout.x) < .01 && Math.abs(layout.y) < .01 && Math.abs(layout.width - 390) < .01 && Math.abs(layout.height - 900) < .01);
     assert.equal(layout.overflow, false);
     assert.equal(layout.score, '68.5');
+    assert.equal(await page.locator('.bp-model-coverage-figure .is-uncovered [data-estimated-score]').textContent(), '74.25');
     await page.screenshot({ path: `${output}/mobile-scores-fullscreen.png` });
     await page.locator('.bp-model-configuration-link').click();
     await page.waitForFunction(() => window.coverageQA.requests.length === 1);

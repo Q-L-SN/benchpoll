@@ -272,7 +272,8 @@ export async function loadPublicUserProfile(db, { publicID = null, viewerID = nu
     const topics = await readProfileTopics(db, { userID, viewerID,
         includeFavorites: isSelf || publishFavorites, includeConfigured: isSelf || publishConfiguredTopics });
     const tabs = [];
-    if (topics.published?.length) tabs.push({ key: 'published', label: 'Published topics', private: false, topics: topics.published });
+    if (isSelf) tabs.push({ key: 'created', label: 'Topics I created', private: false, topics: topics.created });
+    else if (topics.created.length) tabs.push({ key: 'published', label: 'Published topics', private: false, topics: topics.created });
     if (isSelf || publishFavorites) tabs.push({ key: 'favorites', label: 'Favorited topics', private: !publishFavorites, topics: topics.favorites ?? [] });
     if (isSelf || publishConfiguredTopics) tabs.push({ key: 'configured', label: 'Configured topics', private: !publishConfiguredTopics, topics: topics.configured ?? [] });
     return { profile: { publicID: row.publicID, profileURL: profileURL(row.publicID), userName: row.userName,

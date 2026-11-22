@@ -107,23 +107,24 @@ for (const engine of engines) for (const width of [320, 390, 1440]) {
         await page.locator('#topics-filters-toggle').click(); await settle(page);
         assert.equal(await page.locator('#topics-filters').evaluate(node => node.getBoundingClientRect().left), expanded.x);
 
-        await page.locator('#topic-search-toggle').click(); await page.locator('#topic-search').fill('Intelligence');
+        await page.getByRole('combobox', { name: 'Topic collection' }).click();
+        await page.getByRole('option', { name: 'Search', exact: true }).click(); await page.locator('#topic-search').fill('Intelligence');
         assert.equal(await page.locator('.th-card.is-featured').count(), 0, 'Search uses an ordinary Intelligence card');
-        await page.locator('#topic-search-toggle').click();
+        await page.locator('#topic-search').press('Escape');
         assert.equal(await page.locator('#topic-card-54').evaluate(node => node.classList.contains('is-featured')), true);
         const feedback = await page.locator('#topic-card-1 .bp-topic-favorite').evaluate(button => {
             const pulse = () => button.getAnimations().find(animation => animation.effect.getKeyframes().some(frame => frame.transform));
-            button.click(); const first = pulse(); button.click();
-            return { restarted: Boolean(first) && first !== pulse(), busy: button.getAttribute('aria-busy') };
+            button.click(); const first = pulse(), initial = button.getAttribute('aria-pressed'); button.click();
+            return { initial, final: button.getAttribute('aria-pressed'), restarted: Boolean(first) && first !== pulse(), busy: button.getAttribute('aria-busy') };
         });
-        assert.equal(feedback.restarted, true); assert.equal(feedback.busy, 'true');
+        assert.deepEqual(feedback, { initial: 'true', final: 'false', restarted: true, busy: 'true' });
         await page.waitForFunction(() => document.querySelector('#topic-card-1 .bp-topic-favorite').getAttribute('aria-busy') === 'false');
-        assert.equal(await page.locator('#topic-card-1 .bp-topic-favorite').getAttribute('aria-pressed'), 'true');
-        assert.equal(fixture.state.requests.filter(request => request.path === '/api/set_topic_favorite').length, 1, 'Repeated feedback must not duplicate an in-flight write');
-        assert.equal(await page.locator('#topic-card-1 .bp-topic-favorite-count').innerText(), '101');
+        assert.equal(await page.locator('#topic-card-1 .bp-topic-favorite').getAttribute('aria-pressed'), 'false');
+        assert.deepEqual(fixture.state.requests.filter(request => request.path === '/api/set_topic_favorite').map(request => request.body.isFavorited), [true, false]);
+        assert.equal(await page.locator('#topic-card-1 .bp-topic-favorite-count').innerText(), '100');
         await page.locator('#topic-card-1 .bp-topic-favorite').click();
         await page.waitForFunction(() => document.querySelector('#topic-card-1 .bp-topic-favorite').getAttribute('aria-busy') === 'false');
-        assert.equal(await page.locator('#topic-card-1 .bp-topic-favorite-count').innerText(), '100');
+        assert.equal(await page.locator('#topic-card-1 .bp-topic-favorite-count').innerText(), '101');
 
         await page.locator('#topic-card-1 .th-scene-toggle').click();
         await page.locator('#topic-scenes-dialog[open]').waitFor();

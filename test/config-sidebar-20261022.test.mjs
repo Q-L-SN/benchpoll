@@ -110,7 +110,7 @@ test('navigation preserves canonical numeric URLs, local scenes and ranking para
 
 test('the sidebar uses the collection picker and keeps topic creation with authored topics', async () => {
     const html = await readFile(new URL('../private/home.html', import.meta.url), 'utf8');
-    assert.match(html, /<select id="sidebar-topic-collection" aria-label="Topic collection">/);
+    assert.match(html, /<button id="sidebar-topic-collection" aria-label="Topic collection"[^>]*role="combobox"/);
     assert.match(html, /<input id="configured-search" type="search" placeholder="Search" aria-label="Search topics"/);
     const mine = html.slice(html.indexOf('id="sidebar-topic-creation"'), html.indexOf('id="tree-content"'));
     assert.match(mine, /data-create-topic="private"/);

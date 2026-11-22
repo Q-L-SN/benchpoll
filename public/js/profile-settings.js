@@ -11,11 +11,8 @@ import './shared/legal-acceptance.js';
 initializeProfileHeader();
 const status = document.getElementById('settings-status'), view = document.getElementById('settings-view');
 observeTextareaAutosize(view);
-const path = location.pathname, section = path.split('/')[2] || 'home';
-const titles = { home: 'Settings', profile: 'Profile', privacy: 'Privacy', 'delete-account': 'Delete account', logout: 'Log out' };
-document.getElementById('settings-title').textContent = titles[section] || 'Settings';
-document.title = `${titles[section] || 'Settings'} · BenchPoll`;
-document.querySelector(`.pf-settings-nav a[href="${path}"]`)?.setAttribute('aria-current', 'page');
+const tabs = [...document.querySelectorAll('.pf-settings-nav [role="tab"]')];
+let selectedTab = tabs[0];
 const request = (url, body = {}) => postJSON(url, body, { timeoutMs: 20000, requireJSON: true });
 let profile = null, busy = false, blocked = false;
 
@@ -29,7 +26,7 @@ const messages = {
     profile_payload_too_large: 'Choose a smaller avatar image.',
     legal_acceptance_required: 'Review the current terms before saving. Your changes are kept.'
 };
-function report(error) {
+function report(error, status) {
     status.classList.add('is-error');
     status.textContent = isAccountWriteError(error) ? error.message : messages[error.payload?.error]
         || (error.status === 401 ? 'Sign in again before saving.' : 'Could not save your changes. Your draft is kept; try again.');
@@ -51,23 +48,23 @@ function toggle(label, name, checked, disabled = false) {
     input.setAttribute('role', 'switch'); wrapper.append(element('span', '', label), input);
     return { wrapper, input };
 }
-async function guardedWrite(url, body, success) {
+async function guardedWrite(status, url, body, success) {
     if (busy || blocked) return;
-    busy = true; status.textContent = ''; status.classList.remove('is-error'); view.setAttribute('aria-busy', 'true');
+    busy = true; view.inert = true; status.textContent = ''; status.classList.remove('is-error'); view.setAttribute('aria-busy', 'true');
     const controls = [...view.querySelectorAll('button, input, textarea')], disabled = controls.map(item => item.disabled);
     controls.forEach(item => { item.disabled = true; });
     try {
         const saved = await pageAccountWriteScope.write(request, url, body);
         if (blocked) return;
         await success(saved);
-    } catch (error) { report(error); }
+    } catch (error) { report(error, status); }
     finally {
-        busy = false; view.setAttribute('aria-busy', 'false');
+        busy = false; view.inert = false; view.setAttribute('aria-busy', 'false');
         controls.forEach((item, i) => { item.disabled = blocked || disabled[i]; });
     }
 }
 
-function renderProfileForm() {
+function renderProfileForm(panel, status) {
     const form = element('form'); form.noValidate = true;
     const avatarRow = element('div', 'pf-avatar-field'), picture = avatar(profile);
     const upload = field('Avatar', 'avatar', null, 'file', 'PNG, JPEG or WebP. Your image is cropped to a square.');
@@ -83,7 +80,7 @@ function renderProfileForm() {
     actions.append(save, link('/me', 'View profile'));
     form.append(avatarRow, displayName.wrapper, publicID.wrapper, bio.wrapper, github.wrapper);
     if (github.input.disabled) form.append(link('/login', 'Sign in again to connect GitHub'));
-    form.append(actions); view.append(form);
+    form.append(actions); panel.append(form);
     let changedAvatar = false, preparedAvatar = null, processing = false, uploadGeneration = 0;
     let uploadController = null;
     function showAvatar(value) { const next = avatar({ userName: displayName.input.value, userProfilePictureURL: value }); picture.replaceChildren(...next.childNodes); }
@@ -115,7 +112,7 @@ function renderProfileForm() {
         const body = Object.fromEntries(Object.entries(values).filter(([key, value]) => value !== (key === 'displayName' ? profile.userName : profile[key])));
         if (changedAvatar) body.avatar = preparedAvatar;
         if (!Object.keys(body).length) { status.textContent = 'Your profile is up to date.'; return; }
-        void guardedWrite('/api/save_user_profile', body, saved => {
+        void guardedWrite(status, '/api/save_user_profile', body, saved => {
             if (saved?.userID !== profile.userID || !publicProfileID(saved.publicID)) throw new Error('Unconfirmed profile.');
             profile = saved; publicID.input.value = saved.publicID; displayName.input.value = saved.userName;
             changedAvatar = false; status.textContent = 'Profile saved.';
@@ -124,7 +121,7 @@ function renderProfileForm() {
     });
 }
 
-function renderPrivacy() {
+function renderPrivacy(panel, status) {
     const form = element('form'), favorites = toggle('Publish my favorites', 'publishFavorites', profile.publishFavorites === true);
     const configured = toggle('Publish my configured topics', 'publishConfiguredTopics', profile.publishConfiguredTopics === true);
     const save = button('Save privacy settings', 'is-primary'); save.type = 'submit';
@@ -134,42 +131,80 @@ function renderPrivacy() {
     form.addEventListener('submit', event => {
         event.preventDefault();
         const body = { publishFavorites: favorites.input.checked, publishConfiguredTopics: configured.input.checked };
-        void guardedWrite('/api/save_profile_privacy', body, saved => {
+        void guardedWrite(status, '/api/save_profile_privacy', body, saved => {
             if (saved?.userID !== profile.userID || saved.publishFavorites !== body.publishFavorites
                 || saved.publishConfiguredTopics !== body.publishConfiguredTopics) throw new Error('Unconfirmed privacy settings.');
             Object.assign(profile, saved); status.textContent = 'Privacy settings saved.';
         });
     });
-    view.append(form);
+    panel.append(form);
 }
 
-function accountAction(url) {
-    void guardedWrite(url, {}, () => {
+function accountAction(status, url) {
+    void guardedWrite(status, url, {}, () => {
         pageAccountWriteScope.invalidate();
         try { localStorage.setItem('user-profile-update', 'null'); } catch { /* Optional cross-tab notification. */ }
         location.assign('/');
     });
 }
-async function renderLogout() {
-    view.append(element('p', '', 'Log out of BenchPoll on this device.'));
+async function renderLogout(panel, status) {
+    panel.append(element('p', '', 'Log out of BenchPoll on this device.'));
     const actions = element('div', 'pf-form-actions'), current = button('Log out', 'is-primary');
-    current.addEventListener('click', () => accountAction('/api/logout')); actions.append(current); view.append(actions);
+    current.addEventListener('click', () => accountAction(status, '/api/logout')); actions.append(current); panel.append(actions);
     try {
         const result = await request('/api/get_device_count');
         if (!blocked && Number.isSafeInteger(result?.deviceCount) && result.deviceCount > 1) {
             const all = button(`Log out on all ${result.deviceCount} devices`);
-            all.addEventListener('click', () => accountAction('/api/logout?all')); actions.append(all);
+            all.addEventListener('click', () => accountAction(status, '/api/logout?all')); actions.append(all);
         }
     } catch { /* Logging out of this device remains available. */ }
 }
-function renderDelete() {
-    view.append(element('p', '', 'Deleting your account ends all sessions and removes saved comparison profiles. Your weights, private topics and review records are retained. Signing in with GitHub again reactivates the account.'),
+function renderDelete(panel, status) {
+    panel.append(element('p', '', 'Deleting your account ends all sessions and removes saved comparison profiles. Your weights, private topics and review records are retained. Signing in with GitHub again reactivates the account.'),
         link('/account/privacy#request', 'Request data erasure', 'shield-halved'));
     const form = element('form'), confirm = toggle('I understand what will be retained.', 'confirmDelete', false);
     const remove = button('Delete account', 'is-danger'); remove.type = 'submit'; remove.disabled = true;
     confirm.input.addEventListener('change', () => { remove.disabled = !confirm.input.checked || busy || blocked; });
-    form.append(confirm.wrapper, remove); view.append(form);
-    form.addEventListener('submit', event => { event.preventDefault(); if (confirm.input.checked) accountAction('/api/delete_account'); });
+    form.append(confirm.wrapper, remove); panel.append(form);
+    form.addEventListener('submit', event => { event.preventDefault(); if (confirm.input.checked) accountAction(status, '/api/delete_account'); });
+}
+
+const renderPanel = { 'settings-profile': renderProfileForm, 'settings-privacy': renderPrivacy,
+    'settings-delete': renderDelete, 'settings-logout': renderLogout };
+
+function selectTab(tab) {
+    selectedTab = tab;
+    for (const item of tabs) {
+        const selected = item === tab;
+        item.setAttribute('aria-selected', String(selected));
+        item.tabIndex = selected ? 0 : -1;
+        const panel = document.getElementById(item.getAttribute('aria-controls'));
+        panel.hidden = !selected;
+        if (selected && profile && !blocked && !panel.childElementCount) {
+            const message = element('p', 'pf-status');
+            message.setAttribute('role', 'status');
+            panel.append(message);
+            renderPanel[panel.id](panel, message);
+        }
+    }
+}
+
+const verticalTabs = window.matchMedia('(min-width: 581px)');
+const setOrientation = () => tabs[0].parentElement.setAttribute('aria-orientation', verticalTabs.matches ? 'vertical' : 'horizontal');
+setOrientation();
+verticalTabs.addEventListener('change', setOrientation);
+for (const [index, tab] of tabs.entries()) {
+    tab.addEventListener('click', () => selectTab(tab));
+    tab.addEventListener('keydown', event => {
+        const next = verticalTabs.matches ? 'ArrowDown' : 'ArrowRight';
+        const previous = verticalTabs.matches ? 'ArrowUp' : 'ArrowLeft';
+        if (![next, previous, 'Home', 'End'].includes(event.key)) return;
+        event.preventDefault();
+        const position = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1
+            : (index + (event.key === next ? 1 : -1) + tabs.length) % tabs.length;
+        selectTab(tabs[position]);
+        tabs[position].focus();
+    });
 }
 
 listenAccountChange(() => {
@@ -182,9 +217,5 @@ request('/api/get_user_profile').then(result => {
     if (blocked) return;
     if (!result) throw Object.assign(new Error('Sign in.'), { status: 401 });
     pageAccountWriteScope.bind(result.userID); profile = result; status.textContent = '';
-    if (section === 'profile') renderProfileForm();
-    else if (section === 'privacy') renderPrivacy();
-    else if (section === 'logout') void renderLogout();
-    else if (section === 'delete-account') renderDelete();
-    else view.append(element('p', 'pf-muted', 'Manage your public profile, privacy and account.'));
+    selectTab(selectedTab);
 }).catch(error => showFailure(status, error, 'Settings could not be loaded. Refresh to try again.'));
