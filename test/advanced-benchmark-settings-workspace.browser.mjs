@@ -13,6 +13,14 @@ for (const [engine, width, height] of [[chromium, 1440, 900], [chromium, 390, 84
         const families = [[2, 3], [4, 2], [5, 6, 3]].map((IDs, index) => ({ primaryConditionID: 1,
             familyID: 51 + index, mode: 'ordered', entries: familyEntries(IDs.map(conditionID => ({ conditionID }))) }));
         const fixture = await startPreview({ communityVersions: true, secondaryBenchmark: true, sparseBenchmark: true, families,
+            versionVoters: [[20, { entries: [{ conditionID: 901, weightBasisPoints: 2000 }] }]],
+            transformWorkspace(data) {
+                // The version catalogue carries proportions. Allocation fields belong to ranking rows.
+                for (const group of data.versionComposition) for (const version of group.versions) {
+                    delete version.publicWeight;
+                    delete version.publicWeightBasisPoints;
+                }
+            },
             publicFamilyComposition: [{ primaryConditionID: 1, configuredPieCount: 3, isDefault: false,
                 families: families.map((family, index) => ({ ...family, weightBasisPoints: [6000, 3000, 1000][index],
                     overallWeightBasisPoints: [1560, 780, 260][index] })) }],
@@ -30,6 +38,9 @@ for (const [engine, width, height] of [[chromium, 1440, 900], [chromium, 390, 84
         if (built) await page.route(fixture.url + '/1', async route => route.fulfill({ contentType: 'text/html',
             body: await readFile(new URL('../private/home-built.html', import.meta.url), 'utf8') }));
         await page.goto(fixture.url + '/1');
+        await page.locator('#benchmark-card[aria-busy="false"]').waitFor({ state: 'attached' });
+        const row = ID => page.locator(`#benchmark-rows .bp-benchmark-row[data-condition-id="${ID}"]`);
+        assert.equal(await row(1).locator('.bp-benchmark-public-weight').textContent(), '26.00%');
         await page.locator('#pie-mode-personal').click();
         await page.locator('#weight-pie [data-object-id="1"]').click();
         await page.locator('#inline-fallback-toggle').click();
@@ -80,6 +91,14 @@ for (const [engine, width, height] of [[chromium, 1440, 900], [chromium, 390, 84
             frame: node.closest('.bp-inline-fallback-frame').getBoundingClientRect().toJSON() }));
         assert.ok(shape.button.height >= 44 && Math.abs(shape.button.width - shape.frame.width) <= 2, JSON.stringify(shape));
         await add.click();
+        const search = page.locator('#benchmark-search');
+        await row(901).waitFor();
+        assert.equal(await row(1).locator('.bp-benchmark-public-weight').textContent(), '19.50%');
+        assert.equal(await row(8).locator('.bp-benchmark-public-weight').textContent(), '0.00%');
+        assert.equal(await row(8).locator('.bp-benchmark-personal-weight').textContent(), '—');
+        await search.fill('Extended');
+        await page.waitForFunction(() => document.querySelectorAll('#benchmark-rows .bp-benchmark-row').length === 1);
+        assert.equal(await row(901).locator('.bp-benchmark-public-weight').textContent(), '6.50%');
         await page.locator('#benchmark-search').fill('Advanced reasoning');
         await page.locator('.bp-benchmark-row[data-condition-id="2"] .bp-benchmark-add').click();
         await page.locator('#benchmark-search').fill('Code generation');

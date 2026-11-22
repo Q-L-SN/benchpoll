@@ -31,6 +31,7 @@ import { createPieRenderer } from './workspace/pie-renderer.js?v=lightweight-cha
 import { updateTopicSearchMetadata } from './shared/search-metadata.js';
 import { createGuestDraftStore } from './workspace/guest-drafts.js?v=review-drafts-20261008';
 import { createPersonalPieRecovery } from './workspace/pie-recovery.js';
+import { expandCommunityVersions } from './shared/benchmark-version-choice.js';
 import { familyKey, portableFamilyEntry, familyEntryKey, FALLBACK_CONFIGURATION_VERSION } from './shared/benchmark-families.js';
 import { createFamilyView } from './workspace/family-view.js?v=percentile-ranking-20261007';
 import { createBenchmarkRowFocus } from './workspace/benchmark-family-row.js?v=fallback-picker-20261008';
@@ -623,8 +624,13 @@ function expandedBenchmarkRows() {
 function fallbackVersionRows() {
     const query = benchmarkSearch.value.trim().toLowerCase();
     const personal = new Map(state.personalEntries.map(entry => [entry.conditionID, entry.weight]));
+    const publicWeights = new Map();
+    for (const entry of expandCommunityVersions(state.publicEntries, state.versionComposition)) {
+        publicWeights.set(entry.conditionID, (publicWeights.get(entry.conditionID) ?? 0) + entry.weightBasisPoints);
+    }
     return state.versionComposition.flatMap(group => group.versions).map((version, index) => ({ ...version,
         ID: version.conditionID, isBenchmarkGroup: false, rank: index + 1,
+        publicWeight: (publicWeights.get(version.conditionID) ?? 0) / 100,
         personalWeight: personal.get(version.conditionID) ?? null
     })).filter(version => `${version.name} ${version.conditionName}`.toLowerCase().includes(query));
 }
@@ -2011,12 +2017,12 @@ function renderBenchmarks() {
         const publicValue = document.createElement('span');
         publicValue.className = 'bp-benchmark-weight bp-benchmark-public-weight';
         publicValue.hidden = state.contextIsPrivate;
-        publicValue.textContent = `${Number(object.publicWeight).toFixed(2)}%`;
+        publicValue.textContent = Number.isFinite(object.publicWeight) ? `${object.publicWeight.toFixed(2)}%` : '—';
 
         const personalWeight = personalWeightFor(object);
         const personalValue = document.createElement('span');
         personalValue.className = 'bp-benchmark-weight bp-benchmark-personal-weight';
-        const personalWeightText = personalWeight === null ? '—' : `${Math.round(Number(personalWeight))}%`;
+        const personalWeightText = Number.isFinite(personalWeight) ? `${Math.round(personalWeight)}%` : '—';
         personalValue.textContent = personalWeightText;
 
         const actionCell = document.createElement('span');

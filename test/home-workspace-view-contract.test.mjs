@@ -149,7 +149,7 @@ test('benchmark contribution links are unboxed and benchmark weight labels stay 
     assert.match(styles, /\.bp-inline-create-evaluation,\s*\.bp-contribute-data\s*\{[^}]*border:\s*0[^}]*background:\s*transparent[^}]*box-shadow:\s*none/s);
     assert.doesNotMatch(html, /href="\/css\/home\.css/);
     assert.doesNotMatch(styles, /\.bp-benchmark-public-order::after/);
-    assert.match(workspace, /Math\.round\(Number\(personalWeight\)\)/);
+    assert.match(workspace, /Number\.isFinite\(personalWeight\).*Math\.round\(personalWeight\)/);
 });
 
 test('benchmark version names require an explicit detail-view opt-in and default stays hidden', () => {
