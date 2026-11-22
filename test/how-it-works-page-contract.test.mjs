@@ -51,7 +51,7 @@ test('guide keeps the first read short with optional calculation details', () =>
 
 test('Topics introduction leads to the public index, evidence and personal weights', () => {
     const topics = section('topics');
-    assert.match(topics, /Browse Popular, Recent, or Mine/);
+    assert.match(topics, /topic menu to find your favorites, topics you configured or created, recent visits, or search/);
     assert.match(topics, /Favorite topics to find them from your profile/);
     assert.match(topics, /Popular reflects favorites, with recent favorites carrying more weight/);
     assert.match(topics, /Open a topic for its public index/);

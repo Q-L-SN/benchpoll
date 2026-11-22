@@ -2,7 +2,7 @@ import { postJSON, postWriteJSON } from './http.js';
 import { pageAccountWriteScope } from './account-identity.js';
 import { buildContributionURL, activateContributionURL } from './contribution-navigation.js';
 
-const FAVORITE_EVENT = 'benchpoll:topic-favorite';
+export const FAVORITE_EVENT = 'benchpoll:topic-favorite';
 const pending = new Map();
 const favoriteMessages = {
     authentication_required: 'Sign in to favorite a topic.',
@@ -41,7 +41,11 @@ export function createFavoriteButton(topic, { onChange = () => {}, onError = () 
         button.setAttribute('aria-busy', String(pending.has(ID)));
         button.dataset.tooltip = active ? 'Remove favorite' : 'Favorite topic';
     }
-    const broadcast = update => window.dispatchEvent(new CustomEvent(FAVORITE_EVENT, { detail: { categoryID: ID, ...update } }));
+    const broadcast = update => {
+        // A collection may remove this button as soon as an optimistic change lands.
+        current = { ...current, ...update };
+        window.dispatchEvent(new CustomEvent(FAVORITE_EVENT, { detail: { categoryID: ID, ...update } }));
+    };
     const sync = event => {
         if (event.detail.categoryID !== ID) return;
         render(event.detail); onChange({ ...current });

@@ -45,7 +45,8 @@ for (const [engine, width, height] of [[chromium, 1440, 900], [chromium, 390, 84
         await page.locator('#weight-pie [data-object-id="1"]').click();
         await page.locator('#inline-fallback-toggle').click();
         const settings = page.locator('#benchmark-settings');
-        await settings.getByRole('button', { name: 'Accordion', exact: true }).click();
+        assert.equal(await settings.locator('[data-settings-style], .bp-choice-pagination').count(), 0);
+        assert.equal(await settings.locator('#benchmark-settings-versions-trigger').getAttribute('aria-expanded'), 'true');
         await page.waitForFunction(() => {
             const settings = document.getElementById('benchmark-settings');
             let root = settings.parentElement;
@@ -112,8 +113,8 @@ for (const [engine, width, height] of [[chromium, 1440, 900], [chromium, 390, 84
         assert.equal(await settings.locator('#inline-fallback-chart .bp-family-member').count(), 2);
         assert.match(await settings.locator('#inline-fallback-chart .bp-family-member').first().textContent(), /Code generation/);
         await settings.locator('#inline-fallback-done').click();
-        await settings.getByRole('button', { name: 'Pages', exact: true }).click();
-        assert.equal(await settings.locator('.bp-fallback-picker-column:visible').count(), 2);
+        assert.equal(await settings.locator('#benchmark-settings-fallback-trigger').getAttribute('aria-expanded'), 'true');
+        assert.ok(await settings.locator('.bp-fallback-picker-column:visible').count() >= 2);
         assert.equal(await settings.evaluate(node => node.scrollWidth > node.clientWidth + 1), false);
         await page.locator('#inline-fallback-toggle').click();
         assert.equal(await page.locator('#inline-fallback-settings').evaluate(node => node.parentElement.id), 'inline-fallback');

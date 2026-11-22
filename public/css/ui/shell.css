@@ -81,7 +81,7 @@ body.bp-home  {
     gap: 4px;
 }
 
-#tree-content button  {
+#tree-content > button  {
     display: flex;
     align-items: center;
     gap: 8px;
@@ -97,12 +97,12 @@ body.bp-home  {
     font-size: 13px;
 }
 
-#tree-content button:hover  {
+#tree-content > button:hover  {
     background: var(--bp-hover);
     color: var(--bp-ink);
 }
 
-#tree-content button.selected  {
+#tree-content > button.selected  {
     background: var(--bp-selected);
     color: var(--bp-purple-dark);
     font-weight: 650;

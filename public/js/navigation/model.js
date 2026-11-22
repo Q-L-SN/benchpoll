@@ -86,9 +86,8 @@ export function locationURL(entry) {
     return `${url.pathname}${url.search}`;
 }
 
-export function configuredRows(items, current, query = '', privateTopics = []) {
-    const entries = new Map([...privateTopics.filter(item => item.isPrivate === true && item.isMine === true)
-        .map(item => ({ ...item, weightCount: 0 })), ...items.filter(item => item.weightCount > 0)]
+export function configuredRows(items, current, query = '') {
+    const entries = new Map(items.filter(item => item.weightCount > 0)
         .map(item => [contextKey(item.categoryID, item.contextValues), item]));
     const currentKey = current ? contextKey(current.categoryID, current.contextValues) : null;
     const rows = [...entries].map(([key, item]) => ({ ...item, key, configured: item.weightCount > 0,

@@ -7,6 +7,7 @@ import { savePrivateTopic, setTopicVisibility, setTopicFavorite } from '../priva
 import { getTopic, readProfileTopics } from '../topic-service.js';
 import { savePersonalPie } from '../ranking-service.js';
 import { recordProfileVisit, loadProfileHistory, clearProfileHistory } from '../profile-history-service.js';
+import { listDiscussion, listProfileDiscussion } from '../discussion-service.js';
 
 const errorCode = code => error => error.body?.error === code;
 const topicIDs = topics => topics.map(topic => topic.ID).sort((a, b) => a - b);
@@ -98,4 +99,63 @@ test('real profile SQL keeps editable IDs unique, collections private and histor
     assert.deepEqual((await loadProfileHistory(db, '42', {}, getTopic)).entries, []);
     assert.equal((await loadProfileHistory(db, '43', {}, getTopic)).entries.length, 1, 'clearing one account preserves another account\'s history');
     t.diagnostic('MySQL 8.4: profile edits, unique IDs, three collection tabs, private-topic filtering and owner-scoped history passed.');
+});
+
+test('profile discussion lists only visible posts and replies, with stable pages and scene links', {
+    skip: !process.env.LIFECYCLE_MYSQL_ENV_FILE, timeout: 90000
+}, async t => {
+    const database = await createLifecycleDatabase();
+    t.after(() => database.close());
+    const db = database.pool;
+    const createTopic = name => savePrivateTopic(db, '42', {
+        name, description: 'A topic for discussion activity tests.',
+        scenes: [{ key: 'general', name: 'General' }, { key: 'focused', name: 'Focused' }],
+        defaultSceneKey: 'general'
+    }, randomUUID());
+    const draft = await createTopic('Published discussion fixture');
+    const topic = await setTopicVisibility(db, '42', { categoryID: draft.ID, isPublic: true }, randomUUID());
+    const privateTopic = await createTopic('Private discussion fixture');
+    const scene = topic.scenes.find(scene => scene.name === 'Focused');
+    const createdAt = new Date('2026-11-12T12:00:00.123Z');
+    async function post(body, { author = '42', parent = null, hidden = false, deleted = false,
+        categoryID = topic.ID, contextID = scene.ID, date = createdAt } = {}) {
+        const [insert] = await db.execute(`INSERT INTO discussion_posts
+            (category_ID, context_ID, author_ID, parent_ID, body, created_at, hidden_at, deleted_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, [categoryID, contextID, author, parent, body, date,
+            hidden ? date : null, deleted ? date : null]);
+        return Number(insert.insertId);
+    }
+    const main = await post('My own thread');
+    const parent = await post('', { author: '43', deleted: true });
+    const replies = [];
+    for (let i = 0; i < 21; i++) replies.push(await post(`Reply ${i}`, { parent }));
+    const hiddenParent = await post('Hidden parent', { author: '43', hidden: true });
+    await post('Reply under a hidden parent', { parent: hiddenParent });
+    await post('Hidden post', { hidden: true });
+    await post('Removed post', { deleted: true });
+    await post('Private post', { categoryID: privateTopic.ID, contextID: privateTopic.scenes[0].ID });
+    await post('Someone else’s post', { author: '43' });
+
+    const page = await listProfileDiscussion(db, { publicID: '1' });
+    assert.deepEqual(page.posts.map(post => post.ID), replies.slice(1).reverse());
+    assert.equal(page.posts[0].sceneName, 'Focused');
+    assert.equal(page.posts[0].parentID, parent, 'Deleting a thread opener still allows visible replies');
+    assert.equal(page.posts[0].url, `${scene.url}?discussion=1&threadID=${parent}`);
+    const thread = await listDiscussion(db, null, { categoryID: topic.ID, threadID: parent });
+    assert.equal(thread.root.ID, parent);
+    assert.equal(thread.posts[0].ID, replies[0]);
+
+    const newer = await post('A new thread', { date: new Date('2026-11-13T12:00:00.123Z') });
+    await db.execute('UPDATE discussion_posts SET hidden_at = NOW(3) WHERE ID = ?', [page.nextCursor.ID]);
+    const older = await listProfileDiscussion(db, { publicID: '1', before: page.nextCursor });
+    assert.deepEqual(older.posts.map(post => post.ID), [replies[0], main]);
+    assert.equal(older.posts[1].url, `${scene.url}?discussion=1&threadID=${main}`);
+    assert.equal(older.nextCursor, null);
+    assert.equal((await listProfileDiscussion(db, { publicID: '1' })).posts[0].ID, newer);
+
+    await db.execute('UPDATE users SET banned_at = NOW(3), banned_until = NULL WHERE ID = 42');
+    assert.deepEqual((await listProfileDiscussion(db, { publicID: '1' })).posts, []);
+    await db.execute('UPDATE users SET banned_at = NULL WHERE ID = 42');
+    await setTopicVisibility(db, '42', { categoryID: topic.ID, isPublic: false }, randomUUID());
+    assert.deepEqual((await listProfileDiscussion(db, { publicID: '1' })).posts, []);
 });

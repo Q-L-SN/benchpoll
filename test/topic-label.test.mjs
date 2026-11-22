@@ -27,11 +27,11 @@ test('narrow topic tiles retain the full icon/name path for fading, not a detach
     assert.equal(result.rows[0].text, name);
 });
 
-test('reference row reveal bypasses benchmark-version classification', async () => {
+test('topic and benchmark blocks reveal the same evaluation rows, including rows on later pages', async () => {
     const source = await readFile(new URL('../public/js/home-workspace.js', import.meta.url), 'utf8');
-    const start = source.indexOf('function revealBenchmarkRow('), end = source.indexOf('const snapshotID', start);
-    const guard = source.slice(start, end);
-    assert.match(guard, /if \(Number\(objectID\) < 0\)/);
-    assert.match(guard, /bp-reference-option/);
-    assert.match(guard, /return;/);
+    const reveal = source.slice(source.indexOf('function revealBenchmarkRow('), source.indexOf('function registerPieEntries('));
+    assert.match(reveal, /\.bp-benchmark-row\[data-condition-id=/);
+    assert.match(reveal, /loadNextRankingPage\('benchmarks', group\)/);
+    assert.match(reveal, /benchmarkRows\.scrollBy/);
+    assert.doesNotMatch(reveal, /bp-reference-option/);
 });

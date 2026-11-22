@@ -13,16 +13,13 @@ test('the UI inventory has five primitives rather than one component per old ski
     assert.doesNotMatch(read('public/js/global.js'), /#button \{\s*min-height:/);
 });
 
-test('workspace switches retain measured segmented geometry while sidebar modes are icon-only', () => {
+test('workspace switches retain measured segmented geometry alongside the sidebar collection picker', () => {
     const html = read('private/home.html');
     for (const name of ['bp-mode-switch', 'bp-scoring-switch']) {
         assert.match(html, new RegExp(`class="[^"]*${name}[^>]+data-ui-component="segmented"`));
     }
-    assert.deepEqual([...html.matchAll(/data-navigation-view="([^"]+)"/g)].map(match => match[1]), ['popular', 'recent', 'configured', 'search']);
-    for (const [view, label, title] of [['popular', 'Popular topics', 'Popular'], ['recent', 'Recently viewed topics', 'Recent'],
-        ['configured', 'Mine', 'Mine'], ['search', 'Search topics', 'Search']]) {
-        assert.match(html, new RegExp(`data-navigation-view="${view}"[^>]+aria-label="${label}"[^>]+data-tooltip="${title}"[^>]+aria-pressed="${view === 'popular'}"[^>]*><i[^>]+aria-hidden="true"[^>]*><\\/i><\\/button>`));
-    }
+    assert.match(html, /<select id="sidebar-topic-collection" aria-label="Topic collection">/);
+    assert.match(read('public/js/navigation/collection-picker.js'), /mountCustomSelect\(select\)/);
     const code = read('public/js/shared/ui-components.js');
     assert.match(code, /marker\.offsetLeft/);
     assert.match(code, /marker\.offsetWidth/);
@@ -100,12 +97,12 @@ test('shared framed inputs paint one complete focus surface without adding an ex
     assert.match(policy, /\[aria-invalid="true"\] \{\s*border-color: #b24d54 !important/);
 });
 
-test('topic creation is contained in Mine and other navigation actions retain quiet skins', () => {
+test('topic creation is contained in the authored collection and other navigation actions retain quiet skins', () => {
     const html = read('private/home.html');
     for (const ID of ['configured-browse', 'configured-login']) {
         assert.match(html, new RegExp(`id="${ID}"[^>]*class="bp-quiet-action"`));
     }
-    const mine = html.match(/<section id="configured-panel"[\s\S]*?<\/section>/)[0];
+    const mine = html.slice(html.indexOf('id="sidebar-topic-creation"'), html.indexOf('id="tree-content"'));
     assert.doesNotMatch(html, /data-create-topic="public"|id="mine-panel"/);
     assert.match(mine, /data-create-topic="private"/);
     assert.match(mine, /for="topic-create-name">Topic name<\/label>/);

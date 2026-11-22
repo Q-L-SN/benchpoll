@@ -75,9 +75,9 @@ test('shared navigation has no proposal hall and retains Search and Create topic
     assert.match(topics, /mountSiteActions\(\$\('\.th-header-links'\)/);
     assert.match(read('public/js/shared/page-header.js'), /mountSiteActions\(/);
     assert.match(workspace, /minimal: true, extraActions:/);
-    const actions = home.match(/<div class="th-directory-controls"[\s\S]*?<\/div>/)?.[0];
-    assert.ok(actions);
-    assert.match(actions, /id="topic-search-toggle"[\s\S]*?<\/button>\s*<button id="new-private-topic"[^>]*aria-label="Create topic"/);
+    assert.match(home, /<button id="new-private-topic"[^>]*aria-label="Create topic"/);
+    assert.match(home, /id="home-topic-collection" aria-label="Topic collection"/);
+    assert.ok(home.indexOf('id="home-topic-collection"') > home.indexOf('</header>'));
     assert.match(topics, /prioritizeAccount: true, extraActions: \[\$\('#new-private-topic'\)\]/);
     assert.match(topics, /\$\('#new-private-topic'\)\.addEventListener\('click', event => void privateTopicEditor\.open\(null, event\.currentTarget\)\)/);
     assert.doesNotMatch(home, /id="mine-actions"|topic-proposals/);
@@ -111,7 +111,7 @@ test('the second-line summary and plot controls preserve fixed cards and avoid a
     const sidebar = read('public/css/ui/config-sidebar.css');
     assert.match(sidebar, /#config-sidebar \{[^}]*border: 0; background: var\(--bp-surface-soft\)/);
     assert.match(sidebar, /\.selected \{[^}]*border-color: #b8c0c8; background: #e1e5e9; box-shadow: none/);
-    assert.match(sidebar, /button:is\([^}]*aria-pressed="true"[^}]*\) > \.fa-regular \{ font-weight: 900; \}/);
+    assert.match(css, /\.th-card-identity \{[^}]*gap: 1px/);
     assert.doesNotMatch(sidebar, /border-(?:left|right|top|bottom|inline-start|inline-end):[^;]*accent/);
 });
 

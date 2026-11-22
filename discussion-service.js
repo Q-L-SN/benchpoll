@@ -1,6 +1,8 @@
 import { resolveRankingContext } from './ranking-service.js';
 import { selectableBenchmarkConditionSQL } from './benchmark-condition-visibility.js';
 import { canonicalAccountID } from './public/js/shared/account-identity.js';
+import { publicProfileID } from './public/js/shared/profile-identity.js';
+import { scenePath, topicURL } from './public/js/shared/topics.js';
 import { startTransactionConnection, commitTransactionConnection, rollbackTransactionConnection,
     releaseTransactionConnection } from './db-transaction.js';
 
@@ -130,6 +132,50 @@ export async function deleteDiscussionPost(db, userID, body) {
 
 const visible = `p.hidden_at IS NULL AND EXISTS (SELECT 1 FROM categories active_category
     WHERE active_category.ID = p.category_ID AND active_category.is_active = 1 AND active_category.owner_user_ID IS NULL)`;
+
+export async function listProfileDiscussion(db, body) {
+    const handle = publicProfileID(body?.publicID);
+    if (!handle || Array.isArray(body) || Object.keys(body).some(key => !['publicID', 'before'].includes(key))) {
+        fail(400, 'profile_discussion_query_invalid');
+    }
+    const args = [handle];
+    let cursorFilter = '';
+    if (body.before !== undefined) {
+        const { ID, createdAt } = body.before ?? {};
+        const date = typeof createdAt === 'string' && createdAt.length === 24 ? new Date(createdAt) : null;
+        if (!Number.isSafeInteger(ID) || ID < 1 || !date || !Number.isFinite(date.getTime()) || date.toISOString() !== createdAt) {
+            fail(400, 'profile_discussion_cursor_invalid');
+        }
+        cursorFilter = 'AND (p.created_at < ? OR (p.created_at = ? AND p.ID < ?))';
+        args.push(date, date, ID);
+    }
+    const pageSize = 20;
+    const [rows] = await db.execute(`SELECT p.ID, p.parent_ID, p.body, p.created_at,
+        cat.public_ID, cat.name AS category_name, scene.scene_number, scene.name AS scene_name
+        FROM user_public_profiles profile
+        JOIN users author ON author.ID = profile.user_ID
+        JOIN discussion_posts p ON p.author_ID = author.ID
+        JOIN categories cat ON cat.ID = p.category_ID
+        LEFT JOIN discussion_posts parent ON parent.ID = p.parent_ID
+        LEFT JOIN topic_scenes scene ON scene.context_ID = COALESCE(parent.context_ID, p.context_ID)
+            AND scene.category_ID = cat.ID AND scene.is_active = 1
+        WHERE profile.public_id = ? AND author.deleted_at IS NULL
+            AND (author.banned_at IS NULL OR author.banned_until <= NOW())
+            AND ${visible} AND p.deleted_at IS NULL AND cat.public_ID IS NOT NULL
+            AND (p.parent_ID IS NULL OR (parent.category_ID = p.category_ID AND parent.hidden_at IS NULL))
+            ${cursorFilter}
+        ORDER BY p.created_at DESC, p.ID DESC LIMIT ${pageSize + 1}`, args);
+    const posts = rows.slice(0, pageSize).map(row => {
+        const ID = Number(row.ID), parentID = row.parent_ID == null ? null : Number(row.parent_ID);
+        const path = scenePath(topicURL(row.public_ID), row.scene_number == null ? null : { sceneNumber: row.scene_number });
+        return { ID, parentID, text: row.body, createdAt: new Date(row.created_at).toISOString(),
+            categoryName: row.category_name, sceneName: row.scene_name ?? null,
+            url: `${path}?discussion=1&threadID=${parentID ?? ID}` };
+    });
+    const last = posts.at(-1);
+    return { posts, nextCursor: rows.length > pageSize ? { ID: last.ID, createdAt: last.createdAt } : null };
+}
+
 const voteJoin = `LEFT JOIN (SELECT post_ID, SUM(value = 1) AS upvotes, SUM(value = -1) AS downvotes FROM discussion_votes GROUP BY post_ID) v ON v.post_ID = p.ID`;
 const hotSQL = '(GREATEST(0, COALESCE(v.upvotes, 0) - COALESCE(v.downvotes, 0)) + 1) / POW(GREATEST(0, TIMESTAMPDIFF(SECOND, p.created_at, NOW()) / 3600) + 2, 1.5)';
 async function decorate(connection, rows, userID) {

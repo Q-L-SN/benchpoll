@@ -65,10 +65,8 @@ test('short explanations name current navigation and preserve practical scoring 
         for (const [, paragraph] of content.matchAll(/<p(?:\s[^>]*)?>([\s\S]*?)<\/p>/g)) assert.ok(words(plain(paragraph)) <= 55);
     }
     assert.doesNotMatch(guide, /grouping button|optional grouping|fair-comparison control|configuration-share denominator/);
-    assert.match(guide, /Browse Popular, Recent, or Mine/);
-    assert.deepEqual([...home.matchAll(/data-navigation-view="([^"]+)"/g)].map(match => match[1]),
-        ['popular', 'recent', 'configured', 'search']);
-    assert.match(home, /data-navigation-view="configured"[^>]*aria-label="Mine"/);
+    assert.match(guide, /topic menu to find your favorites, topics you configured or created, recent visits, or search/);
+    assert.match(home, /id="sidebar-topic-collection" aria-label="Topic collection"/);
     assert.match(guide, /choose a saved (?:fallback )?order or edit your own/);
     assert.match(guide, /Another topic contributes only through an explicit reference/);
     assert.match(guide, /Private topics and their weights never contribute to Public Weights/);

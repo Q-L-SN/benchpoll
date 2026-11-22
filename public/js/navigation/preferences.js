@@ -1,8 +1,9 @@
 import { canonicalAccountID } from '../shared/account-identity.js';
 import { contextKey } from './model.js';
+import { topicCollections } from './collections.js';
 
 const KEY = 'benchpoll-sidebar-preferences-v1';
-const VIEWS = ['popular', 'recent', 'configured', 'search'];
+const VIEWS = Object.keys(topicCollections);
 export const RECENT_TOPICS_PREFIX = 'benchpoll-sidebar-recent-v1:';
 const MAX_RECENT = 80;
 

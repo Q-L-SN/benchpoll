@@ -26,19 +26,7 @@ export const HOME_WEIGHT_THEME = Object.freeze({ id: 'frost-hatch', ink: '#11111
     colors: Object.freeze(['#e4eaf1', '#cbd5e2', '#eef1f5', '#d5dfe6', '#e2e4eb', '#cbdcde', '#d8e0ee', '#edf0f4']) });
 const compareText = (a, b) => a < b ? -1 : a > b ? 1 : 0;
 
-export function topicCollection(topics, collection, recent = [], userID = null) {
-    const authorized = topics.filter(topic => !topic.isPrivate || userID !== null && topic.isMine === true);
-    if (collection === 'configured' || collection === 'mine') return orderTopics(authorized.filter(topic => userID !== null
-        && (topic.configured === true || topic.isPrivate === true && topic.isMine === true)));
-    if (collection !== 'recent') return orderTopics(authorized);
-    const available = new Map(authorized.map(topic => [Number(topic.ID), topic]));
-    const seen = new Set();
-    return orderTopics(recent.flatMap(record => {
-        const topic = available.get(record.categoryID);
-        if (!topic || seen.has(record.categoryID)) return [];
-        seen.add(record.categoryID); return [topic];
-    }));
-}
+export { topicCollection } from '../navigation/collections.js';
 
 export function modelTargetURL(href, model, filters, isPrivate = false) {
     const numericID = Number(model.modelID ?? model.ID);

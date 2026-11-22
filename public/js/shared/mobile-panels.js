@@ -135,6 +135,7 @@ export function initializeMobilePanels(workspace) {
         ignoreClickUntil = performance.now() + 500;
         if (!enabled()) return;
         const target = cancelled ? press.original : press.moved ? names[Math.round(progress())] : press.target;
+        if (!press.moved) restoreDockScrolling();
         select(target);
     }
     dock.addEventListener('pointerup', event => endDockPress(event));
@@ -155,6 +156,8 @@ export function initializeMobilePanels(workspace) {
     pager.addEventListener('scrollend', commit);
     // Native scrolling follows the finger and preserves vertical scrolling in each page.
     pager.addEventListener('touchstart', () => {
+        // A finger can take over while a released dock thumb is still settling.
+        restoreDockScrolling();
         activatePanels();
     }, { passive: true });
     pager.addEventListener('touchend', () => { clearTimeout(settleTimer); settleTimer = setTimeout(commit, 180); }, { passive: true });

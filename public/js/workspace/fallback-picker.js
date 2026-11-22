@@ -74,10 +74,11 @@ export function createFallbackPicker({ catalogue, getScope, getPrimary, getCompo
     const customize = createAction({ className: 'bp-fallback-picker-customize', label: 'Create my own', icon: 'fa-regular fa-pen-to-square', variant: 'quiet' });
     customize.hidden = true; customAdd.hidden = true;
     actions.append(customize, cancel, customAdd);
-    let intent = null, applying = false, applyError = '', returnFocus = null, layout = 'pages', active = true;
+    let intent = null, applying = false, applyError = '', returnFocus = null, active = true;
     const visitChoices = new Map(), visitExpansions = new Map();
     let currentVisit = null, sessionChoices = new Map(), expandedChains = new Set();
-    const pager = createChoicePager({ list: track, label: 'Fallback configurations', pageSize: 2, neighbors: 3, scrollRoot,
+    const mode = host ? 'continuous' : 'pages';
+    const pager = createChoicePager({ list: track, label: 'Fallback configurations', pageSize: 2, mode, scrollRoot,
         getKey: choice => choice.key, renderItem: choice => createColumn(validPrimary(), choice),
         onLoadMore: loadMore, onRender: updateSelection });
     body.append(readOnlyNotice, question, selectionStatus, pager.element, feedback);
@@ -164,7 +165,7 @@ export function createFallbackPicker({ catalogue, getScope, getPrimary, getCompo
         const list = element('ol', 'bp-fallback-picker-steps bp-fallback-chain');
         list.setAttribute('aria-label', `${name}: entrance, then fallback steps`);
         const chain = [primary, ...choice.entries];
-        const capped = layout === 'pages' && !expandedChains.has(choice.key) && chain.length > 5;
+        const capped = mode === 'pages' && !expandedChains.has(choice.key) && chain.length > 5;
         chain.slice(0, capped ? 5 : undefined).forEach(entry => {
             const item = element('li', 'bp-fallback-chain-step');
             const identity = element('span', 'bp-fallback-picker-step-name');
@@ -220,7 +221,7 @@ export function createFallbackPicker({ catalogue, getScope, getPrimary, getCompo
         const primary = validPrimary();
         if (!primary) { close(); return; }
         const view = catalogue.view(primary), choices = choicesFor(primary);
-        pager.setItems(choices.map(choice => ({ ...choice, layout, expanded: expandedChains.has(choice.key) })),
+        pager.setItems(choices.map(choice => ({ ...choice, expanded: expandedChains.has(choice.key) })),
             { hasMore: view.hasMore || !view.loaded && !Object.hasOwn(primary, 'fallbackConfigCount'),
                 loading: view.loading || view.suspended, error: view.error });
         question.replaceChildren(createBenchmarkInformationLink(primary, { getURL: getMemberURL, showVersion: true,
@@ -289,10 +290,6 @@ export function createFallbackPicker({ catalogue, getScope, getPrimary, getCompo
         void applyChoice(getCurrent(primary.ID) ?? { entries: [] }, true);
     });
     return { open, close, refresh,
-        setLayout(value) {
-            layout = value === 'accordion' ? 'accordion' : 'pages';
-            pager.setMode(layout === 'accordion' ? 'continuous' : 'pages'); refresh();
-        },
         setActive(value) { active = value; pager.setActive(value && Boolean(intent) && !dialog.hidden); }
     };
 }

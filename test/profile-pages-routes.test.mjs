@@ -36,6 +36,14 @@ test('privacy writes enforce origin and exact account owner; publishing changes 
     assert.equal(f.state.queried.at(-1).includeConfigured, false);
 });
 
+test('profile discussion rejects raw account IDs and malformed page cursors', async t => {
+    const f = await startProfilePagesFixture({ viewerID: null }); t.after(f.close);
+    assert.equal((await send(f, 'get_profile_discussion', { userID: '10' })).status, 400);
+    const response = await send(f, 'get_profile_discussion', { publicID: '1', before: { ID: 12, createdAt: '2026-02-30T00:00:00.000Z' } });
+    assert.equal(response.status, 400);
+    assert.deepEqual(await response.json(), { error: 'profile_discussion_cursor_invalid' });
+});
+
 test('profile edit rejects duplicates and poisoned identity fields while saving ID/bio/GitHub together', async t => {
     const f = await startProfilePagesFixture(); t.after(f.close);
     assert.equal((await send(f, 'save_user_profile', { expectedUserID: '10', publicID: '2' })).status, 409);

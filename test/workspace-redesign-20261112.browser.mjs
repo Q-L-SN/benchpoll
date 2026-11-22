@@ -49,7 +49,10 @@ async function setup(t, engine, width, options = {}) {
     page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
     page.setDefaultTimeout(10000);
     t.after(() => assert.deepEqual(errors, []));
-    await page.addInitScript(() => localStorage.setItem('benchpoll:config-sidebar-collapsed', 'true'));
+    await page.addInitScript(() => {
+        localStorage.setItem('benchpoll:config-sidebar-collapsed', 'true');
+        localStorage.setItem('benchpoll:header-layout', 'inline');
+    });
     await page.goto(fixture.url + '/1');
     await page.locator('.bp-benchmark-row').first().waitFor();
     return { page, fixture };
@@ -66,8 +69,7 @@ for (const [engine, width] of [[chromium, 1440], [chromium, 390], [webkit, 390]]
         const title = await page.locator('#workspace-headline').boundingBox();
         const summary = await page.locator('#workspace-topic-summary').boundingBox();
         assert.ok(summary.y >= title.y + title.height - 1);
-        await page.locator('#workspace-header-layout').evaluate(e => { e.value = 'inline'; e.dispatchEvent(new Event('change', { bubbles: true })); });
-        assert.equal(await page.locator('body').getAttribute('data-header-layout'), 'inline');
+        assert.equal(await page.locator('#workspace-header-layout').count(), 0);
         await page.locator('#pie-mode-personal').click();
         assert.equal(await page.locator('#pie-instruction').textContent(), '');
         await page.locator('#weight-pie').dispatchEvent('wheel', { deltaY: 100 });
@@ -131,13 +133,20 @@ for (const engine of [chromium, webkit]) {
         const social = await page.locator('#config-site-links .th-social').boundingBox();
         const menu = await page.locator('#taxonomy-toggle').boundingBox();
         assert.ok(social.x < home.x && home.x < menu.x);
-        await page.evaluate(() => document.querySelector('#taxonomy-toggle').click());
-        await page.waitForFunction(() => {
-            const rect = document.querySelector('#config-sidebar').getBoundingClientRect();
-            return rect.x > -rect.width && rect.x < -1;
-        }, null, { polling: 'raf' });
-        const during = await page.locator('#config-sidebar').boundingBox();
-        assert.ok(during.x < -1 && during.x > -during.width, JSON.stringify(during));
+        // Sample in the page from the click itself so the driver cannot miss a short transition.
+        const animated = await page.evaluate(async () => {
+            await document.fonts.ready;
+            const sidebar = document.querySelector('#config-sidebar');
+            document.querySelector('#taxonomy-toggle').click();
+            const start = performance.now();
+            while (performance.now() - start < 1500) {
+                await new Promise(requestAnimationFrame);
+                const rect = sidebar.getBoundingClientRect();
+                if (rect.x > -rect.width + 1 && rect.x < -1) return true;
+            }
+            return false;
+        });
+        assert.equal(animated, true, 'Opening the sidebar passes through an intermediate position');
         await page.waitForFunction(() => Math.abs(document.querySelector('#config-sidebar').getBoundingClientRect().x) < 1);
         await page.locator('#taxonomy-close').click();
         await page.waitForFunction(() => !document.body.classList.contains('taxonomy-open'));

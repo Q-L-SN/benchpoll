@@ -1,6 +1,7 @@
 import { publicProfileID } from './public/js/shared/profile-identity.js';
 import { loadPublicUserProfile, saveProfilePrivacy } from './user-profile-service.js';
 import { loadProfileHistory, recordProfileVisit, clearProfileHistory } from './profile-history-service.js';
+import { listProfileDiscussion } from './discussion-service.js';
 
 const fail = (status, error) => { throw Object.assign(new Error(error), { status, body: { error } }); };
 
@@ -32,6 +33,10 @@ export function registerProfileRoutes({ page, API, db, currentDir, activeSession
         }
         res.set('Cache-Control', 'private, no-store');
         res.json(await loadPublicUserProfile(db, { ...body, viewerID: await activeSessionUserID(req) }, readProfileTopics));
+    });
+    API.post('/get_profile_discussion', async (req, res) => {
+        res.set('Cache-Control', 'private, no-store');
+        res.json(await listProfileDiscussion(db, req.body));
     });
     API.post('/save_profile_privacy', discussionSameOrigin, requireAuthForAPI, requireAccountWriteOwner, async (req, res) => {
         res.set('Cache-Control', 'private, no-store');

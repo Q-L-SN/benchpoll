@@ -27,18 +27,20 @@ for (const [engine, width] of built ? [[chromium, 390]] : [[chromium, 1440], [ch
                 { ID: 2, name: 'Research', slug: 'research', position: 1, isDefault: false }];
             await route.fulfill({ response, json: data });
         });
-        if (built) await page.route(fixture.url + '/', async route => route.fulfill({ contentType: 'text/html',
+        if (built) await page.route(fixture.url + '/1', async route => route.fulfill({ contentType: 'text/html',
             body: await readFile('private/home-built.html', 'utf8') }));
-        await page.goto(fixture.url);
+        await page.goto(fixture.url + '/1');
         await page.locator('#weight-pie [data-object-id]').first().waitFor();
         if (built) assert.ok(await page.locator('script[src^="/build/home/"]').count());
         assert.equal(await page.locator('#benchmark-rows .bp-benchmark-row').count(), 8);
         assert.equal(await page.locator('#benchmark-rows .bp-benchmark-condition').count(), 0);
         await page.locator('#pie-mode-personal').click();
-        await page.waitForFunction(() => document.getElementById('pie-mode-personal').getAttribute('aria-selected') === 'true');
+        await page.locator('#pie-mode-personal[aria-selected="true"][aria-busy="false"]').waitFor();
         assert.equal(await page.locator('.bp-inline-fallback-info').count(), 0);
         assert.equal(await page.locator('#weight-add-actions button').count(), 1);
+        await page.locator('#weight-pie [data-object-id="1"]').click();
         const entry = page.locator('#inline-fallback-toggle');
+        await page.getByRole('button', { name: 'Contribute your expertise', exact: true }).waitFor();
         assert.equal(await entry.innerText(), 'Contribute your expertise');
         assert.equal(await entry.locator('span').evaluate(node => {
             const range = document.createRange(); range.selectNodeContents(node);
@@ -48,7 +50,7 @@ for (const [engine, width] of built ? [[chromium, 390]] : [[chromium, 1440], [ch
         const settings = page.locator('#benchmark-settings'); await settings.waitFor();
         assert.match(await settings.locator('.bp-benchmark-settings-status').textContent(), /Versions and fallback follow community/);
         assert.equal(await settings.getByRole('button', { name: /Follow community/i }).count(), 0);
-        assert.equal(await settings.locator('.bp-benchmark-settings-placeholder').isVisible(), true);
+        assert.equal(await settings.locator('#benchmark-settings-fallback-trigger').getAttribute('aria-disabled'), 'true');
         assert.equal(await settings.locator('.bp-version-choice').first().getAttribute('data-condition-id'), '901');
         await page.waitForTimeout(260); // Capture the fully opened dialog, after its entrance animation.
         await page.screenshot({ path: `${output}/${engine.name()}-${width}${built ? '-built' : ''}-settings.png` });
@@ -59,9 +61,11 @@ for (const [engine, width] of built ? [[chromium, 390]] : [[chromium, 1440], [ch
         await chooser.locator('[data-family-key="[901]"] .bp-fallback-picker-card-toggle[aria-pressed="true"]').click();
         assert.match(await settings.locator('.bp-benchmark-settings-status').textContent(), /Fallback follows community/);
         assert.equal(await settings.locator('.bp-version-choice[data-condition-id="901"]').getAttribute('aria-pressed'), 'true');
+        await settings.locator('#benchmark-settings-versions-trigger').click();
         await settings.locator('.bp-version-choice[data-condition-id="1"]').click();
+        await settings.locator('#benchmark-settings-versions-trigger').click();
         await settings.locator('.bp-version-choice[data-condition-id="1"][aria-pressed="true"]').click();
-        assert.equal(await chooser.isVisible(), false);
+        await chooser.waitFor({ state: 'hidden' });
         assert.match(await settings.locator('.bp-benchmark-settings-status').textContent(), /Versions and fallback follow community/);
         await page.locator('#inline-fallback-toggle').click();
         await page.waitForFunction(() => !document.getElementById('workspace-undo').disabled);
@@ -75,6 +79,7 @@ for (const [engine, width] of built ? [[chromium, 390]] : [[chromium, 1440], [ch
         await page.locator('#inline-fallback-toggle').click(); await settings.waitFor();
         assert.equal(await settings.locator('.bp-version-choice[data-condition-id="1"]').getAttribute('aria-pressed'), 'true');
         {
+            await settings.locator('#benchmark-settings-fallback-trigger').click();
             await settings.getByRole('button', { name: 'Create my own', exact: true }).click();
             await settings.locator('#inline-fallback-editor').waitFor();
             await chooser.waitFor({ state: 'hidden' });
@@ -113,6 +118,7 @@ for (const [engine, width] of built ? [[chromium, 390]] : [[chromium, 1440], [ch
                 const pager = document.getElementById('workspace-scene-panel');
                 return Math.abs(pager.scrollLeft / pager.clientWidth - 1) < .01;
             });
+            assert.equal(await page.locator('#workspace-scene-panel').evaluate(pager => getComputedStyle(pager).scrollSnapType), 'x mandatory');
             if (engine === chromium && width === 390) {
                 const cdp = await context.newCDPSession(page);
                 const finger = x => [{ x, y: 480, id: 1 }];
@@ -125,21 +131,27 @@ for (const [engine, width] of built ? [[chromium, 390]] : [[chromium, 1440], [ch
                         assert.ok(progress > 1.1 && progress < 1.8, 'the page follows the finger before release');
                     }
                 }
+                // Release without momentum; native snapping still finishes on Discussion.
+                await page.waitForTimeout(250);
                 await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
                 await cdp.detach();
             } else await page.locator('[data-mobile-panel="discussion"]').click();
             await page.locator('#discussion-feed .discussion-post').first().waitFor();
             await page.waitForFunction(() => {
                 const pager = document.getElementById('workspace-scene-panel');
-                return Math.abs(pager.scrollLeft / pager.clientWidth - 2) < .01;
+                return Math.abs(pager.scrollLeft / pager.clientWidth - 2) < .01
+                    && pager.querySelector('.bp-left-workspace').inert && !document.getElementById('workspace-discussion-page').inert;
             });
             assert.equal(await page.locator('#discussion-panel').evaluate(node => node.parentElement.id), 'workspace-discussion-page');
             assert.equal(await page.locator('.bp-workspace').evaluate(node => node.inert), false);
             assert.equal(await page.locator('.bp-breadcrumb-current').isVisible(), true);
             assert.equal(await page.locator('#discussion-context .bp-scene-default').count(), 0);
             assert.equal(await page.locator('#discussion-context .bp-scene-tab').first().textContent(), 'General');
-            await page.locator('#discussion-compose-toggle').click();
-            await page.locator('#discussion-text').fill('A draft that survives swiping between pages.');
+            const composer = page.locator('#discussion-panel:not([inert]) #discussion-text');
+            await composer.click();
+            const draft = 'A draft that survives swiping between pages.';
+            await composer.fill(draft);
+            assert.equal(await composer.inputValue(), draft);
             await page.locator('[data-mobile-panel="mix"]').click();
             await page.waitForFunction(() => document.getElementById('workspace-discussion-page').inert);
             await page.locator('[data-mobile-panel="discussion"]').click();
@@ -148,7 +160,7 @@ for (const [engine, width] of built ? [[chromium, 390]] : [[chromium, 1440], [ch
                 return !document.getElementById('workspace-discussion-page').inert && Math.abs(pager.scrollLeft / pager.clientWidth - 2) < .01;
             });
             await page.locator('#discussion-feed .discussion-post').first().waitFor();
-            assert.equal(await page.locator('#discussion-text').inputValue(), 'A draft that survives swiping between pages.');
+            assert.equal(await composer.inputValue(), draft);
             await page.screenshot({ path: `${output}/${engine.name()}-${width}${built ? '-built' : ''}-discussion.png` });
             assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
             await page.setViewportSize({ width: 1440, height: 900 });

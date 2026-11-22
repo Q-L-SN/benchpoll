@@ -13,7 +13,7 @@ const node = (tag, className) => {
 
 // A bounded page window and an automatically growing list share one rendering
 // and loading contract. Only the page window is mounted in paged mode.
-export function createChoicePager({ list, label, pageSize = 6, neighbors = 3,
+export function createChoicePager({ list, label, pageSize = 6, neighbors = 3, mode = 'pages',
     getKey, renderItem, onLoadMore, scrollRoot = null, onRender = () => {} }) {
     const element = node('div', 'bp-choice-pager');
     const viewport = node('div', 'bp-choice-viewport');
@@ -27,8 +27,9 @@ export function createChoicePager({ list, label, pageSize = 6, neighbors = 3,
     position.setAttribute('role', 'status'); position.setAttribute('aria-live', 'polite');
     const sentinel = node('div', 'bp-choice-load-sentinel'); sentinel.setAttribute('aria-hidden', 'true');
     navigation.append(previous, position, next);
-    viewport.append(list); element.append(viewport, navigation);
-    let items = [], index = 0, mode = 'pages', visibleCount = pageSize * 2, active = false;
+    viewport.append(list); element.append(viewport);
+    if (mode === 'pages') element.append(navigation);
+    let items = [], index = 0, visibleCount = pageSize * 2, active = false;
     let hasMore = false, loading = false, error = false, pending = false, atEnd = false, generation = 0;
     let cache = new Map();
 
@@ -47,7 +48,6 @@ export function createChoicePager({ list, label, pageSize = 6, neighbors = 3,
         index = page.current;
         element.dataset.mode = mode; element.dataset.page = String(index + 1);
         element.dataset.preloadPages = String(neighbors);
-        navigation.hidden = mode !== 'pages';
         previous.disabled = index === 0;
         next.disabled = index === page.pages - 1 && (!hasMore || loading || Boolean(error));
         position.textContent = `${index + 1} / ${page.pages}${hasMore ? '+' : ''}`;
@@ -136,11 +136,6 @@ export function createChoicePager({ list, label, pageSize = 6, neighbors = 3,
         setItems(nextItems, state = {}) {
             items = nextItems; hasMore = Boolean(state.hasMore); loading = Boolean(state.loading); error = Boolean(state.error);
             render();
-        },
-        setMode(value) {
-            const nextMode = value === 'continuous' ? 'continuous' : 'pages';
-            if (mode === nextMode) return;
-            mode = nextMode; atEnd = false; visibleCount = pageSize * 2; render();
         },
         setActive(value) { active = value; if (active) scheduleMore(); },
         reset() { generation++; pending = false; index = 0; visibleCount = pageSize * 2; cache.clear(); render(); },

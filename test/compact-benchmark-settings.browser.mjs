@@ -10,7 +10,7 @@ const output = process.env.BP_SETTINGS_ARTIFACTS ?? 'artifacts/compact-benchmark
 await mkdir(output, { recursive: true });
 for (const [engine, width, height] of built ? [[chromium, 1440, 900], [chromium, 320, 568]]
     : [[chromium, 1440, 900], [chromium, 390, 844], [chromium, 320, 568], [webkit, 390, 660]]) {
-    test(`${engine.name()} ${width}x${height}: inline version pages retain fallback choice semantics ${built ? 'built' : 'source'}`, async t => {
+    test(`${engine.name()} ${width}x${height}: inline version and fallback sections retain choice semantics ${built ? 'built' : 'source'}`, async t => {
         const families = [[2, 3], [4, 2], [5, 6, 3]].map((IDs, index) => ({ primaryConditionID: 1,
             familyID: 51 + index, mode: 'ordered', entries: familyEntries(IDs.map(conditionID => ({ conditionID }))) }));
         const variants = ['Thinking', 'Verified', 'Short', 'Full', 'Overall', 'Task-macro rubric pass rate, model-specific conditions',
@@ -41,50 +41,41 @@ for (const [engine, width, height] of built ? [[chromium, 1440, 900], [chromium,
         assert.equal(await settings.getByRole('button', { name: /Follow community/i }).count(), 0);
         assert.doesNotMatch(await settings.locator('.bp-version-choices').innerText(), /approved|scores|Primary version/);
         for (const text of await settings.locator('.bp-evidence-count-value').allTextContents()) assert.match(text, /^\d+$/);
-        assert.equal(await settings.locator('.bp-version-choice').count(), 24, 'Three neighboring version pages are prepared');
-        const versionPager = settings.locator('.bp-benchmark-settings-versions .bp-choice-pager');
-        const revealVersion = async ID => {
-            const choice = settings.locator(`.bp-version-choice[data-condition-id="${ID}"]`);
-            while (!await choice.isVisible()) {
-                const next = versionPager.getByRole('button', { name: 'Next versions page' });
-                assert.equal(await next.isEnabled(), true, `Version ${ID} must be reachable by paging`);
-                await next.click();
-            }
-            return choice;
-        };
+        assert.equal(await settings.locator('.bp-choice-pagination').count(), 0);
+        const versions = settings.locator('.bp-benchmark-settings-versions');
+        assert.equal(await versions.locator('[aria-expanded]').getAttribute('aria-expanded'), 'true');
+        assert.equal(await settings.locator('#benchmark-settings-fallback-trigger').getAttribute('aria-disabled'), 'true');
+        const pills = versions.locator('.bp-version-choice');
+        const widths = await pills.evaluateAll(nodes => nodes.map(node => Math.round(node.getBoundingClientRect().width)));
+        assert.ok(new Set(widths).size > 1, 'Version choices retain their natural widths in narrow panes');
+        const primaryVersion = versions.locator('[data-condition-id="1"]');
+        while (!await primaryVersion.count()) {
+            const count = await pills.count();
+            await versions.locator('.bp-choice-load-sentinel').evaluate(node => node.scrollIntoView({ block: 'center' }));
+            await page.waitForFunction(before => document.querySelectorAll('.bp-version-choice').length > before, count);
+        }
         const save = async action => {
             const response = page.waitForResponse(response => response.url().endsWith('/api/save_personal_pie') && response.status() === 200);
             await Promise.all([response, action()]);
         };
-        const primaryVersion = await revealVersion(1);
         await save(() => primaryVersion.click());
         const picker = settings.locator('.bp-fallback-picker-embedded'); await picker.waitFor();
         await picker.locator('[data-family-key="[1,2,3]"]').waitFor();
         assert.equal(await page.locator('#fallback-picker').isVisible(), false);
         const bounds = await settings.evaluate(root => {
-            const versionList = root.querySelector('.bp-version-choices');
-            const fallback = root.querySelector('.bp-benchmark-settings-fallback');
             const card = root.querySelector('.bp-fallback-picker-card-toggle');
-            const controls = [...versionList.querySelectorAll('.bp-version-choice')]
-                .filter(node => node.getClientRects().length).map(node => node.getBoundingClientRect());
+            const column = card.closest('.bp-fallback-picker-column');
             return { tag: root.tagName, parent: root.parentElement.id, panel: root.getBoundingClientRect().toJSON(),
-                button: document.getElementById('inline-fallback-toggle').getBoundingClientRect().toJSON(),
-                horizontalOverflow: root.scrollWidth - root.clientWidth,
-                versionOverflow: versionList.scrollHeight > versionList.clientHeight,
-                fallback: fallback.getBoundingClientRect().toJSON(), card: card.getBoundingClientRect().toJSON(),
-                column: card.closest('.bp-fallback-picker-column').getBoundingClientRect().toJSON(),
-                stepsHeight: card.closest('.bp-fallback-picker-column').querySelector('.bp-fallback-picker-steps').clientHeight,
-                multiplePerRow: controls.some((box, index) => controls.some((other, j) => j !== index && Math.abs(box.top - other.top) < 1)),
-                distinctWidths: new Set(controls.map(box => Math.round(box.width))).size };
+                horizontalOverflow: root.scrollWidth - root.clientWidth, card: card.getBoundingClientRect().toJSON(),
+                column: column.getBoundingClientRect().toJSON(), stepsHeight: column.querySelector('.bp-fallback-picker-steps').clientHeight };
         });
         assert.equal(bounds.tag, 'SECTION');
         assert.equal(bounds.parent, 'inline-fallback');
-        assert.ok(bounds.panel.top >= bounds.button.bottom && bounds.horizontalOverflow <= 1, JSON.stringify(bounds));
-        assert.equal(bounds.versionOverflow, false, 'Version choices use discrete pages without a scrolling list');
-        assert.ok(await settings.locator('.bp-version-choice:visible').count() <= 6);
-        assert.ok(bounds.stepsHeight >= 32 && bounds.fallback.height >= 180 && bounds.card.top > bounds.fallback.top
-            && bounds.card.bottom <= bounds.column.bottom && bounds.column.bottom <= bounds.panel.bottom, JSON.stringify(bounds));
-        assert.ok(bounds.distinctWidths > 1, 'Version pills retain their natural widths in narrow panes');
+        assert.ok(bounds.horizontalOverflow <= 1, JSON.stringify(bounds));
+        assert.equal(await settings.locator('#benchmark-settings-fallback-trigger').getAttribute('aria-expanded'), 'true');
+        assert.equal(await versions.locator('[aria-expanded]').getAttribute('aria-expanded'), 'false');
+        assert.ok(bounds.stepsHeight >= 32 && bounds.card.top >= bounds.column.top
+            && bounds.card.bottom <= bounds.column.bottom && bounds.column.bottom <= bounds.panel.bottom + 1, JSON.stringify(bounds));
         await page.mouse.move(1, 1);
         await page.screenshot({ path: `${output}/${engine.name()}-${width}-${height}-${built ? 'built' : 'source'}.png` });
         const toggle = picker.locator('[data-family-key="[1,2,3]"] .bp-fallback-picker-card-toggle');
@@ -95,7 +86,8 @@ for (const [engine, width, height] of built ? [[chromium, 1440, 900], [chromium,
         assert.equal(fixture.state.fallbackRules.length, 0);
         assert.equal(await settings.locator('.bp-version-choice[data-condition-id="1"]').getAttribute('aria-pressed'), 'true');
         assert.match(await settings.locator('.bp-benchmark-settings-status').textContent(), /Fallback follows community/);
-        await save(() => settings.locator('.bp-version-choice[data-condition-id="1"]').click());
+        await settings.locator('#benchmark-settings-versions-trigger').click();
+        await save(() => primaryVersion.click());
         assert.equal(await picker.isVisible(), false);
         assert.equal(fixture.state.personalEntries.find(entry => entry.conditionID === 1).followCommunityVersion, true);
         await page.locator('#inline-fallback-toggle').click();

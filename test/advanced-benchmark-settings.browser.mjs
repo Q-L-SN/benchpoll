@@ -106,43 +106,54 @@ async function scrollChoices(page, position) {
 
 for (const [engine, width] of process.env.BP_SETTINGS_WEBKIT === '1'
     ? [[chromium, 1440], [webkit, 390]] : [[chromium, 1440], [chromium, 390]]) {
-    test(`${engine.name()} ${width}: vertical pages preload neighbors and cap only long chains`, async t => {
-        const { page } = await pageFor(t, engine, width);
-        const settings = page.locator('#settings'), versionPages = page.locator('.bp-benchmark-settings-versions .bp-choice-pager');
-        assert.equal(await settings.getAttribute('data-style'), 'pages');
-        assert.equal(await settings.locator('.bp-version-choice:visible').count(), 6);
-        assert.equal(await settings.locator('.bp-version-choice').count(), 24, 'The first page preloads exactly three neighboring pages');
-        assert.equal(await versionPages.locator('.fa-chevron-up').count(), 1);
-        assert.equal(await versionPages.locator('.fa-chevron-down').count(), 1);
-        for (let i = 0; i < 3; i++) await versionPages.getByRole('button', { name: 'Next versions page' }).click();
-        assert.equal(await settings.locator('.bp-version-choice').count(), 42, 'A middle page retains three pages on both sides');
-        assert.deepEqual(await settings.locator('.bp-version-choice:visible').evaluateAll(nodes => nodes.map(node => Number(node.dataset.conditionId))), [19, 20, 21, 22, 23, 24]);
-        await settings.locator('.bp-version-choice[data-condition-id="19"]').click();
-        await page.waitForFunction(() => review.items.length >= 6 && !review.loading);
-        assert.equal(await page.evaluate(() => review.loads.length), 3, 'The next three fallback pages are prefetched and loading then stops');
-        const cards = settings.locator('.bp-fallback-picker-column:visible');
-        assert.equal(await cards.count(), 2);
-        assert.equal(await cards.first().locator('.bp-fallback-chain-step').count(), 5);
-        const boxes = await cards.evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().toJSON()));
-        assert.ok(boxes[0].bottom <= boxes[1].top && boxes[0].height > boxes[1].height, JSON.stringify(boxes));
-        const firstCard = cards.first();
-        await firstCard.getByRole('button', { name: /Expand fallback chain/ }).click();
-        assert.equal(await firstCard.locator('.bp-fallback-chain-step').count(), 9);
-        assert.equal(await firstCard.locator('.bp-fallback-picker-expand').count(), 0);
+    test(`${engine.name()} ${width}: configuration always opens with version choices and no layout selector`, async t => {
+        const { page, install } = await pageFor(t, engine, width);
+        await page.evaluate(() => localStorage.setItem('benchpoll:benchmark-settings-style', 'pages'));
+        await page.reload(); await install();
+        const settings = page.locator('#settings');
+        assert.equal(await settings.locator('[data-settings-style], .bp-choice-pagination').count(), 0);
+        assert.equal(await settings.locator('#settings-versions-trigger').getAttribute('aria-expanded'), 'true');
+        assert.equal(await settings.locator('#settings-fallback-trigger').getAttribute('aria-disabled'), 'true');
+        await settings.locator('.bp-version-choice[data-condition-id="1"]').click();
         assert.equal(await settings.locator('.bp-fallback-picker-column-title').allTextContents().then(names => names.every(name => name === 'No fallback')), true);
+        const cards = settings.locator('.bp-fallback-picker-column');
+        const boxes = await cards.evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().toJSON()));
+        assert.ok(boxes.length >= 2 && boxes[0].bottom <= boxes[1].top && boxes[0].height > boxes[1].height);
         assert.equal(await settings.locator('.bp-benchmark-settings-fallback > .bp-benchmark-settings-section-heading .bp-help-trigger').count(), 1);
         assert.doesNotMatch(await settings.locator('.bp-fallback-picker-body').innerText(), /Community share|explicit choices|Your configuration|Order \d/);
-        const metrics = await settings.evaluate(node => ({ overflow: node.scrollWidth - node.clientWidth,
-            scrollLists: [...node.querySelectorAll('.bp-version-choices, .bp-fallback-picker-columns, .bp-fallback-picker-steps')]
-                .some(list => /auto|scroll/.test(getComputedStyle(list).overflowY)) }));
-        assert.ok(metrics.overflow <= 1); assert.equal(metrics.scrollLists, false);
-        await page.screenshot({ path: `${output}/${engine.name()}-${width}-pages.png` });
+        assert.ok(await settings.evaluate(node => node.scrollWidth - node.clientWidth <= 1));
     });
 
+    test(`${engine.name()} ${width}: both panels animate and customization stays above the list`, async t => {
+        const { page } = await pageFor(t, engine, width);
+        const settings = page.locator('#settings');
+        await page.emulateMedia({ reducedMotion: 'no-preference' });
+        const modes = await settings.evaluate(node => {
+            node.querySelector('.bp-version-choice').click();
+            return [...node.querySelectorAll('.bp-benchmark-settings-region')].map(region => ({
+                inert: region.inert, resizing: region.getAnimations().some(a => a.transitionProperty === 'grid-template-rows')
+            }));
+        });
+        assert.deepEqual(modes, [{ inert: true, resizing: true }, { inert: false, resizing: true }]);
+        await settings.evaluate(node => Promise.allSettled(node.getAnimations({ subtree: true }).map(animation => animation.finished)));
+        const action = settings.getByRole('button', { name: 'Create my own', exact: true });
+        const list = settings.locator('.bp-fallback-picker-columns');
+        const position = async () => {
+            const button = await action.boundingBox(), cards = await list.boundingBox();
+            assert.ok(button && cards); return { button, cards };
+        };
+        const stacked = await position();
+        assert.ok(stacked.button.y + stacked.button.height <= stacked.cards.y + 1);
+        await settings.evaluate(node => {
+            node.querySelector('#settings-versions-trigger').click();
+            node.querySelector('#settings-fallback-trigger').click();
+        });
+        await settings.evaluate(node => Promise.allSettled(node.getAnimations({ subtree: true }).map(animation => animation.finished)));
+        assert.equal(await settings.locator('#settings-versions-content').evaluate(region => region.inert && region.offsetHeight === 0), true);
+    });
     test(`${engine.name()} ${width}: exclusive Accordion locks fallback and keeps closed headers visible`, async t => {
         const { page, install } = await pageFor(t, engine, width);
         const settings = page.locator('#settings'), versionTrigger = page.locator('#settings-versions-trigger'), fallbackTrigger = page.locator('#settings-fallback-trigger');
-        await settings.getByRole('button', { name: 'Accordion', exact: true }).click();
         assert.equal(await versionTrigger.getAttribute('aria-expanded'), 'true');
         assert.equal(await fallbackTrigger.getAttribute('aria-expanded'), 'false');
         assert.equal(await fallbackTrigger.getAttribute('aria-disabled'), 'true');
@@ -181,7 +192,7 @@ for (const [engine, width] of process.env.BP_SETTINGS_WEBKIT === '1'
         await page.screenshot({ path: `${output}/${engine.name()}-${width}-accordion.png` });
         const none = settings.locator('[data-family-key="[1]"] .bp-fallback-picker-card-toggle');
         await none.click();
-        assert.match(await fallbackTrigger.textContent(), /configurationSelected/);
+        assert.equal(await fallbackTrigger.locator('.bp-benchmark-settings-choice-state').textContent(), 'Selected');
         await none.click();
         assert.match(await fallbackTrigger.textContent(), /Not selected/);
         await scrollChoices(page, 'end');
@@ -196,9 +207,7 @@ for (const [engine, width] of process.env.BP_SETTINGS_WEBKIT === '1'
         assert.match(await versionTrigger.textContent(), /Not selected/);
         assert.deepEqual(await page.evaluate(() => review.calls), [{ version: 1 }, { fallback: '[1]', community: false },
             { fallback: undefined, community: true }, { version: 2 }, { version: null }]);
-        assert.equal(await page.evaluate(() => localStorage.getItem('benchpoll:benchmark-settings-style')), 'accordion');
         await page.reload(); await install();
-        assert.equal(await settings.getAttribute('data-style'), 'accordion', 'The test style persists across reloads');
         assert.equal(await versionTrigger.getAttribute('aria-expanded'), 'true');
     });
 
@@ -210,7 +219,6 @@ for (const [engine, width] of process.env.BP_SETTINGS_WEBKIT === '1'
         assert.equal(await settings.locator('.bp-version-choice[aria-pressed="true"]').count(), 0);
         assert.equal(await settings.locator('.bp-version-choice:disabled').count(), 0);
         assert.match(await page.locator('#settings-versions-trigger').textContent(), /Not selected/);
-        await settings.getByRole('button', { name: 'Accordion', exact: true }).click();
         await settings.locator('.bp-version-choice[data-condition-id="1"]').click();
         assert.equal(await page.locator('#settings-fallback-trigger').getAttribute('aria-expanded'), 'true');
         assert.equal(await settings.locator('.bp-version-choice[aria-pressed="true"], .bp-fallback-picker-column.is-selected').count(), 0);

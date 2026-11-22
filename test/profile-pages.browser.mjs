@@ -21,7 +21,7 @@ try {
     assert.equal(await page.getByRole('link', { name: 'History', exact: true }).getAttribute('href'), '/me/history');
     await page.getByRole('tab', { name: 'Favorited topics, only you' }).click();
     assert.equal(await page.locator('.bp-profile-topic-card').count(), 2);
-    assert.match(await page.locator('.bp-profile-topic-card').first().getByRole('link', { name: 'Report this topic' }).getAttribute('href'), /^\/contribute\/topics\/7\/report/);
+    assert.equal(await page.locator('.bp-profile-topic-card').first().getByRole('link', { name: 'Report this topic' }).count(), 0);
     assert.equal(await page.locator('.bp-profile-topic-card').nth(1).getByRole('link', { name: 'Sam Rivera' }).getAttribute('href'), '/@2');
     const favorite = page.locator('.bp-profile-topic-card').first().getByRole('button', { name: /Remove favorite/ });
     await favorite.click();
@@ -62,7 +62,8 @@ try {
     fixture.state.viewerID = null;
     await page.goto(fixture.origin + '/@avery');
     await page.getByRole('heading', { name: 'Avery Chen' }).waitFor();
-    assert.equal(await page.getByRole('tab').count(), 2);
+    assert.equal(await page.getByRole('tab').count(), 3);
+    assert.equal(await page.getByRole('tab', { name: 'Discussion', exact: true }).count(), 1);
     assert.equal(await page.getByRole('tab', { name: 'Configured topics' }).count(), 0);
     assert.equal(await page.getByRole('link', { name: 'Settings', exact: true }).count(), 0);
     await page.getByRole('tab', { name: 'Favorited topics', exact: true }).click();

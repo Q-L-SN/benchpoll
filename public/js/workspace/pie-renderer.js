@@ -29,6 +29,21 @@ export function createPieRenderer({ state, pieSvg, pieHoverTooltip, orderedPieEn
     function attributesOf(node, attributes) {
         Object.entries(attributes).forEach(([key, value]) => node.setAttribute(key, String(value)));
     }
+    function topicNameRow(row) {
+        // Browser translation wraps text runs in HTML elements. Keep compound
+        // topic labels in an HTML container so both names still paint.
+        const object = element('foreignObject', { 'data-label-kind': 'name',
+            'font-size': row.size, 'font-weight': row.weight });
+        const box = document.createElement('div');
+        box.className = 'bp-weight-topic-name';
+        box.classList.toggle('is-leading', row.clipped || row.align === 'start');
+        box.classList.toggle('is-clipped', Boolean(row.clipped));
+        const name = document.createElement('span');
+        renderTopicLabel(name, row.text);
+        box.append(name);
+        object.append(box);
+        return object;
+    }
     function metricsOf(text, size, weight, fontFamily) {
         const font = `${weight} ${size}px ${fontFamily}`, key = `${font}:${text}`;
         if (!labelMetrics.has(key)) {
@@ -161,18 +176,22 @@ export function createPieRenderer({ state, pieSvg, pieHoverTooltip, orderedPieEn
             if (node.signature !== signature) {
                 node.signature = signature;
                 node.labels.replaceChildren(...label.rows.map(row => {
+                    if (topic && row.kind === 'name') return topicNameRow(row);
                     const text = element('text', { 'data-label-kind': row.kind, 'font-size': row.size, 'font-weight': row.weight,
                         'text-anchor': row.align ?? (row.clipped ? 'start' : 'middle'),
                         ...(row.adoptedScore ? { 'data-adopted-score': true } : {}),
                         ...(row.clipped ? { mask: `url(#${node.mask.id})` } : {}) });
-                    if (topic && row.kind === 'name') renderTopicLabel(text, row.text);
-                    else text.textContent = row.text;
+                    text.textContent = row.text;
                     return text;
                 }));
             }
-            [...node.labels.querySelectorAll('[data-label-kind]')].forEach((text, i) => {
+            [...node.labels.children].forEach((labelNode, i) => {
                 const row = label.rows[i];
-                attributesOf(text, { x: row.align === 'end' ? inner.x + inner.width
+                if (labelNode.localName === 'foreignObject') {
+                    attributesOf(labelNode, { x: inner.x, y: tile.y + row.y - row.size, width: nameBox.width, height: 17 });
+                    return;
+                }
+                attributesOf(labelNode, { x: row.align === 'end' ? inner.x + inner.width
                     : row.align === 'start' || row.clipped ? inner.x : tile.x + tile.width / 2, y: tile.y + row.y });
             });
         });

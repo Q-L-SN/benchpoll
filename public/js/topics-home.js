@@ -11,7 +11,9 @@ import { orderedScenes, sceneURL, searchTopicGroups, sceneMatchSummary } from '.
 import { mountProfilePreview } from './shared/profile-preview.js';
 import { mountFittedHeadline } from './shared/fitted-headline.js';
 import { createModelSearch } from './shared/model-search.js';
-import { createFloatingSearchLayer } from './shared/floating-search-layer.js';
+import { mountTopicCollectionPicker } from './navigation/collection-picker.js';
+import { personalCollection, topicCollections } from './navigation/collections.js';
+import { readRecentTopics, RECENT_TOPICS_PREFIX } from './navigation/preferences.js';
 import { normalizeModelFocusTarget } from './workspace/model-focus-target.js';
 import { topicURL } from './shared/topics.js';
 import { createPrivateTopicEditor } from './shared/private-topic-editor.js';
@@ -205,13 +207,21 @@ function createCard(topic) {
     const footer = element('footer', 'th-card-footer');
     const author = element('div', 'th-card-author');
     author.append(creator);
-    const topicMeta = element('div', 'th-topic-meta');
+    const topicMeta = element('div', 'th-topic-meta bp-topic-metrics');
     const configured = createConfiguredIndicator(topic);
     const coverage = element('span', 'th-topic-coverage');
     coverage.append(icon('chart-pie'), element('span'));
     coverage.hidden = true;
     const favorite = topic.sceneID == null ? createFavoriteButton(topic, {
-        onChange(updated) { const current = cards.get(cardKey(topic)); if (current) current.topic = { ...current.topic, isFavorited: updated.isFavorited, favoriteCount: updated.favoriteCount }; accountPreview.refresh(); },
+        onChange(updated) {
+            const current = cards.get(cardKey(topic));
+            if (current) {
+                const changed = current.topic.isFavorited !== updated.isFavorited;
+                current.topic = { ...current.topic, isFavorited: updated.isFavorited, favoriteCount: updated.favoriteCount };
+                if (changed && directoryView === 'favorites') filterTopics();
+            }
+            accountPreview.refresh();
+        },
         onError(_error, message) { announcement.textContent = message; }
     }) : null;
     topicMeta.append(configured, coverage);
@@ -409,6 +419,7 @@ window.addEventListener('pagehide', () => {
 window.addEventListener('pageshow', event => {
     if (!event.persisted) return;
     suspended = false;
+    if (directoryView === 'recent') filterTopics();
     for (const state of cards.values()) {
         if (state.visible && state.status !== 'error' && state.loadedEpoch !== epoch) enqueue(state);
         else enqueueLocate(state);
@@ -855,14 +866,11 @@ function resetFilters() {
 }
 
 function filterTopics() {
-    const searchAction = $('#topic-search-close');
-    const actionLabel = $('#topic-search').value ? 'Clear search' : 'Close search';
-    searchAction.setAttribute('aria-label', actionLabel); searchAction.dataset.tooltip = actionLabel;
-    const query = $('#topic-search').value.trim().toLocaleLowerCase();
-    const topics = topicCollection([...cards.values()].map(state => state.topic).filter(topic => topic.sceneID == null), 'popular', [], profile?.userID ?? null);
-    const groups = directoryView === 'search' ? searchTopicGroups(topics, query)
-        : topics.filter(topic => `${topic.name} ${topic.description ?? ''} ${topic.creator?.name ?? ''}`.toLocaleLowerCase().includes(query))
-            .map(topic => ({ topic, scenes: [] }));
+    const query = directoryView === 'search' ? collectionPicker.input.value.trim().toLocaleLowerCase() : '';
+    const userID = profile?.userID ?? null;
+    const recent = directoryView === 'recent' ? readRecentTopics(userID) : [];
+    const topics = topicCollection([...cards.values()].map(state => state.topic).filter(topic => topic.sceneID == null), directoryView, recent, userID);
+    const groups = directoryView === 'search' ? searchTopicGroups(topics, query) : topics.map(topic => ({ topic, scenes: [] }));
     const matches = groups.map(group => group.topic);
     const matchedScenes = new Map(groups.map(group => [cardKey(group.topic), group.scenes]));
     for (const state of cards.values()) {
@@ -919,65 +927,45 @@ function filterTopics() {
     if (!topicsLoading && !topicsReadFailed) {
         listStatus.hidden = count > 0;
         if (!count) {
-            listStatus.replaceChildren(element('span', '', query ? 'No topics match your search.' : 'No topics yet.'));
-            if (query) {
-                const clear = button('Clear search', 'xmark', 'th-state-action'); clear.append(element('span', '', 'Clear search'));
-                clear.addEventListener('click', clearSearch);
-                listStatus.append(clear);
+            if (profileLoading && (personalCollection(directoryView) || directoryView === 'recent')) {
+                setLoading(listStatus, 'Loading your topics');
+            } else if (!profile && personalCollection(directoryView)) {
+                const signIn = element('a', 'th-state-action', 'Sign in'); signIn.href = '/login';
+                listStatus.replaceChildren(signIn, element('span', '', 'to see your topics.'));
+            } else {
+                const empty = { favorites: 'No favorites yet.', configured: 'No configured topics yet.', created: 'No created topics yet.',
+                    recent: 'No recently viewed topics.' };
+                listStatus.replaceChildren(element('span', '', query ? 'No topics match your search.' : empty[directoryView] ?? 'No topics yet.'));
+                if (query) {
+                    const clear = button('Clear search', 'xmark', 'th-state-action'); clear.append(element('span', '', 'Clear search'));
+                    clear.addEventListener('click', () => $('#topic-search-close').click());
+                    listStatus.append(clear);
+                }
             }
         }
     }
     pump();
 }
 
-const topicSearchPanel = $('#topic-search-panel');
-const topicSearchToggle = $('#topic-search-toggle');
-const topicSearchLayer = createFloatingSearchLayer({ anchor: topicSearchToggle, panel: topicSearchPanel,
-    align: 'start', gap: 8, closeOnFocusOut: false,
-    getAnchorRect() {
-        const header = $('.th-header').getBoundingClientRect(), content = $('.th-header-inner').getBoundingClientRect();
-        return { top: header.top, bottom: header.bottom, left: content.left, right: content.right };
-    },
-    onClose(reason) {
-        $('#topics-navigation').classList.remove('is-searching');
-        topicSearchToggle.setAttribute('aria-expanded', 'false');
-        if (reason === 'escape') selectDirectoryView('popular');
+const collectionPicker = mountTopicCollectionPicker($('#topics-navigation .bp-topic-collection'), {
+    onSelect: selectDirectoryView, onQuery: filterTopics,
+    onResults() {
+        const first = grid.querySelector('.th-card:not([hidden]) .th-topic-link');
+        first?.focus(); return Boolean(first);
     }
 });
 
-function selectDirectoryView(next) {
-    if (next !== 'search') $('#topic-search').value = '';
+function selectDirectoryView(next, options) {
     directoryView = next;
-    const searching = next === 'search';
-    if (!searching) topicSearchLayer.close();
-    grid.setAttribute('aria-label', searching ? 'Search results' : 'Topics');
+    collectionPicker.setView(next, options);
+    grid.setAttribute('aria-label', next === 'search' ? 'Search results' : topicCollections[next]);
     document.body.dataset.collection = next;
+    siteNavigation.refreshLayout();
     filterTopics();
-    if (searching && topicSearchLayer.open()) {
-        $('#topics-navigation').classList.add('is-searching');
-        topicSearchToggle.setAttribute('aria-expanded', 'true');
-        $('#topic-search').focus({ preventScroll: true });
-    }
 }
 
-function closeSearch() {
-    selectDirectoryView('popular');
-    $('#topic-search-toggle').focus({ preventScroll: true });
-}
-
-function clearSearch() {
-    $('#topic-search').value = '';
-    filterTopics();
-    $('#topic-search').focus({ preventScroll: true });
-}
-
-topicSearchToggle.addEventListener('click', () => {
-    if (topicSearchLayer.isOpen) closeSearch();
-    else selectDirectoryView('search');
-});
-$('#topic-search-close').addEventListener('click', () => {
-    if ($('#topic-search').value) clearSearch();
-    else closeSearch();
+window.addEventListener('storage', event => {
+    if (directoryView === 'recent' && (event.key === null || event.key.startsWith(RECENT_TOPICS_PREFIX))) filterTopics();
 });
 const filterBar = $('#topics-filters');
 const filterControls = $('#topics-filter-controls');
@@ -1054,7 +1042,6 @@ function setHeaderVisible(visible) {
         const active = document.activeElement;
         headerFocusOrigin = active;
         headerReturnFocus = header.contains(active) ? active : filterBar.contains(active) ? $('.th-brand') : null;
-        if ($('#topics-navigation').contains(active) || topicSearchPanel.contains(active)) headerReturnFocus = $('.th-brand');
         siteNavigation.more.open = false;
     }
     header.inert = !visible;
@@ -1265,7 +1252,6 @@ $('#topics-view-toggle').addEventListener('click', event => {
     resizeFilterIsland();
     for (const state of cards.values()) if (state.status === 'loaded') { renderChart(state); maybeFillPage(state); }
 });
-$('#topic-search').addEventListener('input', filterTopics);
 document.fonts?.ready.then(() => { for (const state of cards.values()) if (state.status === 'loaded') renderChart(state); });
 selectDirectoryView('popular');
 void loadTopics();

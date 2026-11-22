@@ -305,7 +305,7 @@ test('selectable tile theme, top exposure/fade and full unmasked weights are exp
     assert.doesNotMatch(html, /th-eyebrow|th-intro-actions|data-open-mine|Explore topics|Our weights\./);
 });
 
-test('the integrated header has search, Topics and priority profile access', async () => {
+test('the header keeps Topics and profile access above the floating topic search', async () => {
     const html = await readFile(new URL('../private/index.html', import.meta.url), 'utf8');
     const source = await readFile(new URL('../public/js/topics-home.js', import.meta.url), 'utf8');
     const shared = await readFile(new URL('../public/js/shared/site-header.js', import.meta.url), 'utf8');
@@ -315,9 +315,9 @@ test('the integrated header has search, Topics and priority profile access', asy
     assert.doesNotMatch(html, /data-topics-view=/);
     assert.match(html, /id="topics-label" class="th-topics-wordmark">Topics<\/span>/);
     assert.match(source, /prioritizeAccount: true/);
-    assert.match(html, /id="topic-search-toggle"[^>]*aria-expanded="false"/);
+    assert.doesNotMatch(html, /id="topic-search-toggle"/);
     assert.doesNotMatch(shared, /topic-proposals|Proposal hall/);
-    assert.ok(html.indexOf('id="new-private-topic"') > html.indexOf('id="topic-search-toggle"'));
+    assert.ok(html.indexOf('id="home-topic-collection"') > html.indexOf('</header>'));
     assert.doesNotMatch(html, /id="mine-actions"/);
     assert.match(html, /<button id="new-private-topic"[^>]*aria-label="Create topic"/);
     assert.doesNotMatch(source, /\$\('#new-topic'\)\.addEventListener/);
@@ -332,7 +332,8 @@ test('the frosted header appears after the introductory header scrolls away', as
     const source = await readFile(new URL('../public/js/topics-home.js', import.meta.url), 'utf8');
     assert.match(html, /id="topics-filters" class="th-filter-bar is-collapsed"[^>]*hidden/);
     const header = html.match(/<header class="th-header">[\s\S]*?<\/header>/)?.[0];
-    assert.match(header, /id="topics-navigation"[\s\S]*class="th-header-links"/);
+    assert.doesNotMatch(header, /id="topics-navigation"|type="search"/);
+    assert.match(header, /id="topics-label"[\s\S]*class="th-header-links"/);
     assert.ok(html.indexOf('id="topics-filters"') > html.indexOf('</header>'));
     assert.doesNotMatch(html, /th-island|th-directory-dock/);
     assert.match(css, /\.th-header \{[^}]*position: relative;/);
@@ -348,15 +349,17 @@ test('the frosted header appears after the introductory header scrolls away', as
 });
 
 test('collections intersect authorized metadata, account flags and account-scoped recent IDs', () => {
-    const topics = [{ ID: 4, isMine: false, configured: true }, { ID: 54, isMine: true, configured: false },
+    const topics = [{ ID: 4, isMine: false, configured: true }, { ID: 54, isMine: true, configured: false, isFavorited: true },
         { ID: 8, isMine: true, isPrivate: true, configured: false }, { ID: 9, isPrivate: true, isMine: false }, { ID: 5, isMine: true }];
     const recent = [{ categoryID: 5 }, { categoryID: 8 }, { categoryID: 4 }, { categoryID: 4 }, { categoryID: 9 }, { categoryID: 777 }];
-    assert.deepEqual(topicCollection(topics, 'popular', recent, '42').map(topic => topic.ID), [4, 54, 8, 5]);
-    assert.deepEqual(topicCollection(topics, 'mine', recent, '42').map(topic => topic.ID), [4, 8]);
-    assert.deepEqual(topicCollection(topics, 'configured', recent, '42').map(topic => topic.ID), [4, 8]);
+    assert.deepEqual(topicCollection(topics, 'popular', recent, '42').map(topic => topic.ID), [4, 54, 5]);
+    assert.deepEqual(topicCollection(topics, 'favorites', recent, '42').map(topic => topic.ID), [54]);
+    assert.deepEqual(topicCollection(topics, 'configured', recent, '42').map(topic => topic.ID), [4]);
     assert.deepEqual(topicCollection(topics, 'recent', recent, '42').map(topic => topic.ID), [5, 8, 4]);
     assert.deepEqual(topicCollection(topics, 'recent', recent, null).map(topic => topic.ID), [5, 4]);
-    assert.deepEqual(topicCollection(topics, 'mine', recent, null), []);
+    assert.deepEqual(topicCollection(topics, 'created', recent, '42').map(topic => topic.ID), [54, 8, 5]);
+    assert.deepEqual(topicCollection(topics, 'created', recent, null), []);
+    assert.deepEqual(topicCollection(topics, 'favorites', recent, null), []);
     assert.deepEqual(topicCollection(topics, 'configured', recent, null), []);
     assert.deepEqual(topicCollection(topics, 'search', recent, null).map(topic => topic.ID), [4, 54, 5]);
 });
@@ -474,10 +477,10 @@ test('root weights naming is distinct from retired Public composition and polici
 test('home input focus uses complete surfaces and does not suppress action-button focus', async () => {
     const css = await readFile(new URL('../public/css/topics-home.css', import.meta.url), 'utf8');
     assert.match(css, /body\.th-home :is\(input, textarea, select\):is\(:focus, :focus-visible\)\s*\{[^}]*outline: none; box-shadow: none/s);
-    assert.match(css, /\.th-search:focus-within\s*\{[^}]*background:/s);
-    assert.match(css, /\.th-search input\s*\{[^}]*border: 0; background: transparent;/s);
-    assert.match(css, /\.th-search input::-webkit-search-cancel-button[^}]*display: none;/s);
-    assert.match(css, /\.th-search:focus-within\s*\{[^}]*outline: none; box-shadow: none/s);
+    const shared = await readFile(new URL('../public/css/site-palette.css', import.meta.url), 'utf8');
+    assert.match(shared, /\.bp-topic-query:focus-within\s*\{[^}]*outline: 2px solid/);
+    assert.match(shared, /\.bp-topic-query input\[type="search"\]\s*\{[^}]*border: 0; background: transparent/);
+    assert.match(shared, /\.bp-topic-query input::-webkit-search-cancel-button[^}]*appearance: none/);
     assert.match(css, /\.th-field input:focus, \.th-field textarea:focus\s*\{[^}]*border-color:[^}]*background:/s);
     assert.doesNotMatch(css, /button[^{}]*:focus[^{}]*\{[^}]*outline:\s*(?:0|none)/s);
 });

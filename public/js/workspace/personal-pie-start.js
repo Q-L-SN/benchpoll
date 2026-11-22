@@ -29,7 +29,7 @@ export function publicWeightStart(entries, composition, limits) {
             ? 'Small weights are adjusted to the 1% minimum.' : '' };
 }
 
-export function createPersonalPieStart({ stage, getScope, getPublicStart, isPrivate, hasWeights = () => false, onApply, onChange }) {
+export function createPersonalPieStart({ stage, getScope, getPublicStart, isPrivate, hasWeights = () => false, canReveal = () => true, onApply, onChange }) {
     const background = document.createElement('div'); background.className = 'bp-pie-start-background';
     background.append(...stage.childNodes); stage.append(background);
     const overlay = document.createElement('div'); overlay.id = 'personal-pie-start'; overlay.className = 'bp-pie-start'; overlay.hidden = true;
@@ -93,7 +93,11 @@ export function createPersonalPieStart({ stage, getScope, getPublicStart, isPriv
         const entries = source === 'public' ? getPublicStart().entries : [];
         if (source === 'public' && (!entries.length || isPrivate())) return;
         const choice = { source, entries: structuredClone(entries) };
-        if (intent.reset && hasWeights()) { intent.choice = choice; refresh(); keep.focus({ preventScroll: true }); }
+        if (intent.reset && hasWeights()) {
+            intent.choice = choice;
+            refresh();
+            if (canReveal()) keep.focus({ preventScroll: true });
+        }
         else void apply(choice);
     }
     fromPublic.addEventListener('click', () => choose('public'));
@@ -117,11 +121,12 @@ export function createPersonalPieStart({ stage, getScope, getPublicStart, isPriv
         if (!isCurrent()) return;
         if (isPrivate() || !getPublicStart().entries.length) {
             overlay.hidden = !reset || !hasWeights();
-            if (reset && hasWeights()) stage.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' });
+            if (reset && hasWeights() && canReveal()) stage.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' });
             choose('blank');
             return;
         }
         overlay.hidden = false;
+        if (!canReveal()) return;
         stage.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' });
         (fromPublic.disabled ? blank : fromPublic).focus({ preventScroll: true });
     } };

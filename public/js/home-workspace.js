@@ -77,14 +77,6 @@ mobileHomeAction.innerHTML = '<i class="fa-solid fa-house" aria-hidden="true"></
 mountSiteActions(document.getElementById('config-site-links'), { accountID: 'config-site-account', moreID: 'config-site-more',
     minimal: true, extraActions: [mobileHomeAction, document.getElementById('taxonomy-toggle')] });
 
-const headerLayout = document.getElementById('workspace-header-layout');
-try { headerLayout.value = localStorage.getItem('benchpoll:header-layout') === 'inline' ? 'inline' : 'stacked'; } catch { /* Keep the default layout. */ }
-document.body.dataset.headerLayout = headerLayout.value;
-headerLayout.addEventListener('change', () => {
-    document.body.dataset.headerLayout = headerLayout.value;
-    try { localStorage.setItem('benchpoll:header-layout', headerLayout.value); } catch { /* The page keeps the selected layout. */ }
-});
-
 const pieSvg = document.getElementById('weight-pie');
 const pieHoverTooltip = document.getElementById('pie-hover-tooltip');
 const breadcrumb = document.getElementById('bp-breadcrumb');
@@ -236,12 +228,15 @@ const benchmarkSettings = createBenchmarkSettings({
     editor: inlineFallbackSettings, onEdit: beginInlineFallbackEditing
 });
 initializeFallbackAppearance();
+const canRevealPieStart = () => !categoryNavigationMedia.matches
+    || pieSvg.closest('.bp-workspace').dataset.mobilePanel === 'mix';
 const personalPieStart = createPersonalPieStart({
     stage: pieSvg.closest('.bp-pie-stage'),
     getScope: () => `${workspaceContextFingerprint()}|${state.userID ?? 'guest'}|${state.personalRevision}|${state.personalEditVersion}`,
     getPublicStart: () => publicWeightStart(state.publicEntries, state.versionComposition, state.limits),
     hasWeights: () => state.personalEntries.length > 0,
     isPrivate: () => state.contextIsPrivate,
+    canReveal: canRevealPieStart,
     onApply: startPersonalPie,
     onChange: () => { renderModeState(); renderPie(); }
 });
@@ -686,19 +681,10 @@ function updatePieAdjustmentStatus() {
 let benchmarkRevealSequence = 0;
 function revealBenchmarkRow(objectID) {
     const sequence = ++benchmarkRevealSequence;
-    if (Number(objectID) < 0) {
-        const row = benchmarkRows.querySelector(`.bp-reference-option[data-context-id="${-Number(objectID)}"]`);
-        if (row) {
-            const viewport = benchmarkRows.getBoundingClientRect(), bounds = row.getBoundingClientRect();
-            if (bounds.top < viewport.top || bounds.bottom > viewport.bottom) row.scrollIntoView({ block: 'nearest',
-                behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
-        }
-        return;
-    }
     const snapshotID = state.rankingPagination?.snapshotID;
     void (async () => {
         await new Promise(resolve => requestAnimationFrame(resolve));
-        while (sequence === benchmarkRevealSequence
+        while (!workspaceLoadFailed && sequence === benchmarkRevealSequence
             && Number(state.selectedObjectID) === Number(objectID)
             && snapshotID === state.rankingPagination?.snapshotID) {
             const details = state.benchmarkDetailsByID.get(Number(objectID))
@@ -712,22 +698,22 @@ function revealBenchmarkRow(objectID) {
                 if (group === 'other' || nestedLowCoverage) otherConditionsExpanded = true;
                 renderBenchmarks();
             }
-            const row = [...benchmarkRows.querySelectorAll('.bp-benchmark-row')]
-                .find(item => Number(item.dataset.conditionId) === Number(objectID));
+            const row = benchmarkRows.querySelector(`.bp-benchmark-row[data-condition-id="${Number(objectID)}"]`);
             if (row) {
-                const viewport = benchmarkRows.getBoundingClientRect();
+                const top = benchmarkRows.getBoundingClientRect().top + benchmarkRows.clientTop;
                 const bounds = row.getBoundingClientRect();
-                if (bounds.top < viewport.top || bounds.bottom > viewport.bottom) {
-                    row.scrollIntoView({
-                        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth',
-                        block: 'nearest'
-                    });
-                }
+                const offset = bounds.top < top || bounds.height > benchmarkRows.clientHeight
+                    ? bounds.top - top : Math.max(0, bounds.bottom - top - benchmarkRows.clientHeight);
+                if (offset) benchmarkRows.scrollBy({ top: offset,
+                    behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
                 return;
             }
-            if (benchmarkSearch.value.trim()) {
+            if (isSceneDiscovery() || benchmarkSearch.value.trim()) {
+                benchmarkSearchActive = false;
                 benchmarkSearch.value = '';
+                window.clearTimeout(benchmarkSearchTimer);
                 reloadBenchmarkPage();
+                continue;
             }
             if (!state.rankingPagination?.benchmarks[group]?.hasMore || state.rankingPageError[benchmarkPageKey(group)]) return;
             if (state.rankingPageLoading[benchmarkPageKey(group)] || state.loading) {
@@ -1995,6 +1981,7 @@ function renderBenchmarks() {
         identity.append(name);
         const metadata = document.createElement('span'); metadata.className = 'bp-evaluation-meta';
         if (isTopicReference(object)) {
+            metadata.classList.add('bp-topic-metrics');
             if (object.configured) metadata.append(createConfiguredIndicator(object));
             if (!object.isPrivate) metadata.append(createFavoriteButton({ ...object, ID: object.categoryID }, {
                 onError: (_error, message) => additionToast.show(message)
@@ -2406,6 +2393,7 @@ async function setMode(mode) {
         }
         await document.fonts.ready;
         if (sequence !== modeSwitchSequence || contextFingerprint && contextFingerprint !== state.pieContextFingerprint) return;
+        pendingPieMode = null; renderPendingPieMode();
         if (requestedMode === 'personal' && needsPersonalStart()) await openPersonalStart(personalModeButton);
         else applyPieMode(requestedMode);
     } catch (error) {
@@ -3173,7 +3161,10 @@ function startPersonalPie(entries, isCurrent) {
     registerPieEntries(state.personalEntries);
     setStatus(''); renderAll();
     if (changed) scheduleSave();
-    (entries.length ? personalModeButton : document.getElementById('weight-add-benchmark')).focus({ preventScroll: true });
+    if (canRevealPieStart()) {
+        const firstControl = entries.length ? personalModeButton : document.getElementById('weight-add-benchmark');
+        firstControl.focus({ preventScroll: true });
+    }
     return true;
 }
 

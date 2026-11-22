@@ -62,8 +62,8 @@
 .benchmark-score-change { margin-left: auto; flex: 0 0 32px; min-height: 32px; display: grid; place-items: center; }
 #benchmark-scores-more { width: 100%; margin: 16px 0; min-height: 40px; }
 .discussion-main button:not(.bp-scene-tab), .discussion-main select { font: inherit; cursor: pointer; }
-.discussion-main button:not(.bp-scene-tab) { border: 0; border-radius: 6px; background: transparent; color: var(--bp-text); padding: 7px 10px; }
-.discussion-main button:not(.bp-scene-tab):hover { background: var(--bp-hover); }
+.discussion-main button:not(.bp-scene-tab, .discussion-primary) { border: 0; border-radius: 6px; background: transparent; color: var(--bp-text); padding: 7px 10px; }
+.discussion-main button:not(.bp-scene-tab, .discussion-primary):hover { background: var(--bp-hover); }
 .discussion-main button:not(.bp-scene-tab):focus-visible, .discussion-main a:focus-visible, .discussion-main textarea:focus-visible { outline: 2px solid var(--bp-accent); outline-offset: -3px; }
 .discussion-main button:disabled { cursor: default; opacity: .6; }
 .discussion-main .discussion-primary { color: white; background: var(--bp-fill); padding: 8px 14px; font-size: 13px; font-weight: 600; }

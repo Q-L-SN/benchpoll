@@ -66,6 +66,7 @@ for (const [engine, width] of [[chromium, 1440], [webkit, 390]]) {
         assert.deepEqual(await cardOrder(), initial, 'Fallback selection stays in place through saving and ranking refresh');
         assert.equal(await card('[1,4,2]').getAttribute('aria-pressed'), 'true');
         await disclosure.click(); await disclosure.click();
+        await settings.locator('#benchmark-settings-fallback-trigger').click();
         assert.equal((await cardOrder())[0], '[1,4,2]');
         const reopened = await cardOrder();
         await choose(() => card('[1,4,2]').click());

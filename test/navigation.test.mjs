@@ -71,14 +71,12 @@ test('browsing an unconfigured topic leaves the configured list unchanged', () =
     assert.deepEqual(rows, configuredRows(items, null));
 });
 
-test('Mine merges owned private topics without Pies, deduplicates saved Pies and excludes other authors', () => {
+test('configured navigation lists saved private or public weights and omits empty topics', () => {
     const privateTopic = ID => entryFromContext({ categoryID: ID, name: `Private ${ID}`, privateID: `PrivateToken${ID}`, isPrivate: true, isMine: true });
     const empty = privateTopic(8), saved = { ...privateTopic(9), weightCount: 2 };
-    const catalog = [empty, saved, { ...privateTopic(10), isMine: false }, { ...entry(11), isMine: true }];
-    const rows = configuredRows([entry(2), saved], empty, '', catalog);
-    assert.deepEqual(rows.map(row => [row.categoryID, row.configured, row.current]), [[2, true, false], [8, false, true], [9, true, false]]);
-    assert.equal(locationURL(rows[1]), '/private/PrivateToken8');
-    assert.deepEqual(configuredRows([], null, 'Private 8', catalog).map(row => row.categoryID), [8]);
+    const rows = configuredRows([entry(2), empty, saved, saved], empty);
+    assert.deepEqual(rows.map(row => [row.categoryID, row.configured, row.current]), [[2, true, false], [9, true, false]]);
+    assert.equal(locationURL(rows[1]), '/private/PrivateToken9');
     assert.deepEqual(configuredRows([], null), []);
 });
 
@@ -273,16 +271,16 @@ test('sidebar preferences store presentation only and tolerate unavailable or ma
             getItem: () => saved ?? '{', setItem: (_, value) => { saved = value; }
         } });
         assert.equal(readSidebarPreferences().view, 'popular');
-        const scroll = { popular: 50, recent: 30, configured: 120, search: 60 };
-        for (const view of ['popular', 'recent', 'configured', 'search']) {
+        const scroll = { popular: 50, favorites: 20, configured: 120, created: 10, recent: 30, search: 60 };
+        for (const view of Object.keys(scroll)) {
             writeSidebarPreferences({ view, scroll, expansion: { 1: true }, items: [entry(1)], userID: 'private' });
             assert.deepEqual(readSidebarPreferences(), { view, scroll, expansion: { 1: true } });
         }
         assert.ok(!saved.includes('items') && !saved.includes('userID'));
         saved = JSON.stringify({ view: 'all', scroll: { all: 70 }, expansion: {} });
-        assert.deepEqual(readSidebarPreferences(), { view: 'popular', scroll: { popular: 70, recent: 0, configured: 0, search: 0 }, expansion: {} });
+        assert.deepEqual(readSidebarPreferences(), { view: 'popular', scroll: { popular: 70, favorites: 0, created: 0, recent: 0, configured: 0, search: 0 }, expansion: {} });
         saved = JSON.stringify({ view: 'mine', scroll: { mine: 40, configured: 120 } });
-        assert.deepEqual(readSidebarPreferences(), { view: 'configured', scroll: { popular: 0, recent: 0, configured: 40, search: 0 }, expansion: {} });
+        assert.deepEqual(readSidebarPreferences(), { view: 'configured', scroll: { popular: 0, favorites: 0, created: 0, recent: 0, configured: 40, search: 0 }, expansion: {} });
         saved = JSON.stringify({ view: 'configured', scroll: { mine: 40, configured: 120 } });
         assert.equal(readSidebarPreferences().scroll.configured, 120);
         Object.defineProperty(globalThis, 'sessionStorage', { configurable: true, get() { throw new Error('Denied'); } });

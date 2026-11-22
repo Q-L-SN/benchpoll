@@ -4,10 +4,13 @@ import { profileDisplayName, prepareProfileAvatar } from './shared/profile-edito
 import { publicProfileID, publicProfileBio } from './shared/profile-identity.js';
 import { listenAccountChange } from './shared/sign-in.js';
 import { element, link, avatar, initializeProfileHeader, showFailure } from './shared/profile-page.js';
+import { setLoading } from './shared/loading.js';
+import { observeTextareaAutosize } from './shared/textarea-autosize.js';
 import './shared/legal-acceptance.js';
 
 initializeProfileHeader();
 const status = document.getElementById('settings-status'), view = document.getElementById('settings-view');
+observeTextareaAutosize(view);
 const path = location.pathname, section = path.split('/')[2] || 'home';
 const titles = { home: 'Settings', profile: 'Profile', privacy: 'Privacy', 'delete-account': 'Delete account', logout: 'Log out' };
 document.getElementById('settings-title').textContent = titles[section] || 'Settings';
@@ -91,7 +94,8 @@ function renderProfileForm() {
     upload.input.addEventListener('change', async () => {
         const selected = upload.input.files?.[0]; if (!selected || busy || blocked) return;
         const generation = ++uploadGeneration; uploadController?.abort(); uploadController = new globalThis.AbortController();
-        processing = true; save.disabled = true; status.textContent = 'Preparing avatar…';
+        processing = true; save.disabled = true; status.classList.remove('is-error');
+        setLoading(status, 'Preparing avatar');
         try {
             const value = await prepareProfileAvatar(selected, { signal: uploadController.signal });
             if (generation !== uploadGeneration || blocked) return;
@@ -173,6 +177,7 @@ listenAccountChange(() => {
     view.querySelectorAll('input, textarea, button').forEach(item => { item.disabled = true; });
     status.textContent = 'Your account changed. Refresh before editing settings.';
 });
+setLoading(status, 'Loading settings');
 request('/api/get_user_profile').then(result => {
     if (blocked) return;
     if (!result) throw Object.assign(new Error('Sign in.'), { status: 401 });

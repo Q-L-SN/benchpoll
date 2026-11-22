@@ -4,6 +4,7 @@
 
 /* Shared orange palette. The --bp-purple aliases serve existing components. */
 :root {
+    --bp-topic-metric-size: 14px;
     --bp-ink: #242c37;
     --bp-text: #39414e;
     --bp-muted: #758091;
@@ -126,9 +127,9 @@ body.censor-page-body .tab-count { background: var(--bp-fill); color: #fff; }
 .bp-home ::selection { background: var(--bp-selected); color: var(--bp-ink); }
 .bp-home .bp-sidebar { background: var(--bp-sidebar); }
 .bp-home .bp-brand-symbol { background: url('/assets/benchpoll-mark.svg') center / contain no-repeat; }
-.bp-home #tree-content button { color: var(--bp-text); }
-.bp-home #tree-content button:hover, .bp-home .bp-sidebar-action:hover { background: var(--bp-hover); }
-.bp-home #tree-content button.selected { background: var(--bp-selected); color: var(--bp-purple); }
+.bp-home #tree-content > button { color: var(--bp-text); }
+.bp-home #tree-content > button:hover, .bp-home .bp-sidebar-action:hover { background: var(--bp-hover); }
+.bp-home #tree-content > button.selected { background: var(--bp-selected); color: var(--bp-purple); }
 .bp-home :is(.tree-children, .bp-sidebar-actions, .bp-sidebar-account) { border-color: var(--bp-line); }
 .bp-home :is(.bp-sidebar-action, .bp-benchmark-name, .bp-model-name, .bp-account-action) { color: var(--bp-text); }
 .bp-home :is(.bp-sidebar-footer, .bp-page-heading p, .bp-last-updated, .bp-square-button, .bp-template-label, .bp-mode-option, .bp-pie-guidance p, .bp-pie-guidance i, .bp-benchmark-rank, .bp-model-rank, .bp-benchmark-condition, .bp-weight-value.empty, .bp-row-edit-action, .bp-personal-weight-remove, .bp-benchmark-personal-pin, .bp-benchmark-height-toggle, .bp-empty-state, .bp-loading-state, .bp-error-state) { color: var(--bp-muted); }
@@ -185,8 +186,8 @@ body.censor-page-body .tab-count { background: var(--bp-fill); color: #fff; }
 .bp-home .bp-welcome-weight-segment.is-teal { background: var(--bp-chart-1-end); }
 .bp-home .bp-welcome-weight-segment.is-yellow { background: var(--bp-chart-3-end); }
 .bp-home .discussion-main { background: var(--bp-surface); }
-.bp-home .discussion-main button:not(.bp-scene-tab, [data-ui-component="segmented"] > button) { color: var(--bp-purple); }
-.bp-home .discussion-main button:not(.bp-scene-tab, [data-ui-component="segmented"] > button):hover { background: var(--bp-hover); }
+.bp-home .discussion-main button:not(.bp-scene-tab, .discussion-primary, [data-ui-component="segmented"] > button) { color: var(--bp-purple); }
+.bp-home .discussion-main button:not(.bp-scene-tab, .discussion-primary, [data-ui-component="segmented"] > button):hover { background: var(--bp-hover); }
 .bp-home .discussion-main .discussion-primary { background: var(--bp-fill); color: var(--bp-fill-ink); }
 .bp-home .discussion-main .discussion-primary:hover { background: var(--bp-fill-hover); }
 .bp-home .discussion-post-actions button[aria-pressed="true"], .bp-home .mention-suggestions button[aria-selected="true"] { background: var(--bp-selected); color: var(--bp-purple); }
@@ -202,4 +203,52 @@ body.censor-page-body .tab-count { background: var(--bp-fill); color: #fff; }
 .bp-home .bp-model-score-sample:hover, .bp-home .bp-model-score-source:hover { background: var(--bp-hover); }
 @media (max-width: 760px) {
     .bp-home .bp-mobile-panels button[aria-pressed="true"] { background: var(--bp-fill); border-color: var(--bp-fill); color: var(--bp-fill-ink); }
+}
+
+.bp-topic-collection { min-width: 0; }
+body .bp-topic-collection :is(.bp-ui-select-trigger, .bp-topic-query) {
+    box-sizing: border-box; display: flex; align-items: center; width: 100%; height: 40px; min-height: 40px;
+    border: 1px solid var(--bp-line); border-radius: 7px; background: var(--bp-surface); color: var(--bp-text);
+}
+body .bp-topic-collection .bp-ui-select-trigger { gap: 6px; font-size: 13px; font-weight: 600; }
+body .bp-topic-collection .bp-topic-query { gap: 2px; padding-inline: 10px 2px; }
+body .bp-topic-query[hidden] { display: none; }
+body .bp-topic-query:focus-within { outline: 2px solid var(--bp-accent); outline-offset: -2px; }
+body .bp-topic-query input[type="search"] {
+    width: 0; min-width: 0; height: 100%; flex: 1 1 0; margin: 0; padding: 0;
+    border: 0; background: transparent; box-shadow: none; color: var(--bp-text); font: inherit; font-size: 14px; outline: none;
+}
+.bp-topic-query input::-webkit-search-cancel-button { -webkit-appearance: none; }
+.bp-topic-query input::placeholder { color: var(--bp-muted); opacity: 1; }
+body .bp-topic-query button {
+    display: grid; place-items: center; align-self: stretch; min-width: 36px; padding: 0;
+    border: 0; background: transparent; color: var(--bp-muted); cursor: pointer;
+}
+body .bp-topic-query button:hover { color: var(--bp-accent); }
+body .bp-ui-select .bp-topic-collection-options .bp-ui-select-option:last-child { color: var(--bp-muted); }
+@media (prefers-reduced-motion: no-preference) {
+    body .bp-ui-select .bp-topic-collection-options[data-ui-open="true"] {
+        transform-origin: center top;
+        animation: bp-topic-collection-open 190ms cubic-bezier(.2,.75,.3,1) both;
+    }
+    body .bp-ui-select .bp-topic-collection-options[data-placement="above"] { transform-origin: center bottom; }
+}
+@keyframes bp-topic-collection-open {
+    from { opacity: 0; transform: scaleY(.92); }
+    to { opacity: 1; transform: scaleY(1); }
+}
+
+/* Keep counts aligned when a topic's star, configuration count and coverage appear together. */
+body .bp-topic-metrics > :is(.bp-topic-favorite, .bp-evidence-count, .th-topic-coverage) {
+    display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 36px;
+    font-size: var(--bp-topic-metric-size); font-weight: 500; line-height: 1.3; font-variant-numeric: tabular-nums;
+}
+body .bp-topic-metrics > :is(.bp-topic-favorite, .bp-evidence-count, .th-topic-coverage) > i { font-size: 1em; }
+body .bp-topic-metrics > [hidden] { display: none; }
+@media (pointer: coarse) {
+    body .bp-topic-collection :is(.bp-ui-select-trigger, .bp-topic-query) { height: 44px; min-height: 44px; }
+    body .bp-ui-select .bp-topic-collection-options .bp-ui-select-option { min-height: 44px; }
+    body .bp-topic-query button { min-width: 44px; }
+    body .bp-topic-query input[type="search"] { font-size: 16px; }
+    body .bp-topic-metrics > :is(.bp-topic-favorite, .bp-evidence-count, .th-topic-coverage) { min-height: 44px; }
 }

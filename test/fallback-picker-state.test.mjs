@@ -192,16 +192,17 @@ test('one settings visit preserves each version order across inspection and cust
     assert.equal(h.columns()[0].dataset.familyKey, '[1,3]', 'A new settings visit starts with the current choice');
 });
 
-test('closing a distant page clears rendered choices before switching layout without a version', t => {
+test('closing a distant page clears rendered choices and resets paging before reopening', t => {
     const h = pickerHarness(t, { current: null,
         view: { featured: Array.from({ length: 15 }, (_, index) => order(10 + index, 100 + index)),
             items: [], loaded: true, hasMore: false } });
     h.picker.open(primary, { action: 'replace' });
     for (let index = 0; index < 5; index++) h.dialog.querySelectorAll('.bp-choice-page-arrow')[1].click();
     h.picker.close({ restore: false });
-    h.picker.setLayout('accordion');
     assert.equal(h.columns().length, 0);
     assert.equal(h.dialog.hidden, true);
+    h.picker.open(primary, { action: 'replace' });
+    assert.equal(h.$('.bp-choice-pager').dataset.page, '1');
 });
 
 test('old apply completions cannot close or show errors in a newly opened picker', async t => {

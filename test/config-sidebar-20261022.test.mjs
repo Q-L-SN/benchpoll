@@ -90,7 +90,7 @@ test('legacy All preferences migrate to Popular with independent scroll position
     try {
         const preferences = readSidebarPreferences();
         assert.equal(preferences.view, 'popular');
-        assert.deepEqual(preferences.scroll, { popular: 51, recent: 0, configured: 9, search: 0 });
+        assert.deepEqual(preferences.scroll, { popular: 51, favorites: 0, configured: 9, created: 0, recent: 0, search: 0 });
     } finally {
         if (original) Object.defineProperty(globalThis, 'sessionStorage', original); else delete globalThis.sessionStorage;
     }
@@ -108,33 +108,22 @@ test('navigation preserves canonical numeric URLs, local scenes and ranking para
     }
 });
 
-test('the sidebar has four icon-only modes and private creation lives exclusively in Mine', async () => {
+test('the sidebar uses the collection picker and keeps topic creation with authored topics', async () => {
     const html = await readFile(new URL('../private/home.html', import.meta.url), 'utf8');
-    const controls = [...html.matchAll(/<button[^>]*data-navigation-view="([^"]+)"[^>]*>([\s\S]*?)<\/button>/g)];
-    assert.deepEqual(controls.map(match => match[1]), ['popular', 'recent', 'configured', 'search']);
-    assert.ok(controls.every(match => /aria-label="[^"]+"/.test(match[0]) && /data-tooltip="[^"]+"/.test(match[0]) && !/<span/.test(match[2])));
-    const byView = new Map(controls.map(match => [match[1], match[0]]));
-    assert.match(byView.get('configured'), /aria-label="Mine" data-tooltip="Mine"/);
-    assert.match(byView.get('configured'), /class="fa-solid fa-user"/);
-    assert.ok(controls.every(match => /<i class="fa-solid fa-[a-z-]+" aria-hidden="true"><\/i>/.test(match[2])),
-        'all four navigation modes use the same solid icon family');
-    assert.ok(controls.every(match => !/\s(?:class|style)=/.test(match[0].split('>')[0])),
-        'all four buttons, including Search, use the shared navigation styling');
-    const mine = html.match(/<section id="configured-panel"[\s\S]*?<\/section>/)[0];
-    assert.doesNotMatch(html, /data-create-topic="public"|topic-proposals|Created by me|Configured by me|id="mine-(?:panel|content|login)"/);
-    assert.ok(controls.every(match => !/fa-pen-to-square/.test(match[0])));
+    assert.match(html, /<select id="sidebar-topic-collection" aria-label="Topic collection">/);
+    assert.match(html, /<input id="configured-search" type="search" placeholder="Search" aria-label="Search topics"/);
+    const mine = html.slice(html.indexOf('id="sidebar-topic-creation"'), html.indexOf('id="tree-content"'));
     assert.match(mine, /data-create-topic="private"/);
     assert.match(mine, /id="topic-create-form"/);
-    assert.match(mine, /aria-label="Mine"/);
     assert.match(mine, /<span>Create private topic<\/span>/);
     assert.match(mine, /<p id="topic-visibility-notice" class="bp-private-category-notice">Private topics and their weights stay private and do not affect public rankings\.<\/p>/);
     assert.match(mine, /id="topic-create-form"[^>]*aria-describedby="topic-visibility-notice"/);
     assert.doesNotMatch(html, /private-category-create-toggle|private-category-create-form/);
 });
 
-test('sidebar Mine copy covers sign-in, loading, empty and error states without a Created mode', async () => {
+test('the topic collections have distinct empty states and offer sign-in and retries', async () => {
     const sidebar = await readFile(new URL('../public/js/navigation/sidebar.js', import.meta.url), 'utf8');
-    for (const copy of ['Sign in to see your topics.', 'Loading your topics...', 'Could not load all your topics.', 'No topics in Mine yet.']) {
+    for (const copy of ['Sign in to see your topics.', 'Loading configured topics', 'Could not load your configured topics.', 'No configured topics yet.', 'No created topics yet.', 'No favorites yet.']) {
         assert.ok(sidebar.includes(copy), copy);
     }
     assert.doesNotMatch(sidebar, /topics you created|topics you configured|Configured Pies|No saved Pies yet|topic-proposals|renderMine|mineContent|minePanel/);

@@ -2,6 +2,8 @@ import { postJSON } from './shared/http.js';
 import { pageAccountWriteScope } from './shared/account-identity.js';
 import { element, link, initializeProfileHeader, showFailure } from './shared/profile-page.js';
 import { listenAccountChange } from './shared/sign-in.js';
+import { writeRecentTopics } from './navigation/preferences.js';
+import { setLoading } from './shared/loading.js';
 
 initializeProfileHeader();
 const status = document.getElementById('history-status'), list = document.getElementById('history-list');
@@ -11,6 +13,8 @@ let offset = 0, busy = false, blocked = false;
 async function load() {
     if (busy || blocked) return;
     busy = true; more.disabled = true;
+    status.classList.remove('is-error');
+    setLoading(status, 'Loading browsing history');
     try {
         const result = await postJSON('/api/get_profile_history', { offset }, { timeoutMs: 15000, requireJSON: true });
         if (blocked) return;
@@ -42,6 +46,7 @@ clear.addEventListener('click', async () => {
     try {
         const result = await pageAccountWriteScope.write((url, body) => postJSON(url, body, { timeoutMs: 15000, requireJSON: true }), '/api/clear_profile_history', {});
         if (result?.cleared !== true || result.userID !== pageAccountWriteScope.capture()) throw new Error('Clearing history could not be confirmed.');
+        writeRecentTopics(result.userID, []);
         list.replaceChildren(); more.hidden = clear.hidden = true; offset = 0; status.textContent = 'Browsing history cleared.';
     } catch (error) { showFailure(status, error, 'History could not be cleared. Try again.'); }
     finally { busy = false; clear.disabled = blocked; }
