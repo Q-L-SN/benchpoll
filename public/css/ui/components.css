@@ -356,6 +356,10 @@ body .bp-ui-select .bp-ui-select-option {
     transition: background-color 120ms ease, color 120ms ease;
 }
 body .bp-ui-select .bp-ui-select-option > span { flex: 1; min-width: 0; overflow-wrap: anywhere; white-space: normal; color: inherit; }
+body .bp-ui-select-score-label { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; vertical-align: middle; }
+body .bp-ui-select-score-label > :first-child { min-width: 0; }
+body .bp-ui-select-value .bp-ui-select-score-label > :first-child { overflow: hidden; }
+body .bp-ui-select-score-label > .bp-evidence-count { flex: none; min-width: 0; min-height: 0; padding: 0; cursor: inherit; }
 body .bp-ui-select .bp-ui-select-option > i { flex: 0 0 14px; width: 14px; color: var(--bp-accent); font-size: 11px; text-align: center; visibility: hidden; }
 body .bp-ui-select .bp-ui-select-option[aria-selected="true"] { background: var(--bp-selected); color: var(--bp-ink); font-weight: 600; }
 body .bp-ui-select .bp-ui-select-option[aria-selected="true"] > i { visibility: visible; }

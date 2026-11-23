@@ -1,4 +1,5 @@
 import { mountDisclosureChevron } from './disclosure-chevron.js';
+import { createEvidenceCount } from './evidence-count.js';
 
 // The native select remains the form/event backing; only this field can receive user input.
 const mounted = new WeakMap();
@@ -10,6 +11,18 @@ function icon(document, className) {
     element.className = `fa-solid ${className}`;
     element.setAttribute('aria-hidden', 'true');
     return element;
+}
+
+function optionContent(option) {
+    if (option.dataset.scoreCount === undefined) return option.label;
+    const count = createEvidenceCount(Number(option.dataset.scoreCount));
+    count.removeAttribute('tabindex');
+    const name = option.ownerDocument.createElement('span');
+    name.textContent = option.label;
+    const label = option.ownerDocument.createElement('span');
+    label.className = 'bp-ui-select-score-label';
+    label.append(name, count);
+    return label;
 }
 
 function attribute(element, name, value) {
@@ -207,7 +220,7 @@ export function mountCustomSelect(select) {
                 node.setAttribute('role', 'option');
                 node.hidden = option.hidden;
                 const text = document.createElement('span');
-                text.textContent = option.label;
+                text.append(optionContent(option));
                 node.append(text, icon(document, 'fa-check'));
                 host.append(node);
                 items.push({ option, index, node });
@@ -237,11 +250,13 @@ export function mountCustomSelect(select) {
         attribute(trigger, 'aria-invalid', validationShown || select.getAttribute('aria-invalid') === 'true');
         attribute(popup, 'aria-multiselectable', select.multiple ? 'true' : null);
         const selected = [...select.selectedOptions];
-        const signature = JSON.stringify(selected.map(option => [option.index, option.label]));
+        const signature = JSON.stringify(selected.map(option => [option.index, option.label, option.dataset.scoreCount]));
         if (signature !== selectionSignature) {
             selectionSignature = signature;
-            value.textContent = selected.map(option => option.label).join(', ') || select.dataset.placeholder || 'Choose an option';
-            value.dataset.tooltip = value.textContent;
+            const label = selected.map(option => option.label).join(', ') || select.dataset.placeholder || 'Choose an option';
+            if (selected.length === 1 && selected[0].dataset.scoreCount !== undefined) value.replaceChildren(optionContent(selected[0]));
+            else value.textContent = label;
+            value.dataset.tooltip = label;
             root.dataset.empty = String(!selected.length || !select.value);
         }
         for (const item of items) {

@@ -86,9 +86,10 @@ export function createBenchmarkScoresView({ onViewChange }) {
             if (current !== sequence || !active) return;
             validatePayload(payload, benchmarkID, conditionID);
             selector.replaceChildren(...payload.conditions.map(condition => {
-                const option = node('option', '', condition.displayRestriction === AA_DISPLAY_RESTRICTION
-                    ? condition.name : `${condition.name} (${condition.scoreCount})`);
-                option.value = String(condition.ID); return option;
+                const option = node('option', '', condition.name);
+                option.value = String(condition.ID);
+                if (condition.scoreCount !== null) option.dataset.scoreCount = String(condition.scoreCount);
+                return option;
             }));
             selector.value = String(conditionID);
             if (payload.displayRestriction === AA_DISPLAY_RESTRICTION) {
