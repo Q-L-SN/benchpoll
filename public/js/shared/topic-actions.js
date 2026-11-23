@@ -5,6 +5,7 @@ import { buildContributionURL, activateContributionURL } from './contribution-na
 
 export const FAVORITE_EVENT = 'benchpoll:topic-favorite';
 const pending = new Map();
+export const topicFavoritePending = categoryID => pending.has(categoryID);
 let errorToast;
 const favoriteMessages = {
     authentication_required: 'Sign in to favorite a topic.',

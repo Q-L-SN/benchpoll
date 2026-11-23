@@ -218,7 +218,8 @@ body .bp-topic-collection [hidden] { display: none; }
 .bp-collection-trigger { cursor: pointer; }
 .bp-collection-trigger > i { color: var(--bp-muted); font-size: 10px; }
 .bp-collection-trigger[aria-expanded="true"] > i { transform: rotate(180deg); }
-body .bp-collection-trigger:focus-visible { outline: 2px solid var(--bp-accent); outline-offset: 1px; }
+body .bp-topic-collection .bp-collection-trigger:focus-visible { outline: none; color: var(--bp-accent); font-weight: 700; }
+.bp-collection-trigger:focus-visible > i { color: inherit; }
 .bp-collection-backdrop {
     position: absolute; inset: 0; z-index: 1; visibility: hidden; opacity: 0; pointer-events: none;
     background: rgb(246 247 249 / 66%); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);

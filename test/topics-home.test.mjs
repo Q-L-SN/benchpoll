@@ -474,11 +474,12 @@ test('root weights naming is distinct from retired Public composition and polici
     }
 });
 
-test('home input focus uses complete surfaces and does not suppress action-button focus', async () => {
+test('the topic picker uses borderless focus and profile fields use filled surfaces', async () => {
     const css = await readFile(new URL('../public/css/topics-home.css', import.meta.url), 'utf8');
     assert.match(css, /body\.th-home :is\(input, textarea, select\):is\(:focus, :focus-visible\)\s*\{[^}]*outline: none; box-shadow: none/s);
     const shared = await readFile(new URL('../public/css/site-palette.css', import.meta.url), 'utf8');
-    assert.match(shared, /\.bp-topic-query:focus-within\s*\{[^}]*outline: 2px solid/);
+    assert.doesNotMatch(shared, /\.bp-topic-query:focus-within\s*\{[^}]*outline: 2px solid/);
+    assert.match(shared, /\.bp-collection-trigger:focus-visible\s*\{[^}]*outline: none;[^}]*font-weight: 700/);
     assert.match(shared, /\.bp-topic-query input\[type="search"\]\s*\{[^}]*border: 0; background: transparent/);
     assert.match(shared, /\.bp-topic-query input::-webkit-search-cancel-button[^}]*appearance: none/);
     assert.match(css, /\.th-field input:focus, \.th-field textarea:focus\s*\{[^}]*border-color:[^}]*background:/s);

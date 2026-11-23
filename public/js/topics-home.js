@@ -18,7 +18,7 @@ import { normalizeModelFocusTarget } from './workspace/model-focus-target.js';
 import { topicURL } from './shared/topics.js';
 import { createPrivateTopicEditor } from './shared/private-topic-editor.js';
 import { createIdentityAvatar as avatar, createTopicCreator } from './shared/topic-identity.js';
-import { createFavoriteButton, createConfiguredIndicator } from './shared/topic-actions.js';
+import { createFavoriteButton, createConfiguredIndicator, topicFavoritePending } from './shared/topic-actions.js';
 import { AVAILABLE_INFERENCE_VERSION } from './shared/available-score.js';
 import { buildContributionURL } from './shared/contribution-navigation.js?v=taxonomy-20260929';
 import { betaFeedbackTemplate } from './shared/feedback-templates.js';
@@ -62,6 +62,7 @@ let profile = null;
 let profileReadFailed = false;
 let profileLoading = true;
 let topicsLoading = false;
+let topicsLoaded = false;
 let topicsRead = null;
 let topicsRefreshQueued = false;
 let topicsReadFailed = false;
@@ -218,7 +219,7 @@ function createCard(topic) {
             if (current) {
                 const changed = current.topic.isFavorited !== updated.isFavorited;
                 current.topic = { ...current.topic, isFavorited: updated.isFavorited, favoriteCount: updated.favoriteCount };
-                if (changed && directoryView === 'favorites') filterTopics();
+                if (!topicsLoading && (changed || directoryView === 'favorites')) filterTopics();
             }
             accountPreview.refresh();
         }
@@ -867,8 +868,17 @@ function resetFilters() {
 function filterTopics() {
     const query = directoryView === 'search' ? collectionPicker.input.value.trim().toLocaleLowerCase() : '';
     const userID = profile?.userID ?? null;
-    const recent = directoryView === 'recent' ? readRecentTopics(userID) : [];
-    const topics = topicCollection([...cards.values()].map(state => state.topic).filter(topic => topic.sceneID == null), directoryView, recent, userID);
+    const recent = readRecentTopics(userID);
+    const roots = [...cards.values()].map(state => state.topic).filter(topic => topic.sceneID == null);
+    const collections = Object.fromEntries(Object.keys(topicCollections).map(view => [view, topicCollection(roots, view, recent, userID)]));
+    const availability = {};
+    for (const [name, topics] of Object.entries(collections)) {
+        if (topics.length) availability[name] = true;
+        else if (topicsLoaded && !topicsLoading && !topicsReadFailed && (name === 'popular' || !profileLoading && !profileReadFailed)
+            && !(name === 'favorites' && roots.some(topic => topicFavoritePending(topic.ID)))) availability[name] = false;
+    }
+    if (collectionPicker.setAvailability(availability)) return;
+    const topics = collections[directoryView];
     const groups = directoryView === 'search' ? searchTopicGroups(topics, query) : topics.map(topic => ({ topic, scenes: [] }));
     const matches = groups.map(group => group.topic);
     const matchedScenes = new Map(groups.map(group => [cardKey(group.topic), group.scenes]));
@@ -964,7 +974,7 @@ function selectDirectoryView(next, options) {
 }
 
 window.addEventListener('storage', event => {
-    if (directoryView === 'recent' && (event.key === null || event.key.startsWith(RECENT_TOPICS_PREFIX))) filterTopics();
+    if (event.key === null || event.key.startsWith(RECENT_TOPICS_PREFIX)) filterTopics();
 });
 const filterBar = $('#topics-filters');
 const filterControls = $('#topics-filter-controls');
@@ -1124,6 +1134,7 @@ async function readTopics() {
             if (visibility) visibility.observe(state.card);
             else enqueue(state);
         }
+        topicsLoaded = true;
         topicsLoading = false; filterTopics();
     } catch {
         topicsReadFailed = true;

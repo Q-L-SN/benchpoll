@@ -1,5 +1,7 @@
 import { topicCollections } from './collections.js';
 
+const sorts = Object.keys(topicCollections).filter(view => view !== 'search');
+
 export function mountTopicCollectionPicker(host, { onSelect, onQuery, onResults }) {
     const trigger = host.querySelector('.bp-collection-trigger');
     const label = trigger.firstElementChild;
@@ -15,6 +17,7 @@ export function mountTopicCollectionPicker(host, { onSelect, onQuery, onResults 
     surface.append(backdrop);
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
     let current = 'popular', previous = 'popular', active = null, flight = null;
+    let available = ['search'];
     let typed = '', lastTyped = 0;
 
     function stopFlight() {
@@ -48,9 +51,8 @@ export function mountTopicCollectionPicker(host, { onSelect, onQuery, onResults 
         list.scrollTop += row.top < bounds.top ? row.top - bounds.top : Math.max(0, row.bottom - bounds.bottom);
     }
 
-    function open() {
-        stopFlight();
-        const keys = [current, ...Object.keys(topicCollections).filter(key => key !== current)];
+    function renderOptions(preferred = current) {
+        const keys = available.includes(current) ? [current, ...available.filter(key => key !== current)] : available;
         list.replaceChildren(...keys.map(key => {
             const option = document.createElement('div'), text = document.createElement('span');
             option.id = list.id + '-' + key;
@@ -62,12 +64,17 @@ export function mountTopicCollectionPicker(host, { onSelect, onQuery, onResults 
             option.append(text);
             return option;
         }));
+        positionList();
+        if (!list.inert) highlight(list.children[keys.indexOf(preferred)] ?? list.firstElementChild);
+    }
+
+    function open() {
+        stopFlight();
         list.inert = false;
         surface.classList.add('is-choosing-collection');
         trigger.setAttribute('aria-expanded', 'true');
         trigger.focus({ preventScroll: true });
-        positionList();
-        if (!list.inert) highlight(list.firstElementChild);
+        renderOptions();
     }
 
     function close() {
@@ -83,6 +90,23 @@ export function mountTopicCollectionPicker(host, { onSelect, onQuery, onResults 
         const name = input.value ? 'Clear search' : 'Close search';
         action.setAttribute('aria-label', name);
         action.dataset.tooltip = name;
+        action.hidden = !input.value && available.length === 1;
+    }
+    function setAvailability(status) {
+        const next = [...sorts.filter(view => status[view] === true), 'search'];
+        const changed = next.length !== available.length || next.some((view, index) => view !== available[index]);
+        available = next;
+        // Undefined means the data is still pending or unavailable. Omit those options
+        // from the list, but give a previously selected view time to load.
+        if (current !== 'search' && status[current] === false && (available.length > 1 || sorts.every(view => status[view] === false))) {
+            onSelect(available[0], { focus: host.contains(document.activeElement) });
+            return true;
+        }
+        if (changed) {
+            updateAction();
+            if (!list.inert) renderOptions(active?.dataset.view);
+        }
+        return false;
     }
     function setView(view, { focus = false } = {}) {
         stopFlight();
@@ -97,7 +121,18 @@ export function mountTopicCollectionPicker(host, { onSelect, onQuery, onResults 
         updateAction();
         if (focus) (searching ? input : trigger).focus({ preventScroll: true });
     }
-    function exitSearch() { onSelect(previous, { focus: true }); }
+    function clearQuery() {
+        input.value = '';
+        updateAction();
+        onQuery();
+        input.focus({ preventScroll: true });
+    }
+
+    function exitSearch() {
+        const next = available.includes(previous) ? previous : available[0];
+        if (next !== 'search') onSelect(next, { focus: true });
+        else if (input.value) clearQuery();
+    }
 
     function choose(option) {
         const view = option.dataset.view;
@@ -166,15 +201,13 @@ export function mountTopicCollectionPicker(host, { onSelect, onQuery, onResults 
 
     input.addEventListener('input', () => { stopFlight(); updateAction(); onQuery(); });
     action.addEventListener('click', () => {
-        if (!input.value) { exitSearch(); return; }
-        input.value = '';
-        updateAction(); onQuery();
-        input.focus({ preventScroll: true });
+        if (input.value) clearQuery();
+        else exitSearch();
     });
     editor.addEventListener('keydown', event => {
         if (event.isComposing) return;
         if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); exitSearch(); }
         if (event.key === 'ArrowDown' && onResults?.()) event.preventDefault();
     });
-    return { setView, input, exitSearch };
+    return { setView, setAvailability, input, exitSearch };
 }

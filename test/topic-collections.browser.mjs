@@ -23,9 +23,11 @@ async function choose(page, value, keyboard = false) {
     const current = await trigger.locator('span').innerText();
     await trigger.click();
     const options = page.locator('.bp-topic-collection-options:visible').getByRole('option');
-    assert.deepEqual(await options.allTextContents(), [current, ...names.filter(name => name !== current)]);
+    const labels = await options.allTextContents();
+    assert.deepEqual(labels, [current, ...names.filter(name => name !== current && labels.includes(name))]);
+    assert.equal(labels.at(-1), 'Search');
     const search = options.last();
-    assert.notEqual(await search.evaluate(n => getComputedStyle(n).color), await options.nth(2).evaluate(n => getComputedStyle(n).color));
+    assert.notEqual(await search.evaluate(n => getComputedStyle(n).color), await options.first().evaluate(n => getComputedStyle(n).color));
     if (keyboard) { await trigger.press('End'); await trigger.press('Enter'); }
     else await options.getByText(topicCollections[value], { exact: true }).click();
     await page.waitForFunction(() => !document.querySelector('[data-collection-surface].is-choosing-collection'));
@@ -34,12 +36,16 @@ async function choose(page, value, keyboard = false) {
 async function checkDisclosure(page, target) {
     const trigger = page.getByRole('combobox', { name: 'Topic collection' });
     const before = await trigger.textContent();
-    const quiet = await trigger.evaluate(el => {
+    const triggerStyle = () => trigger.evaluate(el => {
         const style = getComputedStyle(el);
-        return [style.borderTopWidth, style.backgroundColor, style.boxShadow, style.justifyContent];
+        return { frame: [style.borderWidth, style.outlineStyle, style.backgroundColor, style.boxShadow, style.justifyContent],
+            fontWeight: Number(style.fontWeight) };
     });
-    assert.deepEqual(quiet, ['0px', 'rgba(0, 0, 0, 0)', 'none', 'flex-start']);
+    const unframed = ['0px', 'none', 'rgba(0, 0, 0, 0)', 'none', 'flex-start'];
+    const resting = await triggerStyle();
+    assert.deepEqual(resting.frame, unframed);
     await trigger.click();
+    assert.deepEqual((await triggerStyle()).frame, unframed);
     const backdrop = page.locator('.is-choosing-collection > .bp-collection-backdrop');
     assert.match(await backdrop.evaluate(el => getComputedStyle(el).backdropFilter || getComputedStyle(el).webkitBackdropFilter), /blur/);
     const point = await page.locator(target).first().boundingBox();
@@ -51,6 +57,10 @@ async function checkDisclosure(page, target) {
     assert.equal(await trigger.textContent(), before);
     assert.equal(page.url(), url);
     await trigger.press('ArrowDown');
+    assert.equal(await trigger.evaluate(el => el.matches(':focus-visible')), true);
+    const focused = await triggerStyle();
+    assert.deepEqual(focused.frame, unframed);
+    assert.ok(focused.fontWeight > resting.fontWeight, 'The label shows keyboard focus');
     await trigger.press('Escape');
     assert.equal(await trigger.getAttribute('aria-expanded'), 'false');
     await trigger.press('r');
@@ -166,12 +176,16 @@ async function checkHome(page) {
     assert.equal((await ids()).includes(old[0]), false);
 }
 
-async function checkSidebar(page) {
+async function openWorkspace(page) {
     if (built) await page.route(workspace.url + '/1', async route => route.fulfill({ contentType: 'text/html',
         body: await readFile(new URL('../private/home-built.html', import.meta.url), 'utf8') }));
     await page.goto(workspace.url + '/1');
     await page.locator('#benchmark-rows .bp-benchmark-row').first().waitFor({ state: 'attached' });
     if (page.viewportSize().width <= 760) await page.locator('#taxonomy-toggle').click();
+}
+
+async function checkSidebar(page) {
+    await openWorkspace(page);
     await checkDisclosure(page, '#config-sidebar .bp-brand');
     await checkLanding(page);
     const treeIDs = () => page.locator('#tree-content > [data-category-id]').evaluateAll(nodes => nodes.map(n => Number(n.dataset.categoryId)));
@@ -192,6 +206,61 @@ async function checkSidebar(page) {
     assert.deepEqual(await treeIDs(), [1, 2, 3]);
 }
 
+async function checkOptions(page, expected) {
+    const trigger = page.getByRole('combobox', { name: 'Topic collection' });
+    await trigger.click();
+    const options = page.locator('.bp-topic-collection-options:visible').getByRole('option');
+    assert.deepEqual(await options.allTextContents(), expected.map(view => topicCollections[view]));
+    await trigger.press('Escape');
+}
+
+async function checkEmptyCollections(page) {
+    const originalTopics = home.state.topics;
+    const originalWorkspace = { topics: workspace.state.topics, personalEntries: workspace.state.personalEntries, favorites: workspace.state.favorites };
+    try {
+        const topic = { ...originalTopics[0], isMine: false, configured: false, isFavorited: true };
+        home.state.topics = [topic];
+        await page.goto(home.url);
+        const trigger = page.getByRole('combobox', { name: 'Topic collection' });
+        const card = page.locator('#topics-grid .th-card');
+        await card.waitFor();
+        await page.locator('#topics-account[href="/me"]').waitFor();
+        await checkOptions(page, ['popular', 'favorites', 'search']);
+        await choose(page, 'favorites');
+        await checkFailedRemoval(page, card);
+        assert.equal(await trigger.textContent(), topicCollections.favorites);
+        const star = card.locator('.bp-topic-favorite');
+        await star.click();
+        await page.waitForFunction(() => document.body.dataset.collection === 'popular');
+        await checkOptions(page, ['popular', 'search']);
+        await star.click();
+        await page.locator('.bp-topic-favorite[aria-pressed="true"][aria-busy="false"]').waitFor();
+        await checkOptions(page, ['popular', 'favorites', 'search']);
+
+        home.state.topics = [];
+        await page.reload();
+        const search = page.getByRole('searchbox', { name: 'Search topics' });
+        await search.waitFor();
+        assert.equal(await trigger.count(), 0);
+        await search.fill('no results');
+        await page.getByRole('button', { name: 'Clear search', exact: true }).first().click();
+        assert.equal(await search.inputValue(), '');
+
+        Object.assign(workspace.state, { topics: originalWorkspace.topics.map(topic => ({ ...topic, isMine: false })), personalEntries: [], favorites: {} });
+        await openWorkspace(page);
+        await page.locator('#sidebar-topic-creation:not([hidden])').waitFor();
+        await page.waitForFunction(() => JSON.parse(localStorage.getItem('benchpoll-sidebar-recent-v1:user:1') ?? '[]')
+            .some(topic => topic.categoryID === 1));
+        await checkOptions(page, ['popular', 'recent', 'search']);
+        await page.getByRole('button', { name: 'Create private topic', exact: true }).click();
+        await page.locator('#create-topic-dialog[open]').waitFor();
+        await page.getByRole('button', { name: 'Close topic editor' }).click();
+    } finally {
+        home.state.topics = originalTopics;
+        Object.assign(workspace.state, originalWorkspace);
+    }
+}
+
 try {
     for (const [engine, width] of [[webkit, 390], [chromium, 1440], [webkit, 320]]) {
         const browser = await engine.launch();
@@ -206,6 +275,15 @@ try {
             }, initialRecent);
             await checkHome(page); await checkSidebar(page);
             assert.deepEqual(errors, []);
+            if (width === 1440) {
+                const emptyPage = await browser.newPage({ viewport: { width, height: 850 } });
+                const emptyErrors = []; emptyPage.on('pageerror', error => emptyErrors.push(error.message));
+                await emptyPage.addInitScript(() => localStorage.setItem('benchpoll:config-sidebar-collapsed', 'false'));
+                emptyPage.setDefaultTimeout(7000);
+                await checkEmptyCollections(emptyPage);
+                assert.deepEqual(emptyErrors, []);
+                await emptyPage.close();
+            }
             console.log(engine.name(), width, built ? 'built' : 'source', 'passed');
         } finally { await browser.close(); }
     }

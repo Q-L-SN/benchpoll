@@ -5,7 +5,7 @@ import { readSidebarPreferences, writeSidebarPreferences, readRecentTopics, writ
 import { postJSON } from '../shared/http.js';
 import { isAccountWriteError, accountWriteError, pageAccountWriteScope } from '../shared/account-identity.js';
 import { animateContent, setVisible } from '../shared/motion.js';
-import { FAVORITE_EVENT, createFavoriteButton, createConfiguredIndicator } from '../shared/topic-actions.js';
+import { FAVORITE_EVENT, createFavoriteButton, createConfiguredIndicator, topicFavoritePending } from '../shared/topic-actions.js';
 import { normalizeTopicSummary, sceneSummary } from '../shared/topics.js';
 import { mountTopicCollectionPicker } from './collection-picker.js';
 import { topicCollection, topicCollections, personalCollection } from './collections.js';
@@ -21,6 +21,7 @@ export function createSidebarNavigation({ onNavigate, onLogin, onSessionChange, 
     const empty = document.getElementById('configured-empty');
     const browse = document.getElementById('configured-browse');
     const login = document.getElementById('configured-login');
+    const topicCreation = document.getElementById('sidebar-topic-creation');
     const createButtons = [...document.querySelectorAll('[data-create-topic]')];
     const createForm = document.getElementById('topic-create-form');
     const createName = document.getElementById('topic-create-name');
@@ -42,9 +43,10 @@ export function createSidebarNavigation({ onNavigate, onLogin, onSessionChange, 
     let categories = [], categoryRequest = 0, categoryLoading = false, categoryError = false;
     let categoriesLoaded = false;
     let accountKnown = false, recentRecords = [], recentDisplayKeys = [], lastVisited = null;
-    let privateValidation = 0, actionDepth = 0, recentDirty = false;
+    let privateValidation = 0, privateRecentsLoading = false, actionDepth = 0, recentDirty = false;
     const accessiblePrivateTopics = new Map();
     let catalog = [], catalogLoaded = false, catalogLoading = false, catalogError = false, catalogRequest = 0;
+    let catalogFavoriteUpdates = null;
     let creating = false;
     const catalogView = view => ['favorites', 'created', 'search'].includes(view);
 
@@ -68,13 +70,13 @@ export function createSidebarNavigation({ onNavigate, onLogin, onSessionChange, 
     }
 
     function flushRecentOrder(force = false) {
-        if (!recentDirty && !force) return;
+        if (!recentDirty && !force) return false;
         if (!force && preferences.view === 'recent' && (actionDepth > 0 || viewport.matches(':hover')
-            || viewport.contains(document.activeElement))) return;
+            || viewport.contains(document.activeElement))) return false;
         recentDisplayKeys = recentEntries().map(keyFor);
         recentDirty = false;
-        renderTopics();
-        renderCategorySearch();
+        render();
+        return true;
     }
 
     function recordSuccessfulVisit(snapshot) {
@@ -100,6 +102,7 @@ export function createSidebarNavigation({ onNavigate, onLogin, onSessionChange, 
         try { if (pageAccountWriteScope.capture() !== owner) return; } catch { return; }
         const records = [...new Map(recentRecords.filter(record => record.isPrivate
             && (force || !accessiblePrivateTopics.has(record.categoryID))).map(record => [record.categoryID, record])).values()];
+        privateRecentsLoading = records.length > 0;
         await Promise.all(records.map(async record => {
             try {
                 const topic = await postJSON('/api/get_topic', { categoryID: record.categoryID });
@@ -114,10 +117,9 @@ export function createSidebarNavigation({ onNavigate, onLogin, onSessionChange, 
             }
         }));
         if (sequence !== privateValidation || owner !== account) return;
-        renderTopics();
-        renderCategorySearch();
+        privateRecentsLoading = false;
         recentDirty = true;
-        flushRecentOrder();
+        if (!flushRecentOrder()) render();
     }
 
     async function navigate(entry) {
@@ -267,6 +269,9 @@ export function createSidebarNavigation({ onNavigate, onLogin, onSessionChange, 
 
     async function loadCatalog() {
         const owner = account, sequence = ++catalogRequest;
+        const favoriteUpdates = new Map(catalog.filter(topic => topicFavoritePending(topic.categoryID))
+            .map(topic => [topic.categoryID, { isFavorited: topic.isFavorited, favoriteCount: topic.favoriteCount }]));
+        catalogFavoriteUpdates = favoriteUpdates;
         catalogLoading = true; catalogError = false; render();
         try {
             const payload = await postJSON('/api/get_topics', {});
@@ -283,18 +288,25 @@ export function createSidebarNavigation({ onNavigate, onLogin, onSessionChange, 
                 || typeof topic.isMine !== 'boolean' || typeof topic.configured !== 'boolean')) throw new TypeError('Invalid topic catalogue');
             const entries = payload.topics.filter(topic => !topic.isPrivate || owner !== null && topic.isMine === true).map(entryFromContext);
             if (new Set(entries.map(entry => entry.categoryID)).size !== entries.length) throw new TypeError('Duplicate topic identity');
-            entries.forEach(entry => locationURL(entry));
+            for (const entry of entries) {
+                locationURL(entry);
+                Object.assign(entry, favoriteUpdates.get(entry.categoryID));
+            }
             catalog = entries; catalogLoaded = true;
         } catch {
             if (sequence === catalogRequest && owner === account) catalogError = true;
         } finally {
-            if (sequence === catalogRequest && owner === account) { catalogLoading = false; render(); }
+            if (sequence === catalogRequest && owner === account) {
+                catalogFavoriteUpdates = null;
+                catalogLoading = false;
+                render();
+            }
         }
     }
 
     async function loadCategories() {
         const sequence = ++categoryRequest;
-        categoryLoading = true; categoryError = false; renderTopics(); renderCategorySearch();
+        categoryLoading = true; categoryError = false; render();
         try {
             const payload = await postJSON('/api/get_category_navigation', {});
             const entries = payload.items ?? payload.entries;
@@ -304,9 +316,14 @@ export function createSidebarNavigation({ onNavigate, onLogin, onSessionChange, 
                 || entry.lineage.some(item => !Number.isSafeInteger(item.ID) || typeof item.name !== 'string')
                 || !entry.contextValues || Object.keys(entry.contextValues).some(key => key !== 'scene'))
                 || new Set(entries.map(entry => entry.categoryID)).size !== entries.length) throw new Error('Invalid topic navigation response');
-            if (sequence === categoryRequest) { categories = popularTopics(entries); categoriesLoaded = true; recentDirty = true; flushRecentOrder(); }
+            if (sequence === categoryRequest) { categories = popularTopics(entries); categoriesLoaded = true; recentDirty = true; }
         } catch { if (sequence === categoryRequest) categoryError = true; }
-        finally { if (sequence === categoryRequest) { categoryLoading = false; renderTopics(); renderCategorySearch(); } }
+        finally {
+            if (sequence === categoryRequest) {
+                categoryLoading = false;
+                if (!flushRecentOrder()) render();
+            }
+        }
     }
 
     function restorePosition(top) {
@@ -369,7 +386,29 @@ export function createSidebarNavigation({ onNavigate, onLogin, onSessionChange, 
         if (confirmed.hasPersonalWeights) items.push({ ...entry, weightCount: Math.max(1, confirmed.weightCount ?? 1) });
     }
 
+    function updateCollectionPicker() {
+        const catalogReady = accountKnown && (account === null || catalogLoaded);
+        const personalTopics = account === null ? [] : catalog;
+        const hasCreated = personalTopics.some(topic => topic.isMine);
+        const hasFavorites = personalTopics.some(topic => topic.isFavorited);
+        const hasHistory = recentEntries().length > 0;
+        const availability = {
+            popular: categoriesLoaded ? categories.length > 0 : undefined,
+            favorites: hasFavorites || (catalogReady && !personalTopics.some(topic => topicFavoritePending(topic.categoryID)) ? false : undefined),
+            configured: items.length > 0 || (accountKnown && loaded ? false : undefined),
+            created: hasCreated || (catalogReady ? false : undefined),
+            recent: hasHistory || (accountKnown && categoriesLoaded && !privateRecentsLoading ? false : undefined)
+        };
+        if (picker.setAvailability(availability)) return true;
+        const view = preferences.view;
+        // Keep the first topic accessible from the sidebar before the authored list exists.
+        const firstTopic = catalogReady && !hasCreated && (view === 'popular' || view === 'search' && availability.popular === false);
+        topicCreation.hidden = account === null || !(view === 'created' || firstTopic);
+        return false;
+    }
+
     function render() {
+        if (updateCollectionPicker()) return;
         renderTopics();
         renderCategorySearch();
         const oldScroll = viewport.scrollTop;
@@ -450,7 +489,7 @@ export function createSidebarNavigation({ onNavigate, onLogin, onSessionChange, 
         else empty.textContent = failed ? 'Could not load your configured topics.' : account === null ? 'Sign in to see your topics.' : 'No configured topics yet.';
         login.hidden = account !== null;
         browse.hidden = account === null || rows.length > 0;
-        retry.hidden = preferences.view !== 'configured' || !failed;
+        retry.hidden = !catalogError && (preferences.view !== 'configured' || !failed);
         if (preferences.view === 'configured') {
             const top = !scrollReady.configured ? preferences.scroll.configured
                 : anchor?.isConnected ? oldScroll + anchor.getBoundingClientRect().top - anchorTop : oldScroll;
@@ -472,7 +511,6 @@ export function createSidebarNavigation({ onNavigate, onLogin, onSessionChange, 
         const configured = preferences.view === 'configured';
         tree.hidden = configured || preferences.view === 'search';
         document.getElementById('configured-panel').hidden = !configured;
-        document.getElementById('sidebar-topic-creation').hidden = preferences.view !== 'created';
         if (catalogView(preferences.view) && (account !== null || preferences.view === 'search') && !catalogLoading && (remember || !catalogLoaded)) void loadCatalog();
         render();
         restorePosition(preferences.scroll[preferences.view]);
@@ -527,9 +565,9 @@ export function createSidebarNavigation({ onNavigate, onLogin, onSessionChange, 
         const next = userID == null ? null : String(userID);
         const changed = !accountKnown || next !== account;
         accountKnown = true;
-        if (next === account && loaded) {
+        if (!changed && loaded) {
             void refresh();
-            if (catalogView(preferences.view) && (account !== null || preferences.view === 'search')) void loadCatalog();
+            if (!catalogLoading && (account !== null || preferences.view === 'search')) void loadCatalog();
             return;
         }
         ++request;
@@ -538,16 +576,17 @@ export function createSidebarNavigation({ onNavigate, onLogin, onSessionChange, 
         if (changed) {
             ++catalogRequest;
             catalog = []; catalogLoaded = false; catalogLoading = false; catalogError = false;
+            catalogFavoriteUpdates = null;
             scrollReady.search = scrollReady.favorites = scrollReady.created = false;
             createForm.reset(); createError.textContent = ''; void setVisible(createForm, false, { collapse: true });
             createButtons.forEach(button => button.setAttribute('aria-expanded', 'false'));
             ++privateValidation;
+            privateRecentsLoading = false;
             accessiblePrivateTopics.clear();
             recentRecords = readRecentTopics(account);
             recentDisplayKeys = [];
             lastVisited = null;
             recentDirty = true;
-            flushRecentOrder(true);
         }
         scrollReady.configured = false;
         items = [];
@@ -555,13 +594,13 @@ export function createSidebarNavigation({ onNavigate, onLogin, onSessionChange, 
         loaded = next === null;
         // A confirmed snapshot from another account can never seed this index.
         applyConfirmedWorkspace();
+        if (changed) void validatePrivateRecents();
         if (confirmed) recordSuccessfulVisit(confirmed);
         feedback.textContent = '';
         viewport.setAttribute('aria-busy', 'false');
-        render();
+        if (!flushRecentOrder(changed)) render();
         if (account) void refresh();
-        if (catalogView(preferences.view) && (account !== null || preferences.view === 'search')) void loadCatalog();
-        void validatePrivateRecents();
+        if (!catalogLoading && (account !== null || preferences.view === 'search')) void loadCatalog();
     }
 
     navigationChannel.subscribe(snapshot => {
@@ -580,15 +619,18 @@ export function createSidebarNavigation({ onNavigate, onLogin, onSessionChange, 
         }
     });
     window.addEventListener(FAVORITE_EVENT, ({ detail }) => {
+        const favorite = { isFavorited: detail.isFavorited, favoriteCount: detail.favoriteCount };
+        catalogFavoriteUpdates?.set(detail.categoryID, favorite);
         for (const source of [categories, catalog, items]) for (const topic of source) {
-            if (topic.categoryID === detail.categoryID) Object.assign(topic, { isFavorited: detail.isFavorited, favoriteCount: detail.favoriteCount });
+            if (topic.categoryID === detail.categoryID) Object.assign(topic, favorite);
         }
-        if (preferences.view === 'favorites') renderTopics();
+        if (preferences.view === 'favorites') render();
+        else updateCollectionPicker();
     });
     searchResults.addEventListener('keydown', event => {
         if (event.key === 'Escape') { event.stopPropagation(); picker.exitSearch(); }
     });
-    retry.addEventListener('click', () => void refresh());
+    retry.addEventListener('click', () => { void (catalogError ? loadCatalog() : refresh()); });
     browse.addEventListener('click', () => setView('popular'));
     login.addEventListener('click', onLogin);
     createButtons.forEach(button => button.addEventListener('click', () => {
@@ -674,8 +716,8 @@ export function createSidebarNavigation({ onNavigate, onLogin, onSessionChange, 
         recentRecords = readRecentTopics(account);
         accessiblePrivateTopics.clear();
         recentDirty = true;
-        flushRecentOrder();
         void validatePrivateRecents();
+        if (!flushRecentOrder()) updateCollectionPicker();
     });
     window.addEventListener('pagehide', () => writeSidebarPreferences(preferences));
     const initialView = preferences.view;
