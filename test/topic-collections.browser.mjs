@@ -94,6 +94,12 @@ async function checkSearch(page, surface, query, matchingName) {
     await choose(page, 'search', isHome);
     assert.equal(await field.getAttribute('placeholder'), 'Search');
     assert.equal(await field.evaluate(node => node === document.activeElement), true);
+    const searchSurfaces = await field.evaluate(input => [input.parentElement, input].map(element => {
+        const style = getComputedStyle(element);
+        return [style.borderWidth, style.outlineStyle, style.boxShadow, style.backgroundColor];
+    }));
+    const unframed = ['0px', 'none', 'none', 'rgba(0, 0, 0, 0)'];
+    assert.deepEqual(searchSurfaces, [unframed, unframed], surface + ' focused search remains borderless');
     const after = await field.locator('..').boundingBox();
     for (const axis of ['x', 'y', 'width', 'height']) assert.ok(Math.abs(before[axis] - after[axis]) <= 1, surface + ' ' + axis);
     await field.fill(query);
