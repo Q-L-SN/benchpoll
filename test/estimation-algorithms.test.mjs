@@ -1,141 +1,152 @@
-import { pairedModels } from './helpers/fallback-pairs.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { calibrationModel as model, pairedModels } from './helpers/fallback-pairs.mjs';
 import { availableResultInference, storedAvailableResultInference } from '../public/js/shared/available-score.js';
 import { ESTIMATION_ALGORITHMS, normalizeEstimationAlgorithm } from '../public/js/shared/estimation-algorithms.js';
 import { readEstimationPreference, writeEstimationPreference } from '../public/js/workspace/preferences.js';
 import { scoreModels, scoreComparison, getRankingWorkspace } from '../ranking-service.js';
 import { comparisonOptions } from '../model-comparison.js';
-import { createFixtureState, workspace } from '../scripts/frontend/fixtures.mjs';
+import { createFixtureState, weightedEntries, workspace } from '../scripts/frontend/fixtures.mjs';
 import { createRankingPager } from '../ranking-pagination.js';
 import { validateWorkspacePayload, validateRankingPagePayload } from '../public/js/workspace/contracts.js';
 
-const choices = ESTIMATION_ALGORITHMS.map(item => item.ID), alternatives = choices.slice(1);
-const close = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-8, `${actual} != ${expected}`);
-const model = (ID, values) => ({ ID, modelID: ID, name: `Model ${ID}`, modelName: `Model ${ID}`,
-    condition: { parameters: {}, scoreFields: [] },
-    results: new Map(Object.entries(values).map(([key, normalizedScore]) => [key, { normalizedScore }])) });
-const entries = [{ conditionID: 1, weightBasisPoints: 5000 }, { conditionID: 2, weightBasisPoints: 5000 }];
+const weight = (conditionID, weightBasisPoints, estimationSourceIDs = []) => ({ conditionID, weightBasisPoints, estimationSourceIDs });
+const compare = (models, entries, scoreMode = 'available', mode = 'best', rules = {}) => scoreComparison(
+    models, entries, 10000, { scoreMode, ...rules }, comparisonOptions(models, { mode, keys: ['model'] }));
 
-test('experimental corrections keep measured contributions fixed and midpoint shrinkage can raise or lower estimates', () => {
-    for (const prediction of [40, 90]) {
-        const totals = {};
-        for (const algorithm of choices) {
-            const trace = availableResultInference(80, .5, [{ normalizedScore: prediction, weightFraction: .5 }], null, 3, algorithm);
-            totals[algorithm] = trace.totalScore;
-            close(trace.observedContribution, 40);
-            assert.deepEqual(storedAvailableResultInference(80, .5, [{ normalizedScore: prediction, weightFraction: .5 }], null, 3,
-                { method: trace.method }), trace);
-        }
-        close(totals.current, (40 + prediction / 2) * 5 / 6);
-        close(totals['missing-raw'], 40 + prediction / 2);
-        close(totals['missing-rational'], 40 + prediction / 2 * 5 / 6);
-        close(totals['missing-linear'], 40 + prediction / 4);
-        close(totals['missing-sqrt'], 40 + prediction / 2 * Math.sqrt(.5));
-        close(totals['missing-midpoint'], 40 + prediction / 4 + 12.5);
-        assert.equal(totals['missing-midpoint'] > totals['missing-raw'], prediction < 50);
+test('paired-test estimates and measured points retain their original weights', () => {
+    const estimates = [{ normalizedScore: 70, weightFraction: .25 }];
+    const partial = availableResultInference(80, .3, estimates, null, 5);
+    assert.equal(partial.observedContribution, 24);
+    assert.equal(partial.inferredContribution, 17.5);
+    assert.ok(Math.abs(partial.unresolvedFraction - .45) < 1e-12);
+    assert.equal(partial.unresolvedContribution, 0);
+    assert.equal(partial.totalScore, 41.5);
+    const inferredOnly = availableResultInference(0, 0, estimates, null, 5);
+    assert.equal(inferredOnly.totalScore, 17.5);
+    assert.equal(inferredOnly.coverageFraction, 0);
+    const empty = availableResultInference(0, 0, []);
+    assert.equal(empty.totalScore, 0);
+    assert.equal(empty.unresolvedFraction, 1);
+    assert.equal(empty.sourceCount, 0);
+    assert.deepEqual(storedAvailableResultInference(80, .3, estimates, null, 5, { method: partial.method }), partial);
+});
+
+test('automatic estimates choose the lowest held-out error, then paired count, then stable version ID', () => {
+    const subject = model(1, { 2: 70, 3: 80, 4: 90, 5: 30, 9: -20, 999: 95 });
+    const peers = Array.from({ length: 7 }, (_, index) => {
+        const primary = 57 + index;
+        return model(101 + index, { 1: primary, ...(index < 5 ? { 2: primary + 10 } : {}),
+            3: primary + 20, 4: primary + 30 + index % 2, 5: primary - 30, 999: primary + 35 });
+    });
+    const entriesFor = IDs => [weight(1, 4000, IDs), weight(9, 4000), weight(12, 2000)];
+    for (const IDs of [[4, 5, 2, 3], [3, 2, 5, 4]]) {
+        const [row] = compare([subject, ...peers], entriesFor(IDs));
+        const [estimate] = row.inferredScores;
+        assert.deepEqual([row.lower, row.coverage, row.fallbackCoverage], [16, 40, 40]);
+        assert.deepEqual([estimate.sourceConditionID, estimate.sourceScore, estimate.referenceCount, estimate.validationError], [3, 80, 7, 0]);
+        assert.equal(estimate.selection, 'automatic');
+        assert.deepEqual(estimate.familyConditionIDs, [1, 3]);
+        assert.equal(estimate.originalWeight, 40);
+        assert.equal(estimate.effectiveWeight, 40);
+        assert.equal(estimate.contribution, 24);
+        assert.equal(row.calculationScores[0].contribution, -8);
     }
+    const [row] = compare([subject, ...peers], entriesFor([4, 2]));
+    assert.equal(row.inferredScores[0].sourceConditionID, 2);
+    assert.equal(row.inferredScores[0].referenceCount, 5);
 });
 
-test('all missing-only choices stay inside Score range, including negative measurements and unresolved weight', () => {
-    for (const algorithm of alternatives) for (const observed of [-200, -1, 0, 70, 150]) {
-        for (const coverage of [.00001, .1, .5, .99, 1]) for (const prediction of [0, 50, 100]) {
-            const fraction = (1 - coverage) / 2;
-            const trace = availableResultInference(observed, coverage,
-                fraction ? [{ normalizedScore: prediction, weightFraction: fraction }] : [], null, 2, algorithm);
-            close(trace.observedContribution, observed * coverage);
-            close(trace.unresolvedContribution, fraction * 50);
-            assert.ok(trace.totalScore >= observed * coverage - 1e-9);
-            assert.ok(trace.totalScore <= observed * coverage + (1 - coverage) * 100 + 1e-9);
-        }
-    }
+test('each contribution to a repeated version keeps the eligible sources of its scene', () => {
+    const models = [model(1, { 2: 70, 9: 80 }), ...pairedModels(1, 2, 70, -10)];
+    const entries = [weight(1, 2500, [2]), weight(1, 2500), weight(9, 2000), weight(9, 1000), weight(-3, 2000)];
+    const [row] = compare(models, entries);
+    assert.deepEqual([row.lower, row.coverage, row.fallbackCoverage], [39, 30, 25]);
+    assert.ok(Math.abs(row.availableInference.unresolvedFraction - .45) < 1e-12);
+    assert.deepEqual(row.coverageEntries.map(item => [item.conditionID, item.weightBasisPoints, item.coveredWeightBasisPoints]),
+        [[1, 5000, 0], [9, 3000, 3000], [-3, 2000, 0]]);
+    assert.deepEqual(row.calculationScores.map(item => [item.conditionID, item.effectiveWeight, item.contribution]), [[9, 30, 24]]);
+    assert.deepEqual(row.inferredScores.map(item => [item.sourceConditionID, item.effectiveWeight, item.contribution]), [[2, 25, 15]]);
+    const [range] = compare(models, entries, 'range');
+    assert.deepEqual([range.lower, range.upper, range.coverage], [24, 94, 30]);
+    assert.deepEqual(range.inferredScores, []);
+    assert.equal(range.availableInference, null);
 });
 
-test('square-root attenuation multiplies only the missing contribution by the square root of measured coverage', () => {
-    const trace = availableResultInference(80, .5, [{ normalizedScore: 60, weightFraction: .5 }], null, 3, 'missing-sqrt');
-    close(trace.observedContribution, 40);
-    close(trace.missingFactor, Math.sqrt(.5));
-    close(trace.totalScore, 40 + 30 * Math.sqrt(.5));
-    assert.notEqual(trace.totalScore, 70 * Math.sqrt(.5));
+test('an estimate only uses a recorded source, and a direct measured zero takes precedence', () => {
+    const subject = model(1, { 3: 85, 999: 95 });
+    const peers = pairedModels(1, 2, 75, -10);
+    for (const peer of peers) peer.results.set('3', { normalizedScore: peer.results.get('2').normalizedScore + 10 });
+    const entry = [weight(1, 5000, [2]), weight(2, 5000, [3])];
+    const rules = { fallbackRules: [{ primaryConditionID: 1, mode: 'ordered', entries: [{ conditionID: 3 }] }] };
+    const [estimated] = compare([subject, ...peers], entry, 'available', 'best', rules);
+    assert.deepEqual(estimated.inferredScores.map(row => row.conditionID), [2]);
+    assert.deepEqual([estimated.lower, estimated.coverage, estimated.availableInference.unresolvedFraction], [37.5, 0, .5]);
+    subject.results.set('1', { normalizedScore: 0 });
+    const [recorded] = compare([subject, ...peers], entry, 'available', 'best', rules);
+    assert.deepEqual([recorded.lower, recorded.coverage, recorded.calculationScores[0].normalizedScore], [37.5, 50, 0]);
 });
 
-test('missing-only choices adjust a calibrated backup while keeping the measured portion fixed', () => {
-    const models = [model(1, { 1: -20, 3: 80 }), ...pairedModels(2, 3, 80, -10)];
-    const rules = { fallbackRules: [{ primaryConditionID: 2, mode: 'ordered', entries: [{ conditionID: 3 }] }] };
-    for (const algorithm of alternatives) {
-        const [score] = scoreModels(models, entries, 10000, { ...rules, estimationAlgorithm: algorithm, scoreMode: 'available' });
-        assert.equal(score.coverage, 50); assert.equal(score.fallbackCoverage, 50);
-        assert.equal(score.calculationScores[0].contribution, -10);
-        assert.equal(score.inferredScores[0].normalizedScore, 70);
-        const factor = { 'missing-raw': 1, 'missing-rational': 5 / 6,
-            'missing-linear': .5, 'missing-sqrt': Math.sqrt(.5), 'missing-midpoint': .5 }[algorithm];
-        close(score.availableInference.totalScore, -10 + 35 * factor + (algorithm === 'missing-midpoint' ? 12.5 : 0));
-    }
+test('matched comparisons use measured siblings under the same matching controls', () => {
+    const models = [model(1, { 2: 70 }, { harness: 'A' }), model(2, { 2: 90 }, { harness: 'B' }),
+        ...pairedModels(1, 2, 70, -10, { harness: 'A' })];
+    const entries = [weight(1, 10000, [2])];
+    const [estimated, unmatched] = compare(models, entries, 'available', 'matched');
+    assert.deepEqual([estimated.lower, estimated.comparable, estimated.coverage], [60, true, 0]);
+    assert.deepEqual([unmatched.lower, unmatched.comparable, unmatched.availableInference.totalScore], [null, false, 0]);
+    assert.equal(unmatched.availableInference.unresolvedFraction, 1);
+    assert.equal(unmatched.resultCount, 0);
+    assert.deepEqual(unmatched.inferredScores, []);
+    const [range] = compare(models, entries, 'range', 'matched');
+    assert.deepEqual([range.lower, range.comparable, range.availableInference], [null, false, null]);
 });
 
-test('experimental estimates respect the score bounds while actual observations retain their scale', () => {
-    const models = [model(1, { 1: -20, 3: 110 }), ...pairedModels(2, 3, 110, 10)];
-    const rules = { fallbackRules: [{ primaryConditionID: 2, mode: 'ordered', entries: [{ conditionID: 3 }] }] };
-    const [current] = scoreModels(models, entries, 10000, { ...rules, scoreMode: 'available' });
-    assert.equal(current.inferredScores[0].normalizedScore, 120);
-    for (const estimationAlgorithm of alternatives) {
-        const [row] = scoreModels(models, entries, 10000, { ...rules, scoreMode: 'available', estimationAlgorithm });
-        assert.equal(row.inferredScores[0].normalizedScore, 100);
-        assert.equal(row.inferredScores[0].rawNormalizedScore, 120);
-        assert.equal(row.calculationScores[0].normalizedScore, -20);
-    }
+test('matched scores calibrate measured runs before averaging their estimates', () => {
+    const settingsA = { harness: 'A' }, settingsB = { harness: 'B' };
+    const models = [model(1, { 2: 30 }, settingsA), model(2, { 2: 80 }, settingsB, { modelID: 1 }),
+        ...pairedModels(1, 2, 30, -5, settingsA),
+        ...pairedModels(1, 2, 80, 10, settingsB).map(peer => ({ ...peer, ID: peer.ID + 100 }))];
+    const [row] = compare(models, [weight(1, 10000, [2])], 'available', 'matched');
+    const [estimate] = row.inferredScores;
+    assert.deepEqual([row.lower, row.coverage, estimate.sourceScore, estimate.referenceCount], [57.5, 0, 55, 5]);
 });
 
-test('full coverage, zero observed scores, range mode and evidence eligibility do not change with the selector', () => {
-    const models = [model(1, { 1: 80, 2: 100 }), model(2, { 1: 0, 2: 0 }), model(3, { 3: 100 })];
-    const baseline = scoreModels(models, entries, 10000, { scoreMode: 'range' });
-    for (const estimationAlgorithm of choices) {
-        assert.deepEqual(scoreModels(models, entries, 10000, { scoreMode: 'range', estimationAlgorithm }), baseline);
-        const scores = scoreComparison(models, entries, 10000, { scoreMode: 'available', estimationAlgorithm },
-            comparisonOptions(models, { mode: 'best', keys: ['model'] }));
-        assert.deepEqual(scores.map(row => row.lower), [90, 0, null]);
-        assert.equal(scores[2].comparable, false);
-    }
+test('ranking pages validate original contributions, estimates and fully unresolved rows', () => {
+    const models = [model(1, { 901: 70 }), model(2, { 3: 90 }), ...pairedModels(1, 901, 70, -10)];
+    const weights = [weight(1, 10000)];
+    const state = createFixtureState({ estimationSources: true, secondaryBenchmark: true, comparisonModels: models,
+        personalEntries: weightedEntries(weights), publicWeights: weights });
+    const raw = workspace(state, { categoryID: 1, scoreMode: 'available' }, { paginate: false });
+    const pager = createRankingPager(), first = pager.create(raw, { userID: state.userID, initialMode: 'public' });
+    validateWorkspacePayload(first);
+    const rows = first.modelLeaderboards.public;
+    assert.equal(rows.find(row => row.ID === 1).inferredScores[0].sourceConditionID, 901);
+    const unresolved = rows.find(row => row.ID === 2);
+    assert.deepEqual([unresolved.rank, unresolved.lower, unresolved.availableInference.totalScore], [null, null, 0]);
+    const corrupt = structuredClone(first);
+    corrupt.modelLeaderboards.public.find(row => row.ID === 2).availableInference.unresolvedContribution = 50;
+    assert.throws(() => validateWorkspacePayload(corrupt), /missing-score estimate/);
+
+    const stress = workspace(createFixtureState({ rankingStress: true }), { categoryID: 1, scoreMode: 'available' }, { paginate: false });
+    const initial = pager.create(stress, { userID: state.userID, initialMode: 'public' });
+    const offset = initial.rankingPagination.public.nextOffset;
+    const page = pager.getPage({ snapshotID: initial.rankingPagination.snapshotID, userID: state.userID, list: 'public', offset });
+    validateRankingPagePayload(page, { list: 'public', scoreMode: 'available', offset });
+    assert.ok(page.items.length > 0);
 });
 
-test('matched comparisons honor the selected method and do not fall back to the default', () => {
-    const models = [model(1, { 1: 80 }), model(2, { 1: 60 })];
-    for (const estimationAlgorithm of alternatives) {
-        const scores = scoreComparison(models, entries, 10000, { scoreMode: 'available', estimationAlgorithm },
-            comparisonOptions(models, { mode: 'matched', keys: ['model'] }));
-        assert.ok(scores.every(row => row.availableInference.algorithm === estimationAlgorithm));
-        assert.deepEqual(scores.map(row => row.availableInference.observedContribution), [80, 60]);
-    }
-});
-
-test('every method provides auditable traces through initial and subsequent ranking pages', () => {
-    const state = createFixtureState({ rankingStress: true });
-    for (const estimationAlgorithm of choices) {
-        const raw = workspace(state, { categoryID: 1, scoreMode: 'available', estimationAlgorithm }, { paginate: false });
-        const pager = createRankingPager(), first = pager.create(raw, { userID: state.userID, initialMode: 'public' });
-        validateWorkspacePayload(first);
-        const second = pager.getPage({ snapshotID: first.rankingPagination.snapshotID, userID: state.userID,
-            list: 'public', offset: first.rankingPagination.public.nextOffset });
-        validateRankingPagePayload(second, { list: 'public', scoreMode: 'available', offset: first.rankingPagination.public.nextOffset });
-        assert.ok(second.items.length > 0);
-        if (estimationAlgorithm !== 'current') {
-            const corrupt = structuredClone(first);
-            corrupt.modelLeaderboards.public[0].availableInference.observedContribution++;
-            assert.throws(() => validateWorkspacePayload(corrupt), /missing-score estimate/);
-        }
-    }
-});
-
-test('invalid choices fail before database access and unavailable storage safely uses the current algorithm', async () => {
-    for (const estimationAlgorithm of [null, '', 'mean-percentile', 'typo', {}, 1]) {
+test('exactly one live method is available and retired requests fail before database access', async () => {
+    assert.deepEqual(ESTIMATION_ALGORITHMS.map(item => [item.ID, item.label]), [['current', 'Version-based estimation']]);
+    const rejected = ['missing-raw', 'missing-rational', 'missing-linear', 'missing-sqrt', 'missing-midpoint', null, '', 'mean-percentile', {}, 1];
+    for (const estimationAlgorithm of rejected) {
         assert.throws(() => normalizeEstimationAlgorithm(estimationAlgorithm));
         await assert.rejects(getRankingWorkspace({ getConnection() { throw new Error('Database must not be read'); } }, { estimationAlgorithm }),
             error => error.status === 400 && error.body.error === 'invalid_estimation_algorithm');
     }
+    assert.throws(() => scoreModels([], [weight(1, 10000)], 10000, { estimationAlgorithm: 'missing-midpoint' }),
+        error => error.status === 400 && error.body.error === 'invalid_estimation_algorithm');
+    assert.equal(readEstimationPreference({ getItem: () => 'missing-midpoint' }), 'current');
     const values = new Map(), storage = { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) };
+    assert.equal(writeEstimationPreference('current', storage), true);
     assert.equal(readEstimationPreference(storage), 'current');
-    assert.equal(writeEstimationPreference('missing-midpoint', storage), true);
-    assert.equal(readEstimationPreference(storage), 'missing-midpoint');
-    assert.equal(readEstimationPreference({ getItem() { throw new Error('Storage denied'); } }), 'current');
-    assert.equal(writeEstimationPreference('missing-raw', { setItem() { throw new Error('Storage denied'); } }), false);
 });

@@ -34,7 +34,7 @@ test('changing off-chain scores cannot affect a missing benchmark with no fallba
     const archived = createPercentileReference(models);
     close(archived.estimate(models[0]).percentile, 1 / 3);
     close(percentileScore(archived.distributions.get('2'), 1 / 3), 100 / 3);
-    assert.equal(actual.lower, 66.67);
+    assert.equal(actual.lower, 40);
     assert.equal(actual.coverage, 50);
     assert.equal(actual.resultCount, 1);
     assert.deepEqual(actual.inferredScores, []);
@@ -58,7 +58,8 @@ test('an entry without real weighted evidence stays incomparable, even if other 
     const result = score([model(1, { 3: 100 }), model(2, { 1: 80, 2: 90, 3: 80 })])[0];
     assert.equal(result.comparable, false);
     assert.equal(result.lower, null);
-    assert.equal(result.availableInference, null);
+    assert.equal(result.availableInference.totalScore, 0);
+    assert.equal(result.availableInference.unresolvedFraction, 1);
     assert.deepEqual(result.inferredScores, []);
 });
 

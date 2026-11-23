@@ -1,6 +1,7 @@
 import { canonicalAccountID } from '../shared/account-identity.js';
 import { canonicalWritePayload } from '../shared/write-intent.js';
 import { familyKey, FALLBACK_CONFIGURATION_VERSION } from '../shared/benchmark-families.js';
+import { normalizeEstimationVotes } from '../shared/estimation-votes.js';
 import { createDraftRecordStore } from './draft-records.js';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -25,6 +26,7 @@ function validPie(pie) {
     if (pie.entries.length && pie.entries.reduce((total, entry) => total + entry.weightBasisPoints, 0) !== 10000) return false;
     const rules = new Set();
     try {
+        if (Object.hasOwn(pie, 'estimationVotes')) normalizeEstimationVotes(pie.estimationVotes);
         for (const rule of pie.fallbackRules) {
             if (!positive(rule.primaryConditionID) || !IDs.has(rule.primaryConditionID) || rules.has(rule.primaryConditionID) || rule.mode !== 'ordered'
                 || !Array.isArray(rule.entries)) return false;
@@ -33,6 +35,10 @@ function validPie(pie) {
         }
     } catch { return false; }
     return true;
+}
+function canonicalDraft(pie) {
+    return canonicalWritePayload({ ...pie, estimationVotes: pie.estimationVotes === undefined ? undefined
+        : normalizeEstimationVotes(pie.estimationVotes) });
 }
 function validRecovery(value, ownerID, categoryID, contextValues) {
     if (!validScope(ownerID, categoryID, contextValues) || value?.schema !== 1 || value.ownerID !== ownerID
@@ -45,10 +51,12 @@ function validRecovery(value, ownerID, categoryID, contextValues) {
         && body?.expectedUserID === ownerID && body.categoryID === categoryID
         && canonicalWritePayload(body.contextValues) === canonicalWritePayload(contextValues)
         && integer(body.expectedRevision) && body.expectedRevision <= value.revision && validPie(body)
-        && (pending.editVersion !== value.editVersion || canonicalWritePayload({ entries: body.entries, fallbackRules: body.fallbackRules })
-            === canonicalWritePayload(value.draft))
+        && (pending.editVersion !== value.editVersion || canonicalDraft({ entries: body.entries, fallbackRules: body.fallbackRules,
+            estimationVotes: body.estimationVotes })
+            === canonicalDraft(value.draft))
         && (body.fallbackConfigurationVersion === undefined || body.fallbackConfigurationVersion === FALLBACK_CONFIGURATION_VERSION)
-        && Object.keys(body).every(key => ['expectedUserID', 'categoryID', 'contextValues', 'expectedRevision', 'entries', 'fallbackRules', 'fallbackConfigurationVersion'].includes(key));
+        && Object.keys(body).every(key => ['expectedUserID', 'categoryID', 'contextValues', 'expectedRevision',
+            'entries', 'fallbackRules', 'fallbackConfigurationVersion', 'estimationVotes'].includes(key));
 }
 function changedDraftError() {
     return Object.assign(new Error('This draft changed in another page. Refresh to review it before saving.'), { code: 'pie_recovery_changed' });
@@ -58,7 +66,7 @@ export function createPersonalPieRecovery({ state, guestDrafts, snapshot, getSto
     const records = createDraftRecordStore('benchpoll:owned-pie:v1:', getStorage);
     const slot = (ownerID, categoryID, contextValues) => `${ownerID}:${pieRecoveryContextKey(categoryID, contextValues)}`;
     const scope = () => ({ ownerID: state.userID, categoryID: state.categoryID, contextValues: { ...state.selectedContextValues } });
-    function lookup(ownerID, categoryID, contextValues, { revision } = {}) {
+    function lookup(ownerID, categoryID, contextValues, { revision, estimationVoting = false } = {}) {
         if (!validScope(ownerID, categoryID, contextValues)) return null;
         let record = records.read(slot(ownerID, categoryID, contextValues));
         if (!record) return null;
@@ -69,6 +77,15 @@ export function createPersonalPieRecovery({ state, guestDrafts, snapshot, getSto
             if (validRecovery(value, ownerID, categoryID, contextValues)) {
                 const replaced = records.replace(slot(ownerID, categoryID, contextValues), record.token, value);
                 if (replaced.ok) record = replaced.record;
+            }
+        }
+        if (estimationVoting && validRecovery(record.value, ownerID, categoryID, contextValues)) {
+            const { draft, pending } = record.value;
+            const legacyRequest = pending && (pending.body.fallbackRules.length || !Object.hasOwn(pending.body, 'estimationVotes'));
+            if (draft.fallbackRules.length || legacyRequest) {
+                // The stored legacy record stays available until the user edits or discards it.
+                const value = { ...record.value, draft: { ...draft, fallbackRules: [] }, pending: legacyRequest ? null : pending };
+                return { ...record, value };
             }
         }
         return validRecovery(record.value, ownerID, categoryID, contextValues) ? record
@@ -112,7 +129,8 @@ export function createPersonalPieRecovery({ state, guestDrafts, snapshot, getSto
                 state.personalEditVersion = record.value.editVersion;
                 const pending = record.value.pending;
                 state.personalSaveRequest = pending ? { ...structuredClone(pending),
-                    snapshot: { entries: structuredClone(pending.body.entries), fallbackRules: structuredClone(pending.body.fallbackRules) } } : null;
+                    snapshot: structuredClone({ entries: pending.body.entries, fallbackRules: pending.body.fallbackRules,
+                        estimationVotes: pending.body.estimationVotes ?? [] }) } : null;
             }
         },
         capture(request, key, body = request.body) {

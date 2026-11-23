@@ -63,28 +63,38 @@ export function createFallbackCalibration(configurations) {
                 vendor: config.vendor, source: backup, offset: target - backup });
         }
         const sorted = new Map([...settings].map(([setting, models]) =>
-            [setting, [...models.values()].sort((a, b) => a.offset - b.offset)]));
+            [setting, [...models.values()].sort((a, b) => a.offset - b.offset || a.modelID - b.modelID)]));
         pairs.set(key, sorted);
         return sorted;
     }
     return {
-        predict(model, primary, source, sourceScore, sourceMembers) {
+        predict(model, primary, source, sourceScore, sourceMembers, matchedWeights = null) {
             const settings = pairedMeasurements(primary, source);
             const estimates = [];
-            // Tied winning runs must agree. Never splice A from one run and B from another.
-            for (const ID of sourceMembers ?? [model.ID]) {
+            const members = matchedWeights ?? (sourceMembers ?? [model.ID]).map(ID => ({ ID }));
+            for (const { ID, weight } of members) {
                 const subject = byID.get(ID);
                 if (!subject) return null;
-                const estimate = localEstimate(settings.get(subject.settings) ?? [], subject, sourceScore);
+                // Matched rows can average settings and measured scores. Calibrate each actual run.
+                const measured = matchedWeights ? subject.results.get(String(source))?.normalizedScore : sourceScore;
+                if (!Number.isFinite(measured)) return null;
+                const estimate = localEstimate(settings.get(subject.settings) ?? [], subject, measured);
                 if (!estimate) return null;
-                estimates.push(estimate);
+                estimates.push({ ...estimate, weight });
             }
             if (!estimates.length) return null;
-            estimates.sort((a, b) => a.normalizedScore - b.normalizedScore);
-            if (estimates.at(-1).normalizedScore - estimates[0].normalizedScore > MAX_HELD_OUT_ERROR) return null;
-            const mid = Math.floor(estimates.length / 2);
-            return { normalizedScore: estimates.length % 2 ? estimates[mid].normalizedScore
-                : estimates[mid - 1].normalizedScore / 2 + estimates[mid].normalizedScore / 2,
+            let normalizedScore;
+            if (matchedWeights) normalizedScore = estimates.reduce((sum, item) => sum + item.normalizedScore * item.weight, 0);
+            else {
+                // Estimates from tied winning runs must agree.
+                estimates.sort((a, b) => a.normalizedScore - b.normalizedScore);
+                if (estimates.at(-1).normalizedScore - estimates[0].normalizedScore > MAX_HELD_OUT_ERROR) return null;
+                const mid = Math.floor(estimates.length / 2);
+                normalizedScore = estimates.length % 2 ? estimates[mid].normalizedScore
+                    : estimates[mid - 1].normalizedScore / 2 + estimates[mid].normalizedScore / 2;
+            }
+            if (!Number.isFinite(normalizedScore)) return null;
+            return { normalizedScore,
                 referenceCount: estimates.reduce((n, item) => Math.min(n, item.referenceCount), Infinity),
                 validationError: estimates.reduce((n, item) => Math.max(n, item.validationError), 0),
                 sourceConditionID: source, sourceScore };

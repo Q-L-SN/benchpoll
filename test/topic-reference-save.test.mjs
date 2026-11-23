@@ -38,8 +38,8 @@ function database({ seedReferences = true, ...options } = {}) {
 
 test('mixed weights commit to separate tables and loadPersonalPie projects stable negative context IDs', async () => {
     const db = database(), entries = [weight(1, 6000), weight(-20, 2500), weight(-51, 1500)];
-    const fallbackRules = [{ primaryConditionID: 1, mode: 'ordered', entries: [{ conditionID: 2 }] }];
-    const receipt = await savePersonalPie(db, request({ entries, fallbackRules }));
+    const estimationVotes = [{ conditionID: 1, vote: 'support' }];
+    const receipt = await savePersonalPie(db, request({ entries, estimationVotes }));
     assert.equal(receipt.personalPie.revision, 2);
     assert.deepEqual(db.stored.weights, [weight(1, 6000)]);
     assert.deepEqual(db.stored.topicWeights, [{ targetContextID: 20, weightBasisPoints: 2500 },
@@ -47,61 +47,57 @@ test('mixed weights commit to separate tables and loadPersonalPie projects stabl
     const loaded = await loadPersonalPie(db, 10, '7');
     assert.deepEqual(order(loaded.entries), order(entries));
     assert.equal(loaded.revision, 2);
-    assert.deepEqual(loaded.fallbackRules.map(({ primaryConditionID, mode, entries }) => ({ primaryConditionID, mode, entries })), fallbackRules);
+    assert.deepEqual(loaded.estimationVotes, estimationVotes);
     assert.equal(await loadPersonalPie(db, 10, '8'), null);
     assert.equal(await loadPersonalPie(db, 20, '7'), null);
 });
 
-test('a pure-reference pie is stored without fabricated benchmark weights or fallback rules', async () => {
+test('a pure-reference pie is stored without fabricated benchmark weights or estimation votes', async () => {
     const db = database({ revision: 0 }), body = request({ expectedRevision: 0 });
     const result = await savePersonalPie(db, body);
     assert.equal(result.personalPie.revision, 1);
     assert.deepEqual(db.stored.weights, []);
     assert.deepEqual(db.stored.topicWeights, [{ targetContextID: 20, weightBasisPoints: 10000 }]);
-    assert.deepEqual(db.stored.rules, []);
+    assert.deepEqual(result.personalPie.estimationVotes, []);
     assert.deepEqual((await loadPersonalPie(db, 10, '7')).entries, body.entries);
     assert.equal(db.statements.some(({ sql }) => sql.includes('INSERT INTO personal_pie_weights ')), false);
 });
 
-test('replacement clears old reference rows, cascades entrance fallback choices, and prunes only unused families', async () => {
+test('replacement clears old reference rows and discards votes for benchmarks no longer weighted', async () => {
     const db = database();
-    const fallbackRules = [{ primaryConditionID: 1, mode: 'ordered', entries: [{ conditionID: 2 }] }];
-    await savePersonalPie(db, request({ entries: [weight(1, 5000), weight(-20, 5000)], fallbackRules }));
-    const familyID = db.stored.rules[0].familyID;
-    assert.ok(db.stored.families.has(familyID));
+    const estimationVotes = [{ conditionID: 1, vote: 'oppose' }];
+    await savePersonalPie(db, request({ entries: [weight(1, 5000), weight(-20, 5000)], estimationVotes }));
+    assert.deepEqual((await loadPersonalPie(db, 10, '7')).estimationVotes, estimationVotes);
     const replacement = await savePersonalPie(db, request({ expectedRevision: 2, entries: [weight(-51)] }));
     assert.deepEqual(db.stored.weights, []);
     assert.deepEqual(db.stored.topicWeights, [{ targetContextID: 51, weightBasisPoints: 10000 }]);
-    assert.deepEqual(db.stored.rules, []);
-    assert.equal(db.stored.families.size, 0);
+    assert.deepEqual(replacement.personalPie.estimationVotes, []);
     assert.deepEqual((await loadPersonalPie(db, 10, '7')).entries, replacement.personalPie.entries);
     await savePersonalPie(db, request({ expectedRevision: 3, entries: [weight(3)] }));
     assert.deepEqual(db.stored.topicWeights, []);
     assert.deepEqual(db.stored.weights, [weight(3)]);
 });
 
-test('fallback cleanup preserves a shared family used by another mixed pie', async () => {
+test('dropping an estimation vote preserves distinct votes on another mixed pie', async () => {
     const db = database();
     const entries = [weight(1, 5000), weight(-51, 5000)];
-    const fallbackRules = [{ primaryConditionID: 1, mode: 'ordered', entries: [{ conditionID: 2 }] }];
-    await savePersonalPie(db, request({ entries, fallbackRules }));
-    await savePersonalPie(db, request({ categoryID: 2, userID: '8', expectedRevision: 0, entries, fallbackRules }));
-    const familyID = db.stored.rules[0].familyID;
+    const estimationVotes = [{ conditionID: 1, vote: 'support' }];
+    await savePersonalPie(db, request({ entries, estimationVotes }));
+    await savePersonalPie(db, request({ categoryID: 2, userID: '8', expectedRevision: 0, entries, estimationVotes }));
     await savePersonalPie(db, request({ expectedRevision: 2, entries: [weight(-51)] }));
-    assert.equal(db.stored.families.size, 1);
-    assert.equal(db.getPie('8', 20).rules[0].familyID, familyID);
-    assert.equal((await loadPersonalPie(db, 20, '8')).fallbackRules[0].entries[0].conditionID, 2);
+    assert.deepEqual((await loadPersonalPie(db, 10, '7')).estimationVotes, []);
+    assert.deepEqual((await loadPersonalPie(db, 20, '8')).estimationVotes, estimationVotes);
 });
 
 for (const [name, options, message] of [
     ['reference insertion', { failReferenceInsert: true }, /reference insert failed after mutation/],
     ['receipt completion', { failCompletion: true }, /completion failed/]
-]) test(`${name} failure rolls back both weight tables, revision, families, and write intent`, async () => {
+]) test(`${name} failure rolls back both weight tables, revision, estimation votes, and write intent`, async () => {
     const db = database({ ...options, pies: [{ ID: 70, user_ID: '7', context_ID: 10, revision: 4,
         weights: [weight(1, 6000)], topicWeights: [{ targetContextID: 20, weightBasisPoints: 4000 }],
-        rules: [{ primaryConditionID: 1, familyID: null }] }] }), before = db.stored;
+        estimation_votes: [{ conditionID: 1, vote: 'oppose' }] }] }), before = db.stored;
     await assert.rejects(savePersonalPie(db, request({ expectedRevision: 4, entries: [weight(3, 6000), weight(-51, 4000)],
-        fallbackRules: [{ primaryConditionID: 3, mode: 'ordered', entries: [{ conditionID: 2 }] }] })), message);
+        estimationVotes: [{ conditionID: 3, vote: 'support' }] })), message);
     assert.deepEqual(db.stored, before);
     assert.equal(db.mutations, 0); assert.equal(db.commits, 0);
     assert.equal(db.events.at(-2), 'rollback');
@@ -227,14 +223,13 @@ for (const user of [{ ID: '7', deleted_at: new Date() }, { ID: '7', banned_at: n
     });
 }
 
-test('mixed totals, duplicate reference IDs and reference fallbacks are validated before opening a transaction', async () => {
+test('mixed totals, duplicate reference IDs and reference-only estimation votes fail before opening a transaction', async () => {
     for (const [extra, code] of [
         [{ entries: [weight(1, 6000), weight(-20, 5000)] }, 'pie_total_must_equal_100_percent'],
         [{ entries: [weight(-20, 5000), weight(-20, 5000)] }, 'invalid_pie_entry'],
         [{ entries: [weight(0)] }, 'invalid_pie_entry'],
-        [{ fallbackRules: [{ primaryConditionID: -20, mode: 'ordered', entries: [] }] }, 'invalid_personal_pie_fallback_rule'],
-        [{ entries: [weight(1)], fallbackRules: [{ primaryConditionID: 1, mode: 'ordered', entries: [{ conditionID: -20 }] }] },
-            'invalid_personal_pie_fallback_component']
+        [{ estimationVotes: [{ conditionID: 1, vote: 'support' }] }, 'estimation_vote_condition_unavailable'],
+        [{ entries: [weight(1)], estimationVotes: [{ conditionID: -20, vote: 'support' }] }, 'invalid_estimation_votes']
     ]) {
         const db = database();
         await assert.rejects(savePersonalPie(db, request(extra)), error(code));

@@ -5,7 +5,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 import express from 'express';
-import { savePersonalPie } from '../ranking-service.js';
+import { loadPersonalPie, savePersonalPie } from '../ranking-service.js';
 import { readWriteIdentity } from '../write-idempotency.js';
 import { createPieSaveDatabase as createTransactionalPieSaveDatabase } from '../scripts/personal-pie-save-fixture.mjs';
 import { pieConditionRows } from '../scripts/personal-pie-save-fixture.mjs';
@@ -27,6 +27,10 @@ const request = (extra = {}) => ({ userID: '7', writeIdentity: randomUUID(), cat
     contextValues: {}, expectedRevision: 1, entries: [], fallbackRules: [], ...extra });
 const plain = value => JSON.parse(JSON.stringify(value));
 const error = code => value => value.body?.error === code;
+const siblingConditionRows = pieConditionRows.map(row => row.condition_ID === 2 ? {
+    ...row, benchmark_ID: 1, name: pieConditionRows[0].name, condition_key: 'extended', condition_name: 'Extended',
+    is_default: 0, is_primary: 0
+} : row);
 
 function createPieSaveDatabase(options) {
     const db = createTransactionalPieSaveDatabase(options);
@@ -86,21 +90,32 @@ test('an unavailable graph lock schema fails without claiming a write or changin
     assert.deepEqual(db.events, ['begin', 'rollback', 'release']);
 });
 
-test('explicit no fallback is durable and following community removes only the choice, not its weight', async () => {
-    const db = createPieSaveDatabase();
+test('an estimation vote survives switching scoring versions and following the community', async () => {
+    const db = createPieSaveDatabase({ conditionRows: siblingConditionRows });
     const entries = [{ conditionID: 1, weightBasisPoints: 10000 }];
-    const fallbackRules = [{ primaryConditionID: 1, mode: 'ordered', entries: [] }];
-    const body = request({ entries, fallbackRules });
+    const estimationVotes = [{ conditionID: 2, vote: 'oppose' }];
+    const body = request({ entries, estimationVotes });
     const receipt = await savePersonalPie(db, body);
-    assert.deepEqual(receipt.personalPie.fallbackRules, fallbackRules);
-    assert.equal(db.stored.rules.length, 1);
-    assert.equal(db.stored.rules[0].familyID, null);
-    assert.equal(db.stored.families.size, 0);
+    assert.deepEqual(receipt.personalPie.estimationVotes, estimationVotes);
     assert.deepEqual(await savePersonalPie(db, body), receipt);
-    const following = await savePersonalPie(db, request({ expectedRevision: 2, entries }));
-    assert.deepEqual(following.personalPie.fallbackRules, []);
-    assert.deepEqual(db.stored.rules, []);
-    assert.deepEqual(db.stored.weights, entries);
+    const followingEntries = [{ conditionID: 2, weightBasisPoints: 10000, followCommunityVersion: true }];
+    const following = await savePersonalPie(db, request({ expectedRevision: 2, entries: followingEntries }));
+    assert.deepEqual(following.personalPie.estimationVotes, estimationVotes);
+    assert.deepEqual(db.stored.weights, followingEntries);
+    assert.deepEqual((await loadPersonalPie(db, 10, '7')).estimationVotes, estimationVotes);
+    const cleared = await savePersonalPie(db, request({ expectedRevision: 3, entries, estimationVotes: [] }));
+    assert.deepEqual(cleared.personalPie.estimationVotes, []);
+    assert.equal(db.stored.pie.estimation_votes, null);
+});
+
+test('a removed benchmark loses its retained estimation votes on an older client save', async () => {
+    const db = createPieSaveDatabase({ conditionRows: siblingConditionRows });
+    await savePersonalPie(db, request({ entries: [{ conditionID: 1, weightBasisPoints: 10000 }],
+        estimationVotes: [{ conditionID: 2, vote: 'support' }] }));
+    const receipt = await savePersonalPie(db, request({ expectedRevision: 2,
+        entries: [{ conditionID: 3, weightBasisPoints: 10000 }] }));
+    assert.deepEqual(receipt.personalPie.estimationVotes, []);
+    assert.equal(db.stored.pie.estimation_votes, null);
 });
 
 for (const failures of [1, Infinity]) test(`deadlock retry is bounded and reuses the same request identity (${failures})`, async () => {
@@ -125,30 +140,42 @@ for (const failures of [1, Infinity]) test(`deadlock retry is bounded and reuses
     }
 });
 
-for (const kind of ['primary', 'fallback']) test(`server refuses an AA ${kind} even when directly submitted`, async () => {
-    const db = createPieSaveDatabase();
-    const wrapped = { async getConnection() {
-        const connection = await db.getConnection(), execute = connection.execute;
-        connection.execute = (sql, parameters) => sql.includes('SELECT benchmark_conditions.ID AS condition_ID')
-            ? Promise.resolve([pieConditionRows.map(row => row.condition_ID === 2 ? { ...row, name: 'AA-Fixture' } : row), []])
-            : execute(sql, parameters);
-        return connection;
-    } };
-    const body = kind === 'primary' ? request({ entries: [{ conditionID: 2, weightBasisPoints: 10000 }] })
-        : request({ entries: [{ conditionID: 1, weightBasisPoints: 10000 }],
-            fallbackRules: [{ primaryConditionID: 1, mode: 'ordered', entries: [{ conditionID: 2 }] }] });
-    await assert.rejects(savePersonalPie(wrapped, body), value => {
-        assert.equal(value.body?.error, 'pie_benchmark_condition_excluded', JSON.stringify(value)); return true;
-    });
+for (const kind of ['scoring version', 'estimation vote']) test(`server refuses an AA ${kind} even when directly submitted`, async () => {
+    const conditionRows = siblingConditionRows.map(row => row.condition_ID === 2
+        ? { ...row, condition_key: 'aa-run', condition_name: 'AA run' } : row);
+    const db = createPieSaveDatabase({ conditionRows });
+    const body = kind === 'scoring version' ? request({ entries: [{ conditionID: 2, weightBasisPoints: 10000 }] })
+        : request({ entries: [{ conditionID: 1, weightBasisPoints: 10000 }], estimationVotes: [{ conditionID: 2, vote: 'support' }] });
+    await assert.rejects(savePersonalPie(db, body), error(kind === 'scoring version'
+        ? 'pie_benchmark_condition_excluded' : 'estimation_vote_condition_unavailable'));
     assert.equal(db.mutations, 0);
     assert.equal(db.stored.receipts.size, 0);
+});
+
+test('estimation votes must refer to an available version of a weighted benchmark', async () => {
+    const db = createPieSaveDatabase({ conditionRows: siblingConditionRows });
+    for (const conditionID of [3, 999]) {
+        await assert.rejects(savePersonalPie(db, request({ entries: [{ conditionID: 1, weightBasisPoints: 10000 }],
+            estimationVotes: [{ conditionID, vote: 'support' }] })), value =>
+            value.status === 400 && value.body?.error === 'estimation_vote_condition_unavailable' && value.body.conditionID === conditionID);
+    }
+    assert.equal(db.mutations, 0);
+    assert.equal(db.stored.receipts.size, 0);
+});
+
+test('a personal save rejects assigning weight to two scoring versions of one benchmark', async () => {
+    const db = createPieSaveDatabase({ conditionRows: siblingConditionRows });
+    await assert.rejects(savePersonalPie(db, request({ entries: [
+        { conditionID: 1, weightBasisPoints: 5000 }, { conditionID: 2, weightBasisPoints: 5000 }
+    ] })), value => value.status === 400 && value.body?.error === 'pie_benchmark_version_conflict');
+    assert.equal(db.mutations, 0);
 });
 
 test('the actual save route enforces owner and identity then sends a private JSON receipt over HTTP', async t => {
     const source = await readFile(new URL('../server.js', import.meta.url), 'utf8');
     const start = source.indexOf("API.post('/save_personal_pie'");
     assert.ok(start >= 0);
-    const db = createPieSaveDatabase(), app = express(), invalidated = [];
+    const db = createPieSaveDatabase({ conditionRows: siblingConditionRows }), app = express(), invalidated = [];
     app.use(express.json());
     app.use((req, _res, next) => { req.session = { userID: req.get('Fixture-User') ?? null }; next(); });
     vm.runInNewContext(source.slice(start, source.indexOf('\n});', start) + 4), {
@@ -162,7 +189,8 @@ test('the actual save route enforces owner and identity then sends a private JSO
     const server = app.listen(0, '127.0.0.1');
     await new Promise(resolve => server.once('listening', resolve));
     t.after(() => new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve())));
-    const body = { expectedUserID: '7', categoryID: 1, contextValues: {}, expectedRevision: 1, entries: [], fallbackRules: [] };
+    const body = { expectedUserID: '7', categoryID: 1, contextValues: {}, expectedRevision: 1,
+        entries: [{ conditionID: 1, weightBasisPoints: 10000 }], estimationVotes: [{ conditionID: 2, vote: 'support' }] };
     const key = randomUUID();
     const send = (extraHeaders = {}, extraBody = {}) => fetch(`http://127.0.0.1:${server.address().port}/save_personal_pie`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', ...extraHeaders }, body: JSON.stringify({ ...body, ...extraBody })
@@ -181,6 +209,7 @@ test('the actual save route enforces owner and identity then sends a private JSO
     const receipt = await first.json();
     assert.equal(first.status, 200, JSON.stringify(receipt)); assert.equal(first.headers.get('cache-control'), 'private, no-store');
     validatePersonalPieSave(receipt, body, key);
+    assert.deepEqual(receipt.personalPie.estimationVotes, body.estimationVotes);
     assert.equal(db.borrows, 1); assert.equal(db.mutations, 1);
     assert.deepEqual(invalidated, [1]);
     const duplicate = await send(headers); assert.deepEqual(await duplicate.json(), receipt);
@@ -231,14 +260,16 @@ for (let repetition = 1; repetition <= 2; repetition++) {
         await assert.rejects(savePersonalPie(db, { ...body, entries: [{ conditionID: 1, weightBasisPoints: 10000 }] }), error('write_identity_reused'));
         assert.equal(db.mutations, 1);
     });
-    test(`ordered concrete fallbacks commit and replay with their exact order (${repetition})`, async () => {
-        const db = createPieSaveDatabase();
+    test(`estimation votes commit and replay with canonical condition order (${repetition})`, async () => {
+        const db = createPieSaveDatabase({ conditionRows: siblingConditionRows });
         const body = request({ entries: [{ conditionID: 1, weightBasisPoints: 10000 }],
-            fallbackRules: [{ primaryConditionID: 1, mode: 'ordered', entries: [{ conditionID: 2 }] }] });
+            estimationVotes: [{ conditionID: 2, vote: 'support' }, { conditionID: 1, vote: 'oppose' }] });
         const result = await savePersonalPie(db, body);
-        assert.deepEqual(result.personalPie.fallbackRules, body.fallbackRules);
-        assert.equal(db.stored.rules.length, 1); assert.equal(db.stored.families.size, 1);
-        await savePersonalPie(db, body); assert.equal(db.stored.rules.length, 1); assert.equal(db.mutations, 1);
+        const canonical = [...body.estimationVotes].reverse();
+        assert.deepEqual(result.personalPie.estimationVotes, canonical);
+        assert.deepEqual(JSON.parse(db.stored.pie.estimation_votes), canonical);
+        assert.deepEqual(await savePersonalPie(db, { ...body, estimationVotes: canonical }), result);
+        assert.equal(db.mutations, 1);
     });
     test(`revision conflicts roll back their request claim without changing weights (${repetition})`, async () => {
         const db = createPieSaveDatabase();
@@ -263,6 +294,19 @@ test('save receipts reject missing, mismatched and malformed confirmations befor
     for (const changed of [null, {}, { ...receipt('key'), userID: '8' }, { ...receipt('key'), requestKey: 'other' },
         { ...receipt('key'), personalPie: { revision: 1, entries: [], fallbackRules: [] } },
         { ...receipt('key'), contextValues: { budget: 'other' } }]) assert.throws(() => validatePersonalPieSave(changed, body, 'key'));
+});
+
+test('a vote-bearing save receipt must confirm every requested ballot independently of order', () => {
+    const body = { expectedUserID: '7', categoryID: 1, contextValues: {}, expectedRevision: 1,
+        entries: [{ conditionID: 1, weightBasisPoints: 10000 }], fallbackRules: [],
+        estimationVotes: [{ conditionID: 901, vote: 'oppose' }, { conditionID: 1, vote: 'support' }] };
+    const receipt = estimationVotes => ({ saved: true, requestKey: 'key', userID: '7', categoryID: 1, contextValues: {},
+        personalPie: { revision: 2, entries: body.entries, fallbackRules: [], estimationVotes } });
+    const sorted = [...body.estimationVotes].reverse();
+    assert.deepEqual(validatePersonalPieSave(receipt(sorted), body, 'key').personalPie.estimationVotes, sorted);
+    for (const votes of [undefined, null, [], [...sorted, sorted[0]], [{ ...sorted[0], vote: 'oppose' }, sorted[1]]]) {
+        assert.throws(() => validatePersonalPieSave(receipt(votes), body, 'key'), error => error.code === 'invalid_personal_pie_receipt');
+    }
 });
 
 const source = await readFile(new URL('../public/js/home-workspace.js', import.meta.url), 'utf8');

@@ -12,6 +12,7 @@ import { validateWorkspacePayload } from '../public/js/workspace/contracts.js';
 import { cloneEntries, cloneFallbackRules } from '../public/js/workspace/weights.js';
 import { portableFamilyEntry } from '../public/js/shared/benchmark-families.js';
 import { createFixtureState, workspace } from '../scripts/frontend/fixtures.mjs';
+import { recoveryScene, withRecoveryScenes } from './helpers/workspace-scene-fixture.mjs';
 
 const root = resolve(process.env.GUEST_PREVIEW_REVIEW_SOURCE_DIR ?? '.');
 const source = await readFile(join(root, 'public/js/home-workspace.js'), 'utf8');
@@ -43,8 +44,8 @@ const draft = weights => ({ entries: weights.map((weightBasisPoints, index) => (
 
 function harness(t, { gesture = null } = {}) {
     const state = createWorkspaceState();
-    Object.assign(state, { categoryID: 1, categoryPath: 'Language-models', mode: 'personal',
-        selectedContextValues: { budget: 'standard' }, personalEntries: draft([6000, 4000]).entries,
+    Object.assign(state, { categoryID: 1, categoryPath: '1/1', mode: 'personal',
+        selectedContextValues: { scene: recoveryScene.standard }, personalEntries: draft([6000, 4000]).entries,
         personalRankingDirty: true, personalEditVersion: 1,
         comparisonRequest: { mode: 'best', keys: ['model'], filters: [] } });
     const values = new Map(), timers = new Map(), requests = [], applied = [], tasks = [], loads = [];
@@ -81,7 +82,7 @@ function harness(t, { gesture = null } = {}) {
             body = rankingReadBody(path, body);
             assert.equal(path, '/api/get_weighted_workspace', 'Preview must never write a Pie.');
             const request = { ...deferred(), path, body: plain(body), options,
-                payload: workspace(fixture, body), phase: 'headers' };
+                payload: withRecoveryScenes(workspace(fixture, body), body.contextValues), phase: 'headers' };
             requests.push(request);
             return actualPostJSON(path, body, options);
         }
@@ -160,21 +161,21 @@ for (let repetition = 1; repetition <= 2; repetition++) {
     }
     test(`a category transition is released after failed preview and succeeds on explicit retry (${repetition})`, async t => {
         const h = harness(t), task = h.start(); await drain();
-        const transition = h.transition({ currentCategoryID: 2, categoryPath: 'Language-models/Reasoning',
-            contextValues: { budget: 'extended' } });
+        const transition = h.transition({ currentCategoryID: 2, categoryPath: '2/2',
+            contextValues: { scene: recoveryScene.extended } });
         h.tick(60000); await drain();
         assert.equal(task.settled, true, 'Transition must not await a preview forever.');
         await transition;
         assert.equal(h.state.categoryID, 1, 'Failed pending preview must not discard a local draft by navigating.');
         assert.equal(h.loads.length, 0);
         const retry = h.start(); await drain(); await h.succeed(1); await retry.promise;
-        await h.transition({ currentCategoryID: 2, categoryPath: 'Language-models/Reasoning',
-            contextValues: { budget: 'extended' } });
+        await h.transition({ currentCategoryID: 2, categoryPath: '2/2',
+            contextValues: { scene: recoveryScene.extended } });
         assert.equal(h.state.categoryID, 2); assert.equal(h.loads.length, 1);
     });
     test(`old preview failure cannot mark a replacement context as failed (${repetition})`, async t => {
         const h = harness(t), task = h.start(); await drain();
-        h.state.categoryID = 2; h.state.selectedContextValues = { budget: 'extended' };
+        h.state.categoryID = 2; h.state.selectedContextValues = { scene: recoveryScene.extended };
         h.state.statusMessage = 'Replacement context is ready';
         await h.fail(); await task.promise;
         assert.equal(h.state.guestPreviewError, false);
@@ -185,7 +186,7 @@ for (let repetition = 1; repetition <= 2; repetition++) {
     test(`a preview cannot apply after its context changes while a gesture settles (${repetition})`, async t => {
         const gesture = deferred(), h = harness(t, { gesture }), task = h.start(); await drain();
         await h.succeed(); assert.equal(task.settled, false);
-        h.state.categoryID = 2; h.state.selectedContextValues = { budget: 'extended' };
+        h.state.categoryID = 2; h.state.selectedContextValues = { scene: recoveryScene.extended };
         gesture.resolve(); await drain(); await task.promise;
         assert.equal(h.applied.length, 0, 'Recheck the context after the asynchronous gesture boundary.');
     });
@@ -210,3 +211,12 @@ for (let repetition = 1; repetition <= 2; repetition++) {
         assert.equal(h.state.persistPromise, null); assert.equal(h.timers.size, 0);
     });
 }
+
+test('a guest preview response from another scene leaves the current draft and ranking intact', async t => {
+    const h = harness(t), task = h.start(); await drain();
+    h.requests[0].payload = withRecoveryScenes(h.requests[0].payload, { scene: recoveryScene.extended });
+    await h.succeed(); assert.equal(await task.promise, false);
+    assert.equal(h.applied.length, 0);
+    assert.equal(h.state.selectedContextValues.scene, recoveryScene.standard);
+    assert.deepEqual(plain(h.guestDrafts.get(h.key())), draft([6000, 4000]));
+});

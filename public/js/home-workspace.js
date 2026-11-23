@@ -13,7 +13,7 @@ import {
     TOUCH_WEIGHT_BASIS_POINTS_PER_PIXEL, WORKSPACE_LOAD_RETRY_DELAYS_MS, FALLBACK_RULE_MODE
 } from './workspace/constants.js';
 import { createWorkspaceState } from './workspace/state.js?v=fallback-controls-20261009';
-import { readWorkspacePreferences, writeWorkspacePreferences, readEstimationPreference, writeEstimationPreference } from './workspace/preferences.js?v=fallback-controls-20261009';
+import { readWorkspacePreferences, writeWorkspacePreferences, readEstimationPreference } from './workspace/preferences.js?v=fallback-controls-20261009';
 import { estimationRequest, normalizeEstimationAlgorithm } from './shared/estimation-algorithms.js';
 import { createEstimationControl } from './workspace/estimation-control.js';
 import { validateWorkspacePayload, validateRankingPagePayload } from './workspace/contracts.js?v=review-evidence-20261008';
@@ -186,7 +186,7 @@ const getBenchmarkMemberURL = member => categoryDiscussionURL(state.categoryID, 
 const benchmarkRowFocus = createBenchmarkRowFocus();
 const benchmarkFallbackCatalogue = createBenchmarkFallbackCatalogue({
     request: body => postJSON('/api/get_ranking_page', body),
-    onChange: () => { renderBenchmarks(); fallbackPicker.refresh(); benchmarkSettings.refresh(); },
+    onChange: () => { renderBenchmarks(); fallbackPicker?.refresh(); },
     onExpired: page => { void recoverRankingPages(page); }
 });
 const fallbackPickerOptions = { catalogue: benchmarkFallbackCatalogue,
@@ -194,41 +194,37 @@ const fallbackPickerOptions = { catalogue: benchmarkFallbackCatalogue,
     getPrimary: ID => state.benchmarks.find(object => Number(object.ID) === Number(ID))
         ?? state.benchmarkDetailsByID.get(Number(ID)),
     getComposition: publicFallbackRuleFor, getCurrent: fallbackRuleFor,
-    canApply: (ID, action) => state.mode === 'personal' && !state.loading && !state.gestureOpen
+    canApply: (ID, action) => !state.versionComposition && state.mode === 'personal' && !state.loading && !state.gestureOpen
         && (action === 'replace'
             ? state.personalEntries.some(entry => Number(entry.conditionID) === Number(ID) && entry.followCommunityVersion !== true)
             : !state.personalEntries.some(entry => Number(entry.conditionID) === Number(ID))),
-    onApply: applyFallbackConfiguration, onCustomize: primary => state.versionComposition
-        ? openBenchmarkSettings(primary, { custom: true }) : beginInlineFallbackEditing(primary),
+    onApply: applyFallbackConfiguration, onCustomize: beginInlineFallbackEditing,
     getMemberURL: getBenchmarkMemberURL, onInspectVersion: onBenchmarkInspection
 };
-const fallbackPicker = createFallbackPicker(fallbackPickerOptions);
+let fallbackPicker = null;
+function legacyFallbackPicker() {
+    initializeFallbackAppearance();
+    fallbackPicker ??= createFallbackPicker(fallbackPickerOptions);
+    return fallbackPicker;
+}
 const benchmarkSettings = createBenchmarkSettings({
     host: document.getElementById('benchmark-settings'),
     selectedHeader: document.getElementById('pie-focus-bar'),
-    fallbackPickerOptions,
     getScope: () => `${workspaceContextFingerprint()}|${state.mode}|${state.userID ?? 'guest'}`,
     getData(benchmarkID) {
         const group = state.versionComposition?.find(item => item.benchmarkID === benchmarkID);
         if (!group) return null;
         const IDs = new Set(group.versions.map(version => version.conditionID));
         const entries = state.personalEntries.filter(entry => IDs.has(entry.conditionID));
-        return { group, entries, isPrivate: state.contextIsPrivate, rule: entries.length === 1 ? fallbackRuleFor(entries[0].conditionID) : null,
-            editable: state.mode === 'personal' && !isExpandedWeightView() && entries.length > 0 && !state.loading && !state.gestureOpen,
+        return { group, entries, personalEstimationVotes: state.personalEstimationVotes,
+            communityEstimationVotes: state.communityEstimationVotes,
+            editable: state.mode === 'personal' && !isExpandedWeightView() && entries.length > 0,
             readOnly: state.mode === 'public' || isExpandedWeightView(),
-            busy: state.loading || state.gestureOpen, editing: isInlineFallbackEditing() };
+            busy: state.loading || state.gestureOpen };
     },
     onVersion: chooseBenchmarkVersion,
-    async onContribute(group) {
-        const scope = workspaceContextFingerprint();
-        await setMode('personal');
-        if (scope !== workspaceContextFingerprint() || state.mode !== 'personal') return;
-        const primary = group.versions.find(version => version.conditionID === group.primaryConditionID);
-        if (!state.personalEntries.some(entry => entry.benchmarkID === group.benchmarkID)) addObjectToPersonalPie(primary);
-    },
-    editor: inlineFallbackSettings, onEdit: beginInlineFallbackEditing
+    onVote: chooseBenchmarkEstimationVote
 });
-initializeFallbackAppearance();
 const canRevealPieStart = () => !categoryNavigationMedia.matches
     || pieSvg.closest('.bp-workspace').dataset.mobilePanel === 'mix';
 const personalPieStart = createPersonalPieStart({
@@ -310,30 +306,11 @@ if (homeModelFocusIntent?.valid) {
     state.scoreMode = homeModelFocusIntent.scoreMode;
 }
 if (homeModelFocusIntent) consumeHomeModelFocusURL();
-const estimationControl = createEstimationControl(document.getElementById('estimation-test-control'), {
-    async onChange(algorithm) {
-        const changeID = ++scoreModeChangeID;
-        const adjustmentsSaved = await finishPendingWeightAdjustments();
-        const pieSaved = adjustmentsSaved && await flushPendingPersonalPieSave();
-        if (changeID !== scoreModeChangeID) return;
-        if (!pieSaved) {
-            setStatus('Your weight change was not saved. Try switching algorithms again.');
-            renderScoringControls(); return;
-        }
-        if (state.estimationAlgorithm === algorithm) return;
-        state.estimationAlgorithm = normalizeEstimationAlgorithm(algorithm);
-        writeEstimationPreference(algorithm);
-        renderScoringControls();
-        void loadWeightedWorkspace({ preserveUndo: true });
-    }
-});
+const estimationControl = createEstimationControl(document.getElementById('estimation-method-control'));
 function renderScoringControls() {
     scoreModeButtons.forEach(button => button.setAttribute('aria-pressed', String(button.dataset.scoreMode === state.scoreMode)));
     scoringSwitch.dataset.mode = state.scoreMode;
     estimationControl.render(state);
-    setHelpText(scoringSwitch.querySelector('.bp-scoring-help'), state.estimationAlgorithm === 'current'
-        ? 'Estimated score combines available results and estimates, then adjusts the whole index for measured coverage. Score range keeps measured results fixed and fills gaps with 0 or 100.'
-        : 'Estimated score adjusts missing weight using the selected method and keeps measured contributions fixed. Score range fills gaps with 0 or 100.');
 }
 renderScoringControls();
 let scoreModeChangeID = 0;
@@ -512,7 +489,8 @@ function renderPie(options) {
 function snapshotPersonalPie() {
     return {
         entries: cloneEntries(state.personalEntries),
-        fallbackRules: cloneFallbackRules(state.personalFallbackRules)
+        fallbackRules: cloneFallbackRules(state.personalFallbackRules),
+        estimationVotes: cloneEntries(state.personalEstimationVotes)
     };
 }
 
@@ -523,12 +501,14 @@ function portablePersonalPie() {
             weightBasisPoints: Number(entry.weightBasisPoints),
             ...(entry.followCommunityVersion === true ? { followCommunityVersion: true } : {})
         })),
-        fallbackRules: state.personalFallbackRules.map(rule => ({
+        fallbackRules: state.estimationVoting ? [] : state.personalFallbackRules.map(rule => ({
             primaryConditionID: Number(rule.primaryConditionID),
             mode: FALLBACK_RULE_MODE,
             ...(rule.selectionSource ? { selectionSource: rule.selectionSource } : {}),
             entries: rule.entries.map(portableFamilyEntry)
-        }))
+        })),
+        ...(state.estimationVoting || state.personalEstimationVotes.length
+            ? { estimationVotes: cloneEntries(state.personalEstimationVotes) } : {})
     };
 }
 
@@ -566,7 +546,8 @@ function recordPersonalDraft() {
 function restorePersonalPieSnapshot(snapshot) {
     const restored = clonePersonalPieSnapshot(snapshot);
     state.personalEntries = restored.entries;
-    state.personalFallbackRules = restored.fallbackRules;
+    state.personalFallbackRules = state.estimationVoting ? [] : restored.fallbackRules;
+    state.personalEstimationVotes = restored.estimationVotes;
 }
 
 function selectedObjectIndex(entries = currentPieEntries()) {
@@ -1069,7 +1050,8 @@ function invalidateRankingPages() {
 
 let rankingRecovery = null;
 function rankingRecoveryScope() {
-    return JSON.stringify([workspaceContextFingerprint(), state.scoreMode, state.availableInferenceVersion, state.estimationAlgorithm, state.personalEditVersion,
+    return JSON.stringify([workspaceContextFingerprint(), state.userID, state.mode, state.scoreMode, state.availableInferenceVersion,
+        state.estimationAlgorithm, state.personalRevision, state.personalEditVersion,
         comparisonProfileKey(state.comparisonRequest ?? { mode: 'best', keys: ['model'], filters: [] }),
         currentBenchmarkFilters()]);
 }
@@ -1103,9 +1085,13 @@ async function loadNextRankingPage(list, group = 'primary') {
     const key = list === 'benchmarks' ? benchmarkPageKey(group) : list;
     const page = list === 'benchmarks' ? pagination?.benchmarks[group] : pagination?.[list];
     if (!pagination || !page?.hasMore || state.loading || workspaceLoadFailed || state.rankingPageLoading[key]) return;
+    if (list === 'personal' && state.personalRankingDirty) return;
     const snapshotID = pagination.snapshotID;
     const workspaceSequence = state.loadSequence;
     const sequence = ++state.rankingPageSequence[key];
+    const editVersion = state.personalEditVersion;
+    const isCurrent = () => sequence === state.rankingPageSequence[key] && workspaceSequence === state.loadSequence
+        && snapshotID === state.rankingPagination?.snapshotID && (list !== 'personal' || editVersion === state.personalEditVersion);
     const offset = page.nextOffset;
     state.rankingPageLoading[key] = true;
     state.rankingPageError[key] = '';
@@ -1119,8 +1105,7 @@ async function loadNextRankingPage(list, group = 'primary') {
             pinPersonal: list === 'benchmarks' ? state.pinPersonalBenchmarks : false
         }), { list, offset, group, scoreMode: state.scoreMode,
             grouping: !state.versionComposition && benchmarkSearch.value.trim() ? 'versions' : 'flat' });
-        if (sequence !== state.rankingPageSequence[key] || workspaceSequence !== state.loadSequence
-            || snapshotID !== state.rankingPagination?.snapshotID) return;
+        if (!isCurrent()) return;
         if (list === 'benchmarks') {
             state.rankingPagination.benchmarkGrouping = response.grouping;
             state.benchmarks.push(...response.items);
@@ -1144,8 +1129,7 @@ async function loadNextRankingPage(list, group = 'primary') {
             if (state.mode === list) renderModels();
         }
     } catch (error) {
-        if (sequence !== state.rankingPageSequence[key] || workspaceSequence !== state.loadSequence
-            || snapshotID !== state.rankingPagination?.snapshotID) return;
+        if (!isCurrent()) return;
         if (error.status === 410 || (error.status === 403 && error.payload?.error === 'ranking_snapshot_forbidden')) {
             void recoverRankingPages({ list, group: list === 'benchmarks' ? group : undefined, offset });
             return;
@@ -1255,7 +1239,7 @@ function setWorkspaceView(view, { animate = true } = {}) {
 
 function onBenchmarkInspection(event) {
     if (event && (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey)) return;
-    fallbackPicker.close({ restore: false });
+    fallbackPicker?.close({ restore: false });
     if (isPersonalBenchmarkFocus()) setWorkspaceView('leaderboard');
 }
 
@@ -1343,14 +1327,14 @@ function inlineFallbackScope(primaryID) {
 }
 
 function isInlineFallbackEditing() {
-    if (isExpandedWeightView()) return false;
+    if (state.versionComposition || isExpandedWeightView()) return false;
     const primary = selectedInlineFallbackPrimary();
     return Boolean(primary) && state.personalFallbackExpanded
         && fallbackEditorScope === inlineFallbackScope(primary.ID);
 }
 
 function beginInlineFallbackEditing(primary = selectedInlineFallbackPrimary()) {
-    if (!primary || isTopicReference(primary) || state.mode !== 'personal' || state.loading || state.gestureOpen
+    if (state.versionComposition || !primary || isTopicReference(primary) || state.mode !== 'personal' || state.loading || state.gestureOpen
         || !state.personalEntries.some(entry => Number(entry.conditionID) === Number(primary.ID))) return false;
     if (Number(state.selectedObjectID) !== Number(primary.ID)) focusPersonalBenchmark(primary);
     const current = fallbackRuleFor(primary.ID);
@@ -1374,11 +1358,8 @@ function finishInlineFallbackEditing() {
     fallbackEditorScope = null;
     deactivateInlineFallbackTarget();
     renderInlineFallback(); renderBenchmarks();
-    if (state.versionComposition) reloadBenchmarkPage();
     requestAnimationFrame(() => {
-        const edit = state.versionComposition
-            ? document.querySelector('#benchmark-settings .bp-fallback-picker-customize') : inlineFallbackEdit;
-        if (edit && !edit.closest('[hidden], [inert]')) edit.focus({ preventScroll: true });
+        if (!inlineFallbackEdit.closest('[hidden], [inert]')) inlineFallbackEdit.focus({ preventScroll: true });
     });
 }
 
@@ -1412,34 +1393,33 @@ function activateInlineFallbackTarget() {
 }
 
 function renderInlineFallback() {
-    if (!isInlineFallbackEditing() || state.versionComposition && !state.benchmarkSettingsExpanded) {
+    if (!isInlineFallbackEditing()) {
         fallbackEditorScope = null;
         deactivateInlineFallbackTarget();
     }
     if (isExpandedWeightView()) {
-        fallbackPicker.close({ restore: false }); benchmarkSettings.close();
+        fallbackPicker?.close({ restore: false }); benchmarkSettings.close();
         inlineFallback.hidden = true; pieCard.classList.remove('has-inline-fallback');
         return;
     }
-    fallbackPicker.refresh();
     if (state.versionComposition) {
-        const primary = state.mode === 'personal' ? selectedInlineFallbackPrimary() : selectedPublicFallbackPrimary();
+        const selected = state.mode === 'personal' ? selectedInlineFallbackPrimary() : selectedPublicFallbackPrimary();
+        const primary = selected && state.versionComposition.some(group => group.benchmarkID === selected.benchmarkID) ? selected : null;
         benchmarkSettings.refresh(primary, state.benchmarkSettingsExpanded);
         void setVisible(inlineFallback, Boolean(primary), { collapse: true });
         pieCard.classList.toggle('has-inline-fallback', Boolean(primary));
         inlineFallbackPersonalControl.hidden = state.mode !== 'personal';
         publicFallbackToggle.hidden = state.mode === 'personal';
         for (const control of [inlineFallbackToggle, publicFallbackToggle]) {
-            (control.querySelector('span') ?? control).textContent = state.mode === 'public' ? 'Benchmark settings'
-                : state.contextIsPrivate ? 'Configure this benchmark' : 'Contribute your expertise';
+            control.querySelector('span').textContent = 'Advanced settings';
             control.removeAttribute('aria-haspopup'); control.setAttribute('aria-controls', 'benchmark-settings');
             control.setAttribute('aria-expanded', String(Boolean(primary) && state.benchmarkSettingsExpanded)); control.disabled = state.loading;
         }
-        const editing = Boolean(primary) && state.benchmarkSettingsExpanded && isInlineFallbackEditing();
-        renderFallbackConfiguration(primary, primary ? fallbackRuleFor(primary.ID) : null,
-            { personal: state.mode === 'personal', enabled: editing, editing });
+        inlineFallbackSaveError.hidden = true;
+        void setVisible(inlineFallbackSettings, false, { collapse: true });
         return;
     }
+    fallbackPicker?.refresh();
     benchmarkSettings.close();
     if (!isInlineFallbackEditing()) {
         fallbackEditorScope = null;
@@ -1458,6 +1438,7 @@ function renderInlineFallback() {
     publicFallbackToggle.removeAttribute('aria-expanded');
     publicFallbackToggle.setAttribute('aria-haspopup', 'dialog');
     publicFallbackToggle.setAttribute('aria-controls', 'fallback-picker');
+    publicFallbackToggle.querySelector('span').textContent = 'View fallback configurations';
     publicFallbackToggle.disabled = state.loading;
     inlineFallbackToggle.querySelector('span').textContent = `Fallback: ${fallbackStatusLabel(rule)}`;
     if (rule) {
@@ -1508,6 +1489,7 @@ function renderFallbackConfiguration(primary, rule, { personal, enabled, editing
         void setVisible(inlineFallbackEditor, false, { collapse: true });
         return;
     }
+    initializeFallbackAppearance();
     inlineFallbackSettings.classList.toggle('is-editing', editing);
     inlineFallbackConfigurationLabel.textContent = fallbackStatusLabel(rule);
     inlineFallbackEntrance.textContent = benchmarkAccessibleName(primary);
@@ -1606,7 +1588,7 @@ function focusPersonalBenchmark(object) {
 }
 
 function applyFallbackConfiguration(primary, choice, action) {
-    if (state.mode !== 'personal' || state.loading) return false;
+    if (state.versionComposition || state.mode !== 'personal' || state.loading) return false;
     if (state.personalEntries.find(entry => entry.conditionID === Number(primary.ID))?.followCommunityVersion === true) return false;
     if (!choice.community && (excludedFromRanking(primary) || choice.entries.some(excludedFromRanking))) {
         return false;
@@ -1629,10 +1611,7 @@ function applyFallbackConfiguration(primary, choice, action) {
     state.personalFallbackExpanded = true;
     writeWorkspacePreferences(state);
     focusPersonalBenchmark(primary);
-    if (choice.configureOwn) {
-        if (state.versionComposition) openBenchmarkSettings(primary, { custom: true });
-        else beginInlineFallbackEditing(primary);
-    }
+    if (choice.configureOwn) beginInlineFallbackEditing(primary);
     return true;
 }
 
@@ -1655,26 +1634,36 @@ function chooseBenchmarkVersion(group, conditionID) {
     return true;
 }
 
-function openInlineFallbackPicker() {
-    const primary = selectedInlineFallbackPrimary();
-    if (primary && !state.loading && !isInlineFallbackEditing()) fallbackPicker.open(primary, { action: 'replace',
-        getReturnFocus: () => inlineFallbackToggle });
+function chooseBenchmarkEstimationVote(group, conditionID, vote) {
+    if (state.mode !== 'personal' || state.loading || state.gestureOpen
+        || !group.versions.some(version => version.conditionID === conditionID)
+        || !state.personalEntries.some(entry => entry.benchmarkID === group.benchmarkID) || !beginMutation()) return false;
+    const votes = state.personalEstimationVotes.filter(item => item.conditionID !== conditionID);
+    if (vote) votes.push({ conditionID, vote });
+    state.personalEstimationVotes = votes;
+    scheduleSave();
+    return true;
 }
 
-function openBenchmarkSettings(primary, options) {
-    state.benchmarkSettingsExpanded = true;
-    writeWorkspacePreferences(state);
-    benchmarkSettings.open(primary, options);
-    renderInlineFallback();
-    return true;
+function openInlineFallbackPicker() {
+    const primary = selectedInlineFallbackPrimary();
+    if (primary && !state.loading && !isInlineFallbackEditing()) legacyFallbackPicker().open(primary, { action: 'replace',
+        getReturnFocus: () => inlineFallbackToggle });
 }
 
 function toggleBenchmarkSettings() {
     state.benchmarkSettingsExpanded = !state.benchmarkSettingsExpanded;
     writeWorkspacePreferences(state);
     renderInlineFallback();
-    renderBenchmarks();
-    if (!state.benchmarkSettingsExpanded) reloadBenchmarkPage();
+    if (!state.benchmarkSettingsExpanded) return;
+    requestAnimationFrame(() => {
+        const firstRow = document.querySelector('#benchmark-settings .bp-version-choice-row');
+        if (!firstRow || firstRow.closest('[hidden], [inert]')) return;
+        revealInPanel(firstRow, {
+            behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth',
+            block: 'nearest'
+        });
+    });
 }
 
 inlineFallbackConfigurations.addEventListener('click', () => {
@@ -1774,8 +1763,9 @@ function removeObjectFromPersonalPie(object) {
         return false;
     }
 
-    const removedIDs = new Set(state.personalEntries.filter(entry => entry.conditionID === objectID
-        || object.isBenchmarkGroup && entry.benchmarkID === object.benchmarkID).map(entry => entry.conditionID));
+    const removed = state.personalEntries.filter(entry => entry.conditionID === objectID
+        || object.isBenchmarkGroup && entry.benchmarkID === object.benchmarkID);
+    const removedIDs = new Set(removed.map(entry => entry.conditionID));
     state.personalEntries = distributeToTarget(
         state.personalEntries.filter(entry => !removedIDs.has(entry.conditionID)),
         state.limits.totalBasisPoints
@@ -1784,6 +1774,13 @@ function removeObjectFromPersonalPie(object) {
     state.personalFallbackRules = state.personalFallbackRules.filter(rule => (
         !removedIDs.has(Number(rule.primaryConditionID))
     ));
+    if (state.personalEstimationVotes.length && state.versionComposition) {
+        const retainedBenchmarks = new Set(state.personalEntries.map(entry => entry.benchmarkID));
+        const removedBenchmarks = new Set(removed.map(entry => entry.benchmarkID).filter(ID => !retainedBenchmarks.has(ID)));
+        const removedSources = new Set(state.versionComposition.filter(group => removedBenchmarks.has(group.benchmarkID))
+            .flatMap(group => group.versions.map(version => version.conditionID)));
+        state.personalEstimationVotes = state.personalEstimationVotes.filter(vote => !removedSources.has(vote.conditionID));
+    }
     if (state.mode === 'personal' && Number(state.selectedObjectID) === objectID) {
         deactivateInlineFallbackTarget();
         state.selectedObjectID = null;
@@ -2525,6 +2522,9 @@ function applyServerWorkspace(payload, {
     state.personalIsDraft = Boolean(payload.personalPie.isDraft);
     state.personalEntries = cloneEntries(payload.personalPie.entries);
     state.personalFallbackRules = cloneFallbackRules(payload.personalPie.fallbackRules);
+    state.estimationVoting = Object.hasOwn(payload, 'communityEstimationVotes');
+    state.personalEstimationVotes = cloneEntries(payload.personalPie.estimationVotes ?? []);
+    state.communityEstimationVotes = cloneEntries(payload.communityEstimationVotes ?? []);
     state.publicEntries = cloneEntries(payload.publicPie.entries);
     state.coverageIndex = { personal: payload.personalPie.coverageIndex, public: payload.publicPie.coverageIndex };
     state.referenceIssues = { personal: structuredClone(payload.personalPie.referenceIssues ?? []), public: structuredClone(payload.publicPie.referenceIssues ?? []) };
@@ -2734,35 +2734,43 @@ async function loadWeightedWorkspace({ resetTemplates = false, retryAttempt = 0,
             }
         }
         const draftKey = workspaceContextFingerprint(payload.context.categoryID, payload.context.contextValues);
+        const estimationVoting = Object.hasOwn(payload, 'communityEstimationVotes');
         const recoveryRecord = payload.authenticated
             ? pieRecovery.lookup(payload.userID, Number(payload.context.categoryID), payload.context.contextValues,
-                { revision: payload.personalPie.revision }) : null;
+                { revision: payload.personalPie.revision, estimationVoting }) : null;
         const legacyDraft = !recoveryRecord && legacyClaim ? guestDrafts.getLegacy(draftKey) : null;
         const guestDraft = recoveryRecord ? recoveryRecord.value?.draft ?? null : guestDrafts.get(draftKey) ?? legacyDraft;
         const savedPersonalWeights = payload.personalPie.entries.length > 0;
-        let draftUnavailable = false;
+        let draftProblem = '';
         if (guestDraft) {
             try {
-                payload = await requestWorkspace({
+                const previewPayload = await requestWorkspace({
                     categoryID: payload.context.categoryID,
                     contextValues: payload.context.contextValues,
                     comparison: requestedComparison,
                     scoreMode: requestedScoreMode,
-                    previewPersonalPie: guestDraft,
+                    previewPersonalPie: estimationVoting ? { ...guestDraft, fallbackRules: [] } : guestDraft,
                     initialMode: requestedMode,
                     benchmarkQuery: requestedBenchmarkQuery,
                     pinPersonal: requestedPinPersonal
                 });
                 if (sequence !== state.loadSequence) return;
+                if (workspaceContextFingerprint(previewPayload.context.categoryID, previewPayload.context.contextValues) !== draftKey) {
+                    throw Object.assign(new Error('The draft preview belongs to a different context.'), { status: 422 });
+                }
+                payload = previewPayload;
             } catch (error) {
                 if (sequence !== state.loadSequence) return;
-                if (![400, 404].includes(error.status) || error.payload?.error !== 'pie_benchmark_condition_not_found') throw error;
-                draftUnavailable = true;
+                const code = error.payload?.error;
+                if (![400, 404].includes(error.status) || !['pie_benchmark_condition_not_found', 'estimation_vote_condition_unavailable',
+                    'pie_benchmark_version_conflict'].includes(code)) throw error;
+                draftProblem = code;
             }
         }
         if (sequence !== state.loadSequence) {
             return;
         }
+        const draftUnavailable = Boolean(draftProblem);
         state.loading = false;
         applyServerWorkspace(payload, {
             preserveUndo,
@@ -2784,7 +2792,9 @@ async function loadWeightedWorkspace({ resetTemplates = false, retryAttempt = 0,
             || requestedPinPersonal !== state.pinPersonalBenchmarks) {
             reloadBenchmarkPage();
         }
-        if (draftUnavailable) setStatus('Your draft refers to a benchmark that is no longer available. It is kept until you discard it.');
+        if (draftUnavailable) setStatus(draftProblem === 'pie_benchmark_version_conflict'
+            ? 'This draft has multiple scoring versions for one benchmark. It is kept until you discard it.'
+            : 'Your draft refers to a benchmark version that is no longer available. It is kept until you discard it.');
         else if (!adjustmentsSaved) setStatus('Your change was not saved');
         else if (comparisonProfileLoadError) setStatus(comparisonProfileLoadError);
     } catch (error) {
@@ -2819,8 +2829,6 @@ async function previewGuestPersonalPie() {
     if (state.persistPromise) return state.persistPromise;
     recordPersonalDraft();
     const contextFingerprint = workspaceContextFingerprint();
-    const usingGuestDraft = state.usingGuestDraft;
-    const savedPersonalWeights = state.hasSavedPersonalWeights;
     const task = (async () => {
         state.saving = true;
         state.guestPreviewError = false;
@@ -2830,6 +2838,8 @@ async function previewGuestPersonalPie() {
         try {
             while (true) {
                 const editVersion = state.personalEditVersion;
+                const usingGuestDraft = state.usingGuestDraft;
+                const savedPersonalWeights = state.hasSavedPersonalWeights;
                 const requestedBenchmarkFilters = currentBenchmarkFilters();
                 try {
                     state.savePromise = postJSON('/api/get_weighted_workspace', {
@@ -2845,6 +2855,9 @@ async function previewGuestPersonalPie() {
                     }, { timeoutMs: 60000 });
                     const payload = validateWorkspacePayload(await state.savePromise);
                     if (contextFingerprint !== workspaceContextFingerprint()) return true;
+                    if (workspaceContextFingerprint(payload.context.categoryID, payload.context.contextValues) !== contextFingerprint) {
+                        throw new Error('The draft preview belongs to a different context.');
+                    }
                     await waitForGestureToSettle();
                     if (contextFingerprint !== workspaceContextFingerprint()) return true;
                     if (editVersion !== state.personalEditVersion) {
@@ -2852,7 +2865,8 @@ async function previewGuestPersonalPie() {
                         continue;
                     }
                     const recoveryRecord = state.recoveredPersonalDraft
-                        ? pieRecovery.lookup(state.userID, state.categoryID, state.selectedContextValues) : null;
+                        ? pieRecovery.lookup(state.userID, state.categoryID, state.selectedContextValues,
+                            { estimationVoting: state.estimationVoting }) : null;
                     applyServerWorkspace(payload, { usingGuestDraft, savedPersonalWeights, recoveryRecord });
                     renderAll();
                     refreshChangedBenchmarkFilters(requestedBenchmarkFilters);
@@ -2991,7 +3005,9 @@ async function persistPersonalPie({ forceSave = false } = {}) {
                                 && error.code !== 'invalid_personal_pie_receipt') state.personalSaveRequest = null;
                             state.personalRecoveryBlocked ||= error.code === 'pie_recovery_changed';
                             state.personalSaveConflict = error.payload?.error === 'pie_revision_conflict' || state.personalRecoveryBlocked;
-                            state.personalSaveError = topicReferenceError(error) || (['pie_save_scope_changed', 'pie_recovery_changed'].includes(error.code) ? error.message : state.personalSaveConflict
+                            state.personalSaveError = topicReferenceError(error) || (error.payload?.error === 'pie_benchmark_version_conflict'
+                                ? 'Choose one scoring version for each benchmark, then save again.'
+                                : ['pie_save_scope_changed', 'pie_recovery_changed'].includes(error.code) ? error.message : state.personalSaveConflict
                                 ? 'This pie changed elsewhere. Your changes are kept; reload to review the saved version.'
                                 : error.status >= 400 && error.status < 500 && ![408, 429].includes(error.status)
                                     ? 'Your changes could not be saved. They are kept here so you can correct them.'
@@ -3129,7 +3145,7 @@ async function openPersonalStart(trigger, reset = false) {
     if (state.loading || state.accountWriteBlocked || state.personalRecoveryBlocked || state.personalSaveConflict
         || !await prepareContextChange() || scope !== workspaceContextFingerprint() || user !== state.userID) return;
     if (reset && state.mode !== 'personal') return;
-    fallbackPicker.close({ restore: false }); benchmarkSettings.close();
+    fallbackPicker?.close({ restore: false }); benchmarkSettings.close();
     await personalPieStart.open({ reset, trigger, beforeReveal: !reset && state.mode !== 'personal' ? async isCurrent => {
         modeSwitch.classList.add('is-revealing');
         const segmented = mountSegmentedControl(modeSwitch);
@@ -3151,7 +3167,8 @@ async function openPersonalStart(trigger, reset = false) {
 
 function startPersonalPie(entries, isCurrent) {
     if (!isCurrent() || state.loading || state.accountWriteBlocked || state.personalRecoveryBlocked || state.personalSaveConflict) return false;
-    const changed = entries.length > 0 || state.personalEntries.length > 0 || state.personalFallbackRules.length > 0;
+    const changed = entries.length > 0 || state.personalEntries.length > 0 || state.personalFallbackRules.length > 0
+        || state.personalEstimationVotes.length > 0;
     personalPieStart.close({ restore: false });
     modeSwitchSequence++; pendingPieMode = null; renderPendingPieMode();
     state.loadSequence++;
@@ -3159,6 +3176,7 @@ function startPersonalPie(entries, isCurrent) {
     if (changed && !beginMutation()) return false;
     resetPieVisualState(); hiddenPersonalBenchmarkIDs.clear();
     state.personalEntries = cloneEntries(entries); state.personalFallbackRules = [];
+    state.personalEstimationVotes = [];
     state.personalCommunityComposition = [];
     state.referenceIssues.personal = []; state.effectiveEntries.personal = null; state.referenceCompositions.personal = [];
     state.selectedObjectID = null; state.selectedFamilyKey = null;
@@ -3568,7 +3586,7 @@ publicFallbackToggle.addEventListener('click', () => {
     const primary = selectedPublicFallbackPrimary();
     if (state.mode !== 'public' || state.loading || !primary) return;
     if (state.versionComposition) { toggleBenchmarkSettings(); return; }
-    fallbackPicker.open(primary, { action: 'view', getReturnFocus: () => publicFallbackToggle });
+    legacyFallbackPicker().open(primary, { action: 'view', getReturnFocus: () => publicFallbackToggle });
 });
 inlineFallbackChart.addEventListener('keydown', event => {
     if (state.mode !== 'personal') return;

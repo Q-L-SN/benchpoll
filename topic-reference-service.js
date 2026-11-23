@@ -67,8 +67,9 @@ export async function lockTopicReferences(db) {
 // Display weights are rounded to 1bp. Graph scoring retains unrounded electorate shares.
 export function publicReferenceWeights(pie) {
     if (!pie.participantCount) return [];
-    return pie.scoringEntries.map(entry => ({ conditionID: entry.conditionID,
-        weightBasisPoints: entry.weightBasisPoints / pie.participantCount }));
+    return pie.scoringEntries.map(({ conditionID, weightBasisPoints, estimationSourceIDs }) => ({ conditionID,
+        weightBasisPoints: weightBasisPoints / pie.participantCount,
+        ...(estimationSourceIDs ? { estimationSourceIDs } : {}) }));
 }
 
 export async function validateTopicReferences(db, source, entries, userID) {
@@ -84,18 +85,7 @@ export async function validateTopicReferences(db, source, entries, userID) {
     }
 }
 
-function chainKey(family) {
-    return (family.entries ?? []).map(entry => entry.conditionID).join(',');
-}
-
-function compositionFor(node, conditionID) {
-    const own = node.fallbackRules?.find(rule => rule.primaryConditionID === conditionID);
-    if (own) return [{ ...own, weightBasisPoints: 10000 }];
-    return node.familyComposition?.find(group => group.primaryConditionID === conditionID)?.families
-        ?? [{ familyID: null, entries: [], weightBasisPoints: 10000 }];
-}
-
-/** Expand allocations to their eventual benchmark/fallback absorption shares.
+/** Expand allocations to their eventual benchmark and estimation-source shares.
  * Every context is loaded once using the caller's public/personal policy.
  * Missing targets and closed topic-only classes keep explicit unmeasured mass.
  */
@@ -120,13 +110,11 @@ export async function expandTopicReferences(root, { loadTarget, maxNodes = MAX_R
                 || !Number.isFinite(entry.weightBasisPoints) || entry.weightBasisPoints < 0) throw new TypeError('Invalid topic weight');
             if (entry.weightBasisPoints === 0) continue;
             if (entry.conditionID > 0) {
-                for (const family of compositionFor(target, entry.conditionID)) {
-                    if (!Number.isFinite(family.weightBasisPoints) || family.weightBasisPoints < 0) throw new TypeError('Invalid topic fallback share');
-                    const key = `benchmark:${entry.conditionID}:${chainKey(family)}`;
-                    if (!outcomes.has(key)) outcomes.set(key, { conditionID: entry.conditionID,
-                        familyID: family.familyID ?? null, entries: family.entries ?? [] });
-                    add(row.absorbed, key, entry.weightBasisPoints * family.weightBasisPoints / 10000);
-                }
+                // Distinct scenes can vote differently about sources for the same scoring version.
+                const estimationSourceIDs = [...new Set(entry.estimationSourceIDs ?? [])].sort((a, b) => a - b);
+                const key = `benchmark:${entry.conditionID}:${estimationSourceIDs.join(',')}`;
+                if (!outcomes.has(key)) outcomes.set(key, { conditionID: entry.conditionID, estimationSourceIDs });
+                add(row.absorbed, key, entry.weightBasisPoints);
                 continue;
             }
             const targetID = -entry.conditionID;
@@ -138,7 +126,7 @@ export async function expandTopicReferences(root, { loadTarget, maxNodes = MAX_R
             else add(row.edges, targetID, entry.weightBasisPoints);
         }
         if (!row.edges.size && !row.absorbed.size) {
-            if (ID === root.contextID && target) return { entries: [], familyComposition: [], issues: [], referenceCompositions: [] };
+            if (ID === root.contextID && target) return { entries: [], scoringEntries: [], issues: [], referenceCompositions: [] };
             row.absorbed.set(missing(ID, target ? 'empty' : 'unavailable', target?.name), 10000);
         }
     }
@@ -147,23 +135,17 @@ export async function expandTopicReferences(root, { loadTarget, maxNodes = MAX_R
         return missing(ID, 'closed_cycle', targets.get(ID)?.name, { contextIDs: component });
     });
     const composition = distribution => {
-        const weights = new Map(), families = new Map(), issues = [];
+        const weights = new Map(), scoringEntries = [], issues = [];
         for (const [key, fraction] of [...distribution].sort(([a], [b]) => a.localeCompare(b, 'en'))) {
             const outcome = outcomes.get(key), weight = fraction * 10000;
             add(weights, outcome.conditionID, weight);
             if (outcome.issue) issues.push(outcome.issue);
-            else {
-                if (!families.has(outcome.conditionID)) families.set(outcome.conditionID, []);
-                families.get(outcome.conditionID).push({ primaryConditionID: outcome.conditionID,
-                    familyID: outcome.familyID, entries: outcome.entries, overallWeightBasisPoints: weight });
-            }
+            scoringEntries.push({ conditionID: outcome.conditionID, weightBasisPoints: weight,
+                estimationSourceIDs: outcome.estimationSourceIDs ?? [] });
         }
         return {
             entries: [...weights].sort(([a], [b]) => a - b).map(([conditionID, weightBasisPoints]) => ({ conditionID, weightBasisPoints })),
-            familyComposition: [...families].sort(([a], [b]) => a - b).map(([primaryConditionID, choices]) => ({
-                primaryConditionID, families: choices.map(family => ({ ...family,
-                    weightBasisPoints: family.overallWeightBasisPoints / weights.get(primaryConditionID) * 10000 }))
-            })), issues
+            scoringEntries, issues
         };
     };
     return { ...composition(solved.get(root.contextID)),

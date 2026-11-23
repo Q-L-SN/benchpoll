@@ -9,17 +9,16 @@ import { workspace, createFixtureState } from '../scripts/frontend/fixtures.mjs'
 import { validateWorkspacePayload, validateRankingPagePayload } from '../public/js/workspace/contracts.js';
 import { readFileSync } from 'node:fs';
 
-test('full coverage is unchanged and absent references still receive the rational coverage penalty', () => {
+test('missing weight contributes zero and full coverage preserves the score', () => {
     for (const score of [-200, -10, 0, 40, 50, 80, 100, 150, 1000]) {
         assert.equal(availableResultInference(score, 1, []).totalScore, score);
-        for (const coverage of [.000001, .01, .1, .3, .5, .8, 1]) {
+        for (const coverage of [0, .000001, .01, .1, .3, .5, .8, 1]) {
             const inference = availableResultInference(score, coverage, []);
-            const factor = 5 * coverage / (1 + 4 * coverage);
-            assert.equal(inference.totalScore, score * (score < 0 ? 2 - factor : factor));
+            assert.equal(inference.totalScore, coverage === 0 ? 0 : score * coverage);
             assert.equal(inference.unresolvedFraction, 1 - coverage);
         }
     }
-    for (const [score, coverage] of [[NaN, 1], [Infinity, 1], [1, 0], [1, -1], [1, 1.1]]) {
+    for (const [score, coverage] of [[NaN, 1], [Infinity, 1], [1, -1], [1, 1.1]]) {
         assert.throws(() => availableResultInference(score, coverage, []), TypeError);
     }
 });
@@ -28,14 +27,14 @@ const recordedModel = (ID, scores) => ({ ID, modelID: ID, modelName: `M${ID}`, n
     condition: { parameters: { harness: 'same' } },
     results: new Map(Object.entries(scores).map(([key, normalizedScore]) => [key, { normalizedScore }])) });
 
-test('missing-score inference is followed by the fixed rational coverage factor', () => {
+test('a measured result retains its one-percent contribution when the remainder is unresolved', () => {
     const models = [recordedModel(1, { 1: 100 }), recordedModel(2, { 1: 75, 2: 75 })];
     const options = comparisonOptions(models);
     const weights = [{ conditionID: 1, weightBasisPoints: 100 }, { conditionID: 2, weightBasisPoints: 9900 }];
     const scores = scoreComparison(models, weights, 10000, { scoreMode: 'available' }, options);
-    assert.equal(scores[0].lower, 4.81);
-    assert.equal(scores[0].availableInference.unpenalizedScore, 100);
-    assert.equal(scores[0].availableInference.coverageFactor, .05 / 1.04);
+    assert.equal(scores[0].lower, 1);
+    assert.equal(scores[0].availableInference.observedContribution, 1);
+    assert.equal(scores[0].availableInference.unresolvedContribution, 0);
     assert.equal(scores[0].availableInference.unresolvedFraction, .99);
     assert.deepEqual(scores[0].inferredScores, []);
     assert.equal(scores[1].lower, 75);

@@ -3,7 +3,7 @@ import { sceneSummary } from './public/js/shared/topics.js';
 
 export const PUBLIC_DOCUMENTS = Object.freeze([
     { path: '/', title: SITE_TITLE, description: SITE_DESCRIPTION, type: 'CollectionPage' },
-    { path: '/how-it-works', title: 'How BenchPoll Works - Weights, Scores and Fallback', description: 'Understand BenchPoll public and personal AI indices, topic references, measured coverage, missing-score estimation and community fallback.' },
+    { path: '/how-it-works', title: 'How BenchPoll Works - Weights, Scores and Estimation', description: 'Understand BenchPoll public and personal AI indices, topic references, measured coverage and how votes affect missing-score estimates.' },
     { path: '/terms', title: 'Terms of Use | BenchPoll', description: 'Terms for BenchPoll accounts, evaluation contributions, public and private topics, AI indices and discussions.', modified: '2026-11-04' },
     { path: '/privacy', title: 'Privacy Policy | BenchPoll', description: 'How BenchPoll handles account information, private topics, contributions and privacy requests.', modified: '2026-11-04' },
     { path: '/cookies', title: 'Cookie and Local Storage Policy | BenchPoll', description: 'Cookies, local storage, session preferences and your choices on BenchPoll.', modified: '2026-11-04' },
@@ -141,12 +141,12 @@ export function discoveryText(topics, origin) {
 
 BenchPoll is a community-weighted AI model ranking platform. Participants choose benchmark and topic weights to define what matters in an AI index. Explore public rankings by topic and scene, inspect the evidence, or build a personal index.
 
-Benchmark evidence supplies measured results; public or personal weights determine their importance. Estimated scores combine available results with estimates and a coverage adjustment. Coverage counts direct measurements on the weighted benchmark versions. Estimates use paired measurements from the selected fallback chain. Score range holds measurements fixed and fills missing scores with 0 at the lower end and 100 at the upper end. Topic references expand into benchmark weights before scores are calculated. Scores depend on the selected topic, scene, weights and comparison settings.
+Public or personal weights determine the contribution of each benchmark. Estimated scores use direct measurements and reliable estimates from eligible versions of the same benchmark. Paired model measurements calibrate those estimates. Unresolved results contribute 0 at full weight. Coverage counts direct measurements on the weighted versions. Score range uses 0 and 100 for missing measurements and holds measured scores fixed. Topic references expand into benchmark weights before scores are calculated. Scores depend on the selected topic, scene, weights and comparison settings.
 
 ## Methodology and evidence
 - ${link('How BenchPoll works', '/how-it-works')}
 - ${link('Scores, estimates and measured coverage', '/how-it-works#rankings')}
-- ${link('Community fallback', '/how-it-works#fallback')}
+- ${link('Scoring versions and estimation sources', '/how-it-works#fallback')}
 - ${link('Topic references', '/how-it-works#references')}
 - ${link('Contribution and source rules', '/community-guidelines')}
 - ${link('Sitemap', '/sitemap.xml')}
@@ -163,7 +163,7 @@ ${publicTopics(topics).map(topic => `- ${link(topic.name, topic.url)}: ${topic.d
 
 export function createSearchPresentation({ origin, loadTopics, loadPreview, now = () => Date.now(), snapshotWaitMs = 1500 }) {
     if (new URL(origin).origin !== origin || !/^https?:\/\//.test(origin)) throw new Error('Search origin must be an HTTP(S) origin');
-    let catalogue = null;
+    let catalogue = null, activePreviews = 0, previewRevision = 0;
     const previewJobs = new Map();
     async function topics() {
         if (!catalogue || catalogue.expires <= now()) {
@@ -176,26 +176,37 @@ export function createSearchPresentation({ origin, loadTopics, loadPreview, now 
     }
     async function snapshot(topic, scene) {
         if (topic.isPrivate !== false || !loadPreview || !topic.hasWeights) return null;
+        const revision = previewRevision;
         const key = `${topic.ID}:${scene?.ID ?? ''}`;
         let job = previewJobs.get(key);
         if (!job) {
-            // Bound crawler-triggered work; duplicate requests share the same public preview.
-            if (previewJobs.size >= 2) return null;
+            // Invalidated jobs still occupy a slot until they settle.
+            if (activePreviews >= 2) return null;
+            activePreviews++;
             job = Promise.resolve().then(() => loadPreview({ categoryID: topic.ID, sceneID: scene?.ID ?? null,
                 scoreMode: 'available', reasoning: false, harness: false })).catch(() => null)
-                .finally(() => previewJobs.delete(key));
+                .finally(() => {
+                    activePreviews--;
+                    if (previewJobs.get(key) === job) previewJobs.delete(key);
+                });
             previewJobs.set(key, job);
         }
         let timer;
         try {
-            return await Promise.race([
+            const result = await Promise.race([
                 job,
                 new Promise(resolve => { timer = setTimeout(() => resolve(null), snapshotWaitMs); })
             ]);
+            return revision === previewRevision ? result : null;
         } finally { clearTimeout(timer); }
     }
     return {
-        topics, snapshot, invalidate() { catalogue = null; },
+        topics, snapshot,
+        invalidate() {
+            catalogue = null;
+            previewRevision++;
+            previewJobs.clear();
+        },
         middleware(req, res, next) {
             if (!['GET', 'HEAD'].includes(req.method)) return next();
             const path = req.path.toLowerCase();

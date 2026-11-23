@@ -136,14 +136,15 @@ for (const [engine, width] of [[chromium, 1440], [webkit, 390]]) {
     });
 }
 
-test('resetting removes version/fallback choices only after confirmation and Undo restores them', async t => {
-    const rules = [{ primaryConditionID: 1, mode: 'ordered', selectionSource: 'custom', entries: familyEntries([{ conditionID: 2 }, { conditionID: 3 }]) }];
-    const { fixture, page, save, saves, overlay } = await setup(t, chromium, 1440, { fallbackRules: rules });
+test('resetting clears personal ballots only after confirmation and Undo restores them', async t => {
+    const votes = [{ conditionID: 901, vote: 'oppose' }];
+    const { fixture, page, save, saves, overlay } = await setup(t, chromium, 1440, { secondaryBenchmark: true,
+        personalEstimationVotes: votes, communityEstimationVotes: [{ conditionID: 901, supportCount: 5, opposeCount: 2 }] });
     await page.locator('#pie-mode-personal').click();
     const original = structuredClone(fixture.state.personalEntries);
     await page.locator('#workspace-reset').click();
     await overlay.getByRole('button', { name: 'From public weights', exact: true }).click();
-    assert.equal(saves().length, 0); assert.deepEqual(fixture.state.fallbackRules, rules);
+    assert.equal(saves().length, 0); assert.deepEqual(fixture.state.personalEstimationVotes, votes);
     await page.locator('#pie-mode-public').click();
     await overlay.waitFor({ state: 'hidden' });
     assert.equal(saves().length, 0, 'Leaving the editor cancels a pending reset');
@@ -151,15 +152,13 @@ test('resetting removes version/fallback choices only after confirmation and Und
     await page.locator('#workspace-reset').click();
     await overlay.getByRole('button', { name: 'From public weights', exact: true }).click();
     await save(() => overlay.locator('#personal-pie-start-confirm').click());
-    assert.deepEqual(fixture.state.fallbackRules, []);
+    assert.deepEqual(fixture.state.personalEstimationVotes, []);
     assert.ok(fixture.state.personalEntries.every(entry => entry.followCommunityVersion === true));
     await save(() => page.locator('#workspace-undo').click());
     assert.deepEqual(fixture.state.personalEntries, original);
-    const choices = rows => rows.map(row => ({ primaryConditionID: row.primaryConditionID, mode: row.mode,
-        selectionSource: row.selectionSource, entries: row.entries.map(entry => entry.conditionID) }));
-    assert.deepEqual(choices(fixture.state.fallbackRules), choices(rules));
+    assert.deepEqual(fixture.state.personalEstimationVotes, votes);
     await save(() => page.locator('#workspace-redo').click());
-    assert.deepEqual(fixture.state.fallbackRules, []);
+    assert.deepEqual(fixture.state.personalEstimationVotes, []);
 });
 
 test('empty public weights start blank on mobile without a chooser or save', async t => {

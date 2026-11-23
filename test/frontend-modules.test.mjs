@@ -23,17 +23,51 @@ test('redistribution conserves exact total, minimum weight, identity and source 
 });
 
 test('undo snapshots and separate workspace instances do not share mutable data', () => {
-    const original = { entries: [{ conditionID: 1, weightBasisPoints: 10000 }], fallbackRules: [{ primaryConditionID: 1, entries: [{ conditionID: 2, weightBasisPoints: 10000 }] }] };
+    const original = { entries: [{ conditionID: 1, weightBasisPoints: 10000 }],
+        fallbackRules: [{ primaryConditionID: 1, entries: [{ conditionID: 2, weightBasisPoints: 10000 }] }],
+        estimationVotes: [{ conditionID: 2, vote: 'support' }] };
     const snapshot = clonePersonalPieSnapshot(original);
     snapshot.entries[0].weightBasisPoints = 100;
     snapshot.fallbackRules[0].entries[0].conditionID = 3;
+    snapshot.estimationVotes[0].vote = 'oppose';
     assert.equal(original.entries[0].weightBasisPoints, 10000);
     assert.equal(original.fallbackRules[0].entries[0].conditionID, 2);
+    assert.equal(original.estimationVotes[0].vote, 'support');
     const first = createWorkspaceState(), second = createWorkspaceState();
     first.personalEntries.push({ conditionID: 1 });
+    first.personalEstimationVotes.push({ conditionID: 2, vote: 'support' });
     first.pieOrderByObjectID.set(1, 0);
     assert.equal(second.personalEntries.length, 0);
+    assert.equal(second.personalEstimationVotes.length, 0);
     assert.equal(second.pieOrderByObjectID.size, 0);
+});
+
+test('workspace ballots identify eligible versions and keep personal choices and public counts separate', () => {
+    const estimationVotes = [{ conditionID: 901, vote: 'support' }];
+    const valid = workspace(createFixtureState({ communityVersions: true, secondaryBenchmark: true,
+        personalEstimationVotes: estimationVotes, communityEstimationVotes: [{ conditionID: 8, supportCount: 2, opposeCount: 1 }] }), {});
+    assert.equal(validateWorkspacePayload(valid), valid);
+    assert.deepEqual(valid.personalPie.estimationVotes, estimationVotes);
+    assert.deepEqual(valid.communityEstimationVotes, [{ conditionID: 8, supportCount: 2, opposeCount: 1 },
+        { conditionID: 901, supportCount: 1, opposeCount: 0 }]);
+    assert.ok(valid.personalPie.entries.every(entry => entry.conditionID !== 901));
+
+    const malformed = [
+        payload => { delete payload.communityEstimationVotes; },
+        payload => { payload.personalPie.estimationVotes = null; },
+        payload => { payload.personalPie.estimationVotes.push({ conditionID: 901, vote: 'oppose' }); },
+        payload => { payload.personalPie.estimationVotes[0].conditionID = 8; },
+        payload => { payload.personalPie.estimationVotes[0].conditionID = 9999; },
+        payload => { payload.personalPie.estimationVotes[0].vote = 'abstain'; },
+        payload => { payload.communityEstimationVotes[0].supportCount = -1; },
+        payload => { payload.communityEstimationVotes[0].conditionID = '8'; },
+        payload => { payload.communityEstimationVotes[0].accountID = '7'; },
+        payload => { payload.communityEstimationVotes.push(payload.communityEstimationVotes[0]); }
+    ];
+    for (const mutate of malformed) {
+        const payload = structuredClone(valid); mutate(payload);
+        assert.throws(() => validateWorkspacePayload(payload), error => error.code === 'invalid_workspace_response');
+    }
 });
 
 test('model ranking empty messages distinguish missing weights from filtered results', () => {

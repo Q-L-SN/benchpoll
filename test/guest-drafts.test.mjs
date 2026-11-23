@@ -32,6 +32,17 @@ test('unavailable browser storage is reported rather than silently promising per
     assert.deepEqual(store.get('context'), { entries: [], fallbackRules: [] });
 });
 
+test('guest drafts preserve independent version votes and reject ambiguous ballots', () => {
+    const storage = memoryStorage();
+    const store = createGuestDraftStore(() => storage);
+    const draft = { entries: [{ conditionID: 1, weightBasisPoints: 10000 }], fallbackRules: [],
+        estimationVotes: [{ conditionID: 901, vote: 'oppose' }] };
+    assert.equal(store.set('scene', draft), true);
+    assert.throws(() => store.set('scene', { ...draft, estimationVotes: [...draft.estimationVotes,
+        { conditionID: 901, vote: 'support' }] }), /Invalid guest draft/);
+    assert.deepEqual(createGuestDraftStore(() => storage).get('scene'), draft);
+});
+
 test('every successfully saved guest context survives reloading beyond fifty drafts', () => {
     const storage = memoryStorage();
     const store = createGuestDraftStore(() => storage);

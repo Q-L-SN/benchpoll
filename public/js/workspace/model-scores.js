@@ -7,6 +7,7 @@ import { buildModelEditURL, buildResultEditURL } from './links.js?v=model-change
 import { animateContent, isDisclosureOpen, mountDisclosureMotion, setDisclosureOpen, setVisible } from '../shared/motion.js';
 import { searchItems } from '../shared/search.js';
 import { actualScoreFallbackPath } from './model-score-fallback.js?v=model-change-panel-20261006';
+import { initializeFallbackAppearance } from './fallback-appearance.js?v=fallback-appearance-20261014';
 import { benchmarkAccessibleName } from './weights.js';
 import { createBenchmarkInformationLink } from './benchmark-link.js';
 import { protectModelName } from '../shared/model-name.js?v=model-name-translation-20261006';
@@ -449,10 +450,12 @@ export function createModelScoresView({ state, modelScoresDialog, modelScoresTit
         if (coveragePreview) {
             const figure = document.createElement('figure');
             figure.className = 'bp-model-coverage-figure';
-            figure.setAttribute('aria-label', 'Measured and estimated benchmark scores');
+            figure.setAttribute('aria-label', 'Benchmark scores used in this ranking');
             const stage = document.createElement('div');
             const caption = document.createElement('figcaption');
-            caption.textContent = 'Scores are out of 100. Faded tiles show an estimate or a dash if none is available.';
+            caption.textContent = state.scoreMode === 'range'
+                ? 'Scores are out of 100 and show the lower end of the range. Faded zeros mark unmeasured results.'
+                : 'Scores are out of 100. Faded tiles show estimates or zeros for gaps in the evidence.';
             figure.append(stage, caption);
             modelScoresList.append(figure);
             coverageView = coveragePreview.renderInto(stage, model);
@@ -472,10 +475,22 @@ export function createModelScoresView({ state, modelScoresDialog, modelScoresTit
         }
         const inference = model.availableInference;
         const calibrated = inference?.method === FALLBACK_INFERENCE_METHOD;
+        const originalWeights = inference?.weightPolicy === 'original';
         const missingOnly = isMissingInferenceMethod(inference?.method);
         const usesCoverageFactor = inference && [inference.coverageFactor, inference.appliedFactor,
             inference.unpenalizedScore].every(Number.isFinite);
-        if (inference && (model.missingWeight > 0 || usesCoverageFactor || missingOnly || calibrated)) {
+        if (originalWeights) {
+            const sentences = [];
+            if (inference.inferredFraction > 0) sentences.push(`${(inference.inferredFraction * 100).toFixed(2)}% of the weight uses estimates calibrated with paired model results.`);
+            if (inference.unresolvedFraction > 0) sentences.push(`${(inference.unresolvedFraction * 100).toFixed(2)}% of the weight has no reliable estimate and counts as 0 at its full weight.`);
+            if (sentences.length) {
+                const detail = document.createElement('p');
+                detail.className = 'bp-model-inference-summary';
+                detail.textContent = sentences.join(' ');
+                modelScoresSummary.append(detail);
+                appendCalculationLink();
+            }
+        } else if (inference && (model.missingWeight > 0 || usesCoverageFactor || missingOnly || calibrated)) {
             const detail = document.createElement('p');
             detail.className = 'bp-model-inference-summary';
             detail.textContent = model.missingWeight <= 0 ? '' : inference.inferredFraction > 0
@@ -486,20 +501,26 @@ export function createModelScoresView({ state, modelScoresDialog, modelScoresTit
                 : ` ${(inference.unresolvedFraction * 100).toFixed(2)}% of the weight has no measurement or estimate and is left out of the average.`;
             if (usesCoverageFactor || missingOnly || calibrated) {
                 modelScoresSummary.append(detail);
-                const calculation = document.createElement('div');
-                calculation.className = 'bp-model-calculation-details';
-                const before = document.createElement('p');
-                before.textContent = `Before adjustment: ${rankingNumber(inference.unpenalizedScore)}`;
-                const after = document.createElement('p');
-                after.textContent = `After adjustment: ${rankingNumber(model.lower)}`;
-                const help = document.createElement('a');
-                help.href = '/how-it-works#rankings'; help.textContent = 'How it works';
-                calculation.append(before, after, help);
-                modelScoresSummary.append(calculation);
+                appendCalculationLink(inference);
             } else {
                 if (inference.coveragePenalty > 0) detail.textContent += ` Before adjustment: ${rankingNumber(inference.unpenalizedScore)}. After adjustment: ${rankingNumber(model.lower)}.`;
                 modelScoresSummary.append(detail);
             }
+        }
+        function appendCalculationLink(trace) {
+            const calculation = document.createElement('div');
+            calculation.className = 'bp-model-calculation-details';
+            if (trace) {
+                const before = document.createElement('p');
+                before.textContent = `Before adjustment: ${rankingNumber(trace.unpenalizedScore)}`;
+                const after = document.createElement('p');
+                after.textContent = `After adjustment: ${rankingNumber(model.lower)}`;
+                calculation.append(before, after);
+            }
+            const help = document.createElement('a');
+            help.href = '/how-it-works#rankings'; help.textContent = 'How it works';
+            calculation.append(help);
+            modelScoresSummary.append(calculation);
         }
         for (const score of scores) {
             const path = actualScoreFallbackPath(score);
@@ -554,6 +575,7 @@ export function createModelScoresView({ state, modelScoresDialog, modelScoresTit
                     toggle.setAttribute('aria-expanded', String(open));
                     toggle.dataset.tooltip = open ? 'Hide fallback steps' : 'Show fallback steps used for this result';
                     toggle.setAttribute('aria-label', toggle.dataset.tooltip);
+                    if (open) initializeFallbackAppearance();
                     void setVisible(chain, open, { collapse: true });
                 });
                 identity.append(chain);
@@ -623,10 +645,13 @@ export function createModelScoresView({ state, modelScoresDialog, modelScoresTit
                 if (calibrated) {
                     const source = benchmarkDetails(score.sourceConditionID);
                     description.append('Estimated from ', source ? informationLink(source) : `Benchmark #${score.sourceConditionID}`,
-                        ` (${rankingNumber(score.sourceScore)} measured). At least ${score.referenceCount} paired models · ${score.originalWeight.toFixed(2)}% weight.`);
+                        ` (${Number(score.sourceScore.toFixed(2))} measured). Calibrated with at least ${score.referenceCount} paired models.`);
+                    if (Number.isFinite(score.validationError)) description.append(` Validation error ${score.validationError.toFixed(2)} points.`);
+                    description.append(` ${score.originalWeight.toFixed(2)}% weight.`);
                 } else description.textContent = `Estimate for ${score.originalWeight.toFixed(2)}% of the Pie, based on ${score.referenceCount} comparison entries`;
                 const value = document.createElement('strong'); value.textContent = score.normalizedScore.toFixed(2);
-                const contribution = document.createElement('span'); contribution.textContent = `${score.contribution.toFixed(2)} points before adjustment`;
+                const contribution = document.createElement('span');
+                contribution.textContent = `${score.contribution.toFixed(2)} points ${originalWeights ? 'added to total' : 'before adjustment'}`;
                 row.append(title, value, description, contribution); modelScoresList.append(row);
             }
         }

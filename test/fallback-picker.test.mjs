@@ -70,10 +70,11 @@ test('Public viewing includes all active shares and paged configurations without
     assert.equal(unknown[0].shareBasisPoints, null);
 });
 
-test('the standalone fallback chooser preserves read-only Public inspection', async () => {
+test('legacy workspaces mount the standalone fallback chooser when Public inspection opens', async () => {
     const workspace = await readFile(new URL('../public/js/home-workspace.js', import.meta.url), 'utf8');
     const picker = await readFile(new URL('../public/js/workspace/fallback-picker.js', import.meta.url), 'utf8');
-    assert.match(workspace, /fallbackPicker\.open\(primary, \{ action: 'view', getReturnFocus: \(\) => publicFallbackToggle \}\)/);
+    assert.match(workspace, /fallbackPicker \?\?= createFallbackPicker\(fallbackPickerOptions\)/);
+    assert.match(workspace, /if \(state.versionComposition\) \{ toggleBenchmarkSettings\(\); return; \}\s+legacyFallbackPicker\(\)\.open\(primary, \{ action: 'view', getReturnFocus: \(\) => publicFallbackToggle \}\)/);
     assert.doesNotMatch(workspace, /publicFallbackVisible|familyView\.renderPublic/);
     assert.doesNotMatch(picker, /fallback-picker-confirm|radiogroup|fallback-order/);
     assert.match(picker, /if \(intent\.action === 'replace'\) \{\s*const toggle = createAction/);

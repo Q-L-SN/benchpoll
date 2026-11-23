@@ -99,6 +99,7 @@ export async function createPieRecoveryHarness({ sourceRoot = '.', ownerID = '7'
         checkpoint: api.checkpoint,
         edit(pie) {
             state.personalEntries = weights.cloneEntries(pie.entries); state.personalFallbackRules = weights.cloneFallbackRules(pie.fallbackRules);
+            if (pie.estimationVotes !== undefined) state.personalEstimationVotes = weights.cloneEntries(pie.estimationVotes);
             state.personalEditVersion++; state.personalSavePending = true; state.personalRankingDirty = true; api.schedule();
         },
         commit(index) {
@@ -108,10 +109,12 @@ export async function createPieRecoveryHarness({ sourceRoot = '.', ownerID = '7'
             if (item.body.expectedRevision !== fixture.revision) throw Object.assign(Error('pie_revision_conflict'),
                 { status: 409, payload: { error: 'pie_revision_conflict' } });
             fixture.personalEntries = weightedEntries(item.body.entries); fixture.fallbackRules = item.body.fallbackRules;
+            if (item.body.estimationVotes !== undefined) fixture.personalEstimationVotes = structuredClone(item.body.estimationVotes);
             fixture.revision = item.body.entries.length ? fixture.revision + 1 : 0;
             const receipt = { saved: true, requestKey: item.key, userID: ownerID, categoryID: item.body.categoryID,
                 contextValues: item.body.contextValues, personalPie: { revision: fixture.revision,
-                    entries: item.body.entries, fallbackRules: item.body.fallbackRules } };
+                    entries: item.body.entries, fallbackRules: item.body.fallbackRules,
+                    ...(item.body.estimationVotes !== undefined ? { estimationVotes: item.body.estimationVotes } : {}) } };
             receipts.set(item.key, receipt); return receipt;
         },
         async acknowledge(index) { try { writes[index].resolve(h.commit(index)); } catch (error) { writes[index].reject(error); } await drain(); },

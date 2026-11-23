@@ -17,7 +17,7 @@ test('short homepage hints explain the immediate choice without a calculation es
     assert.doesNotMatch(home, /id="agi-promo"/);
     for (const hint of hints) {
         assert.ok(words(hint) <= 32, hint);
-        assert.doesNotMatch(hint, /entrance|denominator|normalized|eligible|configuration identity/);
+        assert.doesNotMatch(hint, /entrance|denominator|normalized|configuration identity/);
     }
     const publicSummary = home.match(/<div id="public-pie-summary"[^>]*>[\s\S]*?<\/div>/)?.[0];
     assert.ok(publicSummary);
@@ -56,24 +56,24 @@ test('static JavaScript question hints remain short and use ordinary language', 
 test('short explanations name current navigation and preserve practical scoring and privacy choices', () => {
     const sections = [...guide.matchAll(/<section([^>]*)>([\s\S]*?)<\/section>/g)];
     const fallback = sections.find(([, attributes]) => attributes.includes('id="fallback"'));
-    assert.ok(fallback, 'Explicit backup choices remain available in the guide');
-    assert.match(fallback[2], /Backup versions are selected explicitly/);
-    assert.match(fallback[2], /New versions never join an existing order automatically/);
-    assert.match(fallback[2], /Added benchmarks <strong>follow the community<\/strong>/);
-    assert.match(fallback[2], /Deselect to follow the community/);
+    assert.ok(fallback, 'Existing guide links reach the source eligibility explanation');
+    assert.match(fallback[2], /automatically considers other versions of the same benchmark/);
+    assert.match(fallback[2], /support equals or exceeds opposition, even with zero votes/);
+    assert.match(fallback[2], /Your own vote takes priority for your personal ranking/);
+    assert.match(fallback[2], /Select the same option again to clear it/);
     for (const [, , content] of sections) {
         for (const [, paragraph] of content.matchAll(/<p(?:\s[^>]*)?>([\s\S]*?)<\/p>/g)) assert.ok(words(plain(paragraph)) <= 55);
     }
     assert.doesNotMatch(guide, /grouping button|optional grouping|fair-comparison control|configuration-share denominator/);
     assert.match(guide, /topic menu to find your favorites, topics you configured or created, recent visits, or search/);
     assert.match(home, /id="sidebar-topic-collection" aria-label="Topic collection"/);
-    assert.match(guide, /choose a saved (?:fallback )?order or edit your own/);
+    assert.match(guide, /Use <strong>Scoring version<\/strong> to choose the version to rank on/);
     assert.match(guide, /Another topic contributes only through an explicit reference/);
     assert.match(guide, /Private topics and their weights never contribute to Public Weights/);
     assert.match(guide, /effort or harness to rank settings separately/);
     assert.match(guide, /best qualifying score per test/);
     assert.match(guide, /Missing settings stay in an unknown group/);
-    assert.match(guide, /missing scores count as 0 at the lower end and 100 at the upper end/);
+    assert.match(guide, /uses 0 at the lower end and 100 at the upper end for missing measurements/);
 });
 
 test('contribution instructions distinguish pending requests, public data and run settings', () => {
@@ -100,8 +100,8 @@ test('guide details remain concise and the first read stays light', () => {
     assert.doesNotMatch(main, /72 hours|Public weight =|48 to 88/);
     assert.doesNotMatch(main, /<ol\b|<table\b|Full calculation rules|Expand all/);
     assert.match(guide, /<p id="calculation-details">[\s\S]*?saved personal weight configurations in this topic/);
-    assert.match(main, /Backup versions are selected explicitly/);
-    assert.doesNotMatch(guide, /id="fallback-versions"|All Other Versions|New versions join automatically/);
+    assert.match(main, /automatically considers other versions of the same benchmark/);
+    assert.doesNotMatch(guide, /id="fallback-versions"|All Other Versions|No fallback/);
     for (const [, paragraph] of main.matchAll(/<p(?:\s[^>]*)?>([\s\S]*?)<\/p>/g)) assert.ok(words(plain(paragraph)) <= 55);
     const form = read('private/contribute.html');
     const start = form.indexOf('<div slot="body" class="contribution-guide">');

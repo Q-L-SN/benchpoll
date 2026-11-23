@@ -12,24 +12,13 @@ export async function conditionImpact(connection, kind, targetID, conditionID) {
         WHERE ID = ? AND ${schema.parent} = ? AND ${selectableBenchmarkConditionSQL(schema.conditions)}`,
     [conditionID, targetID]);
     if (conditions.length !== 1) fail('condition_not_found');
-    const column = 'benchmark_condition_ID';
-    const [scores] = await connection.execute(`SELECT COUNT(*) AS count FROM benchmark_results WHERE ${column} = ?`, [conditionID]);
-    let pieCount = 0;
-    if (kind === 'benchmark') {
-        const [pies] = await connection.execute(`SELECT COUNT(DISTINCT pie_ID) AS count FROM (
+    const [[usage]] = await connection.execute(`SELECT
+        (SELECT COUNT(*) FROM benchmark_results WHERE benchmark_condition_ID = ?) AS resultCount,
+        (SELECT COUNT(*) FROM (
             SELECT pie_ID FROM personal_pie_weights WHERE benchmark_condition_ID = ?
-            UNION SELECT r.pie_ID FROM personal_pie_score_rules r
-                JOIN benchmark_family_members m ON m.family_ID = r.family_ID WHERE m.benchmark_condition_ID = ?
-            UNION SELECT r.pie_ID FROM personal_pie_score_rules r
-                JOIN benchmark_families f ON f.ID = r.family_ID
-                JOIN benchmark_family_members automatic ON automatic.family_ID = f.ID
-                    AND automatic.benchmark_condition_ID IS NULL
-                LEFT JOIN benchmark_family_members previous ON previous.family_ID = f.ID
-                    AND previous.position = automatic.position - 1
-                JOIN benchmark_conditions anchor ON anchor.ID = COALESCE(previous.benchmark_condition_ID, f.primary_benchmark_condition_ID)
-                WHERE anchor.benchmark_ID = ? AND anchor.ID <> ?
-        ) AS dependencies`, [conditionID, conditionID, targetID, conditionID]);
-        pieCount = Number(pies[0].count);
-    }
-    return { resultCount: Number(scores[0].count), pieCount };
+            UNION SELECT ID AS pie_ID FROM personal_pies
+                WHERE JSON_CONTAINS(estimation_votes, JSON_OBJECT('conditionID', CAST(? AS UNSIGNED)))
+        ) AS linked_pies) AS pieCount`, [conditionID, conditionID, conditionID]);
+    if (!usage) fail('benchmark_condition_dependency_check_failed', { ID: conditionID });
+    return { resultCount: Number(usage.resultCount), pieCount: Number(usage.pieCount) };
 }

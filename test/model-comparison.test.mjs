@@ -191,7 +191,7 @@ test('matched comparison can use the same observed subset without inventing miss
     const options = comparisonOptions(models, { keys: ['model'], mode: 'matched' });
     const ranked = scoreComparison(models, entries, 20000, { scoreMode: 'available' }, options);
     assert.deepEqual(ranked.map(item => [item.lower, item.upper, item.coverage, item.comparable]), [
-        [33.33, 33.33, 50, true], [66.67, 66.67, 50, true]
+        [20, 20, 50, true], [40, 40, 50, true]
     ]);
     assert.ok(ranked.every(row => row.inferredScores.length === 0 && row.availableInference.unresolvedFraction === .5));
     const missing = scoreComparison([model(3, 3, { harness: 'a' }, {})], weights, 10000,

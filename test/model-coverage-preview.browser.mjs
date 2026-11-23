@@ -11,7 +11,7 @@ const publicRoot = resolve(fileURLToPath(new URL('../public/', import.meta.url))
 const fixture = `<!doctype html><html lang="en"><head><meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css"><link rel="stylesheet" href="/css/global.css">
 <link rel="stylesheet" href="/css/ui/tokens.css"><link rel="stylesheet" href="/css/ui/workspace.css">
-<link rel="stylesheet" href="/css/ui/evidence.css"><link rel="stylesheet" href="/css/ui/chart-workspace.css"><link rel="stylesheet" href="/css/site-palette.css">
+<link rel="stylesheet" href="/css/ui/evidence.css"><link rel="stylesheet" href="/css/ui/chart-workspace.css"><link rel="stylesheet" href="/css/ui/ranking-motion.css"><link rel="stylesheet" href="/css/site-palette.css">
 <style>body{margin:0;padding:20px;font-family:Arial,sans-serif}.layout{display:flex;gap:24px;max-width:100%}.bp-pie-card{width:500px;flex-shrink:0}.rows{width:300px}.rows>div{padding:25px;margin-bottom:12px;background:#eee;cursor:pointer}.reference{position:absolute;left:-10000px;width:500px;height:500px}@media(max-width:600px){body{padding:10px}.layout{display:block}.bp-pie-card{width:100%}.rows{width:100%}}</style>
 <script type="module" src="/js/global.js"></script></head><body>
 <main class="layout"><div class="bp-pie-card"><div class="bp-pie-stage"><svg id="weight-pie"></svg></div></div><div class="rows"><div id="row-a">Model A</div><div id="row-b">Model B</div></div></main>
@@ -46,7 +46,7 @@ before(async () => {
 after(async () => { await browser?.close(); await new Promise(resolve => server?.close(resolve)); });
 
 async function setup(t, width = 1360) {
-    const page = await browser.newPage({ viewport: { width, height: 900 } });
+    const page = await browser.newPage({ viewport: { width, height: 900 }, hasTouch: width <= 760 });
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
     t.after(async () => { await page.close(); assert.deepEqual(errors, []); });
@@ -59,7 +59,7 @@ async function setup(t, width = 1360) {
         const { mergeBenchmarkWeights } = await import('/js/workspace/expanded-weights.js');
         const { createModelScoresView } = await import('/js/workspace/model-scores.js');
         const state = { authenticated: false, userID: null, mode: 'public', categoryID: 1, selectedContextValues: {},
-            scoreMode: 'range', selectedObjectID: -10, selectedFamilyKey: 'original', workspaceView: 'focus', topicsExpanded: false,
+            scoreMode: 'available', selectedObjectID: -10, selectedFamilyKey: 'original', workspaceView: 'focus', topicsExpanded: false,
             loadSequence: 1, rankingVersion: 1, comparison: { keys: ['model'], fields: [] },
             limits: { totalBasisPoints: 10000 }, pieOrderByObjectID: new Map([[11, 0], [21, 1], [31, 2]]),
             visualPieWeights: new Map(), visualPieEntries: new Map(), pieAnimationFrame: null,
@@ -73,21 +73,25 @@ async function setup(t, width = 1360) {
         state.benchmarkDetailsByID.set(11, expanded[0]);
         const adopted = (conditionID, weightBasisPoints, coveredWeightBasisPoints, normalizedScore) =>
             ({ conditionID, weightBasisPoints, coveredWeightBasisPoints, normalizedScore, coverage: coveredWeightBasisPoints / weightBasisPoints * 100 });
-        const modelA = { ID: 1, name: 'Model A', lower: 50, upper: 50, coverage: 55, missingWeight: 45, availableInference: null,
-            inferredScores: [], calculationScores: [{ conditionID: 11, fallbackFor: null, normalizedScore: 68.5,
+        const modelA = { ID: 1, name: 'Model A', lower: 39.4, upper: 39.4, coverage: 55, missingWeight: 45,
+            availableInference: { method: 'calibrated-fallback', weightPolicy: 'original', inferredFraction: .3, unresolvedFraction: .15 },
+            inferredScores: [{ conditionID: 21, sourceConditionID: 85, sourceScore: 86, normalizedScore: 74.25,
+                validationError: .1, referenceCount: 5, originalWeight: 30, weightBasisPoints: 3000, contribution: 22.275 }],
+            calculationScores: [{ conditionID: 11, fallbackFor: null, normalizedScore: 68.5,
                 effectiveWeight: 25, contribution: 17.125, matchedCount: null, memberIDs: [1], memberWeights: [{ ID: 1, weight: 1 }],
                 memberEvidence: [{ ID: 1, hash: 'a'.repeat(64) }] }],
             members: [{ ID: 1, modelID: 1, name: 'Model A', condition: { scoreFields: [] } }],
-            fallbackResolutions: [{ primaryConditionID: 21, conditionID: 85, sourceScore: 86, normalizedScore: 74.25, weightBasisPoints: 3000 }],
             coverageEntries: [adopted(11, 2500, 2500, 68.5), adopted(12, 1500, 0, null),
                 adopted(21, 3000, 0, null), adopted(31, 3000, 3000, 0)] };
-        const modelB = { ...modelA, ID: 2, name: 'Model B',
+        const modelB = { ...modelA, ID: 2, name: 'Model B', inferredScores: [], lower: 37.5, upper: 37.5, coverage: 45, missingWeight: 55,
+            availableInference: { ...modelA.availableInference, inferredFraction: 0, unresolvedFraction: .55 },
             coverageEntries: [adopted(11, 2500, 0, null), adopted(12, 1500, 1500, 90),
                 adopted(21, 3000, 3000, 80), adopted(31, 3000, 0, null)] };
         const pieSvg = document.querySelector('#weight-pie');
         const renderer = createPieRenderer({ state, pieSvg, orderedPieEntries: values => values,
             currentPieEntries: () => original, selectedObjectIndex: entries => entries.findIndex(item => item.conditionID === state.selectedObjectID),
-            renderInlineFallback() {}, fallbackRuleFor: () => null, publicFallbackRuleFor: () => null, onSelect() {} });
+            renderInlineFallback() {}, fallbackRuleFor: () => null, publicFallbackRuleFor: () => null,
+            onSelect(id) { window.coverageQA.selectedTile = id; } });
         renderer.renderPie();
         const referenceState = { ...state, selectedObjectID: null, visualPieWeights: new Map(), visualPieEntries: new Map(), pieAnimationFrame: null };
         const reference = createPieRenderer({ state: referenceState, pieSvg: document.querySelector('#reference'),
@@ -147,7 +151,7 @@ test('desktop row hover expands and merges coverage, preserves label typography,
     assert.equal(preview.count, 3);
     assert.equal(preview.faded, true);
     assert.equal(preview.zeroCovered, true);
-    assert.equal(preview.score, '68.5');
+    assert.equal(preview.score, '42.81');
     assert.equal(await page.locator('.bp-model-coverage-overlay .is-uncovered [data-estimated-score]').textContent(), '74.25');
     assert.equal(await page.locator('.bp-model-coverage-overlay [data-label-kind="percent"]').count(), 0);
     assert.equal(preview.sameSize, true);
@@ -166,7 +170,7 @@ test('desktop row hover expands and merges coverage, preserves label typography,
     }), [-10, 'original', 'focus', false, true, true, null]);
 });
 
-test('Estimated score shows the inferred benchmark value and leaves an unresolved gap as a dash', async t => {
+test('desktop tooltips distinguish unresolved zeros from measured and estimated zeros', async t => {
     const page = await setup(t);
     await page.evaluate(() => {
         const qa = window.coverageQA;
@@ -177,9 +181,24 @@ test('Estimated score shows the inferred benchmark value and leaves an unresolve
     assert.equal(await page.locator('.bp-model-coverage-overlay [data-object-id="21"] [data-estimated-score]').textContent(), '0');
     assert.equal(await page.locator('.bp-model-coverage-overlay [data-object-id="31"] [data-adopted-score]').textContent(), '0');
     assert.equal(await page.getByRole('img', { name: 'Beta test. Estimated score 0 / 100.', exact: true }).count(), 1);
-    assert.equal(await page.getByRole('img', { name: 'Gamma test. Adopted score 0 / 100.', exact: true }).count(), 1);
+    assert.equal(await page.getByRole('img', { name: 'Gamma test. Measured score 0 / 100.', exact: true }).count(), 1);
     await page.locator('#row-b').hover();
-    assert.equal(await page.locator('.bp-model-coverage-overlay [data-object-id="31"] [data-label-kind="score"]').textContent(), '—');
+    const unresolved = page.locator('.bp-model-coverage-overlay [data-object-id="31"][data-score-status="unresolved"]');
+    assert.equal(await unresolved.locator('[data-unresolved-score]').textContent(), '0');
+    assert.ok(await unresolved.evaluate(node => Number(getComputedStyle(node.querySelector('.bp-weight-tile')).opacity) < 1));
+    await unresolved.hover();
+    const tooltip = page.getByRole('tooltip');
+    await tooltip.waitFor({ state: 'visible' });
+    assert.equal(await tooltip.textContent(), 'No reliable estimate. Counts as 0 in this ranking.');
+    await page.mouse.move(1200, 800);
+    await page.waitForSelector('.bp-model-coverage-overlay', { state: 'detached' });
+    await page.locator('#weight-pie [data-object-id="31"]').click();
+    assert.equal(await page.evaluate(() => window.coverageQA.selectedTile), 31);
+    await page.evaluate(() => { window.coverageQA.state.scoreMode = 'range'; });
+    await page.locator('#row-a').hover();
+    const rangeTile = page.locator('.bp-model-coverage-overlay [data-object-id="21"]');
+    assert.equal(await rangeTile.locator('[data-unresolved-score]').textContent(), '0');
+    assert.equal(await rangeTile.getAttribute('data-tooltip'), 'No measurement. Counts as 0 at the lower end and 100 at the upper end.');
 });
 
 test('out of order coverage requests, pointer leave and context changes cannot paint stale previews', async t => {
@@ -197,7 +216,7 @@ test('out of order coverage requests, pointer leave and context changes cannot p
     await page.evaluate(() => window.coverageQA.requests[1].resolve(window.coverageQA.modelB));
     await page.waitForSelector('.bp-model-coverage-overlay:not([hidden])');
     assert.equal(await page.locator('.bp-model-coverage-overlay [data-object-id="21"] [data-adopted-score]').textContent(), '80');
-    assert.equal(await page.locator('.bp-model-coverage-overlay [data-object-id="31"] [data-label-kind="score"]').textContent(), '—');
+    assert.equal(await page.locator('.bp-model-coverage-overlay [data-object-id="31"] [data-unresolved-score]').textContent(), '0');
     await page.evaluate(() => { const qa = window.coverageQA; qa.slow.clear(); void qa.slow.show(qa.modelA); qa.state.categoryID = 2; qa.requests[2].resolve(qa.modelA); });
     await page.waitForSelector('.bp-model-coverage-overlay', { state: 'detached' });
     assert.equal(await page.locator('#weight-pie').evaluate(svg => getComputedStyle(svg).visibility), 'visible');
@@ -263,7 +282,7 @@ test('mobile Used in this ranking shows the same treemap in a fullscreen dialog 
     });
     assert.ok(Math.abs(layout.x) < .01 && Math.abs(layout.y) < .01 && Math.abs(layout.width - 390) < .01 && Math.abs(layout.height - 900) < .01);
     assert.equal(layout.overflow, false);
-    assert.equal(layout.score, '68.5');
+    assert.equal(layout.score, '42.81');
     assert.equal(await page.locator('.bp-model-coverage-figure .is-uncovered [data-estimated-score]').textContent(), '74.25');
     await page.screenshot({ path: `${output}/mobile-scores-fullscreen.png` });
     await page.locator('.bp-model-configuration-link').click();
@@ -275,6 +294,13 @@ test('mobile Used in this ranking shows the same treemap in a fullscreen dialog 
         qa.requests[0].resolve(new Response('{}', { headers: { 'content-type': 'application/json' } })); });
     await page.waitForTimeout(50);
     assert.match(await page.locator('#model-scores-title').textContent(), /Model B/);
+    const unresolved = page.locator('.bp-model-coverage-figure [data-object-id="31"][data-score-status="unresolved"]');
+    assert.equal(await unresolved.locator('[data-unresolved-score]').textContent(), '0');
+    assert.equal(await unresolved.getAttribute('tabindex'), '0');
+    await unresolved.tap();
+    const tooltip = page.getByRole('tooltip');
+    await tooltip.waitFor({ state: 'visible' });
+    assert.equal(await tooltip.textContent(), 'No reliable estimate. Counts as 0 in this ranking.');
     await page.locator('.bp-model-configuration-link').click();
     await page.waitForFunction(() => window.coverageQA.requests.length === 2);
     await page.evaluate(() => { window.coverageQA.state.loadSequence++; });

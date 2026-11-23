@@ -48,7 +48,10 @@ test('public discovery excludes private records and emits only canonical scene a
     assert.match(robots, /Disallow: \/private\//);
     assert.match(robots, /Sitemap: https:\/\/benchpoll.com\/sitemap.xml/);
     assert.doesNotMatch(robots, /Disallow: \/(?:js|css|assets)/);
-    assert.match(discoveryText([topic], origin), /Benchmark evidence supplies measured results/);
+    const methods = discoveryText([topic], origin);
+    assert.match(methods, /direct measurements and reliable estimates from eligible versions of the same benchmark/);
+    assert.match(methods, /Unresolved results contribute 0 at full weight/);
+    assert.match(methods, /Scoring versions and estimation sources/);
 });
 
 test('HTML, XML and JSON-LD treat user-provided text as data, not markup', () => {
@@ -110,6 +113,34 @@ test('crawler previews are public-only, bounded, deduplicated and do not block o
     await new Promise(resolve => setImmediate(resolve));
     pending[2](snapshot);
     assert.equal(await third, snapshot);
+});
+
+test('crawler invalidation detaches old previews and keeps pending work bounded', async t => {
+    const pending = [];
+    t.after(() => pending.forEach(job => job.resolve(null)));
+    const service = createSearchPresentation({ origin, loadPreview() {
+        const job = Promise.withResolvers();
+        pending.push(job);
+        return job.promise;
+    } });
+    const scene = topic.scenes[0];
+    const oldRead = service.snapshot(topic, scene);
+    await new Promise(resolve => setImmediate(resolve));
+    service.invalidate();
+    const fresh = service.snapshot(topic, scene);
+    const capped = service.snapshot({ ...topic, ID: 60 }, null);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(pending.length, 2);
+    assert.equal(await capped, null);
+    pending[0].resolve({ ...snapshot, beforeSave: true });
+    assert.equal(await oldRead, null);
+
+    const joined = service.snapshot(topic, scene);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(pending.length, 2);
+    pending[1].resolve(snapshot);
+    assert.equal(await fresh, snapshot);
+    assert.equal(await joined, snapshot);
 });
 
 test('private/action pages send noindex while public pages and assets remain crawlable', () => {

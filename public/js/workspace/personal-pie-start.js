@@ -67,7 +67,7 @@ export function createPersonalPieStart({ stage, getScope, getPublicStart, isPriv
         const publicStart = getPublicStart();
         const available = !isPrivate() && publicStart.entries.length > 0;
         message.textContent = confirming
-            ? `${intent.choice.source === 'public' ? 'Start from public weights' : 'Start from blank'}. This replaces your current weights, version choices and fallback settings.`
+            ? `${intent.choice.source === 'public' ? 'Start from public weights' : 'Start from blank'}. This replaces your current weights, scoring versions and estimation votes.`
             : !available ? isPrivate() ? 'Public weights are unavailable for private topics.' : 'No public weights in this scene yet.' : publicStart.note;
         message.hidden = !message.textContent;
         choices.hidden = confirming; confirmation.hidden = !confirming;

@@ -134,6 +134,36 @@ test('tampered request scope, precision, UUID, revision and generation are rejec
     }
 });
 
+test('recovery compares ballots as a set without changing the pending write body', () => {
+    const owner = harness();
+    const votes = [{ conditionID: 901, vote: 'oppose' }, { conditionID: 1, vote: 'support' }];
+    const request = owner.request();
+    request.body.estimationVotes = votes;
+    owner.state.personalSaveRequest = request;
+    const recovery = createPersonalPieRecovery({ state: owner.state, guestDrafts: owner.guestDrafts, getStorage: () => owner.store,
+        snapshot: () => ({ ...draft(6000), estimationVotes: [...votes].reverse() }) });
+    recovery.capture(request, randomUUID());
+    const restored = recovery.lookup('7', 1, context, { estimationVoting: true });
+    assert.deepEqual(restored.value.pending.body.estimationVotes, votes);
+    assert.deepEqual(restored.value.draft.estimationVotes, [...votes].reverse());
+    recovery.bind(restored);
+    assert.deepEqual(owner.state.personalSaveRequest.snapshot.estimationVotes, votes);
+});
+
+test('opening legacy recovery in the ballot workspace drops retired chains and retains the draft weights', () => {
+    const h = harness(), request = h.request();
+    const fallbackRules = [{ primaryConditionID: 1, mode: 'ordered', entries: [{ conditionID: 2 }] }];
+    request.body.fallbackRules = fallbackRules;
+    h.state.personalFallbackRules = fallbackRules;
+    h.state.personalSaveRequest = request;
+    h.recovery.capture(request, randomUUID());
+    const migrated = h.recovery.lookup('7', 1, context, { estimationVoting: true });
+    assert.deepEqual(migrated.value.draft, draft(6000));
+    assert.equal(migrated.value.pending, null);
+    assert.equal(migrated.value.revision, 1);
+    assert.deepEqual(h.recovery.lookup('7', 1, context).value.draft.fallbackRules, fallbackRules);
+});
+
 test('legacy ownerless drafts are preserved but never automatically returned as guest drafts', () => {
     const h = harness(), key = pieRecoveryContextKey(1, context);
     const raw = JSON.stringify([[key, draft(6000)], ['2:[]', draft(7000)], ['bad', null]]);

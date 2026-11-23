@@ -11,13 +11,12 @@ const html = await readFile(new URL('../private/home.html', import.meta.url), 'u
 const links = [...html.matchAll(/<link\s+rel="([^"]+)"\s+href="([^"]+)"[^>]*>/g)]
     .map(([, rel, href]) => ({ rel, href }));
 
-test('missing-score help distinguishes whole-index adjustment from fixed measured range scenarios', () => {
+test('missing-score help explains eligible versions, unresolved weight, and measured ranges', () => {
     const help = html.match(/<button class="bp-scoring-help[^>]*data-help-text="([^"]+)"/)?.[1];
     assert.ok(help);
-    assert.match(help, /Estimated score combines direct scores with reliable estimates/);
-    assert.match(help, /Score range keeps measured results fixed/);
-    assert.match(help, /reliable estimates from the selected fallback chains/);
-    assert.match(help, /fills gaps with 0 or 100/);
+    assert.match(help, /Estimated score uses measured results and reliable estimates from eligible versions of the same benchmark/);
+    assert.match(help, /Unresolved results count as 0 at (?:their )?full weight/);
+    assert.match(help, /Score range uses 0 and 100 for missing measurements/);
 });
 
 test('homepage preload hints exactly match reachable module URL identities without executing new modules', async () => {

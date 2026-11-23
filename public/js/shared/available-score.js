@@ -1,6 +1,6 @@
 import { coverageMultiplier } from './coverage-penalty.js';
-import { DEFAULT_ESTIMATION_ALGORITHM, normalizeEstimationAlgorithm, missingOnlyInference,
-    isMissingInferenceMethod } from './estimation-algorithms.js';
+import { DEFAULT_ESTIMATION_ALGORITHM, normalizeEstimationAlgorithm, storedMissingOnlyInference,
+    isMissingInferenceMethod, originalWeightContributions } from './estimation-algorithms.js';
 
 const finite = value => {
     if (!Number.isFinite(value)) throw new TypeError('Percentile scoring requires finite values');
@@ -11,12 +11,13 @@ export const PAIRWISE_INFERENCE_METHOD = 'pairwise-anchored';
 export const PAIRWISE_COVERAGE_METHOD = 'pairwise-anchored-coverage';
 export const PAIRWISE_COVERAGE_FACTOR_METHOD = 'pairwise-anchored-coverage-factor';
 export const PAIRWISE_RATIONAL_COVERAGE_FACTOR_METHOD = 'pairwise-anchored-rational-coverage-factor';
+export const PAIRWISE_ORIGINAL_WEIGHT_METHOD = 'pairwise-anchored-original-weight';
 export const AVAILABLE_COVERAGE_EXPONENT = .35;
 export const AVAILABLE_COVERAGE_PENALTY_POINTS = 20;
-export const AVAILABLE_INFERENCE_VERSION = 8;
+export const AVAILABLE_INFERENCE_VERSION = 9;
 
 export function normalizeAvailableInferenceVersion(version = AVAILABLE_INFERENCE_VERSION) {
-    if (![1, 2, 3, 4, 5, 6, 7, 8].includes(version)) throw new TypeError('Invalid available inference version');
+    if (!Number.isSafeInteger(version) || version < 1 || version > AVAILABLE_INFERENCE_VERSION) throw new TypeError('Invalid available inference version');
     // Stale clients may still send a retired version, but new calculations use the current one.
     return AVAILABLE_INFERENCE_VERSION;
 }
@@ -89,12 +90,8 @@ export function createPercentileReference(models) {
 export function availableResultInference(observedScore, coverageFraction, estimates, percentile = null, sourceCount = 0,
     algorithm = DEFAULT_ESTIMATION_ALGORITHM) {
     normalizeEstimationAlgorithm(algorithm);
-    if (algorithm !== DEFAULT_ESTIMATION_ALGORITHM) {
-        if (percentile !== null) throw new TypeError('Missing-only inference requires pairwise estimates');
-        return missingOnlyInference(observedScore, coverageFraction, estimates, sourceCount, algorithm);
-    }
     return storedAvailableResultInference(observedScore, coverageFraction, estimates, percentile, sourceCount,
-        { method: PAIRWISE_RATIONAL_COVERAGE_FACTOR_METHOD });
+        { method: PAIRWISE_ORIGINAL_WEIGHT_METHOD });
 }
 
 // Historical evidence must be checked against the formula recorded in its trace.
@@ -102,7 +99,14 @@ export function storedAvailableResultInference(observedScore, coverageFraction, 
     { method } = {}) {
     if (isMissingInferenceMethod(method)) {
         if (percentile !== null) throw new TypeError('Missing-only inference requires pairwise estimates');
-        return missingOnlyInference(observedScore, coverageFraction, estimates, sourceCount, method.slice('pairwise-'.length));
+        return storedMissingOnlyInference(observedScore, coverageFraction, estimates, sourceCount, method.slice('pairwise-'.length));
+    }
+    if (method === PAIRWISE_ORIGINAL_WEIGHT_METHOD) {
+        if (percentile !== null || !Number.isSafeInteger(sourceCount) || sourceCount < 0 || !sourceCount && estimates.length) {
+            throw new TypeError('Invalid pairwise inference');
+        }
+        const contributions = originalWeightContributions(observedScore, coverageFraction, estimates);
+        return { method, percentile, sourceCount, ...contributions, totalScore: contributions.unpenalizedScore };
     }
     finite(observedScore);
     if (!Number.isFinite(coverageFraction) || coverageFraction <= 0 || coverageFraction > 1 + 1e-9

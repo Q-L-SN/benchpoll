@@ -14,13 +14,17 @@ const entry = (conditionID, weightBasisPoints = 10000, follows = false) => ({ co
     ...(follows ? { followCommunityVersion: true } : {}) });
 const pie = (...entries) => ({ entries });
 
-test('shared version validation rejects conflicting abstentions while preserving explicit multi-version mixes', () => {
+test('new pies require one scoring version per benchmark while stored explicit mixes remain readable', () => {
     const catalogue = new Map(conditions.map(condition => [condition.conditionID, condition]));
     for (const entries of [[entry(1, 5000, true), entry(2, 5000)], [entry(1, 5000), entry(2, 5000, true)]]) {
-        assert.throws(() => validateBenchmarkVersionChoices(entries, catalogue, 409),
+        assert.throws(() => validateBenchmarkVersionChoices(entries, catalogue, 409, { allowLegacyMixes: true }),
             error => error.status === 409 && error.body?.error === 'pie_benchmark_version_conflict');
     }
-    for (const entries of [[entry(1, 5000), entry(2, 5000)], [entry(1, 5000, true), entry(3, 5000)], [entry(-9), entry(1)]]) {
+    const legacyMix = [entry(1, 5000), entry(2, 5000)];
+    assert.throws(() => validateBenchmarkVersionChoices(legacyMix, catalogue),
+        error => error.status === 400 && error.body?.error === 'pie_benchmark_version_conflict');
+    assert.doesNotThrow(() => validateBenchmarkVersionChoices(legacyMix, catalogue, 409, { allowLegacyMixes: true }));
+    for (const entries of [[entry(1, 5000, true), entry(3, 5000)], [entry(-9), entry(1)]]) {
         assert.doesNotThrow(() => validateBenchmarkVersionChoices(entries, catalogue));
     }
 });
@@ -63,13 +67,12 @@ test('an explicit zero score is retained when mixing versions', () => {
     assert.deepEqual([score.lower, score.upper, score.coverage], [40, 40, 100]);
 });
 
-test('fallback requires an explicitly chosen version, including explicit No fallback', () => {
+test('estimation votes may coexist with following community scoring versions', () => {
     const entries = [entry(1, 10000, true)];
-    assert.deepEqual(normalizePreviewPersonalPie({ entries, fallbackRules: [] }), { entries, fallbackRules: [] });
-    for (const members of [[], [{ conditionID: 3 }]]) assert.throws(() => normalizePreviewPersonalPie({ entries,
-        fallbackRules: [{ primaryConditionID: 1, mode: 'ordered', entries: members }] }),
-    error => error.body?.error === 'fallback_requires_explicit_version');
-    assert.equal(normalizePreviewPersonalPie({ entries: [entry(1)], fallbackRules: [] }).fallbackRules.length, 0);
+    const estimationVotes = [{ conditionID: 2, vote: 'support' }];
+    assert.deepEqual(normalizePreviewPersonalPie({ entries, estimationVotes }), { entries, estimationVotes });
+    assert.deepEqual(normalizePreviewPersonalPie({ entries, estimationVotes: [] }), { entries, estimationVotes: [] });
+    assert.deepEqual(normalizePreviewPersonalPie({ entries, fallbackRules: [{ primaryConditionID: 1, mode: 'ordered', entries: [] }] }), { entries });
 });
 
 test('invalid abstention flags and topic-version choices fail before database access', () => {
@@ -78,34 +81,35 @@ test('invalid abstention flags and topic-version choices fail before database ac
     assert.throws(() => normalizePreviewPersonalPie({ entries: [entry(-1, 10000, true)], fallbackRules: [] }), error => error.status === 400);
 });
 
-function database(weights, rules = []) {
+function database(weights) {
     return { async execute(sql, params) {
         if (sql.includes('FROM personal_pies')) {
             return [weights.filter(row => params.includes(row.context_ID)).map(row => ({ is_recent: 1, is_fallback_recent: 1, ...row }))];
         }
-        if (sql.includes('FROM personal_pie_score_rules')) return [rules.filter(row => params.includes(row.pie_ID))];
         throw new Error('Unexpected fixture query');
     } };
 }
 const row = (pieID, contextID, conditionID, weight, follows = false) => ({ pie_ID: pieID, context_ID: contextID,
     benchmark_condition_ID: conditionID, weight_basis_points: weight, follow_community_version: Number(follows) });
-const none = (pieID, primary) => ({ pie_ID: pieID, primary_benchmark_condition_ID: primary, selected_family_ID: null,
-    family_ID: null, position: null, fallback_benchmark_condition_ID: null, selection_source: 'selected' });
 
-test('version and fallback electorates are independent and scoped to the selected scene', async () => {
-    const weights = [row(1, 10, 1, 10000), row(2, 10, 2, 10000), row(3, 10, 1, 10000, true), row(4, 11, 2, 10000)];
-    const db = database(weights, [none(1, 1), none(4, 2)]);
+test('scoring version preferences and estimation votes are independent and scoped to the selected scene', async () => {
+    const weights = [
+        { ...row(1, 10, 1, 10000), estimation_votes: [{ conditionID: 2, vote: 'support' }] },
+        row(2, 10, 2, 10000),
+        { ...row(3, 10, 1, 10000, true), estimation_votes: [{ conditionID: 2, vote: 'oppose' }] },
+        { ...row(4, 11, 2, 10000), estimation_votes: [{ conditionID: 2, vote: 'support' }] }
+    ];
+    const db = database(weights);
     const byID = new Map(conditions.map(condition => [condition.conditionID, condition]));
     const first = await loadPublicPie(db, { ID: 10, categoryID: 1, sceneID: 10 }, byID);
     assert.equal(first.participantCount, 3);
     assert.deepEqual(first.entries, [entry(1, 10000, true)]);
     assert.deepEqual(first.versionComposition[0].versions.map(version => [version.conditionID, version.selectionBasisPoints]), [[2, 5000], [1, 5000]]);
-    assert.equal(first.communityComposition.find(group => group.primaryConditionID === 1).configuredPieCount, 1);
-    assert.equal(first.communityComposition.find(group => group.primaryConditionID === 2).isDefault, true);
-    assert.equal(first.communityComposition.find(group => group.primaryConditionID === 2).configuredPieCount, 0);
+    assert.deepEqual(first.estimationVotes, [{ conditionID: 2, supportCount: 1, opposeCount: 1 }]);
     assert.equal(first.scoringEntries.reduce((sum, item) => sum + item.weightBasisPoints, 0), 30000);
     const second = await loadPublicPie(db, { ID: 11, categoryID: 1, sceneID: 11 }, byID);
     assert.deepEqual(second.versionComposition[0].versions.map(version => [version.conditionID, version.selectionBasisPoints]), [[2, 10000], [1, 0]]);
+    assert.deepEqual(second.estimationVotes, [{ conditionID: 2, supportCount: 1, opposeCount: 0 }]);
 });
 
 test('sparse public weights still top up to ten while old version choices expire independently', async () => {

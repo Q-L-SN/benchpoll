@@ -1,256 +1,65 @@
-import { pairedModels } from './helpers/fallback-pairs.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
-import { loadPublicPie, getRankingWorkspace, scoreModels } from '../ranking-service.js';
+import { loadPublicPie, getRankingWorkspace } from '../ranking-service.js';
 
-const weight = (pie, condition, points) => ({ pie_ID: pie, context_ID: 10,
-    benchmark_condition_ID: condition, weight_basis_points: points });
-const chainRows = (pie, primary, IDs) => {
-    const chainHash = createHash('sha256').update(JSON.stringify([primary, ...IDs])).digest('hex');
-    const familyID = parseInt(chainHash.slice(0, 10), 16);
-    return IDs.map((ID, index) => ({ pie_ID: pie, family_ID: familyID,
-        primary_benchmark_condition_ID: primary, chain_hash: chainHash, position: index + 1,
-        fallback_benchmark_condition_ID: ID }));
-};
-const noFallback = (pie, primary) => ({ pie_ID: pie, primary_benchmark_condition_ID: primary,
-    selected_family_ID: null, family_ID: null, chain_hash: null, position: null, fallback_benchmark_condition_ID: null });
-function database(weights, rules) {
-    return { async execute(sql, params) {
-        if (sql.includes('FROM ranking_contexts rc')) {
-            assert.match(sql, /WHERE rc.category_ID = \? AND c.is_active = 1 AND c.owner_user_ID IS NULL/);
-            assert.doesNotMatch(sql, /WITH RECURSIVE|parent_ID/);
-            assert.deepEqual(params, [1]);
-            return [[{ ID: 10, category_ID: 1, context_values: '{}' }], []];
-        }
-        if (sql.includes('FROM personal_pies')) {
-            assert.deepEqual(params, [10]);
-            assert.match(sql, /users.deleted_at IS NULL/);
-            assert.match(sql, /users.banned_at IS NULL/);
-            return [weights.map(row => ({ ...row, is_recent: 1, is_fallback_recent: 1 })), []];
-        }
-        if (sql.includes('FROM personal_pie_score_rules')) {
-            assert.deepEqual(params, [...new Set(weights.filter(row => row.benchmark_condition_ID !== null).map(row => row.pie_ID))]);
-            return [rules, []];
-        }
-        throw Error('Unexpected query: ' + sql);
-    } };
-}
-const load = (weights, rules, IDs = [1, 2, 3, 4]) => loadPublicPie(database(weights, rules),
-    { categoryID: 1, dimensions: [], contextValues: {} }, new Map(IDs.map(ID => [ID, { conditionID: ID, benchmarkID: ID, isPrimaryCondition: true, scoreCount: 1 }])));
-const modelWith = entries => ({ ID: 1, modelID: 1, name: 'Fixture model',
-    results: new Map(entries.map(([ID, normalizedScore]) => [String(ID), { normalizedScore, sampleCount: 1 }])) });
-const publicScore = (pie, model, scoreMode = 'range', peers = []) => scoreModels([model, ...peers], pie.scoringEntries, pie.participantCount * 10000,
-    { familyComposition: pie.familyComposition, fallbackScope: 'public', scoreMode })[0];
+const scene = { ID: 10, categoryID: 1, sceneID: 10 };
+const catalogue = (entries = [[1, 10], [2, 10], [3, 20]]) => new Map(entries.map(([conditionID, benchmarkID, excludedFromRanking]) =>
+    [conditionID, { conditionID, benchmarkID, excludedFromRanking, isPrimaryCondition: conditionID !== 2, scoreCount: 1 }]));
+const rowsForPie = (pieID, entries, votes = null) => (entries.length ? entries : [[null, null]]).map(([conditionID, points]) => ({
+    pie_ID: pieID, context_ID: 10, benchmark_condition_ID: conditionID, weight_basis_points: points,
+    is_recent: 1, is_fallback_recent: 1, estimation_votes: votes
+}));
+const database = rows => ({ async execute(sql, params) {
+    assert.match(sql, /FROM personal_pies/);
+    assert.match(sql, /personal_pies\.estimation_votes/);
+    assert.match(sql, /users.deleted_at IS NULL/);
+    assert.match(sql, /users.banned_at IS NULL/);
+    assert.deepEqual(params, [10]);
+    return [rows];
+} });
+const vote = (conditionID, option) => ({ conditionID, vote: option });
 
-test('public scoring keeps complete ordered families separate, including the no-fallback share', async () => {
-    const pie = await load([
-        weight(1, 1, 6000), weight(1, 4, 4000), weight(2, 1, 2000), weight(2, 4, 8000),
-        weight(3, 1, 2000), weight(3, 4, 8000), weight(4, 4, 10000)
-    ], [...chainRows(1, 1, [2, 3]), ...chainRows(2, 1, [3, 2]), noFallback(3, 1)]);
-    const peers = pairedModels(1, 2, 80, 0, null);
-    peers.forEach(p => p.results.set('3', { normalizedScore: p.results.get('2').normalizedScore - 60 }));
-    const result = publicScore(pie, modelWith([[2, 80], [3, 20], [4, 40]]), 'range', peers);
-    assert.equal(Object.hasOwn(pie, 'composition'), false);
-    assert.deepEqual([result.lower, result.upper, result.coverage], [30, 55, 75]);
-    assert.equal(result.fallbackCoverage, 20);
-    assert.equal(result.fallbackUsageCount, 1);
-    assert.equal(result.resultCount, 3);
-    assert.deepEqual(pie.familyComposition[0].families.map(f => [f.entries.map(e => e.conditionID), f.weightBasisPoints]),
-        [[[2, 3], 6000], [[3, 2], 2000], [[], 2000]]);
-});
-
-test('direct zero, negative and overflow scores override every public family without duplicate weight', async () => {
-    const pie = await load([weight(1, 1, 10000), weight(2, 1, 10000)],
-        chainRows(1, 1, [2]));
-    for (const score of [0, -50, 150]) {
-        const result = publicScore(pie, modelWith([[1, score], [2, 90]]));
-        assert.deepEqual([result.lower, result.upper, result.coverage], [score, score, 100]);
-        assert.equal(result.fallbackUsageCount, 0);
-        assert.equal(result.calculationScores.reduce((sum, row) => sum + row.effectiveWeight, 0), 100);
-    }
-});
-
-test('public scoring without a matching community composition uses only the original benchmark', () => {
-    const weights = [{ conditionID: 1, weightBasisPoints: 10000 }];
-    for (const composition of [{}, { familyComposition: [] }, { familyComposition: [{ primaryConditionID: 3,
-        families: [{ primaryConditionID: 3, familyID: 9, entries: [{ conditionID: 2 }], weightBasisPoints: 10000 }] }] }]) {
-        for (const scoreMode of ['range', 'available']) {
-            const options = { ...composition, fallbackScope: 'public', scoreMode };
-            for (const score of [0, -20, 80, 150]) {
-                const [result] = scoreModels([modelWith([[1, score], [2, 95]])], weights, 10000, options);
-                assert.deepEqual([result.lower, result.upper, result.coverage], [score, score, 100]);
-                assert.equal(result.fallbackUsageCount, 0);
-                assert.equal(result.fallbackCoverage, 0);
-                assert.deepEqual(result.calculationScores.map(row => [row.conditionID, row.familyConditionIDs]), [[1, [1]]]);
-            }
-            const [missing] = scoreModels([modelWith([[2, 95]])], weights, 10000, options);
-            assert.deepEqual([missing.lower, missing.upper, missing.coverage], scoreMode === 'range' ? [0, 100, 0] : [null, null, 0]);
-            assert.equal(missing.missingWeight, 100);
-            assert.deepEqual(missing.calculationScores, []);
-            assert.deepEqual(missing.fallbackResolutions, []);
-            assert.deepEqual(missing.inferredScores, []);
-        }
-    }
-});
-
-test('no-fallback holders do not inherit another family when their entrance is missing', async () => {
-    const pie = await load([weight(1, 1, 10000), weight(2, 1, 10000)], [...chainRows(1, 1, [2]), noFallback(2, 1)]);
-    const result = publicScore(pie, modelWith([[2, 80]]));
-    assert.deepEqual([result.lower, result.upper, result.coverage], [0, 100, 0]);
-    const available = publicScore(pie, modelWith([[2, 80]]), 'available', pairedModels(1, 2, 80, 0, null));
-    assert.equal(available.lower, 66.67);
-    assert.equal(available.availableInference.unresolvedFraction, .5);
-    assert.deepEqual(available.inferredScores.map(row => row.originalWeight), [50]);
-    assert.deepEqual([publicScore(pie, modelWith([])).lower, publicScore(pie, modelWith([])).upper], [0, 100]);
-});
-
-test('public aggregate equals the average of personal family totals with heterogeneous entrance allocations', async () => {
-    const pie = await load([weight(1, 1, 6000), weight(1, 4, 4000), weight(2, 1, 2000), weight(2, 4, 8000)],
-        [...chainRows(1, 1, [2, 3]), noFallback(2, 1)]);
-    const model = modelWith([[2, -20], [3, 99], [4, 140]]);
-    const first = scoreModels([model], [{ conditionID: 1, weightBasisPoints: 6000 }, { conditionID: 4, weightBasisPoints: 4000 }], 10000,
-        { familyComposition: pie.familyComposition,
-            fallbackRules: [{ primaryConditionID: 1, mode: 'ordered', entries: [{ conditionID: 2 }, { conditionID: 3 }] }] })[0];
-    const second = scoreModels([model], [{ conditionID: 1, weightBasisPoints: 2000 }, { conditionID: 4, weightBasisPoints: 8000 }], 10000,
-        { familyComposition: pie.familyComposition, fallbackRules: [{ primaryConditionID: 1, mode: 'ordered', entries: [] }] })[0];
-    const combined = publicScore(pie, model);
-    for (const key of ['lower', 'upper', 'coverage']) assert.equal(combined[key], (first[key] + second[key]) / 2);
-});
-
-test('the same globally identified chain from several pies becomes one family share', async () => {
-    const pie = await load([weight(1, 1, 10000), weight(2, 1, 10000)],
-        [...chainRows(1, 1, [2, 3]), ...chainRows(2, 1, [2, 3])]);
-    assert.equal(pie.familyComposition[0].families.length, 1);
-    assert.equal(pie.familyComposition[0].families[0].weightBasisPoints, 10000);
-});
-
-test('family composition uses entrance weight; absent entrance and empty pies are not in its denominator', async () => {
-    const pie = await load([
-        weight(1, 1, 6000), weight(1, 4, 4000), weight(2, 1, 2000), weight(2, 4, 8000),
-        weight(3, 4, 10000), weight(4, null, null)
-    ], chainRows(1, 1, [2]));
-    assert.equal(pie.participantCount, 3);
-    const families = pie.familyComposition.find(group => group.primaryConditionID === 1).families;
-    assert.deepEqual(families.map(f => [f.entries.length, f.weightBasisPoints]), [[1, 10000]]);
-    assert.ok(Math.abs(families[0].overallWeightBasisPoints - 8000 / 3) < 1e-6);
-});
-
-test('explicit fallback choices use their own fourteen-day window across matching contexts within one topic', async () => {
+test('an eligible user casts at most one estimation vote per source version regardless of weight', async () => {
     const rows = [
-        { ...weight(3, 1, 10000), is_recent: 1, is_fallback_recent: 1 },
-        { ...weight(2, 1, 10000), is_recent: 1, is_fallback_recent: 1 },
-        { ...weight(1, 1, 10000), is_recent: 0, is_fallback_recent: 1 },
-        ...[4, 5, 6, 7].map(pie => ({ ...weight(pie, 1, 10000), context_ID: 11, is_recent: 1, is_fallback_recent: 1 }))
+        ...rowsForPie(1, [[1, 100], [3, 9900]], JSON.stringify([vote(2, 'support')])),
+        ...rowsForPie(2, [[1, 10000]], [vote(2, 'oppose')]),
+        ...rowsForPie(3, [[1, 6000], [2, 4000]], [vote(1, 'support'), vote(2, 'support')]),
+        ...rowsForPie(4, [[1, 10000]])
     ];
-    const connection = { async execute(sql, params) {
-        if (sql.includes('FROM ranking_contexts rc')) {
-            assert.match(sql, /WHERE rc.category_ID = \? AND c.is_active = 1 AND c.owner_user_ID IS NULL/);
-            assert.doesNotMatch(sql, /WITH RECURSIVE|parent_ID/);
-            assert.deepEqual(params, [1]);
-            return [[
-                { ID: 10, category_ID: 1, context_values: '{"web":"any"}' },
-                { ID: 11, category_ID: 1, context_values: '{"web":"allowed"}' }
-            ], []];
-        }
-        if (sql.includes('FROM personal_pies')) {
-            assert.deepEqual(params, [10, 11]);
-            return [rows, []];
-        }
-        if (sql.includes('FROM personal_pie_score_rules')) { assert.ok(params.includes(1)); return [chainRows(1, 1, [2]), []]; }
-        throw Error('Unexpected query: ' + sql);
-    } };
-    const dimensions = [{ key: 'web', options: [{ key: 'any', isNeutral: true }, { key: 'allowed', isNeutral: false }] }];
-    const pie = await loadPublicPie(connection, { categoryID: 1, dimensions, contextValues: { web: 'any' } }, new Map([[1, { conditionID: 1, benchmarkID: 1, isPrimaryCondition: true, scoreCount: 1 }], [2, { conditionID: 2, benchmarkID: 2, isPrimaryCondition: true, scoreCount: 1 }]]));
-    assert.equal(pie.participantCount, 7);
-    const configured = pie.familyComposition[0].families.find(f => f.entries.length);
-    assert.equal(configured.weightBasisPoints, 10000);
-    assert.equal(pie.familyComposition[0].configuredPieCount, 1);
-    assert.ok(Math.abs(pie.scoringEntries.reduce((sum, entry) => sum + entry.weightBasisPoints, 0) - 70000) < 1e-6);
-    assert.deepEqual(pie.contextIDs, [10, 11]);
-    assert.equal(Object.hasOwn(pie, 'composition'), false);
+    const pie = await loadPublicPie(database(rows), scene, catalogue());
+    assert.equal(pie.participantCount, 4);
+    assert.deepEqual(pie.estimationVotes, [
+        { conditionID: 1, supportCount: 1, opposeCount: 0 },
+        { conditionID: 2, supportCount: 2, opposeCount: 1 }
+    ]);
+    assert.deepEqual(pie.familyComposition, []);
 });
 
-test('fractional sub-percent public shares and an unlimited number of families remain exact', async () => {
-    const weights = [], rules = [];
-    for (let i = 0; i < 130; i++) {
-        weights.push(weight(i + 1, 1, i ? 10000 : 100));
-        if (!i) weights.push(weight(1, 999, 9900));
-        rules.push(...chainRows(i + 1, 1, [i + 2]));
+test('stored votes for removed weights, excluded versions, topic references and empty pies do not count', async () => {
+    const rows = [
+        ...rowsForPie(1, [[1, 10000]], [vote(2, 'support'), vote(4, 'oppose'), vote(99, 'support')]),
+        ...rowsForPie(2, [[3, 10000]], [vote(2, 'oppose')]),
+        ...rowsForPie(3, [[-20, 10000]], [vote(2, 'oppose')]),
+        ...rowsForPie(4, [], [vote(2, 'oppose')])
+    ];
+    const pie = await loadPublicPie(database(rows), scene, catalogue([[1, 10], [2, 10], [3, 20], [4, 10, true]]));
+    assert.equal(pie.participantCount, 3);
+    assert.deepEqual(pie.estimationVotes, [{ conditionID: 2, supportCount: 1, opposeCount: 0 }]);
+});
+
+test('community counts preserve every voted sibling version and use a stable condition order', async () => {
+    const siblingIDs = Array.from({ length: 130 }, (_, index) => index + 2);
+    const conditions = catalogue([1, ...siblingIDs].map(ID => [ID, 10]));
+    const ballots = siblingIDs.slice().reverse().map(ID => vote(ID, 'support'));
+    const pie = await loadPublicPie(database(rowsForPie(1, [[1, 10000]], ballots)), scene, conditions);
+    assert.deepEqual(pie.estimationVotes, siblingIDs.map(conditionID => ({ conditionID, supportCount: 1, opposeCount: 0 })));
+});
+
+test('malformed stored ballots fail the invariant without inflating counts', async () => {
+    for (const votes of ['bad JSON', [vote(2, 'support'), vote(2, 'oppose')], [vote(2, 'neutral')]]) {
+        await assert.rejects(loadPublicPie(database(rowsForPie(1, [[1, 10000]], votes)), scene, catalogue()),
+            error => error.status === 409 && error.body?.error === 'stored_estimation_votes_invalid' && error.body.pieID === 1);
     }
-    const pie = await load(weights, rules, [1, 999, ...Array.from({ length: 130 }, (_, i) => i + 2)]);
-    const families = pie.familyComposition.find(group => group.primaryConditionID === 1).families;
-    assert.equal(families.length, 130);
-    const small = families.find(f => f.entries[0].conditionID === 2).weightBasisPoints;
-    assert.ok(small > 0 && small < 100 && !Number.isInteger(small));
-    assert.ok(Math.abs(families.reduce((sum, f) => sum + f.weightBasisPoints, 0) - 10000) < 1e-6);
-    const peers = pairedModels(1, 2, 80, 0, null);
-    for (const p of peers) for (let id = 3; id <= 131; id++) p.results.set(String(id), p.results.get('2'));
-    const result = publicScore(pie, modelWith(Array.from({ length: 130 }, (_, i) => [i + 2, 80])), 'available', peers);
-    assert.equal(result.coverage, 0);
-    assert.equal(result.inferredScores.length, 130);
-    assert.ok(Math.abs(result.inferredScores.reduce((sum, row) => sum + row.originalWeight, 0) - result.fallbackCoverage) < .01);
-});
-
-test('flat families can reference other entrance conditions without recursive cross-family substitution', async () => {
-    const pie = await load([weight(1, 1, 5000), weight(1, 2, 5000)],
-        [...chainRows(1, 1, [2]), ...chainRows(1, 2, [1])]);
-    const result = publicScore(pie, modelWith([[3, 100]]));
-    assert.deepEqual([result.lower, result.upper, result.coverage, result.fallbackUsageCount], [0, 100, 0, 0]);
-});
-
-test('no explicit choices produce a temporary singleton, not a fabricated no-fallback vote', async () => {
-    const pie = await load([weight(1, 1, 10000)], []);
-    assert.deepEqual(pie.familyComposition, [{ primaryConditionID: 1, configuredPieCount: 0, isDefault: true, families: [{
-        primaryConditionID: 1, familyID: null, entries: [], weightBasisPoints: 10000, overallWeightBasisPoints: 10000
-    }] }]);
-    assert.deepEqual((await load([weight(1, null, null)], [])).familyComposition, []);
-});
-
-test('unconfigured holders inherit a mixed electorate without enlarging or diluting it', async () => {
-    const weights = Array.from({ length: 100 }, (_, i) => weight(i + 1, 1, 10000));
-    const rules = [...Array.from({ length: 6 }, (_, i) => chainRows(i + 1, 1, [2])).flat(),
-        ...Array.from({ length: 3 }, (_, i) => chainRows(i + 7, 1, [3])).flat(), noFallback(10, 1)];
-    const pie = await load(weights, rules);
-    const group = pie.familyComposition[0];
-    assert.equal(group.configuredPieCount, 10);
-    assert.equal(group.isDefault, false);
-    assert.deepEqual(group.families.map(f => [f.entries.map(e => e.conditionID), f.weightBasisPoints]),
-        [[[2], 6000], [[3], 3000], [[], 1000]]);
-    const model = modelWith([[2, 80], [3, 20]]);
-    const peers = pairedModels(1, 2, 80, -10, null);
-    peers.forEach(p => p.results.set('3', { normalizedScore: p.results.get('2').normalizedScore - 60 }));
-    const inputs = [{ conditionID: 1, weightBasisPoints: 10000 }];
-    for (const scoreMode of ['range', 'available']) {
-        const options = { familyComposition: pie.familyComposition, scoreMode };
-        const inherited = scoreModels([model, ...peers], inputs, 10000, options)[0];
-        assert.deepEqual([inherited.lower, inherited.upper, inherited.coverage], scoreMode === 'range' ? [0, 100, 0] : [68.48, 68.48, 0]);
-        const own = scoreModels([model, ...peers], inputs, 10000, { ...options,
-            fallbackRules: [{ primaryConditionID: 1, mode: 'ordered', entries: [{ conditionID: 3 }] }] })[0];
-        assert.deepEqual([own.lower, own.upper, own.coverage], scoreMode === 'range' ? [0, 100, 0] : [70, 70, 0]);
-        const none = scoreModels([model, ...peers], inputs, 10000, { ...options,
-            fallbackRules: [{ primaryConditionID: 1, mode: 'ordered', entries: [] }] })[0];
-        assert.deepEqual([none.lower, none.upper, none.coverage], scoreMode === 'range' ? [0, 100, 0] : [null, null, 0]);
-        assert.equal(publicScore(pie, model, scoreMode, peers).lower, inherited.lower);
-    }
-    assert.equal((await load(weights, [noFallback(10, 1)])).familyComposition[0].configuredPieCount, 1);
-});
-
-test('explicit none round-trips independently from absence and a broken family never becomes none', async () => {
-    const pie = await load([weight(1, 1, 10000)], [noFallback(1, 1)]);
-    assert.equal(pie.familyComposition[0].configuredPieCount, 1);
-    assert.equal(pie.familyComposition[0].isDefault, false);
-    await assert.rejects(load([weight(1, 1, 10000)], [{ ...noFallback(1, 1), selected_family_ID: 99 }]),
-        error => error.body?.error === 'benchmark_family_invariant_failed');
-});
-
-test('malformed stored order, duplicated members and unavailable conditions fail explicitly', async () => {
-    const valid = chainRows(1, 1, [2, 3]);
-    for (const rows of [[{ ...valid[0], position: 2 }], [valid[0], { ...valid[1], fallback_benchmark_condition_ID: 2 }]]) {
-        await assert.rejects(load([weight(1, 1, 10000)], rows), error => error.body?.error === 'benchmark_family_invariant_failed');
-    }
-    await assert.rejects(load([weight(1, 1, 10000)], chainRows(1, 1, [99])),
-        error => error.body?.error === 'personal_pie_fallback_condition_not_available');
 });
 
 test('workspace snapshot errors roll back and release the pooled connection', async () => {

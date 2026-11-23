@@ -8,7 +8,7 @@ const adopted = (conditionID, weightBasisPoints, coveredWeightBasisPoints, norma
     ({ conditionID, weightBasisPoints, coveredWeightBasisPoints, normalizedScore,
         coverage: coveredWeightBasisPoints / weightBasisPoints * 100 });
 
-test('expanded benchmark blocks merge actual adopted scores by covered weight, including partial fallback coverage', () => {
+test('expanded benchmark blocks retain their full weights when only partially measured', () => {
     const entries = [entry(11, 1, 2000), entry(12, 1, 3000), entry(21, 2, 4000), entry(-5, null, 1000)];
     const coverage = [adopted(11, 2000, 2000, 60), adopted(12, 3000, 1500, 90), adopted(21, 4000, 4000, 0)];
     const before = structuredClone({ entries, coverage });
@@ -18,10 +18,13 @@ test('expanded benchmark blocks merge actual adopted scores by covered weight, i
     assert.equal(blocks[0].coveredWeightBasisPoints, 3500);
     assert.equal(blocks[0].coverage, 70);
     assert.equal(blocks[0].adoptedNormalizedScore, (60 * 2000 + 90 * 1500) / 3500);
+    assert.equal(blocks[0].rankingNormalizedScore, 51);
     assert.equal(blocks[1].adoptedNormalizedScore, 0, 'a measured zero is covered');
+    assert.equal(blocks[1].unresolvedWeightBasisPoints, 0);
     assert.equal(blocks[1].coverage, 100);
     assert.equal(blocks[2].isUnresolved, true);
     assert.equal(blocks[2].adoptedNormalizedScore, null);
+    assert.equal(blocks[2].rankingNormalizedScore, 0);
     assert.equal(blocks[2].coverage, 0);
     assert.deepEqual({ entries, coverage }, before, 'presentation never rewrites the ranking inputs');
 });
@@ -50,19 +53,32 @@ test('uncovered blocks use only estimates from this ranking', () => {
     assert.equal(block.adoptedNormalizedScore, null);
     assert.equal(block.estimatedNormalizedScore, null);
     assert.equal(block.coverage, 0);
+    assert.equal(block.rankingNormalizedScore, 0);
+    assert.equal(block.unresolvedWeightBasisPoints, 10000);
     assert.equal(buildModelCoverageEntries([entry(11, 1, 10000)], undefined), null);
 });
 
-test('estimated blocks combine only their supported version and family weights, including zero estimates', () => {
+test('estimated blocks combine repeated version weights, including supported zeros and unresolved shares', () => {
     const entries = [entry(11, 1, 1000), entry(11, 1, 1000), entry(12, 1, 2000), entry(21, 2, 6000)];
     const coverage = [adopted(11, 2000, 0, null), adopted(12, 2000, 0, null), adopted(21, 6000, 0, null)];
     const estimates = [{ conditionID: 11, normalizedScore: 0, originalWeight: 5 },
         { conditionID: 11, normalizedScore: 40, weightBasisPoints: 1500 },
         { conditionID: 12, normalizedScore: 60, weightBasisPoints: 1000 },
-        { primaryConditionID: 21, conditionID: 91, sourceScore: 35, normalizedScore: 0, weightBasisPoints: 6000 }];
+        { conditionID: 21, sourceConditionID: 91, sourceScore: 35, normalizedScore: 0, weightBasisPoints: 6000 }];
     const blocks = buildModelCoverageEntries(entries, coverage, [], estimates);
     assert.deepEqual(blocks.map(b => [b.benchmarkID, b.coverage, b.adoptedNormalizedScore, b.estimatedNormalizedScore]),
         [[2, 0, null, 0], [1, 0, null, 40]]);
+    assert.deepEqual(blocks.map(b => [b.estimatedWeightBasisPoints, b.unresolvedWeightBasisPoints, b.rankingNormalizedScore]),
+        [[6000, 0, 0], [3000, 1000, 30]]);
+});
+
+test('merged benchmarks combine measured, estimated, and unresolved slices at their original weights', () => {
+    const entries = [entry(11, 1, 4000), entry(12, 1, 2000), entry(13, 1, 4000)];
+    const coverage = [adopted(11, 4000, 4000, 80), adopted(12, 2000, 0, null), adopted(13, 4000, 0, null)];
+    const [block] = buildModelCoverageEntries(entries, coverage, [], [{ conditionID: 12, normalizedScore: 70, weightBasisPoints: 2000 }]);
+    assert.equal(block.coverage, 40);
+    assert.equal(block.rankingNormalizedScore, 46);
+    assert.equal(block.unresolvedWeightBasisPoints, 4000);
 });
 
 test('malformed adopted summaries cannot produce fabricated coverage', () => {

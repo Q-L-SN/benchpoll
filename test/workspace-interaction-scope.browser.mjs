@@ -7,11 +7,12 @@ import { startPreview } from '../scripts/frontend/server.mjs';
 const built = process.env.BP_TEST_BUILT === '1';
 const output = process.env.BP_INTERACTION_ARTIFACTS ?? '/tmp/benchpoll-workspace-interaction-scope';
 await mkdir(output, { recursive: true });
-const scenes = [{ ID: 101, name: 'General', slug: 'general', isDefault: true },
-    { ID: 102, name: 'Research', slug: 'research', isDefault: false }];
+const scenes = [{ ID: 101, name: 'General', sceneNumber: 1, isDefault: true },
+    { ID: 102, name: 'Research', sceneNumber: 2, isDefault: false }];
 
 async function setup(t, engine, width, sceneFixture = false) {
-    const app = await startPreview({ communityVersions: true, secondaryBenchmark: true, rankingStress: true });
+    const app = await startPreview({ communityVersions: true, secondaryBenchmark: true, rankingStress: true,
+        communityEstimationVotes: [{ conditionID: 1, supportCount: 4, opposeCount: 2 }] });
     const browser = await engine.launch({ headless: true });
     const page = await browser.newPage({ viewport: { width, height: 900 }, hasTouch: width < 760,
         isMobile: width < 760, reducedMotion: 'reduce' });
@@ -32,13 +33,16 @@ async function setup(t, engine, width, sceneFixture = false) {
             const sceneID = Number(route.request().postDataJSON().contextValues?.scene) || 101;
             Object.assign(data.context, { scenes, dimensions: [], ID: sceneID, sceneID, defaultContextID: 101,
                 contextValues: { scene: String(sceneID) } });
-            if (sceneID === 102) data.versionComposition.forEach(group => { group.name += ' in Research'; });
+            if (sceneID === 102) {
+                data.versionComposition.forEach(group => { group.name += ' in Research'; });
+                data.communityEstimationVotes = [{ conditionID: 1, supportCount: 1, opposeCount: 5 }];
+            }
             await route.fulfill({ json: data });
         });
     }
-    if (built) await page.route(app.url + '/', async route => route.fulfill({ contentType: 'text/html',
+    if (built) await page.route(app.url + '/1', async route => route.fulfill({ contentType: 'text/html',
         body: await readFile(new URL('../private/home-built.html', import.meta.url), 'utf8') }));
-    await page.goto(app.url);
+    await page.goto(app.url + '/1');
     await page.locator('#benchmark-card[aria-busy="false"]').waitFor();
     return { page, app };
 }
@@ -48,17 +52,24 @@ for (const [engine, width] of [[chromium, 1440], [chromium, 320], [webkit, 390]]
         const { page, app } = await setup(t, engine, width, true);
         const panel = page.locator('#benchmark-settings');
         const toggle = page.locator('#inline-fallback-toggle');
+        const select = async conditionID => {
+            const tile = `#weight-pie [data-object-id="${conditionID}"]`;
+            await page.locator(tile).click();
+            await page.locator(`${tile}[aria-pressed="true"]`).waitFor();
+        };
+        await select(1);
         await page.locator('#public-fallback-toggle').click();
         await panel.waitFor();
         assert.equal(await panel.evaluate(node => node.localName), 'section');
         assert.equal(await page.locator('.bp-workspace').evaluate(node => node.inert), false);
-        await page.locator('#weight-pie [data-object-id="2"]').click();
+        await select(2);
         assert.equal(await page.locator('#public-fallback-toggle').getAttribute('aria-expanded'), 'true');
         assert.match(await panel.locator('.bp-benchmark-settings-title').textContent(), /Advanced reasoning/);
         await page.locator('#pie-mode-personal').click();
+        await page.locator('#pie-mode-personal[aria-selected="true"][aria-busy="false"]').waitFor();
         await panel.waitFor();
         assert.equal(await toggle.getAttribute('aria-expanded'), 'true');
-        await page.locator('#weight-pie [data-object-id="1"]').click();
+        await select(1);
         assert.match(await panel.locator('.bp-benchmark-settings-title').textContent(), /General knowledge/);
         assert.equal(await panel.locator('.bp-version-choice[data-condition-id="2"]').count(), 0);
         assert.equal(await panel.locator('.bp-version-choice[data-condition-id="1"]').isEnabled(), true);
@@ -66,14 +77,18 @@ for (const [engine, width] of [[chromium, 1440], [chromium, 320], [webkit, 390]]
             if (!expanded) await toggle.click();
             for (const scene of [102, 101]) {
                 await page.locator(`#scene-tab-${scene}`).click();
+                await page.locator(`#scene-tab-${scene}[aria-selected="true"]`).waitFor();
                 await page.locator('#benchmark-card[aria-busy="false"]').waitFor();
+                await select(1);
                 assert.equal(await toggle.getAttribute('aria-expanded'), String(expanded));
                 assert.equal(await panel.isVisible(), expanded);
                 if (expanded) {
                     const title = await panel.locator('.bp-benchmark-settings-title').textContent();
                     assert.equal(title.includes('in Research'), scene === 102);
+                    assert.equal(await panel.locator('.bp-version-choice-row[data-condition-id="1"] [data-vote="support"]').textContent(),
+                        scene === 102 ? '1' : '4');
                 }
-                await page.locator('#weight-pie [data-object-id="2"]').click();
+                await select(2);
                 assert.equal(await panel.isVisible(), expanded);
             }
         }
@@ -85,8 +100,9 @@ for (const [engine, width] of [[chromium, 1440], [chromium, 320], [webkit, 390]]
         await page.screenshot({ path: `${output}/${engine.name()}-${width}-${built ? 'built' : 'source'}-inline.png` });
         const preferences = await page.evaluate(() => JSON.parse(sessionStorage.getItem('benchpoll-workspace-preferences-v1')));
         assert.equal(preferences.benchmarkSettingsExpanded, true);
-        await page.goto(app.url);
+        await page.goto(app.url + '/1');
         await page.locator('#benchmark-card[aria-busy="false"]').waitFor();
+        await select(1);
         assert.equal(await toggle.getAttribute('aria-expanded'), 'true');
         await panel.waitFor();
     });
@@ -98,14 +114,16 @@ for (const [engine, width] of [[chromium, 1440], [chromium, 320], [webkit, 390]]
         await page.locator('#model-card[aria-busy="false"]').waitFor();
         const row = page.locator('.bp-benchmark-row[data-condition-id="1"]');
         await row.scrollIntoViewIfNeeded();
-        const gap = await row.evaluate(row => {
-            const link = row.querySelector('.bp-benchmark-information-link').getBoundingClientRect();
+        const point = await row.evaluate(row => {
             const count = row.querySelector('.bp-benchmark-score-count').getBoundingClientRect();
-            const point = { x: (link.right + count.left) / 2, y: count.top + count.height / 2 };
-            return { ...point, linked: Boolean(document.elementFromPoint(point.x, point.y)?.closest('a')), gap: count.left - link.right };
+            const y = count.top + count.height / 2;
+            const link = [...row.querySelector('.bp-benchmark-information-link').getClientRects()]
+                .find(rect => y >= rect.top && y <= rect.bottom && rect.right < count.left);
+            const x = link && count.left - link.right >= 2 ? (link.right + count.left) / 2 : count.left + count.width / 2;
+            return { x, y, linked: Boolean(document.elementFromPoint(x, y)?.closest('a')) };
         });
-        assert.ok(gap.gap >= 2 && !gap.linked, JSON.stringify(gap));
-        await page.mouse.click(gap.x, gap.y);
+        assert.equal(point.linked, false, JSON.stringify(point));
+        await page.mouse.click(point.x, point.y);
         assert.equal(await page.locator('#discussion-panel').getAttribute('aria-hidden'), 'true');
         const name = row.locator('.bp-benchmark-information-link');
         await name.click();

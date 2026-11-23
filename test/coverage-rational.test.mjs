@@ -10,7 +10,7 @@ import { validateWorkspacePayload } from '../public/js/workspace/contracts.js';
 import { createFixtureState, workspace } from '../scripts/frontend/fixtures.mjs';
 
 const close = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-10, `${actual} != ${expected}`);
-const infer = (score, coverage) => availableResultInference(score, coverage, []);
+const infer = (score, coverage) => storedAvailableResultInference(score, coverage, [], null, 0, { method: PAIRWISE_RATIONAL_COVERAGE_FACTOR_METHOD });
 
 test('rational a=5 has fixed endpoints, is smooth increasing and concave', () => {
     assert.equal(coverageMultiplier(0), 0);
@@ -38,34 +38,34 @@ test('the fixed rational multiplier keeps negative and tiny-coverage totals fini
     close(infer(80, .3).totalScore, 80 * 1.5 / 2.2);
 });
 
-test('rational scoring keeps zero-coverage models unranked and never affects ranges', () => {
+test('the live score trace includes the full unresolved weight and leaves ranges unchanged', () => {
     const models = [
         { ID: 1, name: 'Measured', results: new Map([['1', { normalizedScore: 80, memberIDs: [1] }]]) },
         { ID: 2, name: 'No score', results: new Map() }
     ];
     const weights = [{ conditionID: 1, weightBasisPoints: 3000 }, { conditionID: 2, weightBasisPoints: 7000 }];
-    const rational = scoreModels(models, weights, 10000, { scoreMode: 'available' });
-    assert.equal(rational[0].availableInference.method, 'calibrated-fallback');
-    close(rational[0].availableInference.coverageFactor, 1.5 / 2.2);
-    assert.equal(rational[1].lower, null);
-    assert.equal(rational[1].availableInference, null);
+    const estimated = scoreModels(models, weights, 10000, { scoreMode: 'available' });
+    assert.equal(estimated[0].availableInference.method, 'calibrated-fallback');
+    close(estimated[0].availableInference.totalScore, 24);
+    assert.equal(estimated[1].lower, 0);
+    assert.equal(estimated[1].availableInference.unresolvedFraction, 1);
     assert.deepEqual(scoreModels(models, weights, 10000, { scoreMode: 'range', availableInferenceVersion: 5 }),
         scoreModels(models, weights, 10000, { scoreMode: 'range', availableInferenceVersion: 4 }));
 });
 
-test('coverage has no preference API and all supported stale request versions upgrade to v8', () => {
+test('coverage has no preference API and all supported stale request versions upgrade to v9', () => {
     assert.deepEqual(Object.keys(coveragePenalty).sort(), ['RATIONAL_COVERAGE_A', 'coverageMultiplier']);
-    assert.equal(AVAILABLE_INFERENCE_VERSION, 8);
-    assert.equal(createWorkspaceState().availableInferenceVersion, 8);
-    assert.equal(normalizeAvailableInferenceVersion(), 8);
-    for (const version of [1, 2, 3, 4, 5, 6, 7]) assert.equal(normalizeAvailableInferenceVersion(version), 8);
-    for (const version of [0, 9, '5', null, NaN]) assert.throws(() => normalizeAvailableInferenceVersion(version));
+    assert.equal(AVAILABLE_INFERENCE_VERSION, 9);
+    assert.equal(createWorkspaceState().availableInferenceVersion, 9);
+    assert.equal(normalizeAvailableInferenceVersion(), 9);
+    for (const version of [1, 2, 3, 4, 5, 6, 7, 8]) assert.equal(normalizeAvailableInferenceVersion(version), 9);
+    for (const version of [0, 10, '5', null, NaN]) assert.throws(() => normalizeAvailableInferenceVersion(version));
 });
 
 test('the fresh inference API cannot opt back into the retired formula', () => {
-    const fresh = infer(80, .3);
+    const fresh = availableResultInference(80, .3, []);
     assert.throws(() => availableResultInference(80, .3, [], null, 0, { method: PAIRWISE_COVERAGE_FACTOR_METHOD }), /Invalid estimation algorithm/);
-    assert.notEqual(fresh.coverageFactor, .3 ** .35);
+    assert.equal(fresh.totalScore, 24);
 });
 
 test('stored v4 evidence is still validated with its recorded factors, independently of new calculations', () => {
@@ -75,6 +75,10 @@ test('stored v4 evidence is still validated with its recorded factors, independe
         row.availableInference = storedAvailableResultInference(trace.observedScore, trace.coverageFraction,
             row.inferredScores.map(score => ({ normalizedScore: score.normalizedScore, weightFraction: score.originalWeight / 100 })),
             trace.percentile, trace.sourceCount, { method: PAIRWISE_COVERAGE_FACTOR_METHOD });
+        for (const score of row.calculationScores) {
+            score.effectiveWeight /= trace.supportedFraction;
+            score.contribution /= trace.supportedFraction;
+        }
         row.lower = row.upper = Math.round(row.availableInference.totalScore * 100) / 100;
     }
     assert.equal(validateWorkspacePayload(payload), payload);
@@ -83,7 +87,7 @@ test('stored v4 evidence is still validated with its recorded factors, independe
     assert.throws(() => validateWorkspacePayload(changed), /Invalid workspace response/);
 });
 
-test('fresh and stale Home requests share only v8 cache and pagination, including concurrent reads', async () => {
+test('fresh and stale Home requests share the v9 cache and pagination, including concurrent reads', async () => {
     const versions = [];
     const db = { async execute(sql, parameters) {
         assert.match(sql, /SELECT ID FROM categories WHERE ID IN/);
@@ -99,10 +103,10 @@ test('fresh and stale Home requests share only v8 cache and pagination, includin
     const [fresh, stale, explicit] = await Promise.all([service.preview(null, { categoryID: 54 }),
         service.preview(null, { categoryID: 54, availableInferenceVersion: 4 }),
         service.preview(null, { categoryID: 54, availableInferenceVersion: 5 })]);
-    assert.deepEqual(versions, [8]);
+    assert.deepEqual(versions, [9]);
     assert.equal(fresh, stale); assert.equal(fresh, explicit);
-    assert.equal(fresh.models[0].lower, 8);
+    assert.equal(fresh.models[0].lower, 9);
     const page = await service.preview(null, { categoryID: 54, availableInferenceVersion: 4, snapshotID: fresh.pagination.snapshotID });
     assert.equal(page.pagination.snapshotID, fresh.pagination.snapshotID);
-    for (const value of [0, 9, '5', null]) assert.throws(() => normalizeTopicPreview({ categoryID: 54, availableInferenceVersion: value }));
+    for (const value of [0, 10, '5', null]) assert.throws(() => normalizeTopicPreview({ categoryID: 54, availableInferenceVersion: value }));
 });

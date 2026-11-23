@@ -35,8 +35,8 @@ test('sidebar defaults to collapsed without writing or replacing any saved boole
     }
 });
 
-test('only the calibrated fallback version is used; neither page exposes experiment controls', () => {
-    assert.equal(AVAILABLE_INFERENCE_VERSION, 8);
+test('version-based estimation uses calibrated scores and keeps retired coverage controls hidden', () => {
+    assert.equal(AVAILABLE_INFERENCE_VERSION, 9);
     for (const source of [topics, workspace]) {
         assert.match(source, /import \{ AVAILABLE_INFERENCE_VERSION \} from '\.\/shared\/available-score\.js'/);
         assert.match(source, /availableInferenceVersion\s*[:=]\s*AVAILABLE_INFERENCE_VERSION/);
@@ -44,8 +44,8 @@ test('only the calibrated fallback version is used; neither page exposes experim
     }
     for (const html of [home, configuration]) assert.doesNotMatch(html, /coverage-experiment|coverage-penalty|Power 0\.35/);
     assert.doesNotMatch(read('public/css/ui/topic-identity.css'), /coverage-experiment/);
-    assert.match(configuration, /reliable estimates from the selected fallback chains/);
-    assert.match(read('private/how-it-works.html'), /f\(c\)=5c\/\(1\+4c\)[^\n]*Negative totals use 2−f\(c\)/);
+    assert.match(configuration, /reliable estimates from eligible versions of the same benchmark/);
+    assert.match(read('private/how-it-works.html'), /Results with neither a measurement nor a reliable estimate count as 0 at their full weight/);
 });
 
 test('topic creation starts private and the editor publishes directly with a three-public-topic limit', () => {

@@ -31,12 +31,16 @@ for (const engine of [chromium, webkit]) for (const width of [1440, 390, 320]) {
         await page.screenshot({ path: `${output}/${engine.name()}-${width}-scores.png` });
         await page.locator('[data-how-score="estimate"]').click();
         assert.equal(await page.locator('#how-score-number').textContent(), '79');
+        assert.match(await page.locator('#how-score-caption').textContent(), /that 20% would contribute 0/);
+        await page.evaluate(() => { location.hash = '#rankings'; });
+        await page.waitForFunction(() => document.querySelector('#rankings details').open);
+        assert.match(await page.locator('#rankings .hi-answer').textContent(), /Version-based estimation/);
         await page.evaluate(() => { location.hash = '#calculation-details'; });
         await page.waitForFunction(() => document.getElementById('calculation-details').closest('details').open);
         assert.equal(await page.locator('#calculation-details').isVisible(), true);
         await page.evaluate(() => { location.hash = '#fallback'; });
         await page.waitForFunction(() => document.querySelector('#fallback details').open);
-        assert.match(await page.locator('#fallback .hi-answer').textContent(), /Each estimates the chosen version directly/);
+        assert.match(await page.locator('#fallback .hi-answer').textContent(), /Paired measurements determine the estimate/);
         await page.locator('#fallback summary').click();
         await page.waitForFunction(() => !document.querySelector('#fallback details').open);
         await page.locator('#fallback summary').focus(); await page.keyboard.press('Enter');

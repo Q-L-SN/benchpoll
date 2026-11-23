@@ -63,12 +63,13 @@ updateMotion();
 
 const scoreExample = document.querySelector('.hi-score-art');
 const scoreButtons = [...document.querySelectorAll('[data-how-score]')];
+const estimateCaption = document.getElementById('how-score-caption').textContent;
 scoreButtons.forEach(button => button.addEventListener('click', () => {
     const range = button.dataset.howScore === 'range';
     scoreExample.dataset.mode = button.dataset.howScore;
     scoreButtons.forEach(other => other.setAttribute('aria-pressed', String(other === button)));
     document.getElementById('how-score-number').textContent = range ? '64–84' : '79';
-    const caption = range ? 'Measured results stay fixed. The range reflects missing results.' : 'A backup score of 85 estimates 75 on a benchmark worth 20%.';
+    const caption = range ? 'The measured tests contribute 64 points. The missing 20% adds 0 to 20 points to that total.' : estimateCaption;
     document.getElementById('how-score-caption').textContent = caption;
     document.getElementById('how-score-status').textContent = `${range ? 'Score range 64 to 84' : 'Estimated score 79'}. Measured coverage 80%.`;
 }));
@@ -93,7 +94,8 @@ async function revealLinkedDetails() {
     if (!target) return;
     const ancestors = [];
     for (let node = target.closest('details'); node; node = node.parentElement.closest('details')) ancestors.unshift(node);
-    if (target.matches('section') && target.querySelector(':scope > details')) ancestors.push(target.querySelector(':scope > details'));
+    const sectionDetails = target.matches('section') && target.querySelector(':scope > details, :scope > .hi-section-copy > details');
+    if (sectionDetails) ancestors.push(sectionDetails);
     for (const details of ancestors) await setDisclosureOpen(details, true, { animate: false });
     if (ancestors.length) target.scrollIntoView({ block: 'start', behavior: 'instant' });
 }

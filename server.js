@@ -26,7 +26,6 @@ import { aaResultReason } from './aa-archive-policy.js';
 import { assertScoreSourcePolicy, recordSyncedScoreEdit, recordSyncedScoreDeletion } from './score-source-policy.js';
 import { getBenchmarkInformation, markBenchmarkScoresUpdated } from './benchmark-details.js';
 import { getBenchmarkScores } from './benchmark-scores.js';
-import { loadReferencedBenchmarkFamilyIDs } from './benchmark-family-service.js';
 import { resolveArenaSyncConflict } from './arena-sync-conflicts.js';
 import { createSearchIndex } from './public/js/shared/search.js';
 import { createDiscussionPost, deleteDiscussionPost, voteDiscussion, listDiscussion, discussionSummary,
@@ -117,7 +116,6 @@ import { createHomeAssetRenderer } from './home-assets.js';
 import { createSearchPresentation, searchIndexingHeaders, searchHead, replaceSearchSlot,
     renderTopicDirectory, PUBLIC_DOCUMENTS, escapeHTML } from './search-presentation.js';
 import { normalizeRankingResume } from './public/js/shared/ranking-resume.js';
-import { FALLBACK_CONFIGURATION_VERSION } from './public/js/shared/benchmark-families.js';
 import {
     createModerationAuditRecorder,
     insertModerationAuditLog,
@@ -712,9 +710,6 @@ API.post('/get_weighted_workspace', async (req, res) => {
 API.post('/get_ranking_page', async (req, res) => {
     const userID = await activeSessionUserID(req);
     await authorizeRankingSnapshot(req.body.snapshotID, userID);
-    if (['benchmarks', 'fallbacks'].includes(req.body.list)) {
-        rankingPager.retainReferencedFamilies(await loadReferencedBenchmarkFamilyIDs(db));
-    }
     const result = rankingPager.getPage({
         snapshotID: req.body.snapshotID,
         userID,
@@ -912,11 +907,6 @@ API.post('/get_approved_benchmark_results', async (req, res) => {
 });
 
 API.post('/save_personal_pie', requireAuthForAPI, requireAccountWriteOwner, requireCurrentTermsForAPI, async (req, res) => {
-    if (Array.isArray(req.body.fallbackRules) && req.body.fallbackRules.length
-        && req.body.fallbackConfigurationVersion !== FALLBACK_CONFIGURATION_VERSION) {
-        return res.status(409).json({ error: 'fallback_configuration_upgrade_required',
-            message: 'Fallback choices have changed. Refresh this page before saving.' });
-    }
     const receipt = await savePersonalPie(db, {
         userID: req.session.userID,
         writeIdentity: readWriteIdentity(req),
@@ -924,7 +914,8 @@ API.post('/save_personal_pie', requireAuthForAPI, requireAccountWriteOwner, requ
         contextValues: req.body.contextValues,
         expectedRevision: req.body.expectedRevision,
         entries: req.body.entries,
-        fallbackRules: req.body.fallbackRules
+        fallbackRules: req.body.fallbackRules,
+        estimationVotes: req.body.estimationVotes
     });
     topicHome.invalidate(req.body.categoryID);
     searchPresentation.invalidate();
@@ -2509,22 +2500,8 @@ async function assertBenchmarkConditionSetCanChange(connection, targetID, before
     assertBenchmarkConditionNameLengths(after.conditions, before.conditions);
     assertUniqueChangeConditionNames(after.conditions, 'duplicate_benchmark_condition', before.conditions);
     for (const condition of changes.removed) {
-        const [dependencies] = await connection.execute(`
-            SELECT
-                (SELECT COUNT(*) FROM benchmark_results WHERE benchmark_condition_ID = ?) AS resultCount,
-                (SELECT COUNT(*) FROM personal_pie_weights WHERE benchmark_condition_ID = ?) AS weightCount,
-                (SELECT COUNT(*) FROM benchmark_families
-                    WHERE primary_benchmark_condition_ID = ?) AS fallbackPrimaryCount,
-                (SELECT COUNT(*) FROM benchmark_family_members
-                    WHERE benchmark_condition_ID = ?) AS fallbackComponentCount`,
-        [condition.ID, condition.ID, condition.ID, condition.ID]);
-        if (dependencies.length !== 1) {
-            throw { status: 409, body: { error: 'benchmark_condition_dependency_check_failed', ID: condition.ID } };
-        }
-        if (Number(dependencies[0].resultCount) > 0
-            || Number(dependencies[0].weightCount) > 0
-            || Number(dependencies[0].fallbackPrimaryCount) > 0
-            || Number(dependencies[0].fallbackComponentCount) > 0) {
+        const { resultCount, pieCount } = await conditionImpact(connection, 'benchmark', targetID, condition.ID);
+        if (resultCount || pieCount) {
             throw {
                 status: 409,
                 body: { error: 'benchmark_condition_in_use', ID: condition.ID }

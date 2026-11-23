@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Compare models by topic, choose your benchmark weights, and understand scores, coverage and fallback.">
-    <title>How BenchPoll Works - Weights, Scores and Fallback</title>
+    <meta name="description" content="Compare models by topic, choose your benchmark weights, and understand measured coverage and score estimates.">
+    <title>How BenchPoll Works - Weights, Scores and Estimation</title>
     <link rel="canonical" href="https://benchpoll.com/how-it-works">
     <meta name="robots" content="index, follow, max-image-preview:large">
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="BenchPoll">
-    <meta property="og:title" content="How BenchPoll Works - Weights, Scores and Fallback">
-    <meta property="og:description" content="Understand BenchPoll public and personal AI indices, topic references, measured coverage, missing-score estimation and community fallback.">
+    <meta property="og:title" content="How BenchPoll Works - Weights, Scores and Estimation">
+    <meta property="og:description" content="Understand BenchPoll public and personal AI indices, topic references, measured coverage and how votes affect missing-score estimates.">
     <meta property="og:url" content="https://benchpoll.com/how-it-works">
     <meta property="og:image" content="https://benchpoll.com/assets/benchpoll-social-si-20261102.png">
     <meta property="og:image:width" content="1200">
@@ -18,8 +18,8 @@
     <meta property="og:image:alt" content="BenchPoll - Define Super Intelligence, democratically.">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:site" content="@BenchPoll">
-    <meta name="twitter:title" content="How BenchPoll Works - Weights, Scores and Fallback">
-    <meta name="twitter:description" content="Understand BenchPoll public and personal AI indices, topic references, measured coverage, missing-score estimation and community fallback.">
+    <meta name="twitter:title" content="How BenchPoll Works - Weights, Scores and Estimation">
+    <meta name="twitter:description" content="Understand BenchPoll public and personal AI indices, topic references, measured coverage and how votes affect missing-score estimates.">
     <meta name="twitter:image" content="https://benchpoll.com/assets/benchpoll-social-si-20261102.png">
     <meta name="twitter:image:alt" content="BenchPoll - Define Super Intelligence, democratically.">
     <link rel="icon" href="/favicon.ico?v=benchpoll-brand-20260919" sizes="any">
@@ -30,7 +30,7 @@
     <link rel="stylesheet" href="/css/how-it-works.css?v=plain-guide-20261105">
     <link rel="stylesheet" href="/css/site-palette.css?v=shared-controls-20261010">
     <link rel="stylesheet" href="/css/typography.css?v=manrope-static-20261007">
-    <script src="/js/how-it-works.js?v=guide-20261105" type="module"></script>
+    <script src="/js/how-it-works.js?v=score-estimation-20261123" type="module"></script>
 </head>
 <body class="bp-how-page">
     <a class="hi-skip" href="#overview">Skip to guide</a>
@@ -86,31 +86,27 @@
             <section id="rankings" class="bp-how-section hi-score-section" data-how-section data-reveal>
                 <div class="hi-section-copy"><h2>Compare model scores</h2><p>Estimated score gives each model a single score. Score range shows the lowest and highest possible totals when some test results are missing.</p><details class="bp-how-rule-answer"><summary>How scores and coverage are calculated</summary><div class="hi-answer"><p>Both modes use the same qualifying measurements, converted using each test's score range and direction, then combined using your weights. The chosen benchmark version takes priority.</p>
                     <ul>
-                        <li><strong>Estimated score:</strong> averages direct scores and calibrated fallback estimates. Unresolved weights are excluded from the average.</li>
-                        <li><strong>Score range:</strong> missing scores count as 0 at the lower end and 100 at the upper end; measured scores stay fixed. Models rank by the lower end.</li>
+                        <li><strong>Estimated score</strong> combines direct scores and calibrated estimates at their full weights. Results with neither a measurement nor a reliable estimate count as 0 at their full weight.</li>
+                        <li><strong>Score range</strong> uses 0 at the lower end and 100 at the upper end for missing measurements. Measured scores stay fixed. Models rank by the lower end.</li>
                     </ul>
-                    <p><strong>Coverage is the share of weight with measured results</strong> on selected versions. Unmeasured versions keep their full score range. A direct score or a reliable fallback qualifies a model to rank.</p>
-                    <p><strong>Coverage factor:</strong> f(c)=5c/(1+4c), where c is the share supported by direct scores and calibrated fallbacks. Negative totals use 2−f(c).</p>
-                    <p><strong>Test algorithm</strong> applies to this tab. Missing-only methods adjust calibrated estimates using direct coverage c.</p>
-                    <p><strong>Unadjusted</strong> keeps that missing contribution; <strong>Rational</strong> multiplies it by f(c); <strong>Linear</strong> by c; <strong>Square root</strong> by √c. <strong>Midpoint</strong> blends it toward 50 using c and 1−c.</p>
-                    <p>Turn on effort or harness to rank settings separately; otherwise use each model's best qualifying score per test. Missing settings stay in an unknown group. Strictly matched comparisons use direct scores.</p></div></details></div>
-                <figure class="hi-score-art"><div class="hi-score-switch" data-ui-component="segmented" role="group" aria-label="Score example"><button type="button" data-how-score="estimate" aria-pressed="true">Estimated score</button><button type="button" data-how-score="range" aria-pressed="false">Score range</button></div><div class="hi-score-number"><span id="how-score-number">79</span><span class="hi-score-out-of">/ 100</span></div><div class="hi-score-track" aria-hidden="true"><span class="hi-score-measured"></span><span class="hi-score-uncertain"></span><i class="hi-score-marker"></i></div><div class="hi-score-scale" aria-hidden="true"><span>0</span><span>100</span></div><div class="hi-coverage"><span><i class="fa-solid fa-circle-half-stroke" aria-hidden="true"></i> Measured coverage</span><strong>80%</strong></div><figcaption id="how-score-caption">A backup score of 85 estimates 75 on a benchmark worth 20%.</figcaption><p class="hi-sr-only" id="how-score-status" role="status"></p></figure>
+                    <p><strong>Coverage is the share of weight with measured results</strong> on selected versions. A direct score or a reliable estimate qualifies a model to rank. In the score preview, faded tiles show estimates or zeros for gaps in the evidence.</p>
+                    <p>The AI Index's <strong>Estimation method</strong> is <strong>Version-based estimation</strong>.</p>
+                    <p>Turn on effort or harness to rank settings separately. The default uses each model's best qualifying score per test. Missing settings stay in an unknown group. Matched comparisons calibrate each qualifying run separately.</p></div></details></div>
+                <figure class="hi-score-art"><div class="hi-score-switch" data-ui-component="segmented" role="group" aria-label="Score example"><button type="button" data-how-score="estimate" aria-pressed="true">Estimated score</button><button type="button" data-how-score="range" aria-pressed="false">Score range</button></div><div class="hi-score-number"><span id="how-score-number">79</span><span class="hi-score-out-of">/ 100</span></div><div class="hi-score-track" aria-hidden="true"><span class="hi-score-measured"></span><span class="hi-score-uncertain"></span><i class="hi-score-marker"></i></div><div class="hi-score-scale" aria-hidden="true"><span>0</span><span>100</span></div><div class="hi-coverage"><span><i class="fa-solid fa-circle-half-stroke" aria-hidden="true"></i> Measured coverage</span><strong>80%</strong></div><figcaption id="how-score-caption">A measured score of 85 on another version estimates 75 on a benchmark worth 20%. If calibration failed, that 20% would contribute 0.</figcaption><p class="hi-sr-only" id="how-score-status" role="status"></p></figure>
             </section>
             <div id="details" class="hi-details" data-how-section data-reveal>
                 <div class="hi-details-heading"><h2>More details</h2></div>
                 <div class="hi-detail-list"><section id="references"><details class="bp-how-rule-answer"><summary>Can I combine topics in one index?</summary><div class="hi-answer"><p>You can add another topic with saved weights, choosing a specific scene if it has scenes. A topic or scene cannot directly reference itself. References follow live weights and stay linked to the scene you selected.</p>
                     <p>Public indices always follow public target weights. Personal indices prefer your saved target weights and otherwise follow public weights. Private topics may reference your other private topics; public-topic configurations cannot reference private topics.</p>
-                    <p>Weights multiply along reference paths and combine for each benchmark version. Different fallback choices retain their shares. Scores and coverage correction are calculated after expansion; child scores are never averaged.</p>
+                    <p>Weights multiply along paths and combine for each benchmark version. Each referenced scene uses its own estimation source votes. BenchPoll calculates scores and coverage from those benchmark shares.</p>
                     <p>References combine capabilities. To evaluate a specific combination, such as real-time vector generation, use benchmarks that test those requirements together.</p>
                     <p>Topics can reference one another in a loop. We calculate the benchmark shares reached after following every repeated path. A loop with no path to benchmarks adds no measured score or coverage; its share stays missing.</p>
-                    <p>Empty or unavailable targets retain their missing weight and show a notice.</p></div></details></section><section id="fallback"><details class="bp-how-rule-answer"><summary>How do versions and fallback work?</summary><div class="hi-answer"><p>Added benchmarks <strong>follow the community</strong>. Expand <strong>Contribute your expertise</strong> below the weight chart to pick a version. Picking one opens the fallback list. You can keep the community fallback, choose a saved fallback order or edit your own.</p>
-                    <p>Explicit choices updated within 14 days shape version and fallback proportions per topic/scene, weighted by benchmark allocation. Following adds no vote.</p>
-                    <p>Unselected versions follow community proportions; without votes, use the primary version. Changing versions clears fallback. If nobody has chosen, the index works normally without backups.</p>
-                    <p>Direct scores count, including zero and negative scores. Otherwise, try backups in order. Each estimates the chosen version directly. No fallback uses the chosen version alone. Deselect to follow the community.</p>
-                    <p>We need five other models measured on both versions with matching run settings. Their backup scores must bracket yours within 10 points. We add the median difference between the tests.</p>
+                    <p>Empty or unavailable targets retain their missing weight and show a notice.</p></div></details></section><section id="fallback"><details class="bp-how-rule-answer"><summary>How do versions and estimation sources work?</summary><div class="hi-answer"><p>Open <strong>Advanced settings</strong> for a benchmark. Use <strong>Scoring version</strong> to choose the version to rank on. Use the thumbs up and down under <strong>Estimation</strong> to support or oppose a version as a source. Select the same option again to clear it.</p>
+                    <p>Scoring version choices in the past 14 days are weighted by benchmark allocation within each scene. With no choices, the primary version is used. Direct scores count, including zero and negative scores.</p>
+                    <p>BenchPoll automatically considers other versions of the same benchmark for missing scores. A source stays eligible when support equals or exceeds opposition, even with zero votes. Each recent voter with weight on that benchmark counts once per version in the scene. Your own vote takes priority for your personal ranking.</p>
+                    <p>An estimate requires a measured source score and at least five other models measured on both versions with matching run settings. Their source scores must bracket the model’s score within 10 points. We add their median paired difference to the source score.</p>
                     <p>Held-out predictions must average at most five points of error. We hold out whole vendors when possible. Evidence from a single known vendor applies to its own models.</p>
-                    <p>Try the next backup when evidence is weak. An exhausted chain leaves its weight unresolved.</p>
-                    <p>Backup versions are selected explicitly. New versions never join an existing order automatically.</p></div></details></section><section id="account"><details class="bp-how-rule-answer"><summary>How can I publish a topic?</summary><div class="hi-answer"><p>Create a private topic, then choose <strong>Make public</strong> in its editor when ready. Creation and publication are immediate and do not require review. You can have up to three public topics at a time.</p>
+                    <p>Among reliable sources, the lowest validation error wins, with more paired models breaking ties. Votes determine which sources are eligible. Paired measurements determine the estimate.</p></div></details></section><section id="account"><details class="bp-how-rule-answer"><summary>How can I publish a topic?</summary><div class="hi-answer"><p>Create a private topic, then choose <strong>Make public</strong> in its editor when ready. Creation and publication are immediate and do not require review. You can have up to three public topics at a time.</p>
                     <p>Private topics and scenes are visible only to you. You can make a public topic private again; make it private before deleting it.</p>
                     <p>Open your <a href="/me">profile</a> and choose <a href="/settings">Settings</a> to edit your details and privacy choices. Showing a GitHub link is optional.</p></div></details></section></div>
             </div>

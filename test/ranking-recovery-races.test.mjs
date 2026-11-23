@@ -72,7 +72,7 @@ async function createHarness(version = before ? 'before' : 'current') {
     const source = version === 'current' ? currentSource : beforeSource;
     const pagerFactory = version === 'current' ? createRankingPager : oldPagerFactory;
     const catalogueFactory = version === 'current' ? createBenchmarkFallbackCatalogue : oldCatalogueFactory;
-    let clock = 0, heldFallback = null, holdFallback = false;
+    let clock = 0, heldFallback = null, holdFallback = false, holdPersonal = false;
     const pager = pagerFactory({ now: () => clock });
     const fixture = createFixtureState({ userID: '7', rankingStress: true,
         families: Array.from({ length: 7 }, (_, index) => index + 2).flatMap(a =>
@@ -132,7 +132,13 @@ async function createHarness(version = before ? 'before' : 'current') {
         topicViewButton: new Element('button'), isTopicReference: entry => entry.conditionID < 0,
         setStatus(message) { state.statusMessage = message; }, renderLoadError(error) { loadErrors.push(error); state.loading = false; },
         postJSON(route, body) {
-            if (route === '/api/get_ranking_page') return Promise.resolve(getPage(body));
+            if (route === '/api/get_ranking_page') {
+                const payload = getPage(body);
+                if (!holdPersonal || body.list !== 'personal') return Promise.resolve(payload);
+                const request = { ...deferred(), route, body: structuredClone(body), payload };
+                requests.push(request);
+                return request.promise;
+            }
             assert.ok(['/api/get_weighted_workspace', '/api/save_personal_pie'].includes(route));
             if (route === '/api/save_personal_pie') {
                 assert.equal(body.expectedUserID, fixture.userID);
@@ -188,11 +194,31 @@ async function createHarness(version = before ? 'before' : 'current') {
     assert.equal(state.workspaceView, 'overview');
     return { api, state, requests, applied, pending, fallbackRequests, expiredCallbacks, loadErrors, catalogue, fixture, search: globals.benchmarkSearch, page: getPage,
         expire() { clock = 900001; }, hold() { holdFallback = true; }, live() { holdFallback = false; },
+        holdPersonalPage() { holdPersonal = true; },
         getHeld: () => heldFallback, failHeld() { try { getPage(heldFallback.body); assert.fail('Expected expired old snapshot'); }
             catch (error) { assert.equal(error.status, 410); heldFallback.reject(error); } },
         fallbackSection() { return catalogue.create(state.benchmarks.find(row => row.ID === 1), item => { const row = new Element('row'); row.item = item; return row; }); }
     };
 }
+
+test('a personal page already in flight cannot append results after a new source vote', async () => {
+    const h = await createHarness('current');
+    h.holdPersonalPage();
+    const previous = h.state.rankingPagination.personal.nextOffset;
+    const page = h.api.loadPage('personal');
+    await waitFor(() => h.requests.length === 1);
+    assert.ok(h.requests[0].payload.items.length > 0);
+    h.state.personalEstimationVotes = [{ conditionID: 1, vote: 'oppose' }];
+    h.state.personalEditVersion++;
+    h.state.personalRankingDirty = true;
+    h.requests[0].resolve(h.requests[0].payload);
+    await page;
+    assert.equal(h.state.modelLeaderboards.personal.length, previous);
+    assert.equal(h.state.rankingPagination.personal.nextOffset, previous);
+    assert.equal(h.state.rankingPageLoading.personal, false);
+    await h.api.loadPage('personal');
+    assert.equal(h.requests.length, 1);
+});
 
 const weights = h => Array.from(h.state.personalEntries, row => row.weightBasisPoints);
 function panel(h) {

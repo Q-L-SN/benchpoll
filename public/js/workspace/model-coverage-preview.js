@@ -22,8 +22,7 @@ export function buildModelCoverageEntries(entries, coverageEntries, versions = [
     const estimatedByID = new Map();
     const totalWeight = coverageEntries.reduce((sum, item) => sum + item.weightBasisPoints, 0);
     for (const score of estimates) {
-        // Fallback resolutions identify the target as primaryConditionID; point estimates use conditionID.
-        const id = score.primaryConditionID ?? score.conditionID;
+        const id = score.conditionID;
         if (!coverageByID.has(id) || !Number.isFinite(score.normalizedScore)) continue;
         const weight = score.weightBasisPoints ?? score.originalWeight / 100 * totalWeight;
         if (!Number.isFinite(weight) || weight <= 0) continue;
@@ -52,10 +51,13 @@ export function buildModelCoverageEntries(entries, coverageEntries, versions = [
     return mergeBenchmarkWeights(entries, versions).map(entry => {
         const total = totals.get(entry.isUnresolved ? 'unresolved' : blockKey(entry));
         const coveredWeightBasisPoints = total?.covered ?? 0;
-        return { ...entry, coveredWeightBasisPoints,
+        const estimatedWeightBasisPoints = total?.estimated ?? 0;
+        const unresolvedWeightBasisPoints = Math.max(0, entry.weightBasisPoints - coveredWeightBasisPoints - estimatedWeightBasisPoints);
+        return { ...entry, coveredWeightBasisPoints, estimatedWeightBasisPoints, unresolvedWeightBasisPoints,
             coverage: Math.min(100, coveredWeightBasisPoints / entry.weightBasisPoints * 100),
-            estimatedNormalizedScore: total?.estimated > 0 ? total.estimatedContribution / total.estimated : null,
-            adoptedNormalizedScore: coveredWeightBasisPoints > 0 ? total.contribution / coveredWeightBasisPoints : null };
+            adoptedNormalizedScore: coveredWeightBasisPoints > 0 ? total.contribution / coveredWeightBasisPoints : null,
+            estimatedNormalizedScore: estimatedWeightBasisPoints > 0 ? total.estimatedContribution / estimatedWeightBasisPoints : null,
+            rankingNormalizedScore: ((total?.contribution ?? 0) + (total?.estimatedContribution ?? 0)) / entry.weightBasisPoints };
     });
 }
 
@@ -70,7 +72,7 @@ export function modelCoverageContext(state) {
 
 export function createModelCoveragePreview({ state, pieSvg, getExpandedEntries, getVersions = () => [],
     getContext = () => modelCoverageContext(state), resolveModel = model => model }) {
-    let active = null, disposed = false;
+    let active = null, disposed = false, leaveTimer;
     const mounts = new Set();
     const mobile = window.matchMedia('(max-width: 760px)');
     const viewportChanged = () => { if (mobile.matches) clear(); };
@@ -78,7 +80,7 @@ export function createModelCoveragePreview({ state, pieSvg, getExpandedEntries, 
     const eligible = () => !disposed && !state.loading && !state.comparisonPending
         && !(state.mode === 'personal' && state.personalRankingDirty);
 
-    function mount(container, model, { anchor, onDestroy = () => {} } = {}) {
+    function mount(container, model, { anchor, focusCoverage = false, onDestroy = () => {} } = {}) {
         const controller = new globalThis.AbortController(), context = getContext();
         let renderer = null, frame = null, destroyed = false;
         const current = () => !destroyed && !disposed && !controller.signal.aborted && context === getContext()
@@ -102,7 +104,7 @@ export function createModelCoveragePreview({ state, pieSvg, getExpandedEntries, 
         watch();
         function render(resolved) {
             if (!current()) return false;
-            const estimates = state.scoreMode === 'range' ? resolved?.fallbackResolutions : resolved?.inferredScores;
+            const estimates = state.scoreMode === 'available' ? resolved?.inferredScores : undefined;
             const entries = buildModelCoverageEntries(getExpandedEntries(), resolved?.coverageEntries, getVersions(), estimates);
             if (!entries) return unavailable();
             const svg = document.createElementNS(SVG_NS, 'svg');
@@ -117,7 +119,7 @@ export function createModelCoveragePreview({ state, pieSvg, getExpandedEntries, 
             renderer = createPieRenderer({ state: previewState, pieSvg: svg,
                 orderedPieEntries: values => values, currentPieEntries: () => entries, selectedObjectIndex: () => -1,
                 renderInlineFallback() {}, fallbackRuleFor: () => null, publicFallbackRuleFor: () => null,
-                autoSelect: () => false, coveragePreview: true });
+                autoSelect: () => false, coveragePreview: true, coverageMode: state.scoreMode, focusCoverage });
             renderer.renderPie();
             return true;
         }
@@ -138,6 +140,7 @@ export function createModelCoveragePreview({ state, pieSvg, getExpandedEntries, 
     }
 
     function clear() {
+        clearTimeout(leaveTimer);
         const previous = active;
         active = null;
         previous?.destroy();
@@ -162,6 +165,9 @@ export function createModelCoveragePreview({ state, pieSvg, getExpandedEntries, 
             if (active?.container === container) active = null;
         } });
         active = handle;
+        container.addEventListener('pointerenter', () => clearTimeout(leaveTimer));
+        container.addEventListener('pointerleave', clear);
+        container.addEventListener('click', clear);
         // Synchronous DTOs are already rendered when mount returns.
         void handle.ready.then(ready => {
             if (ready && active === handle) {
@@ -177,7 +183,7 @@ export function createModelCoveragePreview({ state, pieSvg, getExpandedEntries, 
     function renderInto(container, model) {
         container.classList.add('bp-model-coverage-stage');
         if (!eligible()) return { ready: Promise.resolve(false), destroy() {} };
-        return mount(container, model);
+        return mount(container, model, { focusCoverage: true });
     }
 
     function bindRow(row, model) {
@@ -185,15 +191,20 @@ export function createModelCoveragePreview({ state, pieSvg, getExpandedEntries, 
             if (event.pointerType === 'touch' || mobile.matches) return;
             void show(model, { anchor: row });
         };
-        const leave = () => { if (active?.anchor === row) clear(); };
+        const leave = () => {
+            if (active?.anchor !== row) return;
+            clearTimeout(leaveTimer);
+            leaveTimer = setTimeout(clear, 400);
+        };
+        const cancel = () => { if (active?.anchor === row) clear(); };
         row.addEventListener('pointerenter', enter);
         row.addEventListener('pointerleave', leave);
-        row.addEventListener('pointercancel', leave);
+        row.addEventListener('pointercancel', cancel);
         return () => {
-            leave();
+            cancel();
             row.removeEventListener('pointerenter', enter);
             row.removeEventListener('pointerleave', leave);
-            row.removeEventListener('pointercancel', leave);
+            row.removeEventListener('pointercancel', cancel);
         };
     }
 

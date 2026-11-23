@@ -21,6 +21,7 @@ import { topicSlug, topicURL, parseTopicPath, scenePath } from '../../public/js/
 import { normalizeTopicRequest } from '../../topic-service.js';
 import { topicPreviewComparison, normalizeHomeComparison } from '../../topic-home-service.js';
 import { AA_DISPLAY_RESTRICTION } from '../../public/js/shared/aa-ranking-policy.js';
+import { normalizeEstimationVotes } from '../../public/js/shared/estimation-votes.js';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const publicRoot = resolve(root, 'public');
@@ -187,6 +188,10 @@ export async function startPreview({ port = 0, ...options } = {}) {
                     if (state.saveFailure) return send(state.saveFailure, { error: state.saveFailure === 409 ? 'pie_revision_conflict' : 'fixture_save_failure' });
                     if (!state.authenticated) return send(401, { error: 'unauthorized' });
                     if (body.expectedRevision !== state.revision) return send(409, { error: 'pie_revision_conflict' });
+                    if (Object.hasOwn(body, 'estimationVotes')) {
+                        try { state.personalEstimationVotes = normalizeEstimationVotes(body.estimationVotes); }
+                        catch { return send(400, { error: 'invalid_estimation_votes' }); }
+                    }
                     state.revision = body.entries.length ? state.revision + 1 : 0;
                     state.personalEntries = weightedEntries(body.entries);
                     state.fallbackRules = body.fallbackRules.map(rule => {
@@ -202,7 +207,8 @@ export async function startPreview({ port = 0, ...options } = {}) {
                     });
                     const receipt = { saved: true, requestKey: key, userID: state.userID,
                         categoryID: body.categoryID, contextValues: body.contextValues,
-                        personalPie: { revision: state.revision, entries: body.entries, fallbackRules: body.fallbackRules } };
+                        personalPie: { revision: state.revision, entries: body.entries, fallbackRules: body.fallbackRules,
+                            ...(Object.hasOwn(state, 'personalEstimationVotes') ? { estimationVotes: state.personalEstimationVotes } : {}) } };
                     pieReceipts.set(`${state.userID}:${key}`, { intent, receipt });
                     return send(200, receipt);
                 }

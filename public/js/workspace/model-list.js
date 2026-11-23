@@ -251,9 +251,9 @@ export function createModelListView({ state, modelRows, openApprovedModelResults
             const relative = fillTopBar && comparable;
             row.classList.toggle('is-leader-relative', relative);
             track.classList.toggle('is-leader-relative', relative);
-            track.setAttribute('aria-label', !comparable ? 'No observed total score' : state.scoreMode === 'available'
-                ? `Score ${rankingNumber(model.lower)} including calibrated fallback estimates where available; ${rankingNumber(model.coverage)}% measured coverage; chart scale ${rankingNumber(scale.min)} to ${rankingNumber(scale.max)}.`
-                : `Score range ${rankingNumber(model.lower)} to ${rankingNumber(model.upper)}; chart scale ${rankingNumber(scale.min)} to ${rankingNumber(scale.max)}.`);
+            track.setAttribute('aria-label', !comparable ? 'No qualifying index score' : state.scoreMode === 'available'
+                ? `Estimated score ${rankingNumber(model.lower)}. Measured coverage ${rankingNumber(model.coverage)}%. Chart scale ${rankingNumber(scale.min)} to ${rankingNumber(scale.max)}.`
+                : `Score range ${rankingNumber(model.lower)} to ${rankingNumber(model.upper)}. Chart scale ${rankingNumber(scale.min)} to ${rankingNumber(scale.max)}.`);
             const position = value => Math.max(0, Math.min(100, scale.position(value)));
             const lowerPosition = comparable ? position(model.lower) : 0;
             const upperPosition = comparable ? position(model.upper) : 0;

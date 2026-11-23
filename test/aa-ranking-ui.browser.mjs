@@ -4,6 +4,14 @@ import { readFile } from 'node:fs/promises';
 import { chromium } from 'playwright';
 import { startPreview } from '../scripts/frontend/server.mjs';
 
+async function openWorkspace(page, app) {
+    const url = `${app.url}/1`;
+    if (process.env.BP_TEST_BUILT === '1') await page.route(url, async route => route.fulfill({
+        contentType: 'text/html', body: await readFile('private/home-built.html', 'utf8') }));
+    await page.goto(url);
+    await page.locator('#benchmark-rows .bp-benchmark-row').first().waitFor();
+}
+
 test('AA benchmark remains browsable but cannot be added to a personal pie', async t => {
     const app = await startPreview({ aaBenchmarks: true });
     const browser = await chromium.launch({ headless: true });
@@ -11,8 +19,7 @@ test('AA benchmark remains browsable but cannot be added to a personal pie', asy
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
     t.after(async () => { await page.close(); await browser.close(); await app.close(); assert.deepEqual(errors, []); });
-    await page.goto(`${app.url}/Intelligence`);
-    await page.waitForSelector('#benchmark-rows .bp-benchmark-row');
+    await openWorkspace(page, app);
     await page.locator('#pie-mode-personal').click();
     await page.locator('#benchmark-search').fill('AA Example');
     const row = page.locator('#benchmark-rows [data-condition-id="9901"]');
@@ -35,10 +42,7 @@ for (const width of [1440, 390]) test(`mixed benchmark adds its independent vers
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
     t.after(async () => { await browser.close(); await app.close(); assert.deepEqual(errors, []); });
-    if (process.env.BP_TEST_BUILT === '1') await page.route(app.url + '/', async route => route.fulfill({
-        contentType: 'text/html', body: await readFile('private/home-built.html', 'utf8') }));
-    await page.goto(app.url);
-    await page.locator('#benchmark-rows .bp-benchmark-row').first().waitFor();
+    await openWorkspace(page, app);
     await page.locator('#pie-mode-personal').click();
     await page.locator('#benchmark-search').fill('Mixed benchmark');
     const row = page.locator('#benchmark-rows [data-condition-id="9912"]');
@@ -52,8 +56,8 @@ for (const width of [1440, 390]) test(`mixed benchmark adds its independent vers
     await settings.waitFor();
     assert.equal(await settings.locator('.bp-version-choice').count(), 2);
     assert.equal(await settings.locator('[data-condition-id="9911"]').count(), 0);
-    assert.equal(await settings.locator('[data-condition-id="9912"]').getAttribute('data-default-version'), 'true');
-    await settings.getByRole('button', { name: 'Done', exact: true }).click();
+    assert.equal(await settings.getByRole('button', { name: 'Use Independent for scoring', exact: true }).getAttribute('aria-pressed'), 'false');
+    await page.locator('#inline-fallback-toggle').click();
     await page.waitForTimeout(800);
     const saves = app.state.requests.filter(request => request.path === '/api/save_personal_pie');
     assert.ok(saves.length > 0);

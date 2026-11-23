@@ -19,11 +19,15 @@ const infer = (observed, coverage, estimates = [], sourceCount = 0) => available
 function retiredTrace(row, method = PAIRWISE_COVERAGE_METHOD) {
     if (!row.availableInference) return row;
     const trace = row.availableInference;
+    if (!trace.coverageFraction) return { ...row, availableInference: null };
     const availableInference = availableResultInference(trace.observedScore, trace.coverageFraction,
         row.inferredScores.map(score => ({ normalizedScore: score.normalizedScore, weightFraction: score.originalWeight / 100 })),
         trace.percentile, trace.sourceCount, { method });
     const total = Math.round(availableInference.totalScore * 100) / 100;
-    return { ...row, availableInference, lower: row.lower === null ? null : total, upper: row.upper === null ? null : total };
+    const archivedWeight = score => ({ ...score, effectiveWeight: score.effectiveWeight / trace.supportedFraction,
+        contribution: score.contribution / trace.supportedFraction });
+    return { ...row, availableInference, calculationScores: row.calculationScores.map(archivedWeight),
+        inferredScores: row.inferredScores.map(archivedWeight), lower: row.lower === null ? null : total, upper: row.upper === null ? null : total };
 }
 const score = (models, entries = weights, rules = {}, comparison = {}) => scoreComparison(models, entries, 10000,
     { scoreMode: 'available', ...rules }, comparisonOptions(models, { mode: 'best', keys: ['model'], ...comparison }))
@@ -132,16 +136,16 @@ test('fully measured totals and Score range do not change; lazy metadata preserv
 test('fresh legacy-version requests no longer select archived deduction algorithms', () => {
     const models = [model(1, { 1: 80 }, { harness: 'same' }), model(2, { 1: 60 }, { harness: 'same' })];
     for (const mode of ['best', 'matched']) {
-        for (const availableInferenceVersion of [1, 2, 3, 4, 5, 6, 7]) {
+        for (const availableInferenceVersion of [1, 2, 3, 4, 5, 6, 7, 8]) {
             const rows = scoreComparison(models, weights, 10000, { scoreMode: 'available', availableInferenceVersion },
                 comparisonOptions(models, { mode, keys: ['model'] }));
-            assert.deepEqual(rows.map(row => row.lower), [66.67, 50]);
+            assert.deepEqual(rows.map(row => row.lower), [40, 30]);
             assert.ok(rows.every(row => !Object.hasOwn(row.availableInference, 'coveragePenalty')));
         }
     }
-    assert.equal(AVAILABLE_INFERENCE_VERSION, 8);
-    assert.equal(rankingReadBody('/api/get_weighted_workspace', {}).availableInferenceVersion, 8);
-    for (const version of [1, 2, 5, 6]) assert.equal(rankingReadBody('/api/get_weighted_workspace', { availableInferenceVersion: version }).availableInferenceVersion, 8);
+    assert.equal(AVAILABLE_INFERENCE_VERSION, 9);
+    assert.equal(rankingReadBody('/api/get_weighted_workspace', {}).availableInferenceVersion, 9);
+    for (const version of [1, 2, 5, 6, 8]) assert.equal(rankingReadBody('/api/get_weighted_workspace', { availableInferenceVersion: version }).availableInferenceVersion, 9);
 });
 
 test('workspace validation requires an accurate separate deduction and pre-deduction contribution trace', () => {
@@ -161,18 +165,15 @@ test('workspace validation requires an accurate separate deduction and pre-deduc
     }
 });
 
-test('current help describes the factor while calculation details keep before and after scores', () => {
+test('current help explains version-based estimates and full-weight gaps', () => {
     const read = path => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
-    assert.match(read('private/home.html'), /reliable estimates from the selected fallback chains/);
+    assert.match(read('private/home.html'), /reliable estimates from eligible versions of the same benchmark/);
     const guide = read('private/how-it-works.html');
-    assert.doesNotMatch(guide, /deduct 2 points for every missing 10% of weight/);
-    assert.match(guide, /calibrated fallback estimates/);
-    assert.match(guide, /Unresolved weights are excluded from the average/);
-    assert.match(guide, /Unmeasured versions keep their full score range/);
-    assert.match(guide, /Unresolved weights are excluded from the average/);
-    assert.match(guide, /missing scores count as 0 at the lower end and 100 at the upper end/);
+    assert.match(guide, /Version-based estimation/);
+    assert.match(guide, /calibrated estimates at their full weights/);
+    assert.match(guide, /count as 0 at their full weight/);
+    assert.match(guide, /uses 0 at the lower end and 100 at the upper end for missing measurements/);
+    assert.doesNotMatch(guide, /coverage factor|coverage penalty|excluded from the average/i);
     const details = read('public/js/workspace/model-scores.js');
-    assert.match(details, /Before adjustment:/);
-    assert.match(details, /After adjustment:/);
-    assert.doesNotMatch(details, /Low coverage deduction:/);
+    assert.match(details, /no reliable estimate and counts as 0 at its full weight/);
 });

@@ -15,18 +15,18 @@ const storage = () => {
     return { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value), removeItem: key => values.delete(key) };
 };
 
-test('saved NULL-family rows load as explicit none; missing rows stay unconfigured', async () => {
-    for (const configured of [true, false]) {
+test('personal reads return saved source opinions independently of an explicit scoring version', async () => {
+    for (const estimationVotes of [[{ conditionID: 2, vote: 'oppose' }], []]) {
         const db = { async execute(sql) {
-            if (sql.includes('FROM personal_pies')) return [[{ ID: 1, revision: 2 }]];
-            if (sql.includes('FROM personal_pie_weights')) return [[{ benchmark_condition_ID: 1, weight_basis_points: 10000 }]];
-            if (sql.includes('FROM personal_pie_score_rules')) return [configured ? [{ pie_ID: 1,
-                primary_benchmark_condition_ID: 1, selected_family_ID: null, family_ID: null, chain_hash: null,
-                position: null, fallback_benchmark_condition_ID: null }] : []];
+            if (sql.includes('FROM personal_pies')) return [[{ ID: 1, revision: 2,
+                estimation_votes: estimationVotes.length ? JSON.stringify(estimationVotes) : null }]];
+            if (sql.includes('FROM personal_pie_weights')) return [[{ benchmark_condition_ID: 1,
+                follow_community_version: 1, weight_basis_points: 10000 }]];
             throw new Error(sql);
         } };
         const pie = await loadPersonalPie(db, 1, '7');
-        assert.deepEqual(pie.fallbackRules, configured ? [{ ...none, familyID: null }] : []);
+        assert.deepEqual(pie.estimationVotes, estimationVotes);
+        assert.equal(pie.entries[0].followCommunityVersion, true);
     }
 });
 

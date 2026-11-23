@@ -44,13 +44,13 @@ test('a restricted primary does not block saving an independent version or its c
     assert.equal(available.excludedFromRanking, false);
     assert.equal(page.benchmarks.find(row => row.benchmarkID === 2).excludedFromRanking, true);
     assert.equal(page.versionComposition.find(group => group.benchmarkID === 1).primaryConditionID, 4);
-    const save = (entries, fallbackRules = []) => savePersonalPie(db, { userID: '42', categoryID,
-        writeIdentity: randomUUID(), expectedRevision: 0, entries, fallbackRules, scoreMode: 'range' });
+    const save = (entries, estimationVotes = []) => savePersonalPie(db, { userID: '42', categoryID,
+        writeIdentity: randomUUID(), expectedRevision: 0, entries, estimationVotes });
     const excluded = error => error.body?.error === 'pie_benchmark_condition_excluded';
     await assert.rejects(save([{ conditionID: 1, weightBasisPoints: 10000 }]), excluded);
     await assert.rejects(save([{ conditionID: 2, weightBasisPoints: 10000, followCommunityVersion: true }]), excluded);
     await assert.rejects(save([{ conditionID: 4, weightBasisPoints: 10000 }],
-        [{ primaryConditionID: 4, mode: 'ordered', entries: [{ conditionID: 1 }] }]), excluded);
+        [{ conditionID: 1, vote: 'support' }]), error => error.body?.error === 'estimation_vote_condition_unavailable');
     await save([{ conditionID: available.conditionID, weightBasisPoints: 10000, followCommunityVersion: true }]);
     const saved = await read();
     validateWorkspacePayload(createRankingPager().create(saved));
@@ -76,8 +76,8 @@ test('real MySQL saves abstention, recalculates inherited versions, and expands 
         topics.push(await createPublicTopic(db, name));
     }
     const [topic, reference] = topics;
-    const save = (userID, entries, revision = 0, categoryID = topic.ID, fallbackRules = []) => savePersonalPie(db, {
-        userID, categoryID, writeIdentity: randomUUID(), expectedRevision: revision, entries, fallbackRules, scoreMode: 'range'
+    const save = (userID, entries, revision = 0, categoryID = topic.ID) => savePersonalPie(db, {
+        userID, categoryID, writeIdentity: randomUUID(), expectedRevision: revision, entries
     });
     await assert.rejects(save('1000', [{ conditionID: 1, weightBasisPoints: 5000, followCommunityVersion: true },
         { conditionID: 4, weightBasisPoints: 5000 }]), error => error.body?.error === 'pie_benchmark_version_conflict');

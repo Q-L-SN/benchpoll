@@ -6,6 +6,8 @@ import { AVAILABLE_INFERENCE_VERSION } from '../../public/js/shared/available-sc
 import { normalizeEstimationAlgorithm } from '../../public/js/shared/estimation-algorithms.js';
 import { familyKey } from '../../public/js/shared/benchmark-families.js';
 import { communityVersionComposition, expandCommunityVersions } from '../../public/js/shared/benchmark-version-choice.js';
+import { normalizeEstimationVotes } from '../../public/js/shared/estimation-votes.js';
+import { createVersionEstimationPlanner } from '../../public/js/shared/version-estimation-policy.js';
 // Synthetic records for the isolated frontend harness; never imported by the app.
 const fixtureRankingPager = createRankingPager();
 export function rankingPage(state, body) {
@@ -58,6 +60,14 @@ export function familyEntries(entries) {
     const catalogue = [...benchmarks, secondaryBenchmark, sparseBenchmark];
     return entries.map(entry => ({ ...catalogue.find(item => item.conditionID === entry.conditionID), ...entry }));
 }
+function fixtureEstimationVotes(votes, entries, groupsByCondition, strict = false) {
+    const weightedBenchmarks = new Set(entries.map(entry => groupsByCondition.get(entry.conditionID)));
+    return normalizeEstimationVotes(votes).filter(({ conditionID }) => {
+        if (groupsByCondition.has(conditionID) && weightedBenchmarks.has(groupsByCondition.get(conditionID))) return true;
+        if (strict) throw { status: 400, body: { error: 'estimation_vote_condition_unavailable', conditionID } };
+        return false;
+    });
+}
 export function createFixtureState(options = {}) {
     return {
         userID: '1', authenticated: true, isSenior: true, empty: false, workspaceFailure: null, saveFailure: null,
@@ -80,10 +90,11 @@ export function workspace(state, body, { paginate = true } = {}) {
     const publicWeights = state.publicWeights ?? benchmarks.filter(item => item.publicWeight).map(item => ({ conditionID: item.conditionID, weightBasisPoints: item.publicWeight * 100 }));
     const publicEmpty = state.empty || publicWeights.length === 0;
     const preview = body.previewPersonalPie ?? null;
+    const estimationVoting = state.estimationSources || Object.hasOwn(state, 'communityEstimationVotes') || Object.hasOwn(state, 'personalEstimationVotes');
     const personalEntries = preview
         ? weightedEntries(preview.entries)
         : state.empty || !state.authenticated ? [] : state.personalEntries;
-    const personalFallbackRules = preview
+    const personalFallbackRules = estimationVoting ? [] : preview
         ? preview.fallbackRules.map(rule => ({ ...rule, entries: familyEntries(rule.entries, rule.primaryConditionID) }))
         : state.empty || !state.authenticated ? [] : state.fallbackRules;
     const extraBenchmarks = state.rankingStress ? Array.from({ length: 85 }, (_, index) => ({
@@ -139,6 +150,20 @@ export function workspace(state, body, { paginate = true } = {}) {
         modelLeaderboards: { public: [], personal: [] },
         scoreScale: { min: 0, max: 100 }, limits: { totalBasisPoints: 10000, maxPieItems: 100 }, serverTime: new Date().toISOString()
     };
+    const groupsByCondition = new Map(data.benchmarks.filter(row => !row.excludedFromRanking && row.conditionID > 0)
+        .map(row => [row.conditionID, row.benchmarkID]));
+    const savedVotes = state.empty ? [] : fixtureEstimationVotes(state.personalEstimationVotes ?? [], state.personalEntries, groupsByCondition);
+    const communityVotesByID = new Map((state.isPrivate ? [] : state.communityEstimationVotes ?? [])
+        .map(item => [item.conditionID, { ...item }]));
+    if (!state.isPrivate) for (const { conditionID, vote } of savedVotes) {
+        const count = communityVotesByID.get(conditionID) ?? { conditionID, supportCount: 0, opposeCount: 0 };
+        count[`${vote}Count`]++;
+        communityVotesByID.set(conditionID, count);
+    }
+    const communityVotes = [...communityVotesByID.values()].sort((left, right) => left.conditionID - right.conditionID);
+    const explicitBallot = preview && Object.hasOwn(preview, 'estimationVotes');
+    const personalVotes = fixtureEstimationVotes(explicitBallot ? preview.estimationVotes : state.authenticated ? savedVotes : [],
+        personalEntries, groupsByCondition, explicitBallot);
     data.personalPie.communityFallbackComposition = personalEntries.map(entry => {
         const group = data.publicPie.familyComposition.find(group => group.primaryConditionID === entry.conditionID)
             ?? { primaryConditionID: entry.conditionID, configuredPieCount: 0, isDefault: true,
@@ -146,11 +171,12 @@ export function workspace(state, body, { paginate = true } = {}) {
         return { ...group, families: group.families.map(family => ({ ...family,
             overallWeightBasisPoints: entry.weightBasisPoints * family.weightBasisPoints / 10000 })) };
     });
+    const estimationPlans = estimationVoting ? createVersionEstimationPlanner(data.benchmarks) : null;
     data.modelLeaderboards = options ? {
-        public: scoreComparison(state.comparisonModels, publicWeights, 10000, {
+        public: scoreComparison(state.comparisonModels, estimationPlans?.(publicWeights, communityVotes) ?? publicWeights, 10000, {
             scoreMode, estimationAlgorithm, availableInferenceVersion: body.availableInferenceVersion ?? AVAILABLE_INFERENCE_VERSION, fallbackScope: 'public', familyComposition: data.publicPie.familyComposition
         }, options),
-        personal: scoreComparison(state.comparisonModels, personalEntries, 10000, { fallbackRules: personalFallbackRules,
+        personal: scoreComparison(state.comparisonModels, estimationPlans?.(personalEntries, communityVotes, personalVotes) ?? personalEntries, 10000, { fallbackRules: personalFallbackRules,
             familyComposition: data.personalPie.communityFallbackComposition, scoreMode, estimationAlgorithm,
             availableInferenceVersion: body.availableInferenceVersion ?? AVAILABLE_INFERENCE_VERSION }, options)
     } : {
@@ -158,7 +184,7 @@ export function workspace(state, body, { paginate = true } = {}) {
         personal: personalEntries.length === 0 ? [] : [...models, ...extraModels].map(item => ({ ...item, lower: item.lower - 2,
             upper: scoreMode === 'available' ? item.lower - 2 : item.upper }))
     };
-    for (const family of [...state.families, ...personalFallbackRules]) {
+    for (const family of estimationVoting ? [] : [...state.families, ...personalFallbackRules]) {
         if (!family.entries.length) continue;
         const key = familyKey(family.primaryConditionID, family.entries);
         if (data.benchmarks.some(row => row.isFamily && row.familyKey === key)) continue;
@@ -175,7 +201,7 @@ export function workspace(state, body, { paginate = true } = {}) {
         for (const mode of ['personal', 'public']) {
             const entries = mode === 'personal' ? personalEntries : weightedEntries(publicWeights);
             data.modelLeaderboards[mode] = data.modelLeaderboards[mode].map(model => {
-                const observedScore = model.lower * 100 / model.coverage;
+                const observedScore = model.coverage > 0 ? model.lower * 100 / model.coverage : 0;
                 const availableInference = scoreMode === 'available' ? fallbackInference(observedScore, model.coverage / 100, [], estimationAlgorithm) : null;
                 return { ...model, availableInference, inferredScores: [],
                 lower: availableInference ? Number(availableInference.totalScore.toFixed(2)) : model.lower,
@@ -184,8 +210,8 @@ export function workspace(state, body, { paginate = true } = {}) {
                 calculationScores: entries.map(entry => ({ conditionID: entry.conditionID,
                     normalizedScore: observedScore,
                     weightBasisPoints: entry.weightBasisPoints * model.coverage / 100,
-                    effectiveWeight: entry.weightBasisPoints / 100 * (scoreMode === 'available' ? 1 : model.coverage / 100),
-                    contribution: (scoreMode === 'available' ? observedScore : model.lower) * entry.weightBasisPoints / 10000,
+                    effectiveWeight: entry.weightBasisPoints * model.coverage / 10000,
+                    contribution: model.lower * entry.weightBasisPoints / 10000,
                     fallbackFor: null, memberIDs: [model.ID], memberWeights: [{ ID: model.ID, weight: 1 }],
                     memberEvidence: [{ ID: model.ID, hash: 'f'.repeat(64) }], matchedCount: null }))
             }; });
@@ -216,6 +242,13 @@ export function workspace(state, body, { paginate = true } = {}) {
         data.personalPie.communityFallbackComposition = compositionFor(data.personalPie.effectiveEntries);
         data.publicPie.familyComposition = compositionFor(data.publicPie.effectiveEntries);
         data.communityFallbackComposition = data.publicPie.familyComposition;
+    }
+    if (estimationVoting) {
+        data.communityEstimationVotes = communityVotes;
+        data.personalPie.estimationVotes = personalVotes;
+        data.publicPie.familyComposition = [];
+        delete data.communityFallbackComposition;
+        delete data.personalPie.communityFallbackComposition;
     }
     state.transformWorkspace?.(data, body);
     if (!paginate) return data;

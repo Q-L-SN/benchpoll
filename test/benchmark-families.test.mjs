@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { familyKey, resolveFallbackChain, groupSmallFamilies } from '../public/js/shared/benchmark-families.js';
 import { parseFamilyRows, ensureBenchmarkFamily } from '../benchmark-family-service.js';
-import { scoreModels, buildBenchmarkList, savePersonalPie } from '../ranking-service.js';
+import { scoreModels, buildBenchmarkList, normalizePreviewPersonalPie } from '../ranking-service.js';
 import { convertWeightedRules } from '../scripts/migrate-ordered-benchmark-families.mjs';
 import { createRankingPager } from '../ranking-pagination.js';
 import { benchmarks, familyEntries, createFixtureState, workspace } from '../scripts/frontend/fixtures.mjs';
@@ -83,7 +83,7 @@ test('both modes preserve the missing primary, and only the supported backup sup
     const [range] = scoreModels(models, entries, 10000, rules);
     const [available] = scoreModels(models, entries, 10000, { ...rules, scoreMode: 'available' });
     assert.deepEqual([range.lower, range.upper, range.coverage], [0, 100, 0]);
-    assert.equal(available.lower, Number((75 * 3.5 / 3.8).toFixed(2)));
+    assert.equal(available.lower, 52.5);
     assert.deepEqual(available.inferredScores.map(row => [row.conditionID, row.sourceConditionID, row.originalWeight]), [[1, 2, 70]]);
     assert.deepEqual(available.calculationScores, []);
 });
@@ -123,14 +123,11 @@ test('stored chains reject gaps, duplicate IDs, changed order/hash and orphan me
         [rows[0]], [{ ...rows[0], fallback_benchmark_condition_ID: null }]]) assert.throws(() => parseFamilyRows(invalid));
 });
 
-test('old weighted requests are rejected before any database access', async () => {
-    let touched = false;
-    const db = { getConnection() { touched = true; throw new Error('Should not access DB'); } };
-    const request = { userID: '1', categoryID: 1, expectedRevision: 0, entries: [{ conditionID: 1, weightBasisPoints: 10000 }] };
+test('legacy fallback payloads leave preview weights intact', () => {
+    const entries = [{ conditionID: 1, weightBasisPoints: 10000 }];
     for (const fallbackRules of [[{ ...rule(1, [2]), mode: 'fallback_if_missing' }], [{ ...rule(1, [2]), entries: [{ conditionID: 2, weightBasisPoints: 10000 }] }], [rule(1, [2]), rule(1, [3])], [rule(1, [1])]]) {
-        await assert.rejects(savePersonalPie(db, { ...request, fallbackRules }), error => error.status === 400);
+        assert.deepEqual(normalizePreviewPersonalPie({ entries, fallbackRules }), { entries });
     }
-    assert.equal(touched, false);
 });
 
 test('migration is exact for one 100% fallback and refuses implicit weighted conversion', () => {

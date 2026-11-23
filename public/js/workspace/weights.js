@@ -14,7 +14,8 @@ function cloneFallbackRules(rules) {
 function clonePersonalPieSnapshot(snapshot) {
     return {
         entries: cloneEntries(snapshot?.entries ?? []),
-        fallbackRules: cloneFallbackRules(snapshot?.fallbackRules ?? [])
+        fallbackRules: cloneFallbackRules(snapshot?.fallbackRules ?? []),
+        estimationVotes: cloneEntries(snapshot?.estimationVotes ?? [])
     };
 }
 

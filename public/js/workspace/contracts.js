@@ -1,13 +1,15 @@
-import { FALLBACK_INFERENCE_METHOD, fallbackInference, MIN_PAIRED_MODELS, MAX_HELD_OUT_ERROR } from '../shared/fallback-inference.js';
+import { FALLBACK_INFERENCE_METHOD, storedFallbackInference, MIN_PAIRED_MODELS, MAX_HELD_OUT_ERROR } from '../shared/fallback-inference.js';
 import { FALLBACK_RULE_MODE } from './constants.js';
 import { expandCommunityVersions } from '../shared/benchmark-version-choice.js';
 import { familyKey, resolvedFamilyConditionIDs } from '../shared/benchmark-families.js';
 import { FALLBACK_CONFIGURATION_PAGE_SIZE, FEATURED_FALLBACK_LIMIT, FEATURED_FALLBACK_MIN_BASIS_POINTS } from '../shared/fallback-catalogue-policy.js';
 import { BENCHMARK_GROUPS, benchmarkConditionGroup } from '../shared/benchmark-condition-groups.js?v=fallback-discovery-20261005';
-import { storedAvailableResultInference, PAIRWISE_INFERENCE_METHOD, PAIRWISE_COVERAGE_METHOD, PAIRWISE_COVERAGE_FACTOR_METHOD, PAIRWISE_RATIONAL_COVERAGE_FACTOR_METHOD } from '../shared/available-score.js?v=coverage-factor-20261019';
+import { storedAvailableResultInference, PAIRWISE_INFERENCE_METHOD, PAIRWISE_COVERAGE_METHOD, PAIRWISE_COVERAGE_FACTOR_METHOD,
+    PAIRWISE_RATIONAL_COVERAGE_FACTOR_METHOD, PAIRWISE_ORIGINAL_WEIGHT_METHOD } from '../shared/available-score.js?v=coverage-factor-20261019';
 import { canonicalAccountID } from '../shared/account-identity.js';
-import { isMissingInferenceMethod, normalizeEstimationAlgorithm } from '../shared/estimation-algorithms.js';
+import { isMissingInferenceMethod, normalizeEstimationAlgorithm, ORIGINAL_WEIGHT_POLICY } from '../shared/estimation-algorithms.js';
 import { normalizeRankingResume, RANKING_PAGE_SIZE } from '../shared/ranking-resume.js';
+import { normalizeEstimationVotes } from '../shared/estimation-votes.js';
 
 function invalidWorkspaceResponse(path, message) {
     const error = new Error(`Invalid workspace response: ${path} ${message}`);
@@ -184,7 +186,9 @@ function validPredictionSource(score, inference, chain, pairwise) {
         return Number.isSafeInteger(score.sourceConditionID) && score.sourceConditionID > 0
             && Number.isFinite(score.sourceScore) && Number.isFinite(score.validationError)
             && score.validationError >= 0 && score.validationError <= MAX_HELD_OUT_ERROR
-            && Array.isArray(path) && path[0] === score.conditionID && path.indexOf(score.sourceConditionID) > 0;
+            && Array.isArray(path) && path[0] === score.conditionID && path.indexOf(score.sourceConditionID) > 0
+            && (score.selection === undefined || (score.selection === 'automatic' && inference.weightPolicy === ORIGINAL_WEIGHT_POLICY
+                && path.length === 2 && score.familyID === null));
     }
     if (!pairwise) return score.percentile === inference.percentile;
     return Number.isFinite(score.percentile) && score.percentile >= 0 && score.percentile <= 1
@@ -224,12 +228,18 @@ function requireRankedModel(value, path, scoreMode) {
     });
     const inferredScores = requireWorkspaceArray(model.inferredScores, `${path}.inferredScores`);
     let traceScore = model.lower;
-    if (scoreMode === 'available' && (scores.length || inferredScores.length)) {
+    const evidence = scores.length > 0 || inferredScores.length > 0;
+    const originalWeights = model.availableInference?.weightPolicy === ORIGINAL_WEIGHT_POLICY;
+    if (scoreMode === 'available' && (evidence || originalWeights)) {
         const inference = requireWorkspaceObject(model.availableInference, `${path}.availableInference`);
+        if (!evidence && model.comparable !== false) throw invalidWorkspaceResponse(path, 'must have evidence to rank a model');
+        if (originalWeights && ['coverageFactor', 'appliedFactor', 'coveragePenalty', 'missingFactor', 'adjustedMissingContribution']
+            .some(key => Object.hasOwn(inference, key))) throw invalidWorkspaceResponse(path, 'has an unexpected scoring adjustment');
         const chain = inference.method === FALLBACK_INFERENCE_METHOD;
         if (chain && scores.some(score => score.fallbackFor !== null)) throw invalidWorkspaceResponse(path, 'must count only direct measurements as observed');
         const missingOnly = isMissingInferenceMethod(inference.method);
-        const pairwise = missingOnly || [PAIRWISE_INFERENCE_METHOD, PAIRWISE_COVERAGE_METHOD, PAIRWISE_COVERAGE_FACTOR_METHOD, PAIRWISE_RATIONAL_COVERAGE_FACTOR_METHOD].includes(inference.method);
+        const pairwise = missingOnly || [PAIRWISE_INFERENCE_METHOD, PAIRWISE_COVERAGE_METHOD, PAIRWISE_COVERAGE_FACTOR_METHOD,
+            PAIRWISE_RATIONAL_COVERAGE_FACTOR_METHOD, PAIRWISE_ORIGINAL_WEIGHT_METHOD].includes(inference.method);
         inferredScores.forEach((score, index) => {
             if (!Number.isSafeInteger(score.conditionID) || score.conditionID < 1
                 || !Number.isFinite(score.normalizedScore)
@@ -244,7 +254,8 @@ function requireRankedModel(value, path, scoreMode) {
         });
         let expected;
         const estimates = inferredScores.map(score => ({ normalizedScore: score.normalizedScore, weightFraction: score.originalWeight / 100 }));
-        try { expected = chain ? fallbackInference(inference.observedScore, inference.coverageFraction, estimates, inference.algorithm)
+        try { expected = chain ? storedFallbackInference(inference.observedScore, inference.coverageFraction, estimates,
+            inference.algorithm, inference.weightPolicy)
             : storedAvailableResultInference(inference.observedScore, inference.coverageFraction, estimates,
             inference.percentile, inference.sourceCount, { method: inference.method }); }
         catch { throw invalidWorkspaceResponse(path, 'has an invalid missing-score estimate'); }
@@ -255,15 +266,18 @@ function requireRankedModel(value, path, scoreMode) {
                 throw invalidWorkspaceResponse(`${path}.availableInference.${key}`, 'must match the missing-score estimate');
             }
         }
-        const denominator = chain ? inference.supportedFraction : missingOnly ? 1 : inference.coverageFraction + inference.inferredFraction;
+        const denominator = originalWeights ? 1 : chain ? inference.supportedFraction
+            : missingOnly ? 1 : inference.coverageFraction + inference.inferredFraction;
+        const consistentScore = model.comparable === false ? model.lower === null && model.upper === null
+            : Math.abs(inference.totalScore - model.lower) <= .011 && model.lower === model.upper;
         if (Math.abs(inference.coverageFraction * 100 - model.coverage) > 0.011
-            || Math.abs(inference.totalScore - model.lower) > 0.011 || model.lower !== model.upper
+            || !consistentScore
             || Math.abs(scores.reduce((sum, score) => sum + score.contribution, 0) - inference.observedContribution) > .000001
             || Math.abs(scores.reduce((sum, score) => sum + score.effectiveWeight, 0) - inference.coverageFraction / denominator * 100) > .000001
             || inferredScores.some(score => Math.abs(score.effectiveWeight - score.originalWeight / denominator) > .000001)) {
             throw invalidWorkspaceResponse(path, 'has an inconsistent inferred total');
         }
-        traceScore = chain ? inference.unpenalizedScore : missingOnly ? inference.observedContribution + inference.inferredContribution
+        traceScore = chain || originalWeights ? inference.unpenalizedScore : missingOnly ? inference.observedContribution + inference.inferredContribution
             : [PAIRWISE_COVERAGE_METHOD, PAIRWISE_COVERAGE_FACTOR_METHOD, PAIRWISE_RATIONAL_COVERAGE_FACTOR_METHOD].includes(inference.method)
                 ? inference.unpenalizedScore : inference.totalScore;
     } else if (model.availableInference !== null || inferredScores.length) {
@@ -361,6 +375,34 @@ function validateFamilyComposition(value, pieEntries, compositionPath) {
     }
 }
 
+function validateWorkspaceEstimationVotes(response, personalEntries, versionComposition) {
+    const personalPath = 'personalPie.estimationVotes';
+    let personalVotes;
+    try { personalVotes = normalizeEstimationVotes(response.personalPie.estimationVotes); }
+    catch { throw invalidWorkspaceResponse(personalPath, 'must contain unique support or oppose votes'); }
+    const communityVotes = requireWorkspaceArray(response.communityEstimationVotes, 'communityEstimationVotes');
+    if (!personalVotes.length && !communityVotes.length) return;
+    const groupsByCondition = new Map((versionComposition ?? []).flatMap(group =>
+        group.versions.map(version => [version.conditionID, group.benchmarkID])));
+    const weightedBenchmarks = new Set(personalEntries.filter(entry => entry.weightBasisPoints > 0)
+        .map(entry => groupsByCondition.get(entry.conditionID)));
+    if (personalVotes.some(vote => !groupsByCondition.has(vote.conditionID)
+        || !weightedBenchmarks.has(groupsByCondition.get(vote.conditionID)))) {
+        throw invalidWorkspaceResponse(personalPath, 'must vote on versions of personally weighted benchmarks');
+    }
+    const seen = new Set();
+    communityVotes.forEach((item, index) => {
+        const path = `communityEstimationVotes[${index}]`;
+        const counts = requireWorkspaceObject(item, path);
+        if (!groupsByCondition.has(counts.conditionID) || seen.has(counts.conditionID) || Object.keys(counts).length !== 3
+            || !Number.isSafeInteger(counts.supportCount) || counts.supportCount < 0
+            || !Number.isSafeInteger(counts.opposeCount) || counts.opposeCount < 0) {
+            throw invalidWorkspaceResponse(path, 'must contain unique counts for an eligible version');
+        }
+        seen.add(counts.conditionID);
+    });
+}
+
 function validateWorkspacePayload(payload, { resume = null, initialMode = 'public' } = {}) {
     const progress = normalizeRankingResume(resume);
     const response = requireWorkspaceObject(payload, 'response');
@@ -409,10 +451,6 @@ function validateWorkspacePayload(payload, { resume = null, initialMode = 'publi
         requireWeightEntry(entry, `personalPie.entries[${index}]`);
     });
     validateReferenceStatus(personalPie, 'personalPie');
-    validateWorkspaceFallbackRules(personalPie.fallbackRules, personalEntries, 'personalPie');
-    if (personalPie.communityFallbackComposition !== undefined) {
-        validateFamilyComposition(personalPie.communityFallbackComposition, versionWeights(personalEntries), 'personalPie.communityFallbackComposition');
-    }
     const publicPie = requireWorkspaceObject(response.publicPie, 'publicPie');
     if (!Number.isSafeInteger(publicPie.participantCount) || publicPie.participantCount < 0) {
         throw invalidWorkspaceResponse('publicPie.participantCount', 'must be a non-negative integer');
@@ -422,7 +460,19 @@ function validateWorkspacePayload(payload, { resume = null, initialMode = 'publi
         requireWeightEntry(entry, `publicPie.entries[${index}]`);
     });
     validateReferenceStatus(publicPie, 'publicPie');
-    validateFamilyComposition(publicPie.familyComposition, versionWeights(publicEntries), 'publicPie.familyComposition');
+    if (Object.hasOwn(personalPie, 'estimationVotes') || Object.hasOwn(response, 'communityEstimationVotes')) {
+        validateWorkspaceEstimationVotes(response, personalEntries, versionComposition);
+        if (requireWorkspaceArray(personalPie.fallbackRules, 'personalPie.fallbackRules').length
+            || requireWorkspaceArray(publicPie.familyComposition, 'publicPie.familyComposition').length) {
+            throw invalidWorkspaceResponse('response', 'must have empty legacy fallback fields');
+        }
+    } else {
+        validateWorkspaceFallbackRules(personalPie.fallbackRules, personalEntries, 'personalPie');
+        if (personalPie.communityFallbackComposition !== undefined) {
+            validateFamilyComposition(personalPie.communityFallbackComposition, versionWeights(personalEntries), 'personalPie.communityFallbackComposition');
+        }
+        validateFamilyComposition(publicPie.familyComposition, versionWeights(publicEntries), 'publicPie.familyComposition');
+    }
     requireWorkspaceArray(response.benchmarks, 'benchmarks').forEach((entry, index) => {
         requireBenchmarkRow(entry, `benchmarks[${index}]`);
     });

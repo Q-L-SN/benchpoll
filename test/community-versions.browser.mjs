@@ -40,77 +40,31 @@ for (const [engine, width] of built ? [[chromium, 390]] : [[chromium, 1440], [ch
         assert.equal(await page.locator('#weight-add-actions button').count(), 1);
         await page.locator('#weight-pie [data-object-id="1"]').click();
         const entry = page.locator('#inline-fallback-toggle');
-        await page.getByRole('button', { name: 'Contribute your expertise', exact: true }).waitFor();
-        assert.equal(await entry.innerText(), 'Contribute your expertise');
-        assert.equal(await entry.locator('span').evaluate(node => {
-            const range = document.createRange(); range.selectNodeContents(node);
-            return range.getClientRects().length;
-        }), 1, 'The contribution entry stays on a single line');
+        await page.getByRole('button', { name: 'Advanced settings', exact: true }).waitFor();
+        assert.equal(await entry.innerText(), 'Advanced settings');
         await entry.click();
-        const settings = page.locator('#benchmark-settings'); await settings.waitFor();
-        assert.match(await settings.locator('.bp-benchmark-settings-status').textContent(), /Versions and fallback follow community/);
-        assert.equal(await settings.getByRole('button', { name: /Follow community/i }).count(), 0);
-        assert.equal(await settings.locator('#benchmark-settings-fallback-trigger').getAttribute('aria-disabled'), 'true');
+        const settings = page.locator('#benchmark-settings');
+        await settings.waitFor();
+        assert.match(await settings.getByRole('status').textContent(), /Following community/);
         assert.equal(await settings.locator('.bp-version-choice').first().getAttribute('data-condition-id'), '901');
-        await page.waitForTimeout(260); // Capture the fully opened dialog, after its entrance animation.
+        assert.equal(await settings.locator('.bp-version-choice[data-condition-id="901"] .bp-version-choice-share').textContent(), '75%');
         await page.screenshot({ path: `${output}/${engine.name()}-${width}${built ? '-built' : ''}-settings.png` });
-        await settings.locator('.bp-version-choice[data-condition-id="901"]').click();
-        const chooser = settings.locator('.bp-fallback-picker-embedded'); await chooser.waitFor();
-        assert.equal(await page.locator('#fallback-picker').isVisible(), false);
-        await chooser.locator('[data-family-key="[901]"] .bp-fallback-picker-card-toggle').click();
-        await chooser.locator('[data-family-key="[901]"] .bp-fallback-picker-card-toggle[aria-pressed="true"]').click();
-        assert.match(await settings.locator('.bp-benchmark-settings-status').textContent(), /Fallback follows community/);
-        assert.equal(await settings.locator('.bp-version-choice[data-condition-id="901"]').getAttribute('aria-pressed'), 'true');
-        await settings.locator('#benchmark-settings-versions-trigger').click();
-        await settings.locator('.bp-version-choice[data-condition-id="1"]').click();
-        await settings.locator('#benchmark-settings-versions-trigger').click();
-        await settings.locator('.bp-version-choice[data-condition-id="1"][aria-pressed="true"]').click();
-        await chooser.waitFor({ state: 'hidden' });
-        assert.match(await settings.locator('.bp-benchmark-settings-status').textContent(), /Versions and fallback follow community/);
-        await page.locator('#inline-fallback-toggle').click();
-        await page.waitForFunction(() => !document.getElementById('workspace-undo').disabled);
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        const saves = fixture.state.requests.filter(request => request.path === '/api/save_personal_pie');
-        assert.ok(saves.length > 0);
-        assert.deepEqual(saves.at(-1).body.entries.find(entry => entry.conditionID === 1),
+        const primary = settings.getByRole('button', { name: 'Use Default evaluation for scoring', exact: true });
+        const extended = settings.getByRole('button', { name: 'Use Extended for scoring', exact: true });
+        await extended.click();
+        assert.equal(await extended.getAttribute('aria-pressed'), 'true');
+        await primary.click();
+        assert.equal(await primary.getAttribute('aria-pressed'), 'true');
+        assert.equal(await extended.getAttribute('aria-pressed'), 'false');
+        const save = page.waitForResponse(response => response.url().endsWith('/api/save_personal_pie') && response.ok());
+        await primary.click();
+        const { entries, fallbackRules } = (await save).request().postDataJSON();
+        assert.equal(await primary.getAttribute('aria-pressed'), 'false');
+        assert.match(await settings.getByRole('status').textContent(), /Following community/);
+        assert.deepEqual(entries.find(item => item.conditionID === 1),
             { conditionID: 1, weightBasisPoints: 3500, followCommunityVersion: true });
-        assert.deepEqual(saves.at(-1).body.fallbackRules, []);
-        await page.locator('#workspace-undo').click();
-        await page.locator('#inline-fallback-toggle').click(); await settings.waitFor();
-        assert.equal(await settings.locator('.bp-version-choice[data-condition-id="1"]').getAttribute('aria-pressed'), 'true');
-        {
-            await settings.locator('#benchmark-settings-fallback-trigger').click();
-            await settings.getByRole('button', { name: 'Create my own', exact: true }).click();
-            await settings.locator('#inline-fallback-editor').waitFor();
-            await chooser.waitFor({ state: 'hidden' });
-            assert.equal(await settings.locator('.bp-custom-fallback-editor').count(), 0);
-            const addBackup = settings.locator('#inline-fallback-add-benchmark');
-            const shape = await addBackup.evaluate(node => ({ button: node.getBoundingClientRect().toJSON(),
-                frame: node.closest('.bp-inline-fallback-frame').getBoundingClientRect().toJSON() }));
-            assert.ok(shape.button.height >= 44 && Math.abs(shape.button.width - shape.frame.width) < 2, JSON.stringify(shape));
-            await addBackup.click();
-            await page.locator('#benchmark-search').fill('Advanced reasoning');
-            await page.locator('.bp-benchmark-row[data-condition-id="2"] .bp-benchmark-add').click();
-            await page.locator('#benchmark-search').fill('Code generation');
-            await page.locator('.bp-benchmark-row[data-condition-id="3"] .bp-benchmark-add').click();
-            await page.locator('#benchmark-search').fill('Extended');
-            assert.equal(await page.locator('.bp-benchmark-row[data-condition-id="901"] .bp-benchmark-condition').innerText(), 'Extended');
-            await page.locator('.bp-benchmark-row[data-condition-id="901"] .bp-benchmark-add').click();
-            await settings.locator('[data-family-focus^="up-"]').nth(1).click();
-            await settings.locator('#inline-fallback-done').click();
-            await settings.getByRole('button', { name: 'Edit my order', exact: true }).click();
-            assert.equal(await settings.locator('#inline-fallback-chart .bp-family-member').count(), 3);
-            assert.match(await settings.locator('#inline-fallback-chart .bp-family-member').first().textContent(), /Code generation/);
-            assert.match(await settings.locator('#inline-fallback-chart').textContent(), /Advanced reasoning/);
-            await addBackup.scrollIntoViewIfNeeded();
-            await page.screenshot({ path: `${output}/${engine.name()}-${width}${built ? '-built' : ''}-custom-fallback.png` });
-            for (let i = 0; i < 3; i++) await settings.locator('[data-family-focus^="remove-"]').first().click();
-            await settings.locator('#inline-fallback-done').click();
-            await chooser.locator('[data-family-key="[1]"] .bp-fallback-picker-card-toggle[aria-pressed="true"]').click();
-            assert.match(await settings.locator('.bp-benchmark-settings-status').textContent(), /Fallback follows community/);
-            assert.equal(await settings.locator('.bp-version-choice[data-condition-id="1"]').getAttribute('aria-pressed'), 'true');
-        }
-        await page.locator('#inline-fallback-toggle').click();
+        assert.deepEqual(fallbackRules, []);
+        await entry.click();
         if (width < 760) {
             assert.equal(await page.locator('#discussion-entry').isVisible(), false);
             await page.locator('[data-mobile-panel="models"]').click();

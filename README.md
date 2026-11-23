@@ -6,7 +6,7 @@ benchpoll is a Node.js/Express web app for browsing and weighting ranked evaluat
 
 Users can create, edit and delete private topics, including their scenes and default scene. New public-topic proposals publish a frozen snapshot of an existing private topic’s saved configuration. Anyone can preview rankings and try weights; saving a private copy is explicit. Replacing a snapshot resets supports. A public proposal needs 30 other supporters before administrator review, which imports the snapshot as one contribution from its author. Benchmark, model, score and feedback contributions use the standard contribution forms. Reviewers use the same GitHub-backed accounts; authorization comes from `users.role`. A `senior` submission uses the same endpoint and payload as any other submission, but is validated, approved, applied, audited, and queued for an email decision within one server transaction.
 
-Topics optionally contain one level of scenes, with exactly one default shown first. Search includes scenes: a parent-only match keeps its scenes collapsed until expanded, while directly matched scenes appear immediately. References target a concrete scene when present. References dynamically expand into benchmark weights before scoring: public indices use public target weights, while personal indices prefer the viewer's saved target weights. Private targets never enter public-topic configurations. Cycles are rejected; empty or unavailable targets retain missing weight. See [the implementation and migration notes](docs/topic-scenes-references-20261031.md).
+Topics optionally contain one level of scenes, with exactly one default shown first. Search includes scenes: a parent-only match keeps its scenes collapsed until expanded, while directly matched scenes appear immediately. References target a concrete scene when present. References expand into benchmark weights before scoring, including repeated paths through loops. Public indices use public target weights, while personal indices prefer the viewer's saved target weights. Private targets stay within private configurations. Loops with no path to benchmarks, empty targets and unavailable targets retain missing weight. See [How BenchPoll works](https://benchpoll.com/how-it-works#references).
 
 ## Codex Cloud Handoff
 
@@ -107,6 +107,9 @@ npm run migrate:moderation-email
 npm run migrate:reviewer-accounts -- --senior-user-id=<github-user-id>
 npm run migrate:literal-default-conditions
 ```
+
+Version-based score estimation requires the `personal_pies.estimation_votes` column. Set
+`BENCHPOLL_MIGRATION_DATABASE` to the target database and run `node scripts/migrate-estimation-votes.mjs --apply` before starting the updated server.
 
 For proposal name reservations, first stop application writes and create a
 fresh, verified full database backup. Then run
@@ -213,35 +216,21 @@ without an age cutoff, including when none changed within 72 hours. This is 10
 pies total, not 10 additional pies; if fewer exist, use all of them. If 10 or more
 qualify within 72 hours, use all qualifying pies. Selected pies contribute equally,
 and the participant count is the number selected. Public weights and reference
-availability do not expire after 14 days. Sibling scenes are never automatically blended; a topic with
-scenes opens its default scene. Fallback shares use a separate electorate of explicit choices in
-eligible non-empty pies updated within 14 days, weighted by each pie's allocation
-to the entrance benchmark. An absent rule follows the community without voting;
-an ordered rule with empty entries explicitly votes for no fallback. The database
-stores the latter as a rule with a NULL family ID. Explicit personal choices take
-priority over inheritance. A community with no choices temporarily uses only the
-original benchmark, calculating normally without inventing a vote. Only explicitly
-selected versions can be backups; All Other Versions is no longer supported. Apply
-`scripts/migrate-community-fallback-20261030.mjs --apply --writes-stopped --backup-manifest=<path>`
-before running this version, with application writes stopped. It clears all legacy
-fallback choices and saved chains once, preserving pie entries, weights, and activity
-timestamps. Existing slices become unconfigured; later choices survive migration retries.
-Apply `scripts/migrate-fallback-choice-source-20261031.mjs --apply` before the updated
-fallback controls. This additive migration preserves all choices and weights, and records
-whether a choice is selected or custom. Existing choices are marked selected because their
-creation origin was not recorded. Creating a custom configuration opts out of community
-following immediately, even with an empty backup list. The entry toggles inline details for
-explicit choices; only the separate Switch configuration action opens the chooser. An
-unconfigured entry opens it directly, and deselecting its active card restores community following.
-No fallback remains available even at 0% community share. Each opening puts the current
-choice first and sorts the rest by descending community share, without moving cards after a click.
+availability do not expire after 14 days. A topic with scenes opens its default scene.
+Advanced settings lists each benchmark's versions. Explicit scoring-version choices within
+14 days are weighted by benchmark allocation in the scene. Personal rankings use a chosen
+scoring version or follow community shares. With no version choices, the primary version is used.
+
+Estimation votes belong to a specific scene and source version. Among personal pies active
+within 14 days that assign weight directly to the benchmark, each person contributes one
+support or oppose vote per version. Sources with at least as much support as opposition
+are eligible, including versions with zero votes. In personal rankings a user's own vote
+takes priority. Sign in to save votes and contribute to the community tally.
 Topic references share a topic icon and parent/scene separator across treemaps, selectors,
 and benchmark search. A parent-only search keeps its scenes collapsed. The weight-chart heading
 shows its selected block; scene tabs omit the Default badge. Successful refreshes briefly show
 Updated, then hide it instead of leaving a timestamp.
-Old browser drafts retain their weights but lose their fallback choices and pending
-save receipts. There is
-no parent/descendant aggregation or Public composition endpoint. Login alone does
+There is no parent/descendant aggregation or Public composition endpoint. Login alone does
 not refresh either window. Topic 54 is featured by ID. Other topics use recent
 distinct-contributor activity, with at most one eligible new-topic discovery slot
 per six ordinary positions, including new topics with no saved pies. Home and the
@@ -254,20 +243,14 @@ to the matching comparison in the workspace, including paginated results.
 Home uses a fixed light, hatched treemap and neutral outlined topic surfaces.
 Model paging controls appear at the sides of each preview when available.
 
-Estimated score uses measured scores and fallbacks before attempting pairwise
-estimates. When calibrating estimates, it limits the influence of a small,
-isolated group of extreme reference scores without changing actual results. This
-heuristic is not a confidence interval; estimates may be inaccurate and gaps with
-insufficient connected evidence remain unresolved. The separate rational coverage
-factor uses measured coverage only.
-
-The workspace also has a per-tab **Test algorithm** selector. The current formula
-remains the default. Five alternatives keep measured contributions fixed and
-adjust only missing weight: unadjusted, rational attenuation, linear attenuation,
-square-root attenuation, and shrinkage toward 50. These tests bound predictions to 0–100 and start unresolved
-gaps at 50; that midpoint is an explicit trial assumption, not a population prior.
-Selections are session-local, do not alter public weights, and leave Score range
-unchanged. See [the experiment contract](docs/estimation-lab-20261103.md).
+The AI Index offers **Version-based estimation**. Direct scores take priority.
+For a missing score, BenchPoll automatically considers measured results from eligible versions
+of the same benchmark. Each candidate is calibrated from paired model measurements with
+matching run settings. The most reliable candidate is chosen by validation error and, on a tie,
+paired model count. Direct scores and reliable estimates keep their original weights. Unresolved
+results count as zero at full weight. Only direct scores contribute measured coverage. Score
+range assigns 0 at the lower end and 100 at the upper end for missing measurements. See
+[How BenchPoll works](https://benchpoll.com/how-it-works#rankings).
 
 Shared tooltips use `data-tooltip` (hover, keyboard focus or touch long-press);
 help-only controls use `data-help-text`/`data-help-content` and can be pinned by a tap.
@@ -351,7 +334,7 @@ benchpoll 是一个基于 Node.js/Express 的网页应用，用于浏览、设�
 
 用户可以创建、修改和删除私有主题，并设置场景列表及默认场景。新公开主题提案从现有私有主题的已保存配置生成冻结快照；任何人都可以预览排行和试调权重，只有明确保存时才创建私有副本。替换快照会清空支持票。提案达到 30 位其他用户支持后进入管理员审核，通过时按作者的一份贡献导入配置。基准测试、模型、分数和反馈通过统一的贡献表单提交。审核员继续使用普通的 GitHub 账号登录，权限由 `users.role` 决定。`senior` 提交时仍使用与普通用户完全相同的端点和数据结构，但服务器会在同一个事务内完成校验、批准、应用、审计和审核结果邮件入队。
 
-主题可以没有场景，也可以包含一层场景；有场景时必须有且只有一个默认场景，并排在最前。搜索包含场景：仅匹配一级主题时，其场景默认折叠，点击后展开；直接匹配的场景立即展示。引用有场景的主题时必须指定具体场景。引用在计分前动态展开成基准权重：公众指数取目标的公众权重，个人指数优先取当前用户保存的目标权重。公开主题的配置不能引用私有主题。系统拒绝循环引用；空目标或不可访问目标保留为缺失权重。详见[实现与迁移说明](docs/topic-scenes-references-20261031.md)。
+主题可以没有场景，也可以包含一层场景；有场景时必须有且只有一个默认场景，并排在最前。搜索包含场景：仅匹配一级主题时，其场景默认折叠，点击后展开；直接匹配的场景立即展示。引用有场景的主题时必须指定具体场景。引用在计分前展开成基准权重，包括循环中的重复路径。公众指数取目标的公众权重，个人指数优先取当前用户保存的目标权重。私有主题仅可在私有配置中引用。无法到达基准的循环、空目标和不可访问的目标保留为缺失权重。详见 [How BenchPoll works](https://benchpoll.com/how-it-works#references)。
 
 ## Codex 云端交接
 
@@ -451,6 +434,9 @@ npm run migrate:moderation-email
 npm run migrate:reviewer-accounts -- --senior-user-id=<github-user-id>
 npm run migrate:literal-default-conditions
 ```
+
+版本估分需要 `personal_pies.estimation_votes` 列。将 `BENCHPOLL_MIGRATION_DATABASE` 设为目标数据库，
+启动新版服务前执行 `node scripts/migrate-estimation-votes.mjs --apply`。
 
 迁移提案名称占用前，应先停止应用写入并创建新的、已验证的完整数据库备份，然后执行
 `node scripts/migrate-topic-proposal-reservations-20261029.mjs --apply --backup-manifest=<备份清单路径>`。
@@ -555,27 +541,17 @@ https://benchpoll.com:1337
 即使最近 72 小时内没有更新也照常取样。这里是合计补足至 10 个，不是再补 10 个；
 全部记录不足 10 个时使用全部。达到或超过 10 个时，平均全部符合 72 小时窗口的 Pie。
 选中样本等权参与，参与数量为实际选入的 Pie 数量。公众权重及其引用可用性不再因
-超过 14 天而失效。同级场景不会自动混合；有场景的主题默认打开其默认场景。
-Fallback 比例独立统计最近 14 天有效非空 Pie 中的明确选择，
-按各 Pie 给原基准分配的权重汇总。没有配置记录表示跟随社区但不投票；有记录且
-顺序链为空表示明确选择不使用 fallback，数据库以 family_ID 为 NULL 的配置记录保存。
-个人明确选择优先于社区继承。无人表态时暂时不使用 fallback，正常计算，不报错，
-也不生成虚假的“不使用”票。后备项必须明确选择具体版本，不再支持 All Other Versions。
-运行本版本前执行 `scripts/migrate-community-fallback-20261030.mjs --apply --writes-stopped --backup-manifest=<path>`，
-执行前停止应用写入。迁移仅清空一次所有旧 fallback 选择及保存的链，保留扇区、
-权重及活跃时间，原扇区全部恢复为未选择状态；重试迁移不会删除之后的新选择。
-更新 fallback 控件前执行 `scripts/migrate-fallback-choice-source-20261031.mjs --apply`。
-这项增量迁移保留全部选择及权重，仅记录配置来自选用还是自定义。旧记录没有来源信息，
-统一视为已选配置。创建自定义配置后立即停止跟随社区，即使后备列表仍为空。
-已有明确配置时，入口只展开或收起下方详情，通过独立的“切换配置”按钮打开选择弹窗；
-未配置时入口直接打开弹窗，再次点击已选卡片的按钮则取消选择、恢复跟随社区。
-“不使用 fallback”卡片始终保留，即使社区选择率为 0%。每次打开弹窗时当前配置排第一，
-其余按社区选择率降序排列，点击选择后卡片不跳位。
+超过 14 天而失效。有场景的主题默认打开其默认场景。高级设置列出基准的各个版本。
+计分版本按场景汇总最近 14 天内的明确选择，票的权重取决于个人对该基准的分配。
+个人排行使用自己选定的版本，或者跟随社区版本比例。无人选择时使用主版本。
+
+估计来源投票对应具体场景及来源版本。最近 14 天活跃且直接对该基准分配正权重的
+用户，每个版本可投一票支持或反对。支持票不少于反对票即有资格作为来源，零票同样
+有资格。个人排行优先应用自己的投票。登录后可保存投票并计入社区票数。
 树图、选择器和基准搜索中的主题引用统一使用主题图标及一级主题/场景分隔图标。
 只匹配一级主题时，其场景默认折叠。权重图标题显示当前选中分区；场景标签不再显示 Default。
 刷新成功后短暂显示“已更新”，随后隐藏，不再常驻时间戳。
-旧浏览器草稿保留权重，但不再恢复旧 fallback 及其待提交请求。不再聚合父子
-分类，也不再提供公众构成接口。仅登录不会刷新这两个时间窗口。编号为 54 的主题
+不再聚合父子分类，也不再提供公众构成接口。仅登录不会刷新这两个时间窗口。编号为 54 的主题
 固定突出显示，其余按近期不同参与者的有效配置活动排序，每六个普通位置最多
 安排一个合格的新主题探索位，包括尚无已保存 Pie 的新主题。首页和侧栏提供热门、
 本机最近浏览、我的及搜索。“我的”包含创建私有主题入口；公开主题通过提案大厅提出。
@@ -586,16 +562,12 @@ Fallback 比例独立统计最近 14 天有效非空 Pie 中的明确选择，
 首页使用固定的浅色手绘线条矩形树图和中性描边主题外观；可以翻页时，模型翻页
 按钮显示在预览区域两侧。
 
-Estimated score 优先使用实测和后备成绩，再尝试两两比较估计。校准估计时会
-限制少数孤立的极端参照分数的影响，但不会改动真实成绩。这种启发式方法不是
-置信区间，估计仍可能不准确；关联证据不足的部分保持缺失。另行计算的有理覆盖率
-系数只使用真实覆盖率。
-
-工作区新增仅对当前标签页生效的 **Test algorithm** 切换器，默认仍使用当前公式。
-另外五种试验方法固定实测贡献，只处理缺失权重：不修正、有理衰减、线性衰减、
-平方根衰减、向 50 分中点收缩。这些方法将预测限制在 0–100，无法预测的缺失部分以 50 起算；
-该中点是明确的试验假设，不是总体分布先验。选择保存在会话中，不改变公共权重，
-也不影响 Score range。详见[试验约定](docs/estimation-lab-20261103.md)。
+AI Index 提供 **Version-based estimation**。计分优先使用所选版本的实测成绩。
+缺少成绩时，系统自动考虑同一基准中有资格的其他版本，使用运行设置相同的模型配对实测
+结果校准。多项来源均通过校验时，选验证误差最低的来源，误差相同则优先采用配对模型更多
+的来源。实测和可靠估计均使用原权重。无法可靠估计的部分按原权重计 0 分。实测覆盖率仅
+计入所选版本的直接成绩。Score range 对缺少实测的部分，下限计 0 分，上限计 100 分。
+详见 [How BenchPoll works](https://benchpoll.com/how-it-works#rankings)。
 
 全站共用 `data-tooltip` 提示（悬浮、键盘聚焦或触屏长按）；纯说明按钮使用
 `data-help-text`/`data-help-content`，可点按固定展开。气泡按可视区域自动上下翻转，

@@ -10,13 +10,14 @@ import { createEditHistory } from '../public/js/workspace/edit-history.js';
 const auto = () => ({ kind: 'other_versions' });
 const models = scores => [{ ID: 1, modelID: 1, name: 'Model', results: new Map(scores.map(([ID, normalizedScore]) => [String(ID), { normalizedScore }])) }];
 
-test('only explicit concrete versions can identify, resolve, or persist a family', async () => {
+test('historical family inputs and live estimation votes require concrete versions', async () => {
     const db = { getConnection() { assert.fail('Invalid groups must fail before database access'); } };
     for (const entries of [[auto()], [{ ...auto(), versions: [{ conditionID: 2 }] }], [{ ...auto(), conditionID: 2 }]]) {
         assert.throws(() => familyKey(1, entries), TypeError);
         assert.throws(() => resolvedFamilyConditionIDs(1, entries), TypeError);
         await assert.rejects(savePersonalPie(db, { categoryID: 1, userID: '1', expectedRevision: 0,
-            entries: [{ conditionID: 1, weightBasisPoints: 10000 }], fallbackRules: [{ primaryConditionID: 1, mode: 'ordered', entries }] }), error => error.status === 400);
+            entries: [{ conditionID: 1, weightBasisPoints: 10000 }], estimationVotes: entries }),
+        error => error.status === 400 && error.body?.error === 'invalid_estimation_votes');
     }
 });
 

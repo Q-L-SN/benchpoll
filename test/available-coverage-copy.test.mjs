@@ -34,39 +34,35 @@ function factorInference(raw, coverage, inferredFraction = 0) {
         coverageFactor, appliedFactor, unpenalizedScore: raw, totalScore: raw * appliedFactor };
 }
 
-test('brief help distinguishes calibrated fallback estimates from measured weighted coverage', () => {
+test('brief help distinguishes calibrated estimates from measured weighted coverage', () => {
     const brief = guide.match(/<section id="rankings"[\s\S]*?<\/section>/)?.[0];
     assert.ok(brief);
-    assert.match(brief, /Estimated score:[\s\S]*calibrated fallback estimates/);
-    assert.match(brief, /Unresolved weights are excluded from the average/);
-    assert.match(brief, /Unmeasured versions keep their full score range/);
+    assert.match(brief, /Estimated score[\s\S]*calibrated estimates at their full weights/);
+    assert.match(brief, /neither a measurement nor a reliable estimate count as 0 at their full weight/);
     assert.match(brief, /Coverage is the share of weight with measured results/);
-    assert.match(brief, /share supported by direct scores and calibrated fallbacks/);
     assert.match(brief, /on selected versions/);
-    assert.match(brief, /5c\/\(1\+4c\)/);
-    assert.match(brief, /Negative totals use 2−f\(c\)/);
-    assert.doesNotMatch(guide, /Power 0\.35|experiment|<select|compares Power/i);
+    assert.match(brief, /Version-based estimation/);
+    assert.doesNotMatch(guide, /coverage factor|test algorithm|midpoint|Power 0\.35|experiment/i);
     assert.doesNotMatch(guide, /deduct(?:s|ion)?|2 points (?:for every|per) missing 10%|20\s*(?:points|\*)/i);
 });
 
-test('short score help preserves range endpoints, unresolved gaps and fallback-first evidence', () => {
+test('short score help preserves range endpoints, unresolved gaps and direct-first evidence', () => {
     const brief = guide.match(/<section id="rankings"[\s\S]*?<\/section>/)?.[0];
     assert.ok(brief);
     assert.match(brief, /same qualifying measurements, converted using each test's score range and direction/);
     assert.match(brief, /chosen benchmark version takes priority/);
-    assert.match(brief, /missing scores count as 0 at the lower end and 100 at the upper end; measured scores stay fixed/);
+    assert.match(brief, /uses 0 at the lower end and 100 at the upper end for missing measurements\. Measured scores stay fixed/);
     assert.match(brief, /Models rank by the lower end/);
-    assert.match(brief, /Unresolved weights are excluded from the average/);
-    assert.match(brief, /direct score or a reliable fallback qualifies a model to rank/);
+    assert.match(brief, /count as 0 at their full weight/);
+    assert.match(brief, /direct score or a reliable estimate qualifies a model to rank/);
     const fallback = guide.match(/<section id="fallback"[\s\S]*?<\/section>/)?.[0];
     assert.ok(fallback);
-    assert.match(fallback, /try backups in order/);
-    assert.match(fallback, /Each estimates the chosen version directly/);
+    assert.match(fallback, /automatically considers other versions of the same benchmark/);
+    assert.match(fallback, /Votes determine which sources are eligible\. Paired measurements determine the estimate\./);
     assert.match(fallback, /Direct scores count, including zero and negative scores/);
-    assert.match(fallback, /No fallback uses the chosen version alone/);
 });
 
-test('model details show before and after scores while the formula stays in the guide', () => {
+test('model details display archived before and after scores', () => {
     const text = summary(factorInference(80, .5, .5));
     assert.match(text, /50\.00% of the weight uses estimates from shared-test comparisons/);
     assert.match(text, /Before adjustment: 80/);
@@ -77,6 +73,20 @@ test('model details show before and after scores while the formula stays in the 
     assert.match(worked, /Index score 60; measured results cover 60% of the weight/);
     assert.match(worked, /Before adjustment: 68/);
     assert.match(worked, /After adjustment: 60/);
+});
+
+test('version-based details report estimates separately from coverage and zero-fill unresolved weight', () => {
+    const inference = { method: FALLBACK_INFERENCE_METHOD, weightPolicy: 'original', inferredFraction: .25,
+        unresolvedFraction: .25, unpenalizedScore: 53, totalScore: 53 };
+    const text = summary(inference);
+    assert.match(text, /measured results cover 50% of the weight/);
+    assert.match(text, /25\.00% of the weight uses estimates calibrated with paired model results/);
+    assert.match(text, /25\.00% of the weight has no reliable estimate and counts as 0 at its full weight/);
+    assert.match(text, /How it works/);
+    assert.doesNotMatch(text, /adjustment|fallback chains|left out|starts at 50/);
+    const zero = summary({ ...inference, inferredFraction: 0, totalScore: 0, unresolvedFraction: 1 }, 0, false);
+    assert.match(zero, /No qualifying ranking evidence/);
+    assert.match(zero, /100\.00% of the weight has no reliable estimate and counts as 0/);
 });
 
 test('negative scores retain their before and after values without algorithm details', () => {

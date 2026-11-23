@@ -5,7 +5,33 @@ import { createWeightTreemapLayout, treemapHoverTransform } from './weight-treem
 import '../shared/help-popover.js';
 import { isTopicReference, topicLabelText, topicLabelParts, renderTopicLabel, TOPIC_ICON_FONT } from '../shared/topic-label.js';
 
-export function createPieRenderer({ state, pieSvg, pieHoverTooltip, orderedPieEntries, currentPieEntries, selectedObjectIndex, renderInlineFallback, fallbackRuleFor, publicFallbackRuleFor, onSelect, getPreview = () => null, autoSelect = () => false, coveragePreview = false }) {
+const previewNumber = value => String(Number(value.toFixed(2)));
+
+function coverageScore(tile, range) {
+    const measured = Number.isFinite(tile.adoptedNormalizedScore);
+    const estimated = Number.isFinite(tile.estimatedNormalizedScore);
+    const gap = tile.unresolvedWeightBasisPoints / tile.weightBasisPoints > 1e-9;
+    const value = previewNumber(tile.rankingNormalizedScore);
+    const status = measured ? estimated ? 'mixed' : 'measured' : estimated ? 'estimated' : 'unresolved';
+    if (status === 'unresolved') {
+        const tooltip = range ? 'No measurement. Counts as 0 at the lower end and 100 at the upper end.'
+            : 'No reliable estimate. Counts as 0 in this ranking.';
+        return { measured, status, value, tooltip, description: `Score ${value} / 100. ${tooltip}` };
+    }
+    if (!gap && status !== 'mixed') {
+        return { measured, status, value, description: `${measured ? 'Measured' : 'Estimated'} score ${value} / 100.` };
+    }
+    const share = weight => `${previewNumber(weight / tile.weightBasisPoints * 100)}%`;
+    const parts = [];
+    if (measured) parts.push(`Measured score ${previewNumber(tile.adoptedNormalizedScore)} on ${share(tile.coveredWeightBasisPoints)} of the weight.`);
+    if (estimated) parts.push(`Estimated score ${previewNumber(tile.estimatedNormalizedScore)} on ${share(tile.estimatedWeightBasisPoints)} of the weight.`);
+    if (gap) parts.push(range ? `The remaining ${share(tile.unresolvedWeightBasisPoints)} is unmeasured and spans 0 to 100.`
+        : `The remaining ${share(tile.unresolvedWeightBasisPoints)} has no reliable estimate and counts as 0.`);
+    const tooltip = parts.join(' ');
+    return { measured, status, value, tooltip, description: `${range ? 'Lower-end' : 'Weighted'} score ${value} / 100. ${tooltip}` };
+}
+
+export function createPieRenderer({ state, pieSvg, pieHoverTooltip, orderedPieEntries, currentPieEntries, selectedObjectIndex, renderInlineFallback, fallbackRuleFor, publicFallbackRuleFor, onSelect, getPreview = () => null, autoSelect = () => false, coveragePreview = false, coverageMode = 'available', focusCoverage = false }) {
     const measure = document.createElement('canvas').getContext('2d');
     const labelMetrics = new Map();
     const labelLayout = createPieLabelLayout(metricsOf);
@@ -127,18 +153,23 @@ export function createPieRenderer({ state, pieSvg, pieHoverTooltip, orderedPieEn
             const hasFallback = Boolean(fallback?.entries?.length || fallback?.families?.some(
                 family => family.weightBasisPoints > 0 && family.entries?.length));
             const percent = Number(tile.weightBasisPoints) / state.limits.totalBasisPoints * 100;
-            const covered = coveragePreview && Number.isFinite(tile.adoptedNormalizedScore);
-            const estimated = coveragePreview && !covered && Number.isFinite(tile.estimatedNormalizedScore);
-            const score = covered ? Number(tile.adoptedNormalizedScore.toFixed(2)) : estimated ? Number(tile.estimatedNormalizedScore.toFixed(2)) : null;
-            const value = coveragePreview ? String(score ?? '—') : `${Math.round(percent)}%`;
+            const score = coveragePreview ? coverageScore(tile, coverageMode === 'range') : null;
+            const value = score?.value ?? `${Math.round(percent)}%`;
             const name = benchmarkAccessibleName(tile);
-            const description = coveragePreview
-                ? `${name}. ${covered ? `Adopted score ${score} / 100` : estimated ? `Estimated score ${score} / 100` : 'No measurement or estimate'}.`
+            const description = score ? `${name}. ${score.description}`
                 : `${name}: ${percent.toFixed(2)}%${hasFallback ? '. Fallback enabled' : ''}`;
             attributesOf(node.group, { 'aria-label': description, ...(!coveragePreview ? { 'aria-pressed': selected } : {}) });
-            if (coveragePreview) {
-                node.group.classList.toggle('is-uncovered', !covered);
+            if (score) {
+                node.group.classList.toggle('is-uncovered', !score.measured);
                 node.group.dataset.coverage = String(tile.coverage);
+                node.group.dataset.scoreStatus = score.status;
+                if (score.tooltip) {
+                    node.group.dataset.tooltip = score.tooltip;
+                    if (focusCoverage) node.group.setAttribute('tabindex', '0');
+                } else {
+                    node.group.removeAttribute('data-tooltip');
+                    node.group.removeAttribute('tabindex');
+                }
             }
             node.group.dataset.weight = String(tile.weightBasisPoints);
             attributesOf(node.rect, { x: tile.x, y: tile.y, width: Math.max(0, tile.width), height: Math.max(0, tile.height),
@@ -165,7 +196,7 @@ export function createPieRenderer({ state, pieSvg, pieHoverTooltip, orderedPieEn
             attributesOf(node.gradient, { x1: nameBox.x + nameBox.width - Math.min(14, nameBox.width / 3),
                 x2: nameBox.x + nameBox.width, y1: 0, y2: 0 });
             node.group.dataset.labelMode = label.mode;
-            const signature = JSON.stringify([covered, estimated, ...label.rows.map(row => [row.kind, row.text, row.size, row.weight, row.clipped, row.align])]);
+            const signature = JSON.stringify([score?.status, ...label.rows.map(row => [row.kind, row.text, row.size, row.weight, row.clipped, row.align])]);
             if (node.signature !== signature) {
                 node.signature = signature;
                 node.labels.replaceChildren(...label.rows.map(row => {
@@ -173,8 +204,9 @@ export function createPieRenderer({ state, pieSvg, pieHoverTooltip, orderedPieEn
                     const scoreRow = coveragePreview && row.kind === 'percent';
                     const text = element('text', { 'data-label-kind': scoreRow ? 'score' : row.kind, 'font-size': row.size, 'font-weight': row.weight,
                         'text-anchor': row.align ?? (row.clipped ? 'start' : 'middle'),
-                        ...(scoreRow && covered ? { 'data-adopted-score': true } : {}),
-                        ...(scoreRow && estimated ? { 'data-estimated-score': true } : {}),
+                        ...(scoreRow && score.measured ? { 'data-adopted-score': true } : {}),
+                        ...(scoreRow && score.status === 'estimated' ? { 'data-estimated-score': true } : {}),
+                        ...(scoreRow && score.status === 'unresolved' ? { 'data-unresolved-score': true } : {}),
                         ...(row.clipped ? { mask: `url(#${node.mask.id})` } : {}) });
                     text.textContent = row.text;
                     return text;
@@ -191,7 +223,7 @@ export function createPieRenderer({ state, pieSvg, pieHoverTooltip, orderedPieEn
             });
         });
         raiseActive();
-        pieSvg.setAttribute('aria-label', coveragePreview ? 'Measured and estimated benchmark scores in this ranking'
+        pieSvg.setAttribute('aria-label', coveragePreview ? 'Benchmark scores used in this ranking'
             : `${mode === 'personal' ? 'Personal' : 'Public'} index composition treemap`);
         visualTiles = new Map(tiles.map(tile => [Number(tile.conditionID), { ...tile }]));
         if (preview) return;

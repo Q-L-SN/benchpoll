@@ -19,32 +19,21 @@ test('fallback labels reflect the local choice, including an empty or unsaved cu
 });
 
 for (const selectionSource of ['custom', 'selected']) for (const backups of [[], [{ conditionID: 2 }]]) {
-    test(`selection source survives save, receipt replay and reload: ${selectionSource}, ${backups.length} backups`, async () => {
+    test(`legacy rules are ignored while saving weights: ${selectionSource}, ${backups.length} backups`, async () => {
         const db = createPieSaveDatabase();
         const entries = [{ conditionID: 1, weightBasisPoints: 10000 }];
         const rule = { primaryConditionID: 1, mode: 'ordered', entries: backups, selectionSource };
         const body = { userID: '7', writeIdentity: randomUUID(), categoryID: 1, contextValues: {}, expectedRevision: 1,
             entries, fallbackRules: [rule] };
         const receipt = await savePersonalPie(db, body);
-        assert.deepEqual(receipt.personalPie.fallbackRules, [rule]);
+        assert.deepEqual(receipt.personalPie.fallbackRules, []);
+        assert.deepEqual(receipt.personalPie.estimationVotes, []);
         assert.deepEqual(await savePersonalPie(db, body), receipt);
         const pie = await loadPersonalPie(db, 10, '7');
-        assert.equal(pie.fallbackRules[0].selectionSource, selectionSource);
-        assert.deepEqual(pie.fallbackRules[0].entries, backups);
+        assert.deepEqual(pie.estimationVotes, []);
         assert.deepEqual(pie.entries, entries);
     });
 }
-
-test('unsupported selection sources fail before changing weights or casting a choice', async () => {
-    for (const selectionSource of ['community', '', null, 1]) {
-        const db = createPieSaveDatabase(), before = db.stored;
-        await assert.rejects(savePersonalPie(db, { userID: '7', writeIdentity: randomUUID(), categoryID: 1,
-            contextValues: {}, expectedRevision: 1, entries: [{ conditionID: 1, weightBasisPoints: 10000 }],
-            fallbackRules: [{ primaryConditionID: 1, mode: 'ordered', entries: [], selectionSource }] }),
-        error => error.body?.error === 'invalid_personal_pie_fallback_rule');
-        assert.deepEqual(db.stored, before);
-    }
-});
 
 test('source metadata has no effect on fallback scoring', () => {
     const models = [{ ID: 1, name: 'Model', results: new Map([['2', { normalizedScore: 65 }]]) }];

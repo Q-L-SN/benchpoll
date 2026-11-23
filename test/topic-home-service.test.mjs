@@ -56,7 +56,7 @@ test('preview and subsequent pages retain canonical names without exposing the f
     assert.ok(next.models.every(model => model.modelName === 'Acme (a=b) / v2'));
 });
 
-function fixture(isPrivate = false) {
+function fixture(isPrivate = false, { authorizeTopics = async () => {}, readWorkspace = workspace => workspace } = {}) {
     let builds = 0;
     const owners = [];
     const workspace = { context: { contextValues: {} }, comparison: { keys: ['model'], fields: [], availableKeys: ['model'] },
@@ -65,11 +65,11 @@ function fixture(isPrivate = false) {
         modelLeaderboards: { public: Array.from({ length: 30 }, (_, index) => ({ ID: index + 1, name: `Model ${index + 1}`,
             lower: 30 - index, upper: 30 - index, coverage: 100 })), personal: [] } };
     const service = createTopicHomeService({
-        db: {}, authorizeTopics: async () => {}, loadTopic: async (_db, userID) => {
+        db: {}, authorizeTopics, loadTopic: async (_db, userID) => {
             if (isPrivate && userID !== '42') throw { status: 404 };
             return { ID: 54, isPrivate };
         }, loadFields: async () => [],
-        loadWorkspace: async (_db, options) => { builds++; owners.push(options.userID); return workspace; }
+        loadWorkspace: async (_db, options) => { builds++; owners.push(options.userID); return readWorkspace(workspace, builds); }
     });
     return { service, owners, builds: () => builds };
 }
@@ -153,6 +153,56 @@ test('cached preview, page and locate reauthorize referenced topics after public
     }
     await assert.rejects(service.locate(null, { categoryID: 1, snapshotID: first.pagination.snapshotID, targetModel: '1' }), error => error.status === 410);
 });
+
+test('a workspace read overtaken by invalidation shares the new preview', async () => {
+    const entered = Promise.withResolvers(), resume = Promise.withResolvers();
+    const { service, builds } = fixture(false, { async readWorkspace(workspace, sequence) {
+        if (sequence === 1) {
+            entered.resolve();
+            await resume.promise;
+            return workspace;
+        }
+        const publicRows = workspace.modelLeaderboards.public.map(row => ({ ...row, lower: row.lower + 10, upper: row.upper + 10 }));
+        return { ...workspace, modelLeaderboards: { ...workspace.modelLeaderboards, public: publicRows } };
+    } });
+    const request = { categoryID: 54 };
+    const oldRead = service.preview(null, request);
+    await entered.promise;
+    service.invalidate();
+    const fresh = await service.preview(null, request);
+    resume.resolve();
+    assert.equal(fresh.models[0].lower, 40);
+    assert.equal(await oldRead, fresh);
+    assert.equal(builds(), 2);
+});
+
+for (const continuation of [false, true]) {
+    const operation = continuation ? 'continuation' : 'cached preview';
+    test(`invalidation during authorization retires the old ${operation}`, async () => {
+        const entered = Promise.withResolvers(), resume = Promise.withResolvers();
+        let pauseNext = false;
+        const { service, builds } = fixture(false, { async authorizeTopics() {
+            if (!pauseNext) return;
+            pauseNext = false;
+            entered.resolve();
+            await resume.promise;
+        } });
+        const request = { categoryID: 54 };
+        const first = await service.preview(null, request);
+        const page = { ...request, snapshotID: first.pagination.snapshotID, offset: 25 };
+        pauseNext = true;
+        const delayed = service.preview(null, continuation ? page : request);
+        await entered.promise;
+        service.invalidate();
+        const fresh = await service.preview(null, request);
+        resume.resolve();
+        const expired = error => error.body?.error === 'ranking_snapshot_expired';
+        if (continuation) await assert.rejects(delayed, expired);
+        else assert.equal(await delayed, fresh);
+        await assert.rejects(service.preview(null, page), expired);
+        assert.equal(builds(), 2);
+    });
+}
 
 
 test('personal reference previews use viewer weights and isolate each account cache', async () => {

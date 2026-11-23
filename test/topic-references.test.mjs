@@ -46,21 +46,23 @@ test('references multiply path shares and combine identical leaf benchmarks', as
     assert.deepEqual(result.issues, []);
 });
 
-test('different fallback chains for the same leaf remain weighted alternatives', async () => {
-    const target = node(2, [entry(10)], { fallbackRules: [{ primaryConditionID: 10,
-        familyID: 100, entries: [{ conditionID: 20 }] }] });
-    const result = await expandTopicReferences(node(1, [entry(-2, 2500), entry(10, 7500)]),
-        { loadTarget: async () => target });
+test('different scene ballots for the same target retain their own source sets and original weight', async () => {
+    const root = node(1, [entry(-2, 2500), { ...entry(10, 7500), estimationSourceIDs: [] }]);
+    const target = node(2, [{ ...entry(10), estimationSourceIDs: [20] }]);
+    const result = await expandTopicReferences(root, { loadTarget: async () => target });
     assert.deepEqual(result.entries, [entry(10)]);
-    assert.deepEqual(result.familyComposition[0].families.map(family => [family.entries, family.weightBasisPoints]),
-        [[[], 7500], [[{ conditionID: 20 }], 2500]]);
+    assert.deepEqual(result.scoringEntries, [
+        { ...entry(10, 7500), estimationSourceIDs: [] },
+        { ...entry(10, 2500), estimationSourceIDs: [20] }
+    ]);
+    assert.deepEqual(result.referenceCompositions[0].scoringEntries, [{ ...entry(10), estimationSourceIDs: [20] }]);
 });
 
-test('an explicit no-fallback choice overrides community fallback inside a reference', async () => {
-    const target = node(2, [entry(10)], { fallbackRules: [{ primaryConditionID: 10, entries: [] }],
-        familyComposition: [{ primaryConditionID: 10, families: [{ entries: [{ conditionID: 20 }], weightBasisPoints: 10000 }] }] });
-    const result = await expandTopicReferences(node(1, [entry(-2)]), { loadTarget: async () => target });
-    assert.deepEqual(result.familyComposition[0].families[0].entries, []);
+test('equivalent source sets merge across paths regardless of their original order', async () => {
+    const root = node(1, [entry(-2, 5000), { ...entry(10, 5000), estimationSourceIDs: [13, 12] }]);
+    const target = node(2, [{ ...entry(10), estimationSourceIDs: [12, 13] }]);
+    const result = await expandTopicReferences(root, { loadTarget: async () => target });
+    assert.deepEqual(result.scoringEntries, [{ ...entry(10), estimationSourceIDs: [12, 13] }]);
 });
 
 test('empty and inaccessible references keep their original missing weight', async () => {
@@ -78,7 +80,7 @@ test('a closed topic-only class retains its entire weight as missing', async () 
     assert.equal(result.issues[0].reason, 'closed_cycle');
     assert.deepEqual(result.issues[0].contextIDs, [1, 2]);
     assert.deepEqual(result.entries, [entry(-1)]);
-    assert.deepEqual(result.familyComposition, []);
+    assert.deepEqual(result.scoringEntries, [{ ...entry(-1), estimationSourceIDs: [] }]);
     const models = [{ ID: 7, modelID: 7, modelName: 'Unrelated evidence', condition: { parameters: {} },
         results: new Map([['10', { normalizedScore: 100 }]]) }];
     for (const scoreMode of ['range', 'available']) {
@@ -123,7 +125,7 @@ test('an unavailable reference affects range and coverage without being estimate
             predict() { predictions++; throw new Error('Do not infer a topic as a benchmark'); } } });
     assert.equal(predictions, 0);
     assert.equal(estimated.coverage, 50);
-    assert.equal(estimated.lower, 66.67);
+    assert.equal(estimated.lower, 40);
 });
 
 test('public references preserve sub-basis-point shares and rounded zero references cannot create NaN', async () => {
@@ -131,11 +133,10 @@ test('public references preserve sub-basis-point shares and rounded zero referen
         scoringEntries: [entry(10, 2009900), entry(-2, 100)] });
     const result = await expandTopicReferences(node(1, entries), { loadTarget: async () => node(2, [entry(11)]) });
     assert.ok(Math.abs(result.entries.find(item => item.conditionID === 11).weightBasisPoints - 100 / 201) < 1e-12);
-    assert.ok(result.familyComposition.every(group => group.families.every(family => Number.isFinite(family.weightBasisPoints))));
+    assert.ok(result.scoringEntries.every(item => Number.isFinite(item.weightBasisPoints)));
     const models = [{ ID: 1, modelID: 1, name: 'Model', condition: {},
         results: new Map([['10', { normalizedScore: 20 }], ['11', { normalizedScore: 80 }]]) }];
-    const scores = scoreModels(models, result.entries, 10000, { scoreMode: 'range',
-        familyComposition: result.familyComposition, fallbackScope: 'public' });
+    const scores = scoreModels(models, result.scoringEntries, 10000, { scoreMode: 'range' });
     assert.equal(scores.length, 1); assert.ok(Number.isFinite(scores[0].lower));
     const zero = await expandTopicReferences(node(1, [entry(10), entry(-2, 0)]), {
         loadTarget: async () => { throw new Error('Zero shares must not load a target'); }
@@ -211,25 +212,28 @@ test('absorbing cycles can also lose weight to a closed class or deleted target'
         assert.ok(Math.abs(result.entries.find(item => item.conditionID < 0).weightBasisPoints - 6000) < 1e-9);
         assert.equal(result.issues[0].reason, deleted ? 'unavailable' : 'closed_cycle');
         const [score] = scoreModels([{ ID: 1, name: 'A', results: new Map([['10', { normalizedScore: 80 }]]) }],
-            result.entries, 10000, { familyComposition: result.familyComposition, fallbackScope: 'public' });
+            result.scoringEntries, 10000);
         assert.equal(score.lower, 32); assert.equal(score.coverage, 40);
     }
 });
 
-test('cyclic paths merge repeated benchmarks while retaining fallback alternatives', async () => {
-    const result = await expandTopicReferences(node(1, [entry(-2, 5000), entry(10, 5000)], {
-        fallbackRules: [{ primaryConditionID: 10, entries: [{ conditionID: 12 }] }]
-    }), { loadTarget: async ID => node(ID, [entry(-1, 5000), entry(10, 5000)], {
-        fallbackRules: [{ primaryConditionID: 10, entries: [{ conditionID: 13 }] }]
-    }) });
+test('cyclic paths merge repeated benchmarks for display and score each scene’s share with its own sources', async () => {
+    const root = node(1, [entry(-2, 5000), { ...entry(10, 5000), estimationSourceIDs: [12] }]);
+    const result = await expandTopicReferences(root, { loadTarget: async ID =>
+        node(ID, [entry(-1, 5000), { ...entry(10, 5000), estimationSourceIDs: [13] }]) });
     assert.deepEqual(result.entries, [entry(10)]);
-    const choices = result.familyComposition[0].families;
-    assert.ok(Math.abs(choices[0].weightBasisPoints - 20000 / 3) < 1e-9);
-    assert.ok(Math.abs(choices[1].weightBasisPoints - 10000 / 3) < 1e-9);
-    const [score] = scoreModels([{ ID: 1, name: 'A', results: new Map([['12', { normalizedScore: 60 }]]) }, ...pairedModels(10, 12, 60, -5, null)],
-        result.entries, 10000, { familyComposition: result.familyComposition, fallbackScope: 'public' });
-    assert.equal(score.lower, 0); assert.equal(score.upper, 100);
-    assert.equal(score.coverage, 0); assert.equal(score.fallbackCoverage, 66.67);
+    const [first, second] = result.scoringEntries;
+    assert.deepEqual(first.estimationSourceIDs, [12]);
+    assert.deepEqual(second.estimationSourceIDs, [13]);
+    assert.ok(Math.abs(first.weightBasisPoints - 20000 / 3) < 1e-9);
+    assert.ok(Math.abs(second.weightBasisPoints - 10000 / 3) < 1e-9);
+    const [score] = scoreModels([{ ID: 1, name: 'A', results: new Map([['12', { normalizedScore: 60 }]]) },
+        ...pairedModels(10, 12, 60, -5, null)], result.scoringEntries, 10000, { scoreMode: 'available' });
+    assert.equal(score.lower, 36.67);
+    assert.equal(score.lower, score.upper);
+    assert.equal(score.coverage, 0);
+    assert.equal(score.fallbackCoverage, 66.67);
+    assert.equal(score.coverageEntries.length, 1);
 });
 
 test('scenes are separate graph states and target selection is specific to each index mode', async () => {

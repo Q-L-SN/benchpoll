@@ -16,7 +16,7 @@ const foreignKeyError = () => Object.assign(Error('Fixture foreign key violation
 export function createPieSaveDatabase({ revision = 1, failCompletion = false, loseCommit = false,
     failReferenceInsert = false, graphSchema = true, requireGraphLock = true,
     users = [{ ID: '7' }, { ID: '8' }], topics = [{ ID: 1 }],
-    contexts = [{ ID: 10, category_ID: 1, context_values: {} }], scenes = [], pies } = {}) {
+    contexts = [{ ID: 10, category_ID: 1, context_values: {} }], scenes = [], pies, conditionRows = pieConditionRows } = {}) {
     const initialPies = pies ?? (revision ? [{ ID: 70, user_ID: '7', context_ID: 10, revision,
         weights: [{ conditionID: 1, weightBasisPoints: 10000 }] }] : []);
     let stored = {
@@ -28,7 +28,7 @@ export function createPieSaveDatabase({ revision = 1, failCompletion = false, lo
         scenes: new Map(scenes.map((scene, index) => [scene.context_ID, { name: `Scene ${scene.context_ID}`, slug: `scene-${scene.context_ID}`,
             description: 'Compare this scene.', scene_number: index + 1, position: 0, is_default: 0, is_active: 1, ...scene }])),
         pies: new Map(initialPies.map(pie => [pie.ID, { revision: 1, updated_at: new Date(), weights: [],
-            topicWeights: [], rules: [], ...structuredClone(pie), user_ID: String(pie.user_ID) }])),
+            topicWeights: [], rules: [], estimation_votes: null, ...structuredClone(pie), user_ID: String(pie.user_ID) }])),
         receipts: new Map(), families: new Map(), nextFamilyID: 100,
         nextPieID: Math.max(70, ...initialPies.map(pie => pie.ID)) + 1,
         nextContextID: Math.max(10, ...contexts.map(context => context.ID)) + 1
@@ -110,14 +110,14 @@ export function createPieSaveDatabase({ revision = 1, failCompletion = false, lo
             if (!existing) state.contexts.set(ID, { ID, category_ID, context_values: JSON.parse(values), context_hash });
             return [{ insertId: ID }, []];
         }
-        if (/SELECT ID, revision(?:, updated_at)? FROM personal_pies/.test(query)) {
+        if (/SELECT ID, revision(?:, updated_at)?, estimation_votes FROM personal_pies/.test(query)) {
             const pie = matchingPie(state, params[0], params[1]);
-            return [pie ? [{ ID: pie.ID, revision: pie.revision, updated_at: pie.updated_at }] : [], []];
+            return [pie ? [{ ID: pie.ID, revision: pie.revision, updated_at: pie.updated_at, estimation_votes: pie.estimation_votes }] : [], []];
         }
         if (query.startsWith('SELECT benchmark_condition_ID, weight_basis_points')) {
             const pie = state.pies.get(params[0]);
             const weights = [...(pie?.weights ?? []).map(row => ({ benchmark_condition_ID: row.conditionID,
-                weight_basis_points: row.weightBasisPoints })),
+                weight_basis_points: row.weightBasisPoints, follow_community_version: Number(row.followCommunityVersion === true) })),
             ...(query.includes('personal_pie_topic_weights') ? (pie?.topicWeights ?? []).map(row => ({
                 benchmark_condition_ID: -row.targetContextID, weight_basis_points: row.weightBasisPoints })) : [])];
             return [weights.sort((a, b) => b.weight_basis_points - a.weight_basis_points || a.benchmark_condition_ID - b.benchmark_condition_ID), []];
@@ -139,18 +139,20 @@ export function createPieSaveDatabase({ revision = 1, failCompletion = false, lo
             change(); events.push('delete-pie'); return [{ affectedRows: 1 }, []];
         }
         if (/FROM benchmark_conditions WHERE ID IN/.test(query)) return [params
-            .filter(ID => pieConditionRows.some(row => row.condition_ID === ID)).map(ID => ({ ID })), []];
-        if (query.includes('SELECT benchmark_conditions.ID AS condition_ID')) return [pieConditionRows, []];
+            .filter(ID => conditionRows.some(row => row.condition_ID === ID)).map(ID => ({ ID })), []];
+        if (query.includes('SELECT benchmark_conditions.ID AS condition_ID')) return [conditionRows, []];
         if (query.includes('INSERT INTO personal_pies')) {
-            const [userID, contextID] = params;
+            const [userID, contextID, estimation_votes] = params;
             if (!state.users.has(String(userID)) || !state.contexts.has(contextID)) throw foreignKeyError();
             assert.equal(matchingPie(state, userID, contextID), undefined, 'One pie per user and context');
             const pie = { ID: state.nextPieID++, user_ID: String(userID), context_ID: contextID, revision: 1,
-                updated_at: new Date(), weights: [], topicWeights: [], rules: [] };
+                updated_at: new Date(), weights: [], topicWeights: [], rules: [], estimation_votes };
             state.pies.set(pie.ID, pie); change(); return [{ insertId: pie.ID }, []];
         }
         if (query.includes('UPDATE personal_pies')) {
-            const pie = state.pies.get(params[0]); assert.ok(pie); pie.revision += 1; pie.updated_at = new Date(); change();
+            const [estimationVotes, pieID] = params;
+            const pie = state.pies.get(pieID); assert.ok(pie); pie.revision += 1; pie.updated_at = new Date();
+            pie.estimation_votes = estimationVotes; change();
             return [{ affectedRows: 1 }, []];
         }
         if (query.includes('DELETE FROM personal_pie_weights')) {
@@ -163,17 +165,18 @@ export function createPieSaveDatabase({ revision = 1, failCompletion = false, lo
         }
         if (query.includes('INSERT INTO personal_pie_weights') || query.includes('INSERT INTO personal_pie_topic_weights')) {
             const reference = query.includes('personal_pie_topic_weights');
-            for (let index = 0; index < params.length; index += 3) {
-                const [pieID, ID, weightBasisPoints] = params.slice(index, index + 3), pie = state.pies.get(pieID);
-                if (!pie || (reference ? !state.contexts.has(ID) : !pieConditionRows.some(row => row.condition_ID === ID))) throw foreignKeyError();
+            const stride = query.includes('follow_community_version') ? 4 : 3;
+            for (let index = 0; index < params.length; index += stride) {
+                const [pieID, ID, weightBasisPoints, follows] = params.slice(index, index + stride), pie = state.pies.get(pieID);
+                if (!pie || (reference ? !state.contexts.has(ID) : !conditionRows.some(row => row.condition_ID === ID))) throw foreignKeyError();
                 assert.ok(Number.isSafeInteger(ID) && ID > 0);
                 assert.ok(Number.isSafeInteger(weightBasisPoints) && weightBasisPoints > 0 && weightBasisPoints <= 10000);
                 const rows = reference ? pie.topicWeights : pie.weights, key = reference ? 'targetContextID' : 'conditionID';
                 assert.ok(!rows.some(row => row[key] === ID), 'Duplicate weight primary key');
-                rows.push({ [key]: ID, weightBasisPoints });
+                rows.push({ [key]: ID, weightBasisPoints, ...(follows === 1 ? { followCommunityVersion: true } : {}) });
                 if (reference && failReferenceInsert) throw Error('Fixture reference insert failed after mutation');
             }
-            return [{ affectedRows: params.length / 3 }, []];
+            return [{ affectedRows: params.length / stride }, []];
         }
         if (query.includes('INSERT INTO benchmark_families')) {
             const [primary, chain_hash] = params;

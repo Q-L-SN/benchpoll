@@ -4,6 +4,7 @@ import mysql from 'mysql2/promise';
 import { installTopicPlatformSchema } from '../../topic-platform-schema.js';
 import { ensureProfilePagesSchema, ensureUserPublicID } from '../../profile-schema.js';
 import { migrateCommunityVersions } from '../../scripts/migrate-community-versions-20261103.mjs';
+import { migrateEstimationVotes } from '../../scripts/migrate-estimation-votes.mjs';
 
 // Explicitly opt-in, loopback-only, synthetic schema. Never connect to an application database.
 export async function createLifecycleDatabase() {
@@ -34,6 +35,7 @@ export async function createLifecycleDatabase() {
             await installTopicPlatformSchema(connection);
             await ensureProfilePagesSchema(connection);
             await migrateCommunityVersions(connection, { apply: true });
+            await migrateEstimationVotes(connection, { apply: true });
             await connection.query('INSERT INTO topic_reference_lock (ID) VALUES (1)');
             await connection.query('INSERT INTO ranking_cache_revisions (ID, epoch, ready) VALUES (1, UUID(), 1), (2, UUID(), 1)');
             for (const ID of ['42', '43', ...Array.from({ length: 31 }, (_, index) => String(1000 + index))]) {

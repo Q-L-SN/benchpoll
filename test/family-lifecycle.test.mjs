@@ -69,14 +69,14 @@ test('removed family disappears from cached searches and page totals, while used
     assert.deepEqual(pager.getPage(configurations).items.map(row => row.familyID), [null]);
 });
 
-test('save cleanup is in the weight transaction; public catalogue and stale search both check usage', async () => {
+test('live saves, public catalogue and pagination do not consult archived fallback families', async () => {
     const ranking = await readFile(new URL('../ranking-service.js', import.meta.url), 'utf8');
     const server = await readFile(new URL('../server.js', import.meta.url), 'utf8');
     const save = ranking.slice(ranking.indexOf('export async function savePersonalPie'));
-    assert.match(save, /SELECT family_ID FROM personal_pie_score_rules[\s\S]*?FOR UPDATE/);
-    assert.match(save, /pruneUnusedBenchmarkFamilies\(connection, previousFamilyIDs\);[\s\S]*?completeWriteIntent\(connection, intent,[\s\S]*?await commitTransactionConnection\(connection, 'SAVE PERSONAL PIE'\)/);
-    assert.match(ranking, /loadBenchmarkFamilies\(db, \{ referencedOnly: true \}\)/);
-    assert.match(server, /\['benchmarks', 'fallbacks'\]\.includes\(req\.body\.list\)[\s\S]*?retainReferencedFamilies\(await loadReferencedBenchmarkFamilyIDs\(db\)\)/);
+    assert.match(save, /estimation_votes = \?[\s\S]*?completeWriteIntent\(connection, intent,[\s\S]*?await commitTransactionConnection\(connection, 'SAVE PERSONAL PIE'\)/);
+    assert.doesNotMatch(ranking, /personal_pie_score_rules|loadBenchmarkFamilies|pruneUnusedBenchmarkFamilies/);
+    const pageRoute = server.slice(server.indexOf("API.post('/get_ranking_page'"), server.indexOf("API.post('/locate_ranking_model'"));
+    assert.doesNotMatch(pageRoute, /retainReferencedFamilies|loadReferencedBenchmarkFamilyIDs/);
 });
 
 test('removing a configuration invalidates fallback offsets but preserves ordinary version pagination', () => {

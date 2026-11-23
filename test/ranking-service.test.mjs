@@ -112,17 +112,17 @@ test('ranking context serialization is canonical and deterministic', () => {
     assert.match(first.contextHash, /^[a-f0-9]{64}$/);
 });
 
-test('read-only personal previews reject invalid weights and fallback cycles before touching the database', async () => {
+test('read-only personal previews reject invalid weights and duplicate votes before touching the database', async () => {
     const db = { getConnection() { throw new Error('Preview validation reached the database'); } };
     const base = { categoryID: 1, previewPersonalPie: { entries: [{ conditionID: 1, weightBasisPoints: 10000 }], fallbackRules: [] } };
     await assert.rejects(getRankingWorkspace(db, {
         ...base, previewPersonalPie: { entries: [{ conditionID: 1, weightBasisPoints: 9900 }], fallbackRules: [] }
     }), error => error.body?.error === 'pie_total_must_equal_100_percent');
     await assert.rejects(getRankingWorkspace(db, {
-        ...base, previewPersonalPie: { entries: [{ conditionID: 1, weightBasisPoints: 10000 }], fallbackRules: [{
-            primaryConditionID: 1, mode: 'ordered', entries: [{ conditionID: 1 }]
-        }] }
-    }), error => error.body?.error === 'invalid_personal_pie_fallback_component');
+        ...base, previewPersonalPie: { ...base.previewPersonalPie, estimationVotes: [
+            { conditionID: 2, vote: 'support' }, { conditionID: 2, vote: 'oppose' }
+        ] }
+    }), error => error.body?.error === 'invalid_estimation_votes');
     await assert.rejects(getRankingWorkspace(db, {
         ...base, previewPersonalPie: { ...base.previewPersonalPie, unexpected: true }
     }), error => error.body?.error === 'invalid_personal_pie_preview');
@@ -227,7 +227,7 @@ test('model scoring exposes an uncertainty interval for missing results', () => 
     assert.equal(scored[0].resultCount, 1);
 });
 
-test('available-results mode excludes unresolved weights from inference but still penalizes missing coverage', () => {
+test('available-results mode keeps original contributions for signed and unresolved scores', () => {
     const model = { ID: 7, modelID: 3, name: 'Partial evidence', results: new Map([
         ['21', { normalizedScore: 120 }], ['22', { normalizedScore: -20 }]
     ]) };
@@ -237,10 +237,10 @@ test('available-results mode excludes unresolved weights from inference but stil
         { conditionID: 23, weightBasisPoints: 3000 }
     ];
     const [scored] = scoreModels([model], entries, 10000, { scoreMode: 'available' });
-    assert.equal(scored.lower, 55.26);
-    assert.equal(scored.upper, 55.26);
-    assert.equal(scored.availableInference.unpenalizedScore, 60);
-    assert.equal(scored.availableInference.coverageFactor, 3.5 / 3.8);
+    assert.equal(scored.lower, 42);
+    assert.equal(scored.upper, 42);
+    assert.equal(scored.availableInference.unpenalizedScore, 42);
+    assert.equal(scored.availableInference.unresolvedContribution, 0);
     assert.equal(scored.availableInference.observedScore, 60);
     assert.equal(scored.availableInference.inferredFraction, 0);
     assert.deepEqual(scored.inferredScores, []);
@@ -250,7 +250,7 @@ test('available-results mode excludes unresolved weights from inference but stil
     assert.throws(() => scoreModels([model], entries, 10000, { scoreMode: 'unknown' }), error => error.body?.error === 'invalid_score_mode');
 });
 
-test('available-results mode retains 1/3 and 2/3 observed weights when the missing distributions are empty', () => {
+test('available-results mode retains original 20% and 40% weights when other results are absent', () => {
     const entries = [1000, 2000, 3000, 4000].map((weightBasisPoints, index) => ({
         conditionID: index + 1, weightBasisPoints
     }));
@@ -259,11 +259,11 @@ test('available-results mode retains 1/3 and 2/3 observed weights when the missi
     ]) };
     const [score] = scoreModels([model], entries, 10000, { scoreMode: 'available' });
     assert.equal(score.coverage, 60);
-    assert.equal(score.lower, 70.59);
-    assert.equal(score.upper, 70.59);
+    assert.equal(score.lower, 48);
+    assert.equal(score.upper, 48);
     assert.equal(score.availableInference.observedScore, 80);
     assert.deepEqual(score.inferredScores, []);
-    score.calculationScores.forEach((row, index) => assert.ok(Math.abs(row.effectiveWeight - (index + 1) * 100 / 3) < 1e-9));
+    assert.deepEqual(score.calculationScores.map(row => row.effectiveWeight), [20, 40]);
 });
 
 test('ordered fallback resolves the whole entrance and leaves exhausted chains missing in both modes', () => {
@@ -275,7 +275,7 @@ test('ordered fallback resolves the whole entrance and leaves exhausted chains m
     ];
     models.push(...pairedModels(21, 22, 80, -5, null));
     const available = scoreModels(models, entries, 10000, { fallbackRules, scoreMode: 'available' });
-    assert.deepEqual(available.slice(0, 2).map(row => [row.lower, row.upper, row.coverage]), [[75, 75, 0], [null, null, 0]]);
+    assert.deepEqual(available.slice(0, 2).map(row => [row.lower, row.upper, row.coverage]), [[75, 75, 0], [0, 0, 0]]);
     const range = scoreModels(models, entries, 10000, { fallbackRules });
     assert.deepEqual(range.slice(0, 2).map(row => [row.lower, row.upper, row.coverage]), [[0, 100, 0], [0, 100, 0]]);
     assert.equal(range[0].fallbackUsageCount, 1);
@@ -423,8 +423,7 @@ test('pie candidates include sparse siblings of benchmarks with comparable condi
     assert.match(query, /JOIN models ON models\.ID = benchmark_results\.model_ID AND models\.is_active = 1/);
     assert.match(query, /benchmark_results\.status = 'accepted'/);
     assert.match(query, /personal_pie_weights\.benchmark_condition_ID = candidate_conditions\.ID/);
-    assert.match(query, /benchmark_family_members\.benchmark_condition_ID = candidate_conditions\.ID/);
-    assert.match(query, /benchmark_families\.primary_benchmark_condition_ID = candidate_conditions\.ID/);
+    assert.doesNotMatch(query, /benchmark_family_members|benchmark_families|personal_pie_score_rules/);
     assert.match(query, /candidate_conditions\.ID IN \(\?, \?\)/);
     assert.match(query, /JOIN eligible_benchmarks ON eligible_benchmarks\.benchmark_ID = benchmark_conditions\.benchmark_ID/);
     assert.deepEqual(parameters, [MIN_COMPARABLE_MODELS, 21, 22]);
@@ -764,7 +763,8 @@ test('private topics resolve only for their owner and never load public dimensio
 test('private topics have no public contribution and perform no public aggregation reads', async () => {
     const result = await loadPublicPie({ execute() { throw new Error('Private public-aggregation query'); } },
         { categoryID: 8, isPrivate: true, dimensions: [], contextValues: {} }, new Map());
-    assert.deepEqual(result, { entries: [], familyComposition: [], versionComposition: [], participantCount: 0,
+    assert.deepEqual(result, { entries: [], familyComposition: [], communityComposition: [], versionComposition: [],
+        estimationVotes: [], participantCount: 0,
         isFallback: false, scoringEntries: [], contextIDs: [] });
 });
 
@@ -986,32 +986,27 @@ test('an empty stored personal pie remains editable but is not treated as a vali
             if (sql.includes('FROM personal_pie_weights')) {
                 return [[], []];
             }
-            if (sql.includes('FROM personal_pie_score_rules')) {
-                return [[], []];
-            }
             throw new Error(`Unexpected SQL: ${sql}`);
         }
     };
     const pie = await loadPersonalPie(connection, 10, 99);
     assert.equal(pie.revision, 3);
     assert.deepEqual(pie.entries, []);
-    assert.deepEqual(pie.fallbackRules, []);
+    assert.deepEqual(pie.estimationVotes, []);
 });
 
-test('stored personal families preserve exact member order and immutable identity', async () => {
-    const { createHash } = await import('node:crypto');
-    const rows = [23, 22].map((ID, index) => ({ pie_ID: 7, family_ID: 12, primary_benchmark_condition_ID: 21,
-        chain_hash: createHash('sha256').update('[21,23,22]').digest('hex'), position: index + 1, fallback_benchmark_condition_ID: ID }));
+test('stored personal estimation votes are sorted without altering weighted entries', async () => {
+    const votes = [{ conditionID: 23, vote: 'oppose' }, { conditionID: 22, vote: 'support' }];
     const connection = { async execute(sql) {
-        if (sql.includes('FROM personal_pies')) return [[{ ID: 7, revision: 3 }], []];
+        if (sql.includes('FROM personal_pies')) return [[{ ID: 7, revision: 3, estimation_votes: JSON.stringify(votes) }], []];
         if (sql.includes('FROM personal_pie_weights')) return [[{ benchmark_condition_ID: 21, weight_basis_points: 10000 }], []];
-        if (sql.includes('FROM personal_pie_score_rules')) return [rows, []];
         throw new Error('Unexpected SQL: ' + sql);
     } };
     const pie = await loadPersonalPie(connection, 10, 99);
-    assert.deepEqual(pie.fallbackRules, [{ familyID: 12, primaryConditionID: 21, mode: 'ordered', entries: [{ conditionID: 23 }, { conditionID: 22 }] }]);
-    rows[1].position = 3;
-    await assert.rejects(loadPersonalPie(connection, 10, 99), error => error.body?.error === 'benchmark_family_invariant_failed');
+    assert.deepEqual(pie.estimationVotes, [...votes].reverse());
+    assert.deepEqual(pie.entries, [{ conditionID: 21, weightBasisPoints: 10000 }]);
+    votes.push({ conditionID: 22, vote: 'oppose' });
+    await assert.rejects(loadPersonalPie(connection, 10, 99), error => error.body?.error === 'stored_estimation_votes_invalid');
 });
 
 test('public pie rejects stored pies that are neither empty nor exactly 100 percent', async () => {
@@ -1142,17 +1137,17 @@ test('personal pie save rejects an unscored condition before writing a new pie',
     assert.equal(released, true);
 });
 
-test('personal family requests reject legacy weights, duplicates and self references before accessing the database', async () => {
+test('malformed estimation votes fail before accessing the database', async () => {
     let connected = false;
     const db = { async getConnection() { connected = true; throw new Error('should not connect'); } };
     const base = { userID: 1, categoryID: 1, expectedRevision: 0, entries: [
         { conditionID: 21, weightBasisPoints: 5000 }, { conditionID: 22, weightBasisPoints: 5000 }
     ] };
-    await assert.rejects(savePersonalPie(db, base), error => error.body?.error === 'invalid_personal_pie_fallback_rules');
-    for (const entries of [[{ conditionID: 23, weightBasisPoints: 10000 }], [{ conditionID: 21 }],
-        [{ conditionID: 23 }, { conditionID: 23 }]]) {
-        await assert.rejects(savePersonalPie(db, { ...base, fallbackRules: [{ primaryConditionID: 21, mode: 'ordered', entries }] }),
-            error => error.status === 400);
+    for (const estimationVotes of [null, [{ conditionID: 23, vote: 'neutral' }], [{ conditionID: 23 }],
+        [{ conditionID: 23, vote: 'support' }, { conditionID: 23, vote: 'oppose' }],
+        [{ conditionID: -2, vote: 'support' }], Array(1)]) {
+        await assert.rejects(savePersonalPie(db, { ...base, estimationVotes }),
+            error => error.status === 400 && error.body?.error === 'invalid_estimation_votes');
     }
     assert.equal(connected, false);
 });
@@ -1161,5 +1156,5 @@ test('ranking runtime contains only canonical benchmark and context storage name
     assert.match(source, /benchmark_results/);
     assert.match(source, /FROM benchmark_conditions/);
     assert.match(source, /SELECT rc\.ID, rc\.category_ID, rc\.context_values\s+FROM ranking_contexts rc/);
-    assert.doesNotMatch(source, /\bobjects\b|evaluation_profiles|evaluation_results|model_configurations|template_values|template_hash|\bvotes\b/);
+    assert.doesNotMatch(source, /\bobjects\b|evaluation_profiles|evaluation_results|model_configurations|template_values|template_hash|(?:FROM|JOIN|INTO) votes\b/);
 });

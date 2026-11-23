@@ -1,8 +1,16 @@
 import { createDraftRecordStore } from './draft-records.js';
 import { FALLBACK_CONFIGURATION_VERSION } from '../shared/benchmark-families.js';
+import { normalizeEstimationVotes } from '../shared/estimation-votes.js';
 
 const LEGACY_KEY = 'benchpoll-guest-weights-v2-ordered';
-const validDraft = value => Array.isArray(value?.entries) && Array.isArray(value?.fallbackRules);
+function validDraft(value) {
+    if (!Array.isArray(value?.entries) || !Array.isArray(value?.fallbackRules)) return false;
+    if (Object.hasOwn(value, 'estimationVotes')) {
+        try { normalizeEstimationVotes(value.estimationVotes); }
+        catch { return false; }
+    }
+    return true;
+}
 const withoutLegacyChoices = value => ({ ...value, fallbackRules: [] });
 
 export function createGuestDraftStore(getStorage = () => globalThis.sessionStorage) {

@@ -29,7 +29,7 @@ test('partially covered fair comparisons use the same evidence in range and avai
     const models = [model(1, 1, { harness: 'same' }, { 10: 40 }), model(2, 2, { harness: 'same' }, { 10: 80 })];
     const { range, available } = bothModes(models, weights([10, 5000], [11, 5000]), { mode: 'matched', keys: ['model'] });
     assert.deepEqual(range.map(row => [row.lower, row.upper, row.comparable]), [[20, 70, true], [40, 90, true]]);
-    assert.deepEqual(available.map(row => [row.lower, row.upper, row.comparable]), [[33.33, 33.33, true], [66.67, 66.67, true]]);
+    assert.deepEqual(available.map(row => [row.lower, row.upper, row.comparable]), [[20, 20, true], [40, 40, true]]);
     assert.deepEqual(available.map(row => row.availableInference.observedScore), [40, 80]);
     assert.ok(available.every(row => row.inferredScores.length === 0));
 });
@@ -39,7 +39,7 @@ test('per-benchmark matched cohorts do not change when missing results are estim
         model(2, 2, { harness: 'same' }, { 10: 60 }), model(3, 3, { harness: 'same' }, { 11: 70 })];
     const { range, available } = bothModes(models, weights([10, 4000], [11, 6000]), { mode: 'matched', keys: ['model'] });
     assert.deepEqual(range.map(row => [row.lower, row.upper]), [[62, 62], [24, 84], [42, 82]]);
-    assert.deepEqual(available.map(row => row.lower), [62, 46.15, 61.76]);
+    assert.deepEqual(available.map(row => row.lower), [62, 24, 42]);
     assert.ok(available.slice(1).every(row => row.inferredScores.length === 0));
     assert.deepEqual(available.slice(1).map(row => row.availableInference.method), ['calibrated-fallback', 'calibrated-fallback']);
     assert.deepEqual(available.slice(1).map(row => row.availableInference.unresolvedFraction), [.6, .4]);
@@ -80,7 +80,7 @@ test('ordered family evidence is identical between score modes for both personal
         const { range, available } = bothModes(models, entries, undefined, rules);
         assert.equal(range[0].fallbackUsageCount, 0, 'A direct zero must beat fallback');
         assert.deepEqual([range[1].lower, range[1].upper], [0, 100]);
-        assert.equal(available[1].lower, 66.67);
+        assert.equal(available[1].lower, 56);
         assert.deepEqual(available[1].inferredScores.map(row => [row.conditionID, row.normalizedScore]), [[10, 70]]);
         assert.deepEqual(range[1].calculationScores, []);
     }

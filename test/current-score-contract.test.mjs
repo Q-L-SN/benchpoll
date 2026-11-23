@@ -26,7 +26,7 @@ test('calculation, coverage, configuration and detail queries share the current-
     assert.match(server, /COUNT\(\*\) AS scoreCount[\s\S]*?WHERE \$\{currentScoreSQL\(\)\}/);
 });
 
-test('historical results cannot affect medians, coverage, fallback or available-results totals', async () => {
+test('historical results cannot affect medians, coverage, version estimates or totals', async () => {
     const all = [
         { result_ID: 101, model_ID: 3, benchmark_condition_ID: 21, score_fields: [], raw_score: 20, status: 'accepted' },
         { result_ID: 102, model_ID: 3, benchmark_condition_ID: 21, score_fields: [], raw_score: 100, status: 'superseded' },
@@ -53,16 +53,14 @@ test('historical results cannot affect medians, coverage, fallback or available-
     assert.equal(bounded.upper, 60);
     assert.equal(bounded.coverage, 50);
     const [available] = scoreComparison(models, weights, 10000, { scoreMode: 'available' }, comparisonOptions(models));
-    const expected = Number((20 * 5 * .5 / (1 + 4 * .5)).toFixed(2));
-    assert.equal(available.lower, expected);
-    assert.equal(available.upper, expected);
+    assert.equal(available.lower, 10);
+    assert.equal(available.upper, 10);
+    assert.equal(available.availableInference.unresolvedContribution, 0);
     assert.equal(available.availableInference.observedScore, 20);
     assert.equal(available.availableInference.inferredFraction, 0);
     assert.deepEqual(available.inferredScores, []);
-    const fallback = { fallbackRules: [{ primaryConditionID: 23, mode: 'ordered',
-        entries: [{ conditionID: 22 }] }] };
-    const [missing] = scoreComparison(models, [{ conditionID: 23, weightBasisPoints: 10000 }],
-        10000, fallback, comparisonOptions(models));
+    const [missing] = scoreComparison(models, [{ conditionID: 23, weightBasisPoints: 10000, estimationSourceIDs: [22] }],
+        10000, { scoreMode: 'available' }, comparisonOptions(models));
     assert.equal(missing.lower, null);
     assert.equal(missing.upper, null);
     assert.equal(missing.comparable, false);

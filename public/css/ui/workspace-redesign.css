@@ -60,7 +60,7 @@
     .bp-home .bp-benchmark-card, .bp-home .bp-model-card { overflow: visible; }
     .bp-home .bp-benchmark-toolbar, .bp-home .bp-model-controls { position: sticky; top: 0; z-index: 15; background: #fff; border-radius: 10px 10px 0 0; }
     .bp-home .bp-benchmark-head { position: sticky; top: var(--bp-evaluation-toolbar-height, 92px); z-index: 14; }
-    .bp-home #estimation-test-control { position: sticky; top: var(--bp-index-toolbar-height, 64px); z-index: 14; background: #fff; }
+    .bp-home #estimation-method-control { position: sticky; top: var(--bp-index-toolbar-height, 64px); z-index: 14; background: #fff; }
     .bp-home .bp-model-head { position: sticky; top: calc(var(--bp-index-toolbar-height, 64px) + var(--bp-estimation-toolbar-height, 56px)); z-index: 13; }
     .bp-home .bp-workspace .bp-mobile-panels { backface-visibility: hidden; transform: translate3d(-50%, 0, 0); will-change: transform; }
 }

@@ -77,17 +77,17 @@ test('calculation evidence identifies the winning configuration for each weighte
     assert.equal(score.missingWeight, 0);
 });
 
-test('a calibrated backup retains its original share and leaves the score range open', () => {
+test('a calibrated sibling retains its original share and leaves the score range open', () => {
     const model = { ...models[0], results: new Map([['2', { normalizedScore: 80 }]]) };
     const peers = pairedModels(1, 2, 80, -10, model.condition.parameters);
-    const entries = [{ conditionID: 1, weightBasisPoints: 8000 }, { conditionID: 4, weightBasisPoints: 2000 }];
-    const rule = { primaryConditionID: 1, mode: 'ordered', entries: [{ conditionID: 2 }, { conditionID: 3 }] };
-    const [range] = scoreModels([model, ...peers], entries, 10000, { fallbackRules: [rule] });
+    const entries = [{ conditionID: 1, weightBasisPoints: 8000, estimationSourceIDs: [2, 3] },
+        { conditionID: 4, weightBasisPoints: 2000, estimationSourceIDs: [] }];
+    const [range] = scoreModels([model, ...peers], entries, 10000);
     assert.deepEqual([range.lower, range.upper, range.missingWeight], [0, 100, 100]);
     assert.deepEqual(range.calculationScores, []);
-    const [available] = scoreModels([model, ...peers], entries, 10000, { fallbackRules: [rule], scoreMode: 'available' });
-    assert.equal(available.lower, Number((70 * 4 / 4.2).toFixed(2)));
-    assert.deepEqual([available.inferredScores[0].originalWeight, available.inferredScores[0].effectiveWeight], [80, 100]);
+    const [available] = scoreModels([model, ...peers], entries, 10000, { scoreMode: 'available' });
+    assert.equal(available.lower, 56);
+    assert.deepEqual([available.inferredScores[0].originalWeight, available.inferredScores[0].effectiveWeight], [80, 80]);
     assert.ok(Math.abs(available.availableInference.unresolvedFraction - .2) < 1e-9);
 });
 

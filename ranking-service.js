@@ -11,8 +11,7 @@ import { topicURL, sceneSummary } from './public/js/shared/topics.js';
 import { currentScoreSQL } from './score-aggregation.js';
 import { scoreEvidenceHash } from './score-evidence.js';
 import { FALLBACK_RULE_MODE, familyKey, resolvedFamilyConditionIDs, resolveFallbackChain } from './public/js/shared/benchmark-families.js';
-import { FALLBACK_SELECTION_SOURCES } from './public/js/shared/fallback-choice.js';
-import { loadBenchmarkFamilies, ensureBenchmarkFamily, parseFamilyRows, pruneUnusedBenchmarkFamilies } from './benchmark-family-service.js';
+import { normalizeEstimationVotes } from './public/js/shared/estimation-votes.js';
 import { normalizeAvailableInferenceVersion,
     AVAILABLE_INFERENCE_VERSION } from './public/js/shared/available-score.js';
 import { createFallbackCalibration } from './fallback-calibration.js';
@@ -20,6 +19,7 @@ import { fallbackInference } from './public/js/shared/fallback-inference.js';
 import { DEFAULT_ESTIMATION_ALGORITHM, normalizeEstimationAlgorithm } from './public/js/shared/estimation-algorithms.js';
 import { benchmarkVersionTieOrder, benchmarkEvaluationOrder } from './public/js/shared/benchmark-version-order.js';
 import { communityVersionComposition, expandCommunityVersions } from './public/js/shared/benchmark-version-choice.js';
+import { createVersionEstimationPlanner } from './public/js/shared/version-estimation-policy.js';
 import { isAACondition, AA_DISPLAY_RESTRICTION } from './public/js/shared/aa-ranking-policy.js';
 import { aaResultReason } from './aa-archive-policy.js';
 import { resolveTopicScene } from './topic-scenes-service.js';
@@ -35,7 +35,7 @@ export const MAX_PIE_ITEMS = PIE_TOTAL_BASIS_POINTS / PIE_MIN_ITEM_BASIS_POINTS;
 export { FALLBACK_RULE_MODE };
 export const MIN_COMPARABLE_MODELS = 3;
 export const PUBLIC_PIE_SAMPLE_HOURS = 72;
-export const PUBLIC_FALLBACK_ACTIVITY_DAYS = 14;
+export const PUBLIC_CONFIGURATION_ACTIVITY_DAYS = 14;
 export const PUBLIC_PIE_MIN_SAMPLES = 10;
 export const RANKING_READ_TIMEOUT_MS = 45000;
 
@@ -330,18 +330,6 @@ export async function loadBenchmarkConditions(connection, { includeConditionIDs 
                       SELECT 1 FROM personal_pie_weights
                       WHERE personal_pie_weights.benchmark_condition_ID = candidate_conditions.ID
                   )
-                  OR EXISTS (
-                      SELECT 1 FROM benchmark_family_members
-                      WHERE benchmark_family_members.benchmark_condition_ID = candidate_conditions.ID
-                        AND EXISTS (SELECT 1 FROM personal_pie_score_rules r
-                            WHERE r.family_ID = benchmark_family_members.family_ID)
-                  )
-                  OR EXISTS (
-                      SELECT 1 FROM benchmark_families
-                      WHERE benchmark_families.primary_benchmark_condition_ID = candidate_conditions.ID
-                        AND EXISTS (SELECT 1 FROM personal_pie_score_rules r
-                            WHERE r.family_ID = benchmark_families.ID)
-                  )
                   ${previewClause}
               )
         )
@@ -478,19 +466,58 @@ async function loadMatchingContexts(connection, context) {
     })).filter(candidate => contextMatchesSelection(candidate.contextValues, context));
 }
 
-export async function loadPublicPie(connection, context, conditionsByID) {
-    const defaultVersions = () => communityVersionComposition([], conditionsByID.values());
-    if (context.isPrivate) return { entries: [], familyComposition: [], participantCount: 0,
-        versionComposition: defaultVersions(), isFallback: false, scoringEntries: [], contextIDs: [] };
-    const matchingContexts = await loadMatchingContexts(connection, context);
-    if (matchingContexts.length === 0) {
-        return { entries: [], familyComposition: [], versionComposition: defaultVersions(), participantCount: 0, isFallback: false, scoringEntries: [], contextIDs: [] };
+function readStoredEstimationVotes(value, pieID) {
+    if (value == null) return [];
+    try {
+        return normalizeEstimationVotes(typeof value === 'string' ? JSON.parse(value) : value);
+    } catch {
+        throw requestError(409, 'stored_estimation_votes_invalid', { pieID });
     }
+}
+
+function scopeEstimationVotes(votes, entries, conditionsByID, { strict = false, lockedConditionIDs } = {}) {
+    if (!votes.length) return votes;
+    const weightedBenchmarks = new Set();
+    for (const entry of entries) {
+        const condition = entry.conditionID > 0 ? conditionsByID.get(entry.conditionID) : null;
+        if (condition && !condition.excludedFromRanking) weightedBenchmarks.add(condition.benchmarkID);
+    }
+    return votes.filter(({ conditionID }) => {
+        const condition = conditionsByID.get(conditionID);
+        if (condition && !condition.excludedFromRanking && weightedBenchmarks.has(condition.benchmarkID)
+            && (lockedConditionIDs === undefined || lockedConditionIDs.has(conditionID))) return true;
+        if (strict) throw requestError(400, 'estimation_vote_condition_unavailable', { conditionID });
+        return false;
+    });
+}
+
+function aggregateEstimationVotes(pies, conditionsByID) {
+    const counts = new Map();
+    for (const [pieID, pie] of pies) {
+        const votes = scopeEstimationVotes(readStoredEstimationVotes(pie.estimationVotes, pieID), pie.entries, conditionsByID);
+        for (const { conditionID, vote } of votes) {
+            const tally = counts.get(conditionID) ?? { conditionID, supportCount: 0, opposeCount: 0 };
+            if (vote === 'support') tally.supportCount++;
+            else tally.opposeCount++;
+            counts.set(conditionID, tally);
+        }
+    }
+    return [...counts.values()].sort((left, right) => left.conditionID - right.conditionID);
+}
+
+export async function loadPublicPie(connection, context, conditionsByID) {
+    const emptyPie = (contextIDs = []) => ({ entries: [], familyComposition: [], communityComposition: [],
+        versionComposition: communityVersionComposition([], conditionsByID.values()), estimationVotes: [],
+        participantCount: 0, isFallback: false, scoringEntries: [], contextIDs });
+    if (context.isPrivate) return emptyPie();
+    const matchingContexts = await loadMatchingContexts(connection, context);
+    if (matchingContexts.length === 0) return emptyPie();
     const contextIDs = matchingContexts.map(candidate => candidate.ID);
     const [rows] = await connection.execute(`
         SELECT personal_pies.ID AS pie_ID, personal_pies.context_ID,
                personal_pies.updated_at >= NOW() - INTERVAL ${PUBLIC_PIE_SAMPLE_HOURS} HOUR AS is_recent,
-               personal_pies.updated_at >= NOW() - INTERVAL ${PUBLIC_FALLBACK_ACTIVITY_DAYS} DAY AS is_fallback_recent,
+               personal_pies.updated_at >= NOW() - INTERVAL ${PUBLIC_CONFIGURATION_ACTIVITY_DAYS} DAY AS is_fallback_recent,
+               personal_pies.estimation_votes,
                personal_pie_weights.benchmark_condition_ID,
                personal_pie_weights.follow_community_version,
                personal_pie_weights.weight_basis_points
@@ -510,16 +537,17 @@ export async function loadPublicPie(connection, context, conditionsByID) {
     for (const row of rows) {
         const pieID = Number(row.pie_ID);
         const recent = Number(row.is_recent);
-        const fallbackRecent = Number(row.is_fallback_recent);
-        if ((recent !== 0 && recent !== 1) || (fallbackRecent !== 0 && fallbackRecent !== 1)
-            || (recent === 1 && fallbackRecent !== 1)) {
+        const configurationRecent = Number(row.is_fallback_recent);
+        if ((recent !== 0 && recent !== 1) || (configurationRecent !== 0 && configurationRecent !== 1)
+            || (recent === 1 && configurationRecent !== 1)) {
             throw requestError(409, 'personal_pie_recency_invalid', { pieID });
         }
         if (!pies.has(pieID)) {
             pies.set(pieID, {
                 contextID: Number(row.context_ID),
                 isRecent: recent === 1,
-                isFallbackRecent: fallbackRecent === 1,
+                isConfigurationRecent: configurationRecent === 1,
+                estimationVotes: row.estimation_votes,
                 entries: [],
                 conditionIDs: new Set(),
                 total: 0
@@ -562,7 +590,7 @@ export async function loadPublicPie(connection, context, conditionsByID) {
         if (pie.total !== PIE_TOTAL_BASIS_POINTS) {
             throw requestError(409, 'personal_pie_total_invalid', { pieID, totalBasisPoints: pie.total });
         }
-        validateBenchmarkVersionChoices(pie.entries, conditionsByID, 409);
+        validateBenchmarkVersionChoices(pie.entries, conditionsByID, 409, { allowLegacyMixes: true });
         const eligible = pie.entries.filter(entry => !conditionsByID.get(entry.conditionID)?.excludedFromRanking);
         if (!eligible.length) continue;
         if (eligible.length !== pie.entries.length) pie.entries = normalizeWeights(eligible.map(entry => ({
@@ -571,9 +599,7 @@ export async function loadPublicPie(connection, context, conditionsByID) {
             ? { followCommunityVersion: true } : {}) }));
         validPies.set(pieID, pie);
     }
-    if (validPies.size === 0) {
-        return { entries: [], familyComposition: [], versionComposition: defaultVersions(), participantCount: 0, isFallback: false, scoringEntries: [], contextIDs };
-    }
+    if (validPies.size === 0) return emptyPie(contextIDs);
 
     const piesByContext = new Map(contextIDs.map(ID => [ID, []]));
     for (const [pieID, pie] of validPies) {
@@ -591,7 +617,8 @@ export async function loadPublicPie(connection, context, conditionsByID) {
         }
     }
     const participantCount = selectedPies.size;
-    const configuringPies = new Map([...validPies].filter(([, pie]) => pie.isFallbackRecent));
+    // Recent choices count independently of the public weight sample.
+    const configuringPies = new Map([...validPies].filter(([, pie]) => pie.isConfigurationRecent));
     const versionComposition = communityVersionComposition(configuringPies, conditionsByID.values());
     const primaryByVersion = new Map(versionComposition.flatMap(group => group.versions.map(version => [version.conditionID, group.primaryConditionID])));
     const aggregateWeights = new Map();
@@ -613,76 +640,18 @@ export async function loadPublicPie(connection, context, conditionsByID) {
             });
         }
     }
-    // Explicit choices have their own electorate; passive recent pies must not crowd them out.
-    const pieIDs = Array.from(configuringPies.keys());
-    const fallbackRows = await loadPieFallbackRows(connection, pieIDs);
-    const rowsByPie = new Map(pieIDs.map(ID => [ID, []]));
-    for (const row of fallbackRows) {
-        const pieID = Number(row.pie_ID);
-        if (!rowsByPie.has(pieID)) {
-            throw requestError(409, 'public_fallback_pie_outside_scope', { pieID });
-        }
-        rowsByPie.get(pieID).push(row);
-    }
-    const aggregates = new Map();
-    const configuredCounts = new Map();
-    for (const [pieID, pie] of configuringPies) {
-        const rules = parseStoredFallbackRules(rowsByPie.get(pieID), pie.conditionIDs, pieID);
-        const rulesByPrimary = new Map(rules.map(rule => [rule.primaryConditionID, rule]));
-        for (const entry of pie.entries) {
-            const rule = rulesByPrimary.get(entry.conditionID);
-            if (!rule) continue;
-            if (entry.followCommunityVersion === true) throw requestError(409, 'fallback_requires_explicit_version', { pieID });
-            const members = rule.entries;
-            for (const member of members) {
-                if (!conditionsByID.has(member.conditionID)) throw requestError(409, 'personal_pie_fallback_condition_not_available', { pieID, conditionID: member.conditionID });
-            }
-            if (!aggregates.has(entry.conditionID)) aggregates.set(entry.conditionID, new Map());
-            const families = aggregates.get(entry.conditionID);
-            configuredCounts.set(entry.conditionID, (configuredCounts.get(entry.conditionID) ?? 0) + 1);
-            const key = familyKey(entry.conditionID, members);
-            const previous = families.get(key);
-            families.set(key, { primaryConditionID: entry.conditionID, familyID: rule?.familyID ?? null,
-                entries: members, rawWeight: (previous?.rawWeight ?? 0) + entry.weightBasisPoints });
-        }
-    }
-    const scoringEntries = expandCommunityVersions(Array.from(scoringWeights.values()), versionComposition);
-    const effectiveWeights = new Map();
-    for (const entry of scoringEntries) effectiveWeights.set(entry.conditionID,
-        (effectiveWeights.get(entry.conditionID) ?? 0) + entry.weightBasisPoints);
-    // Keep whole chains separate. Mixing alternative positions changes first-present semantics.
-    const communityComposition = Array.from(new Set([...effectiveWeights.keys(), ...aggregates.keys()].filter(ID => ID > 0)), primaryConditionID => {
-        const totalWeight = effectiveWeights.get(primaryConditionID) ?? 0;
-        const families = aggregates.get(primaryConditionID) ?? new Map();
-        const denominator = [...families.values()].reduce((sum, family) => sum + family.rawWeight, 0);
-        const configuredPieCount = configuredCounts.get(primaryConditionID) ?? 0;
-        const choices = denominator > 0 ? [...families.values()] : [
-            { primaryConditionID, familyID: null, entries: [], rawWeight: 1 }
-        ];
-        return {
-            primaryConditionID,
-            configuredPieCount,
-            isDefault: configuredPieCount === 0,
-            families: choices.map(({ rawWeight, ...family }) => ({ ...family,
-                weightBasisPoints: rawWeight / (denominator || 1) * PIE_TOTAL_BASIS_POINTS,
-                overallWeightBasisPoints: totalWeight / participantCount * rawWeight / (denominator || 1)
-            })).sort((a, b) => b.weightBasisPoints - a.weightBasisPoints
-                || familyKey(primaryConditionID, a.entries).localeCompare(familyKey(primaryConditionID, b.entries)))
-        };
-    });
-    const scoringIDs = new Set(scoringEntries.map(entry => entry.conditionID));
-    const familyComposition = communityComposition.filter(group => scoringIDs.has(group.primaryConditionID));
     return {
-        familyComposition,
-        communityComposition,
+        familyComposition: [],
+        communityComposition: [],
         versionComposition,
+        estimationVotes: aggregateEstimationVotes(configuringPies, conditionsByID),
         entries: normalizeWeights(Array.from(aggregateWeights, ([conditionID, rawWeight]) => ({
             conditionID,
             rawWeight
         }))).map(entry => ({ ...entry, ...(entry.conditionID > 0 ? { followCommunityVersion: true } : {}) })),
         participantCount,
         isFallback: false,
-        scoringEntries,
+        scoringEntries: expandCommunityVersions(Array.from(scoringWeights.values()), versionComposition),
         contextIDs
     };
 }
@@ -692,7 +661,7 @@ export async function loadPersonalPie(connection, contextID, userID) {
         return null;
     }
     const [pies] = await connection.execute(`
-        SELECT ID, revision, updated_at
+        SELECT ID, revision, updated_at, estimation_votes
         FROM personal_pies
         WHERE user_ID = ? AND context_ID = ?
         LIMIT 1`, [userID, contextID]);
@@ -733,55 +702,13 @@ export async function loadPersonalPie(connection, contextID, userID) {
     if (entries.length > 0 && total !== PIE_TOTAL_BASIS_POINTS) {
         throw requestError(409, 'personal_pie_total_invalid', { pieID: Number(pie.ID), totalBasisPoints: total });
     }
-    const fallbackRows = await loadPieFallbackRows(connection, [Number(pie.ID)]);
     return {
         ID: Number(pie.ID),
         revision: Number(pie.revision),
         updatedAt: pie.updated_at,
         entries,
-        fallbackRules: parseStoredFallbackRules(fallbackRows, conditionIDs, Number(pie.ID))
+        estimationVotes: readStoredEstimationVotes(pie.estimation_votes, Number(pie.ID))
     };
-}
-
-async function loadPieFallbackRows(connection, pieIDs) {
-    if (!pieIDs.length) return [];
-    const [rows] = await connection.execute(`SELECT rules.pie_ID, rules.primary_benchmark_condition_ID,
-        rules.family_ID AS selected_family_ID, rules.selection_source,
-        f.ID AS family_ID, f.chain_hash, m.position,
-        m.benchmark_condition_ID AS fallback_benchmark_condition_ID
-        FROM personal_pie_score_rules rules
-        LEFT JOIN benchmark_families f ON f.ID = rules.family_ID
-          AND f.primary_benchmark_condition_ID = rules.primary_benchmark_condition_ID
-        LEFT JOIN benchmark_family_members m ON m.family_ID = f.ID
-        WHERE rules.pie_ID IN (${pieIDs.map(() => '?').join(', ')})
-        ORDER BY rules.pie_ID, rules.primary_benchmark_condition_ID, m.position`, pieIDs);
-    return rows;
-}
-
-function parseStoredFallbackRules(rows, conditionIDs, pieID) {
-    const explicitNone = rows.filter(row => row.selected_family_ID === null);
-    for (const row of explicitNone) {
-        if (row.family_ID !== null || row.position !== null || row.fallback_benchmark_condition_ID !== null) {
-            throw requestError(409, 'benchmark_family_invariant_failed', { pieID });
-        }
-    }
-    const families = [...parseFamilyRows(rows.filter(row => row.selected_family_ID !== null)),
-        ...explicitNone.map(row => ({ primaryConditionID: Number(row.primary_benchmark_condition_ID),
-            familyID: null, mode: FALLBACK_RULE_MODE, entries: [] }))];
-    const primaryIDs = new Set();
-    const selectionSources = new Map(rows.map(row => [Number(row.primary_benchmark_condition_ID), row.selection_source]));
-    for (const family of families) {
-        if (!conditionIDs.has(family.primaryConditionID) || primaryIDs.has(family.primaryConditionID)) {
-            throw requestError(409, 'personal_pie_fallback_primary_invalid', { pieID, primaryConditionID: family.primaryConditionID });
-        }
-        primaryIDs.add(family.primaryConditionID);
-        const source = selectionSources.get(family.primaryConditionID);
-        if (source !== undefined) {
-            if (!FALLBACK_SELECTION_SOURCES.includes(source)) throw requestError(409, 'personal_pie_fallback_source_invalid', { pieID });
-            family.selectionSource = source;
-        }
-    }
-    return families;
 }
 
 export function decoratePieEntries(entries, conditionsByID) {
@@ -809,35 +736,6 @@ export function decoratePieEntries(entries, conditionsByID) {
             weight: roundTo(Number(entry.weightBasisPoints) / 100)
         };
     }).sort((a, b) => (b.weightBasisPoints - a.weightBasisPoints) || benchmarkVersionTieOrder(a, b));
-}
-
-function decorateFallbackRules(rules, conditionsByID) {
-    return rules.map(rule => ({
-        primaryConditionID: rule.primaryConditionID,
-        mode: rule.mode,
-        familyID: rule.familyID ?? null,
-        ...(rule.selectionSource ? { selectionSource: rule.selectionSource } : {}),
-        entries: rule.entries.map(entry => {
-            const condition = conditionsByID.get(Number(entry.conditionID));
-            if (!condition) {
-                throw requestError(409, 'personal_pie_fallback_condition_not_available', {
-                    primaryConditionID: rule.primaryConditionID,
-                    conditionID: Number(entry.conditionID)
-                });
-            }
-            return {
-                conditionID: condition.conditionID,
-                benchmarkID: condition.benchmarkID,
-                name: condition.name,
-                conditionKey: condition.conditionKey,
-                conditionName: condition.conditionName,
-                excludedFromRanking: condition.excludedFromRanking === true,
-                isDefaultCondition: condition.isDefaultCondition,
-                isPrimaryCondition: condition.isPrimaryCondition,
-                lowCoverage: condition.lowCoverage
-            };
-        })
-    }));
 }
 
 export function buildBenchmarkList(conditions, publicEntries, personalEntries, families = [], familyComposition = [], personalRules = [], globalWeights = new Map()) {
@@ -1074,6 +972,30 @@ function measuredFraction(weight, total) {
     return Math.abs(fraction - 1) <= 32 * Number.EPSILON ? 1 : Math.min(1, Math.max(0, fraction));
 }
 
+function eligibleEstimationSources(entry, excludedConditionIDs) {
+    if (!Object.hasOwn(entry, 'estimationSourceIDs')) return null;
+    const sources = entry.estimationSourceIDs;
+    if (!Array.isArray(sources) || sources.some(ID => !Number.isSafeInteger(ID) || ID < 1 || ID === entry.conditionID)
+        || new Set(sources).size !== sources.length) throw new TypeError('Invalid estimation sources');
+    return entry.conditionID < 1 || excludedConditionIDs.has(entry.conditionID) ? []
+        : sources.filter(ID => !excludedConditionIDs.has(ID));
+}
+
+function bestVersionEstimate(model, sources, predict) {
+    let best = null;
+    for (const sourceID of sources) {
+        const sourceScore = model.results.get(resultKey(sourceID))?.normalizedScore;
+        if (sourceScore == null) continue;
+        if (!Number.isFinite(sourceScore)) throw new TypeError('Invalid estimation source score');
+        const estimate = predict(sourceID, sourceScore);
+        if (estimate && (!best || (estimate.validationError - best.validationError
+            || best.referenceCount - estimate.referenceCount || estimate.sourceConditionID - best.sourceConditionID) < 0)) {
+            best = estimate;
+        }
+    }
+    return best;
+}
+
 export function scoreModels(models, weightedEntries, totalBasisPoints, { fallbackRules = [], familyComposition = [], fallbackScope = 'personal', scoreMode = 'range', availableInferenceVersion = AVAILABLE_INFERENCE_VERSION, estimationAlgorithm = DEFAULT_ESTIMATION_ALGORITHM, fallbackCalibration = null, comparisonScoreIndexes = null, deferMetadata = false, excludedConditionIDs = new Set() } = {}) {
     currentInferenceVersion(availableInferenceVersion);
     currentEstimationAlgorithm(estimationAlgorithm);
@@ -1089,12 +1011,16 @@ export function scoreModels(models, weightedEntries, totalBasisPoints, { fallbac
     const publicFamilies = indexPublicFamilies(familyComposition);
     let calibration = fallbackCalibration;
     const plans = weightedEntries.filter(entry => entry.weightBasisPoints > 0).map(entry => {
+        const sources = eligibleEstimationSources(entry, excludedConditionIDs);
+        const enabled = entry.conditionID > 0 && !excludedConditionIDs.has(entry.conditionID);
+        if (sources !== null) return { entry, sources,
+            families: [{ family: { familyID: null, entries: [] }, fraction: 1, chain: enabled ? [entry.conditionID] : [] }] };
         const rule = fallbackRulesByPrimary.get(entry.conditionID);
         const families = fallbackScope === 'public' || !rule ? publicFamilies.get(entry.conditionID) : null;
-        return { entry, families: (families ?? [{ familyID: rule?.familyID ?? null,
+        return { entry, sources, families: (families ?? [{ familyID: rule?.familyID ?? null,
             entries: rule?.entries ?? [], weightBasisPoints: 10000 }]).map(family => ({
             family, fraction: family.weightBasisPoints / 10000,
-            chain: entry.conditionID < 0 || excludedConditionIDs.has(entry.conditionID) ? []
+            chain: !enabled ? []
                 : resolvedFamilyConditionIDs(entry.conditionID, family.entries).filter(ID => !excludedConditionIDs.has(ID))
         })) };
     });
@@ -1104,61 +1030,77 @@ export function scoreModels(models, weightedEntries, totalBasisPoints, { fallbac
         let coveredBasisPoints = 0;
         let calibratedBasisPoints = 0;
         const resultKeys = new Set();
+        const estimatedTargets = new Set();
         const fallbackResolutions = [];
         const calculationScores = [];
-        const coverageEntries = [];
+        const coverageByCondition = new Map();
+        const measuredByCondition = new Map();
         const inferredScores = [];
         const comparisonScores = comparisonScoreIndexes?.get(model)
             ?? new Map((model.comparisonScores ?? []).map(score => [Number(score.conditionID), score]));
-        const recordScore = (conditionID, normalizedScore, weightBasisPoints, familyID, chain) => {
+        const recordScore = (conditionID, normalizedScore, weightBasisPoints, familyID, chain, automatic) => {
             if (weightBasisPoints <= 0) return;
+            const recorded = automatic ? measuredByCondition.get(conditionID) : null;
+            if (recorded) {
+                recorded.weightBasisPoints += weightBasisPoints;
+                return;
+            }
             const comparison = comparisonScores.get(Number(conditionID));
-            calculationScores.push({ conditionID: Number(conditionID), normalizedScore,
+            const score = { conditionID: Number(conditionID), normalizedScore,
                 weightBasisPoints, fallbackFor: null, familyID: familyID ?? null, familyConditionIDs: deferMetadata ? chain : [...chain],
                 memberIDs: comparison ? deferMetadata ? comparison.memberIDs : [...comparison.memberIDs] : [model.ID],
                 matchedCount: comparison?.matchedCount ?? null,
-                memberWeights: (deferMetadata ? comparison?.memberWeights : comparison?.memberWeights.map(item => ({ ...item }))) ?? [{ ID: model.ID, weight: 1 }] });
-            calculationScores.at(-1).memberEvidence = (deferMetadata ? comparison?.memberEvidence : comparison?.memberEvidence.map(item => ({ ...item }))) ?? [];
+                memberWeights: (deferMetadata ? comparison?.memberWeights : comparison?.memberWeights.map(item => ({ ...item }))) ?? [{ ID: model.ID, weight: 1 }],
+                memberEvidence: (deferMetadata ? comparison?.memberEvidence : comparison?.memberEvidence.map(item => ({ ...item }))) ?? [] };
+            calculationScores.push(score);
+            if (automatic) measuredByCondition.set(conditionID, score);
         };
-        for (const { entry, families } of plans) {
+        for (const { entry, families, sources } of plans) {
             const entryFraction = entry.weightBasisPoints / totalBasisPoints;
+            const automatic = sources !== null;
             let measuredScore = null;
+            const predict = (sourceID, sourceScore) => {
+                calibration ??= createFallbackCalibration(models);
+                const comparison = comparisonScores.get(sourceID);
+                return calibration.predict(model, entry.conditionID, sourceID, sourceScore, comparison?.memberIDs,
+                    comparison?.matchedCount > 0 ? comparison.memberWeights : null);
+            };
             for (const { family, fraction, chain } of families) {
                 const weight = entry.weightBasisPoints * fraction;
-                const { normalizedScore: direct, prediction, attemptedCount } = resolveFallbackChain(model, chain, (sourceID, source) => {
-                    calibration ??= createFallbackCalibration(models);
-                    return calibration.predict(model, entry.conditionID, sourceID, source, comparisonScores.get(sourceID)?.memberIDs);
-                });
+                const resolved = resolveFallbackChain(model, chain, predict);
+                const direct = resolved.normalizedScore;
                 if (direct !== null) {
                     lower += entryFraction * fraction * direct;
                     upper += entryFraction * fraction * direct;
                     coveredBasisPoints += weight;
                     measuredScore = direct;
                     resultKeys.add(resultKey(entry.conditionID));
-                    recordScore(entry.conditionID, direct, weight, family.familyID, chain);
+                    recordScore(entry.conditionID, direct, weight, family.familyID, chain, automatic);
                     continue;
                 }
                 upper += entryFraction * fraction * 100;
+                const prediction = automatic && scoreMode === 'available' ? bestVersionEstimate(model, sources, predict) : resolved.prediction;
                 if (prediction) {
                     resultKeys.add(resultKey(prediction.sourceConditionID));
+                    estimatedTargets.add(entry.conditionID);
                     calibratedBasisPoints += weight;
                     if (scoreMode === 'available') {
-                        const raw = prediction.normalizedScore;
-                        const normalizedScore = estimationAlgorithm === DEFAULT_ESTIMATION_ALGORITHM ? raw : Math.max(0, Math.min(100, raw));
                         inferredScores.push({ conditionID: entry.conditionID, familyID: family.familyID ?? null,
-                            familyConditionIDs: chain, ...prediction, normalizedScore,
-                            ...(normalizedScore !== raw ? { rawNormalizedScore: raw } : {}),
+                            familyConditionIDs: automatic ? [entry.conditionID, prediction.sourceConditionID] : chain,
+                            ...(automatic ? { selection: 'automatic' } : {}), ...prediction,
                             weightBasisPoints: weight, originalWeight: weight / totalBasisPoints * 100 });
                     }
                 }
                 if (family.entries.length) fallbackResolutions.push({ primaryConditionID: entry.conditionID,
                     familyID: family.familyID ?? null, conditionID: prediction?.sourceConditionID ?? null,
                     normalizedScore: prediction?.normalizedScore ?? null, sourceScore: prediction?.sourceScore ?? null,
-                    attemptedConditionIDs: chain.slice(0, attemptedCount), weightBasisPoints: weight });
+                    attemptedConditionIDs: chain.slice(0, resolved.attemptedCount), weightBasisPoints: weight });
             }
-            coverageEntries.push({ conditionID: entry.conditionID, weightBasisPoints: entry.weightBasisPoints,
-                coveredWeightBasisPoints: measuredScore === null ? 0 : entry.weightBasisPoints,
-                coverage: measuredScore === null ? 0 : 100, normalizedScore: measuredScore });
+            const coverage = coverageByCondition.get(entry.conditionID) ?? { conditionID: entry.conditionID, weightBasisPoints: 0,
+                coveredWeightBasisPoints: 0, coverage: measuredScore === null ? 0 : 100, normalizedScore: measuredScore };
+            coverage.weightBasisPoints += entry.weightBasisPoints;
+            if (measuredScore !== null) coverage.coveredWeightBasisPoints += entry.weightBasisPoints;
+            coverageByCondition.set(entry.conditionID, coverage);
         }
         const observedFraction = measuredFraction(coveredBasisPoints, totalBasisPoints);
         const availableInference = scoreMode === 'available' ? fallbackInference(
@@ -1166,9 +1108,8 @@ export function scoreModels(models, weightedEntries, totalBasisPoints, { fallbac
             observedFraction, inferredScores.map(score => ({ normalizedScore: score.normalizedScore,
                 weightFraction: score.weightBasisPoints / totalBasisPoints })), estimationAlgorithm) : null;
         const availableScore = availableInference ? roundTo(availableInference.totalScore) : null;
-        const scoringBasisPoints = availableInference ? totalBasisPoints * availableInference.supportedFraction : totalBasisPoints;
-        const weightedScore = score => ({ ...score, effectiveWeight: score.weightBasisPoints / scoringBasisPoints * 100,
-            contribution: score.normalizedScore * (score.weightBasisPoints / scoringBasisPoints) });
+        const weightedScore = score => ({ ...score, effectiveWeight: score.weightBasisPoints / totalBasisPoints * 100,
+            contribution: score.normalizedScore * (score.weightBasisPoints / totalBasisPoints) });
         const response = {
             ID: model.ID,
             modelID: model.modelID,
@@ -1182,19 +1123,18 @@ export function scoreModels(models, weightedEntries, totalBasisPoints, { fallbac
             upper: scoreMode === 'available' ? availableScore : roundTo(upper),
             coverage: roundTo(observedFraction * 100),
             coverageFraction: observedFraction,
-            coverageEntries,
+            coverageEntries: [...coverageByCondition.values()],
             availableInference,
             inferredScores: inferredScores.map(weightedScore),
             resultCount: resultKeys.size,
-            fallbackUsageCount: new Set(fallbackResolutions.filter(resolution => resolution.conditionID !== null)
-                .map(resolution => resolution.primaryConditionID)).size,
+            fallbackUsageCount: estimatedTargets.size,
             fallbackCoverage: roundTo(calibratedBasisPoints / totalBasisPoints * 100),
             fallbackResolutions,
             calculationScores: deferMetadata ? null : calculationScores.map(weightedScore),
             missingWeight: Math.max(0, totalBasisPoints - coveredBasisPoints) / totalBasisPoints * 100
         };
         if (deferMetadata) {
-            deferScoreMetadata(response, model.condition, calculationScores, scoringBasisPoints);
+            deferScoreMetadata(response, model.condition, calculationScores, totalBasisPoints);
         }
         return response;
     });
@@ -1208,16 +1148,22 @@ export function aggregateCoverageIndex(models) {
 
 export function scoreComparison(models, entries, total, rules, options, preparedGroups = null) {
     if (!Number.isFinite(total) || total <= 0 || entries.length === 0) return [];
-    const grouped = preparedGroups ?? groupComparisonModels(models, options, entries);
-    const groupsByID = new Map(grouped.map(group => [group.ID, group]));
     const scoreMode = rules.scoreMode ?? 'range';
+    const excludedConditionIDs = rules.excludedConditionIDs ?? new Set();
+    const matchedEntries = options.mode === 'matched' && scoreMode === 'available'
+        ? entries.concat(Array.from(new Set(entries.filter(entry => entry.weightBasisPoints > 0)
+            .flatMap(entry => eligibleEstimationSources(entry, excludedConditionIDs) ?? [])),
+        conditionID => ({ conditionID, weightBasisPoints: 1 })))
+        : entries;
+    const grouped = preparedGroups ?? groupComparisonModels(models, options, matchedEntries);
+    const groupsByID = new Map(grouped.map(group => [group.ID, group]));
     const availableInferenceVersion = currentInferenceVersion(rules.availableInferenceVersion);
     // Pair raw runs, including peers hidden by a model display filter. Each calibration uses the
     // exact run settings of the source measurement selected by the comparison.
     const fallbackCalibration = rules.fallbackCalibration ?? createFallbackCalibration(models);
     const scores = scoreModels(grouped, entries, total, { ...(options.mode === 'matched' ? { scoreMode } : rules), fallbackCalibration,
         availableInferenceVersion, estimationAlgorithm: rules.estimationAlgorithm,
-        excludedConditionIDs: rules.excludedConditionIDs,
+        excludedConditionIDs,
         comparisonScoreIndexes: rules.comparisonScoreIndexes, deferMetadata: rules.jsonMemberMetadata === true });
     return scores.map(score => {
         const group = groupsByID.get(score.ID);
@@ -1227,7 +1173,7 @@ export function scoreComparison(models, entries, total, rules, options, prepared
         };
         // Evidence eligibility must not depend on how missing weights are scored.
         const comparable = score.resultCount > 0
-            && comparisonGroupIsComparable(group, grouped.length, options.mode, entries);
+            && comparisonGroupIsComparable(group, grouped.length, options.mode, matchedEntries);
         const response = rules.jsonMemberMetadata ? Object.defineProperties({}, Object.getOwnPropertyDescriptors(score)) : { ...score };
         Object.assign(response, { comparable, comparisonIdentity: group.comparisonIdentity, comparisonMode: group.comparisonMode,
             lower: comparable ? score.lower : null, upper: comparable ? score.upper : null });
@@ -1508,7 +1454,7 @@ async function readRankingSnapshot(db, build, signal, rankingCache) {
             return typeof value === 'function' && !['constructor', 'Promise'].includes(property) ? value.bind(target) : value;
         } });
         try {
-            // Weights and rules must come from the same revision during concurrent saves.
+            // Weights and votes must come from the same revision during concurrent saves.
             await startTransactionConnection(connection, label, { readOnlySnapshot: true });
             const workspace = await withRankingReadCache(connection, rankingCache, () => build(connection), assertActive);
             assertActive();
@@ -1531,7 +1477,7 @@ async function readRankingSnapshot(db, build, signal, rankingCache) {
 }
 
 export async function getRankingWorkspace(db, options = {}) {
-    const scoreMode = options.scoreMode ?? 'range';
+    const scoreMode = options.scoreMode ?? 'available';
     if (!['range', 'available'].includes(scoreMode)) {
         throw { status: 400, body: { error: 'invalid_score_mode' } };
     }
@@ -1548,7 +1494,7 @@ export async function getRankingWorkspace(db, options = {}) {
 export async function getProposalRankingWorkspace(db, snapshot, options = {}) {
     const scoreMode = options.scoreMode ?? 'available';
     if (!['range', 'available'].includes(scoreMode)) throw requestError(400, 'invalid_score_mode');
-    const previewPersonalPie = normalizePreviewPersonalPie({ entries: snapshot.entries, fallbackRules: snapshot.fallbackRules });
+    const previewPersonalPie = normalizePreviewPersonalPie({ entries: snapshot.entries, estimationVotes: snapshot.estimationVotes ?? [] });
     return readRankingSnapshot(db, connection => buildRankingWorkspace(connection, {
         proposalName: snapshot.name, userID: null, previewPersonalPie, scoreMode,
         availableInferenceVersion: currentInferenceVersion(options.availableInferenceVersion),
@@ -1561,7 +1507,7 @@ async function buildRankingWorkspace(db, {
     contextValues = {},
     userID = null,
     comparison = null,
-    scoreMode = 'range',
+    scoreMode = 'available',
     availableInferenceVersion = AVAILABLE_INFERENCE_VERSION,
     estimationAlgorithm = DEFAULT_ESTIMATION_ALGORITHM,
     previewPersonalPie = null,
@@ -1570,10 +1516,7 @@ async function buildRankingWorkspace(db, {
 } = {}) {
     const context = proposalName === null ? await resolveRankingContext(db, { categoryID, contextValues, userID, create: false })
         : { ID: null, categoryID: 0, categoryName: proposalName, contextValues: {}, isPrivate: false };
-    const previewConditionIDs = previewPersonalPie ? [
-        ...previewPersonalPie.entries.map(entry => entry.conditionID),
-        ...previewPersonalPie.fallbackRules.flatMap(rule => rule.entries.map(entry => entry.conditionID))
-    ].filter(ID => ID > 0) : [];
+    const previewConditionIDs = previewPersonalPie?.entries.map(entry => entry.conditionID).filter(ID => ID > 0) ?? [];
     let availableConditions = await cachedRankingRead(db, 'catalogue', 'conditions:[]', () => loadBenchmarkConditions(db));
     const availableIDs = new Set(availableConditions.map(condition => condition.conditionID));
     if (previewConditionIDs.some(ID => !availableIDs.has(ID))) {
@@ -1586,20 +1529,15 @@ async function buildRankingWorkspace(db, {
     const referencesByID = new Map(referenceTargets.map(target => [target.contextID, target]));
     for (const target of referenceTargets) conditionsByID.set(-target.contextID, referenceCondition(target));
     const publicPie = proposalName === null ? await loadPublicPie(db, context, conditionsByID)
-        : { entries: [], scoringEntries: [], familyComposition: [], communityComposition: [],
+        : { entries: [], scoringEntries: [], familyComposition: [], communityComposition: [], estimationVotes: [],
             versionComposition: communityVersionComposition([], conditionsByID.values()), participantCount: 0 };
     const versionComposition = publicPie.versionComposition;
     const storedPersonalPie = proposalName === null ? await loadPersonalPie(db, context.ID, userID) : null;
     const rawPersonalEntries = previewPersonalPie?.entries ?? storedPersonalPie?.entries ?? [];
-    const rawPersonalFallbackRules = previewPersonalPie?.fallbackRules ?? storedPersonalPie?.fallbackRules ?? [];
-    validateBenchmarkVersionChoices(rawPersonalEntries, conditionsByID, previewPersonalPie ? 400 : 409);
+    validateBenchmarkVersionChoices(rawPersonalEntries, conditionsByID, previewPersonalPie ? 400 : 409, { allowLegacyMixes: !previewPersonalPie });
     if (previewPersonalPie) {
         await validateTopicReferences(db, context, rawPersonalEntries, userID);
-        const conditionIDs = new Set([
-            ...rawPersonalEntries.map(entry => entry.conditionID),
-            ...rawPersonalFallbackRules.flatMap(rule => rule.entries.map(entry => entry.conditionID))
-        ]);
-        for (const conditionID of conditionIDs) {
+        for (const { conditionID } of rawPersonalEntries) {
             if (!conditionsByID.has(conditionID)) {
                 throw requestError(400, 'pie_benchmark_condition_not_found', { conditionID });
             }
@@ -1611,43 +1549,18 @@ async function buildRankingWorkspace(db, {
         : normalizeWeights(eligiblePersonalEntries.map(entry => ({ conditionID: entry.conditionID, rawWeight: entry.weightBasisPoints })))
             .map(entry => ({ ...entry, ...(eligiblePersonalEntries.find(item => item.conditionID === entry.conditionID)?.followCommunityVersion
                 ? { followCommunityVersion: true } : {}) }));
-    const activePersonalIDs = new Set(personalSourceEntries.map(entry => entry.conditionID));
-    const personalSourceFallbackRules = rawPersonalFallbackRules.filter(rule => activePersonalIDs.has(rule.primaryConditionID));
-    const storedFamilies = await loadBenchmarkFamilies(db, { referencedOnly: true });
+    const personalEstimationVotes = scopeEstimationVotes(previewPersonalPie?.estimationVotes ?? storedPersonalPie?.estimationVotes ?? [],
+        personalSourceEntries, conditionsByID, { strict: previewPersonalPie?.estimationVotes !== undefined });
     const personalEntries = decoratePieEntries(personalSourceEntries, conditionsByID);
-    const personalFallbackRules = decorateFallbackRules(personalSourceFallbackRules, conditionsByID);
     const publicEntries = decoratePieEntries(publicPie.entries, conditionsByID);
-    const familyComposition = publicPie.familyComposition.map(group => ({ ...group,
-        families: group.families.map(family => ({ ...family,
-            entries: decorateFallbackRules([{ ...family, mode: FALLBACK_RULE_MODE }], conditionsByID)[0].entries
-        })) }));
-    const communityByPrimary = new Map((publicPie.communityComposition ?? []).map(group => [group.primaryConditionID, group]));
-    const personalVersionEntries = expandCommunityVersions(personalSourceEntries, versionComposition);
-    const personalVersionWeights = new Map();
-    for (const entry of personalVersionEntries) personalVersionWeights.set(entry.conditionID,
-        (personalVersionWeights.get(entry.conditionID) ?? 0) + entry.weightBasisPoints);
-    const personalCommunityComposition = [...personalVersionWeights].filter(([ID]) => ID > 0).map(([conditionID, weightBasisPoints]) => {
-        const entry = { conditionID, weightBasisPoints };
-        const group = communityByPrimary.get(entry.conditionID) ?? {
-            primaryConditionID: entry.conditionID, configuredPieCount: 0, isDefault: true,
-            families: [{ primaryConditionID: entry.conditionID, familyID: null, entries: [], weightBasisPoints: 10000 }]
-        };
-        return { ...group, families: group.families.map(family => ({ ...family,
-            overallWeightBasisPoints: entry.weightBasisPoints * family.weightBasisPoints / 10000,
-            entries: decorateFallbackRules([{ ...family, mode: FALLBACK_RULE_MODE }], conditionsByID)[0].entries
-        })) };
-    });
-    const availableFamilies = storedFamilies.filter(family => [family.primaryConditionID,
-        ...family.entries.map(entry => entry.conditionID)].every(ID => conditionsByID.has(ID)));
-    const familyCatalogue = decorateFallbackRules(availableFamilies, conditionsByID);
-    for (const draft of personalFallbackRules) {
-        if (!draft.entries.length) continue;
-        if (!familyCatalogue.some(family => familyKey(family.primaryConditionID, family.entries) === familyKey(draft.primaryConditionID, draft.entries))) familyCatalogue.push(draft);
-    }
-    const expandedFor = async (mode, entries, fallbackRules, composition) => {
+    const planEstimates = createVersionEstimationPlanner(conditions);
+    const personalVersionEntries = planEstimates(expandCommunityVersions(personalSourceEntries, versionComposition),
+        publicPie.estimationVotes, personalEstimationVotes);
+    const publicVersionEntries = planEstimates(publicPie.scoringEntries, publicPie.estimationVotes);
+    const publicDisplayWeights = publicReferenceWeights({ participantCount: publicPie.participantCount, scoringEntries: publicVersionEntries });
+    const expandedFor = async (mode, entries) => {
         if (!entries.some(entry => entry.conditionID < 0)) return null;
-        const root = { contextID: context.ID ?? 0, name: context.categoryName, entries,
-            fallbackRules, familyComposition: composition };
+        const root = { contextID: context.ID ?? 0, name: context.categoryName, entries };
         return expandTopicReferences(root, { loadTarget: async targetID => {
             const target = referencesByID.get(targetID);
             if (!target || mode === 'public' && target.isPrivate
@@ -1665,32 +1578,22 @@ async function buildRankingWorkspace(db, {
             }))).map(entry => ({ ...entry, ...(eligible.find(item => item.conditionID === entry.conditionID)?.followCommunityVersion
                 ? { followCommunityVersion: true } : {}) }));
             return { contextID: targetID, name: target.name,
-                entries: expandCommunityVersions(selected, publicTarget.versionComposition),
-                fallbackRules: personal?.fallbackRules ?? [],
-                familyComposition: publicTarget.communityComposition ?? publicTarget.familyComposition };
+                entries: planEstimates(expandCommunityVersions(selected, publicTarget.versionComposition),
+                    publicTarget.estimationVotes, personal?.estimationVotes) };
         } });
     };
-    const personalExpanded = await expandedFor('personal', personalVersionEntries, personalFallbackRules, personalCommunityComposition);
-    const publicExpanded = await expandedFor('public', publicReferenceWeights(publicPie), [], familyComposition);
-    const personalEffectiveEntries = personalExpanded?.entries ?? personalVersionEntries;
-    const publicEffectiveEntries = publicExpanded?.entries ?? publicPie.scoringEntries;
-    const personalEffectiveComposition = personalExpanded?.familyComposition ?? personalCommunityComposition;
-    const publicEffectiveComposition = publicExpanded?.familyComposition ?? familyComposition;
+    const personalExpanded = await expandedFor('personal', personalVersionEntries);
+    const publicExpanded = await expandedFor('public', publicDisplayWeights);
+    const personalScoringEntries = personalExpanded?.scoringEntries ?? personalVersionEntries;
+    const publicScoringEntries = publicExpanded?.scoringEntries ?? publicVersionEntries;
     const evaluationConditions = [...conditions, ...referenceTargets.filter(target =>
         context.isPrivate || !target.isPrivate).map(referenceCondition)];
     const globalWeights = await loadGlobalConditionWeights(db);
-    const benchmarkList = buildBenchmarkList(evaluationConditions, publicEntries, personalEntries, familyCatalogue,
-        familyComposition, personalFallbackRules, globalWeights);
+    const benchmarkList = buildBenchmarkList(evaluationConditions, publicEntries, personalEntries, [], [], [], globalWeights);
     const fields = await loadScoreFieldCatalog(db);
-    const scoringConditionIDs = [...new Set([
-        ...personalEffectiveEntries.map(entry => entry.conditionID),
-        ...publicEffectiveEntries.map(entry => entry.conditionID),
-        ...personalFallbackRules.flatMap(rule => resolvedFamilyConditionIDs(rule.primaryConditionID, rule.entries)),
-        ...personalEffectiveComposition.flatMap(group => group.families.flatMap(family =>
-            resolvedFamilyConditionIDs(group.primaryConditionID, family.entries))),
-        ...publicEffectiveComposition.flatMap(group => group.families.flatMap(family =>
-            resolvedFamilyConditionIDs(group.primaryConditionID, family.entries)))
-    ])].filter(ID => ID > 0 && !conditionsByID.get(ID)?.excludedFromRanking).sort((a, b) => a - b);
+    const scoringConditionIDs = [...new Set([...personalScoringEntries, ...publicScoringEntries]
+        .flatMap(entry => [entry.conditionID, ...entry.estimationSourceIDs]))]
+        .filter(ID => ID > 0 && !conditionsByID.get(ID)?.excludedFromRanking).sort((a, b) => a - b);
     const excludedConditionIDs = new Set([...conditionsByID].filter(([, condition]) => condition.excludedFromRanking).map(([ID]) => ID));
     const definitionsFor = IDs => IDs.map(ID => {
         const condition = conditionsByID.get(ID);
@@ -1709,15 +1612,9 @@ async function buildRankingWorkspace(db, {
         : await loadModels(db, fields, { conditionIDs: scoringConditionIDs,
             conditionDefinitions: definitionsFor(scoringConditionIDs) });
     const compareOptions = comparisonOptions(models, comparison, fields);
-    const personalScoringEntries = context.ID === null && !previewPersonalPie
-        ? []
-        : personalEffectiveEntries.map(entry => ({
-            conditionID: entry.conditionID,
-            weightBasisPoints: entry.weightBasisPoints
-        }));
     // Fair comparison controls belong to each pie's benchmark scope.
     const comparisonKey = JSON.stringify([universeKey, compareOptions.keys, compareOptions.filters]);
-    const preparedGroups = compareOptions.mode === 'best' && (personalScoringEntries.length || publicEffectiveEntries.length)
+    const preparedGroups = compareOptions.mode === 'best' && (personalScoringEntries.length || publicScoringEntries.length)
         ? await cachedRankingRead(db, 'data', `groups:${comparisonKey}`, () => groupComparisonModels(models, compareOptions, []),
             groups => groups.reduce((sum, group) => sum + group.results.size, 0)) : null;
     const comparisonScoreIndexes = preparedGroups
@@ -1725,29 +1622,25 @@ async function buildRankingWorkspace(db, {
             new Map(group.comparisonScores.map(score => [Number(score.conditionID), score]))]))) : null;
     // Scope the lazily built pair tables to this workspace read. Both pies may reuse a pair.
     const fallbackCalibration = createFallbackCalibration(models);
-    const calculate = async (scope, entries, total, rules) => {
-        const build = () => scoreComparison(models, entries, total, rules, compareOptions, preparedGroups);
+    const scoringOptions = { scoreMode, availableInferenceVersion, estimationAlgorithm, fallbackCalibration,
+        comparisonScoreIndexes, jsonMemberMetadata, excludedConditionIDs };
+    const calculate = async (scope, entries, total) => {
+        const build = () => scoreComparison(models, entries, total, scoringOptions, compareOptions, preparedGroups);
         if (!jsonMemberMetadata || !preparedGroups) return build();
-        // Read current pies first. Reuse only the exact scoring input, scoped to its owner and context.
+        // Source eligibility is carried on each entry, so a ballot edit changes its calculation key.
         const key = JSON.stringify([normalizeUserID(userID), context.categoryID, context.contextValues,
-            scope, comparisonKey, scoreMode, availableInferenceVersion, estimationAlgorithm, entries, total,
-            rules.fallbackRules ?? [], rules.familyComposition ?? []]);
+            scope, comparisonKey, scoreMode, availableInferenceVersion, estimationAlgorithm, entries, total]);
         return cachedRankingCalculation(db, key, build);
     };
-    const personalRanking = await calculate('personal', personalScoringEntries, PIE_TOTAL_BASIS_POINTS,
-        { fallbackRules: personalExpanded ? [] : personalFallbackRules, familyComposition: personalEffectiveComposition,
-            scoreMode, availableInferenceVersion, estimationAlgorithm, fallbackCalibration, comparisonScoreIndexes, jsonMemberMetadata, excludedConditionIDs });
-    const publicRanking = await calculate('public', publicEffectiveEntries,
-        publicExpanded ? PIE_TOTAL_BASIS_POINTS : publicPie.participantCount * PIE_TOTAL_BASIS_POINTS,
-        { familyComposition: publicEffectiveComposition, fallbackScope: 'public', scoreMode, availableInferenceVersion, estimationAlgorithm,
-            fallbackCalibration, comparisonScoreIndexes, jsonMemberMetadata, excludedConditionIDs });
+    const personalRanking = await calculate('personal', personalScoringEntries, PIE_TOTAL_BASIS_POINTS);
+    const publicRanking = await calculate('public', publicScoringEntries,
+        publicExpanded ? PIE_TOTAL_BASIS_POINTS : publicPie.participantCount * PIE_TOTAL_BASIS_POINTS);
 
     const decorateReferenceComposition = item => {
-        const ranked = scoreComparison(models, item.entries, PIE_TOTAL_BASIS_POINTS,
-            { scoreMode: 'range', familyComposition: item.familyComposition, fallbackScope: 'public',
-                excludedConditionIDs, fallbackCalibration, jsonMemberMetadata: true }, compareOptions, preparedGroups);
-        return { ...item, entries: decoratePieEntries(item.entries, conditionsByID),
-            coverageIndex: aggregateCoverageIndex(ranked) };
+        const ranked = scoreComparison(models, item.scoringEntries, PIE_TOTAL_BASIS_POINTS,
+            { ...scoringOptions, scoreMode: 'range', jsonMemberMetadata: true }, compareOptions, preparedGroups);
+        return { referenceContextID: item.referenceContextID, entries: decoratePieEntries(item.entries, conditionsByID),
+            issues: item.issues, coverageIndex: aggregateCoverageIndex(ranked) };
     };
 
     return {
@@ -1757,30 +1650,28 @@ async function buildRankingWorkspace(db, {
         userID: normalizeUserID(userID),
         context,
         versionComposition,
-        communityFallbackComposition: [...communityByPrimary.values()].map(group => ({ ...group,
-            families: group.families.map(family => ({ ...family,
-                entries: decorateFallbackRules([{ ...family, mode: FALLBACK_RULE_MODE }], conditionsByID)[0].entries })) })),
+        communityEstimationVotes: publicPie.estimationVotes,
         personalPie: {
             coverageIndex: aggregateCoverageIndex(personalRanking),
             revision: storedPersonalPie?.revision ?? 0,
             isDraft: Boolean(previewPersonalPie) || !storedPersonalPie,
             editable: true,
             entries: personalEntries,
-            effectiveEntries: decoratePieEntries(personalEffectiveEntries, conditionsByID),
+            estimationVotes: personalEstimationVotes,
+            effectiveEntries: decoratePieEntries(personalExpanded?.entries ?? personalVersionEntries, conditionsByID),
             referenceCompositions: (personalExpanded?.referenceCompositions ?? []).map(decorateReferenceComposition),
             referenceIssues: personalExpanded?.issues ?? [],
-            fallbackRules: personalFallbackRules,
-            communityFallbackComposition: personalCommunityComposition
+            fallbackRules: []
         },
         publicPie: {
             coverageIndex: aggregateCoverageIndex(publicRanking),
             participantCount: publicPie.participantCount,
             isFallback: false,
             entries: publicEntries,
-            effectiveEntries: decoratePieEntries(publicExpanded?.entries ?? publicReferenceWeights(publicPie), conditionsByID),
+            effectiveEntries: decoratePieEntries(publicExpanded?.entries ?? publicDisplayWeights, conditionsByID),
             referenceCompositions: (publicExpanded?.referenceCompositions ?? []).map(decorateReferenceComposition),
             referenceIssues: publicExpanded?.issues ?? [],
-            familyComposition
+            familyComposition: []
         },
         benchmarks: benchmarkList,
         comparison: compareOptions,
@@ -1836,7 +1727,7 @@ function validatePieEntries(entries) {
     return normalized;
 }
 
-export function validateBenchmarkVersionChoices(entries, conditionsByID, status = 400) {
+export function validateBenchmarkVersionChoices(entries, conditionsByID, status = 400, { allowLegacyMixes = false } = {}) {
     const groups = new Map();
     for (const entry of entries) {
         if (entry.conditionID < 1) continue;
@@ -1846,79 +1737,31 @@ export function validateBenchmarkVersionChoices(entries, conditionsByID, status 
         groups.get(benchmarkID).push(entry);
     }
     for (const [benchmarkID, versions] of groups) {
-        if (versions.length > 1 && versions.some(entry => entry.followCommunityVersion === true)) {
+        if (versions.length > 1 && (!allowLegacyMixes || versions.some(entry => entry.followCommunityVersion === true))) {
             throw requestError(status, 'pie_benchmark_version_conflict', { benchmarkID });
         }
     }
 }
 
-function hasExactKeys(value, expectedKeys) {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) {
-        return false;
+function validateEstimationVotes(estimationVotes, entries) {
+    let votes;
+    try { votes = normalizeEstimationVotes(estimationVotes); }
+    catch { throw requestError(400, 'invalid_estimation_votes'); }
+    if (votes.length && !entries.some(entry => entry.conditionID > 0)) {
+        throw requestError(400, 'estimation_vote_condition_unavailable', { conditionID: votes[0].conditionID });
     }
-    const actual = Object.keys(value).sort();
-    const expected = [...expectedKeys].sort();
-    return actual.length === expected.length
-        && actual.every((key, index) => key === expected[index]);
-}
-
-function validateFallbackRules(fallbackRules, pieEntries) {
-    if (!Array.isArray(fallbackRules) || fallbackRules.length > pieEntries.length) {
-        throw requestError(400, 'invalid_personal_pie_fallback_rules');
-    }
-    const pieConditionIDs = new Set(pieEntries.map(entry => entry.conditionID));
-    const primaryIDs = new Set();
-    const normalized = fallbackRules.map(rule => {
-        if (!hasExactKeys(rule, ['primaryConditionID', 'mode', 'entries'])
-            && !hasExactKeys(rule, ['primaryConditionID', 'mode', 'entries', 'selectionSource'])) {
-            throw requestError(400, 'invalid_personal_pie_fallback_rule');
-        }
-        const primaryConditionID = parseSafeInteger(rule.primaryConditionID, { minimum: 1 });
-        if (primaryConditionID === null
-            || !pieConditionIDs.has(primaryConditionID)
-            || primaryIDs.has(primaryConditionID)
-            || rule.mode !== FALLBACK_RULE_MODE
-            || !Array.isArray(rule.entries)
-            || Object.hasOwn(rule, 'selectionSource') && !FALLBACK_SELECTION_SOURCES.includes(rule.selectionSource)) {
-            throw requestError(400, 'invalid_personal_pie_fallback_rule', {
-                primaryConditionID: rule.primaryConditionID
-            });
-        }
-        if (pieEntries.find(entry => entry.conditionID === primaryConditionID)?.followCommunityVersion === true) {
-            throw requestError(400, 'fallback_requires_explicit_version');
-        }
-        primaryIDs.add(primaryConditionID);
-        const conditionIDs = new Set();
-        const entries = rule.entries.map(entry => {
-            if (!hasExactKeys(entry, ['conditionID'])) {
-                throw requestError(400, 'invalid_personal_pie_fallback_component', { primaryConditionID });
-            }
-            const conditionID = parseSafeInteger(entry.conditionID, { minimum: 1 });
-            if (conditionID === null
-                || conditionID === primaryConditionID
-                || conditionIDs.has(conditionID)) {
-                throw requestError(400, 'invalid_personal_pie_fallback_component', {
-                    primaryConditionID,
-                    conditionID: entry.conditionID
-                });
-            }
-            conditionIDs.add(conditionID);
-            return { conditionID };
-        });
-        try { familyKey(primaryConditionID, entries); }
-        catch { throw requestError(400, 'invalid_personal_pie_fallback_component', { primaryConditionID }); }
-        return { primaryConditionID, mode: FALLBACK_RULE_MODE, entries,
-            ...(rule.selectionSource ? { selectionSource: rule.selectionSource } : {}) };
-    });
-    return normalized;
+    return votes;
 }
 
 export function normalizePreviewPersonalPie(value) {
-    if (!hasExactKeys(value, ['entries', 'fallbackRules'])) {
+    // Accept the legacy field from cached clients without applying manual rules.
+    if (!value || typeof value !== 'object' || Array.isArray(value) || !Object.hasOwn(value, 'entries')
+        || Object.keys(value).some(key => !['entries', 'estimationVotes', 'fallbackRules'].includes(key))) {
         throw requestError(400, 'invalid_personal_pie_preview');
     }
     const entries = validatePieEntries(value.entries);
-    return { entries, fallbackRules: validateFallbackRules(value.fallbackRules, entries) };
+    return { entries, ...(Object.hasOwn(value, 'estimationVotes')
+        ? { estimationVotes: validateEstimationVotes(value.estimationVotes, entries) } : {}) };
 }
 
 export async function savePersonalPie(db, options) {
@@ -1940,8 +1783,9 @@ async function savePersonalPieAttempt(db, {
     expectedRevision,
     entries,
     fallbackRules,
+    estimationVotes,
     comparison = null,
-    scoreMode = 'range'
+    scoreMode = 'available'
 }) {
     if (!['range', 'available'].includes(scoreMode)) {
         throw requestError(400, 'invalid_score_mode');
@@ -1955,12 +1799,12 @@ async function savePersonalPieAttempt(db, {
         throw requestError(400, 'invalid_personal_pie_request');
     }
     const normalizedEntries = validatePieEntries(entries);
-    const normalizedFallbackRules = validateFallbackRules(fallbackRules, normalizedEntries);
+    const normalizedEstimationVotes = estimationVotes === undefined ? undefined : validateEstimationVotes(estimationVotes, normalizedEntries);
     const connection = await db.getConnection();
     let resolvedCategoryID;
     let resolvedContextValues;
     let savedRevision = 0;
-    let previousFamilyIDs = [];
+    let savedEstimationVotes = [];
     try {
         if (comparison !== null) {
             const metadata = await loadModelMetadata(connection);
@@ -1979,10 +1823,14 @@ async function savePersonalPieAttempt(db, {
             throw requestError(403, 'account_unavailable');
         }
 
+        // Older requests used the manual rule array in the write identity digest.
+        const voteIntent = normalizedEstimationVotes === undefined
+            ? { fallbackRules: Array.isArray(fallbackRules) ? fallbackRules : [] }
+            : { estimationVotes: normalizedEstimationVotes };
         const intent = await claimWriteIntent(connection, { userID: normalizedUserID,
             key: writeIdentity, action: 'save_personal_pie', payload: {
                 categoryID: normalizedCategoryID, contextValues, expectedRevision: revision,
-                entries: normalizedEntries, fallbackRules: normalizedFallbackRules
+                entries: normalizedEntries, ...voteIntent
             } });
         if (intent.response) {
             await commitTransactionConnection(connection, 'SAVE PERSONAL PIE');
@@ -2007,15 +1855,10 @@ async function savePersonalPieAttempt(db, {
             await validateTopicReferences(connection, { ...context, isPrivate: category.isPrivate }, normalizedEntries, normalizedUserID);
 
             const [pies] = await connection.execute(`
-                SELECT ID, revision
+                SELECT ID, revision, estimation_votes
                 FROM personal_pies
                 WHERE user_ID = ? AND context_ID = ?
                 FOR UPDATE`, [normalizedUserID, context.ID]);
-            if (pies.length) {
-                const [rules] = await connection.execute(`SELECT family_ID FROM personal_pie_score_rules
-                    WHERE pie_ID = ? ORDER BY family_ID FOR UPDATE`, [Number(pies[0].ID)]);
-                previousFamilyIDs = rules.filter(rule => rule.family_ID !== null).map(rule => Number(rule.family_ID));
-            }
             if (normalizedEntries.length === 0) {
                 if (pies.length === 0) {
                     if (revision !== 0) {
@@ -2029,32 +1872,37 @@ async function savePersonalPieAttempt(db, {
                     await connection.execute('DELETE FROM personal_pies WHERE ID = ?', [Number(pies[0].ID)]);
                 }
             } else {
-                const primaryConditionIDs = normalizedEntries.filter(entry => entry.conditionID > 0).map(entry => entry.conditionID);
-                const fallbackConditionIDs = normalizedFallbackRules.flatMap(rule => (
-                    rule.entries.map(entry => entry.conditionID)
-                ));
-                const conditionIDs = [...new Set([...primaryConditionIDs, ...fallbackConditionIDs])];
-                const [conditions] = conditionIDs.length ? await connection.execute(`
+                const benchmarkEntries = normalizedEntries.filter(entry => entry.conditionID > 0);
+                const referenceEntries = normalizedEntries.filter(entry => entry.conditionID < 0);
+                const conditionIDs = benchmarkEntries.map(entry => entry.conditionID);
+                const requestedVotes = normalizedEstimationVotes ?? readStoredEstimationVotes(pies[0]?.estimation_votes, Number(pies[0]?.ID));
+                const requestedConditionIDs = [...new Set([...conditionIDs, ...requestedVotes.map(vote => vote.conditionID)])]
+                    .sort((left, right) => left - right);
+                const [conditions] = requestedConditionIDs.length ? await connection.execute(`
                     SELECT ID
                     FROM benchmark_conditions
-                    WHERE ID IN (${conditionIDs.map(() => '?').join(', ')})
+                    WHERE ID IN (${requestedConditionIDs.map(() => '?').join(', ')})
                       AND ${selectableBenchmarkConditionSQL()}
-                    FOR SHARE`, conditionIDs) : [[]];
-                if (conditions.length !== conditionIDs.length) {
+                    FOR SHARE`, requestedConditionIDs) : [[]];
+                const lockedConditionIDs = new Set(conditions.map(row => Number(row.ID)));
+                if (conditionIDs.some(ID => !lockedConditionIDs.has(ID))) {
                     throw requestError(404, 'pie_benchmark_condition_not_found');
                 }
-                const selectable = await loadBenchmarkConditions(connection);
-                validateBenchmarkVersionChoices(normalizedEntries, new Map(selectable.map(condition => [condition.conditionID, condition])));
-                const excludedID = conditionIDs.find(id => selectable.some(condition => condition.conditionID === id && condition.excludedFromRanking));
+                const selectable = new Map((await loadBenchmarkConditions(connection)).map(condition => [condition.conditionID, condition]));
+                validateBenchmarkVersionChoices(normalizedEntries, selectable);
+                const excludedID = conditionIDs.find(ID => selectable.get(ID)?.excludedFromRanking);
                 if (excludedID !== undefined) throw requestError(409, 'pie_benchmark_condition_excluded', { conditionID: excludedID });
-                const selectableIDs = new Set(selectable.map(condition => condition.conditionID));
-                const notComparableID = conditionIDs.find(id => !selectableIDs.has(id));
+                const notComparableID = conditionIDs.find(ID => !selectable.has(ID));
                 if (notComparableID !== undefined) {
                     throw requestError(409, 'pie_benchmark_condition_not_comparable', {
                         conditionID: notComparableID,
                         minimumModelCount: MIN_COMPARABLE_MODELS
                     });
                 }
+                savedEstimationVotes = scopeEstimationVotes(requestedVotes, normalizedEntries, selectable, {
+                    strict: normalizedEstimationVotes !== undefined, lockedConditionIDs
+                });
+                const encodedEstimationVotes = savedEstimationVotes.length ? JSON.stringify(savedEstimationVotes) : null;
 
                 let pieID;
                 if (pies.length === 0) {
@@ -2062,8 +1910,8 @@ async function savePersonalPieAttempt(db, {
                         throw requestError(409, 'pie_revision_conflict', { currentRevision: 0 });
                     }
                     const [result] = await connection.execute(`
-                        INSERT INTO personal_pies (user_ID, context_ID, revision)
-                        VALUES (?, ?, 1)`, [normalizedUserID, context.ID]);
+                        INSERT INTO personal_pies (user_ID, context_ID, revision, estimation_votes)
+                        VALUES (?, ?, 1, ?)`, [normalizedUserID, context.ID, encodedEstimationVotes]);
                     pieID = Number(result.insertId);
                     savedRevision = 1;
                 } else {
@@ -2075,14 +1923,12 @@ async function savePersonalPieAttempt(db, {
                     savedRevision = currentRevision + 1;
                     await connection.execute(`
                         UPDATE personal_pies
-                        SET revision = revision + 1, updated_at = CURRENT_TIMESTAMP
-                        WHERE ID = ?`, [pieID]);
+                        SET revision = revision + 1, updated_at = CURRENT_TIMESTAMP, estimation_votes = ?
+                        WHERE ID = ?`, [encodedEstimationVotes, pieID]);
                     await connection.execute('DELETE FROM personal_pie_weights WHERE pie_ID = ?', [pieID]);
                     await connection.execute('DELETE FROM personal_pie_topic_weights WHERE pie_ID = ?', [pieID]);
                 }
 
-                const benchmarkEntries = normalizedEntries.filter(entry => entry.conditionID > 0);
-                const referenceEntries = normalizedEntries.filter(entry => entry.conditionID < 0);
                 const hasVersionAbstentions = benchmarkEntries.some(entry => entry.followCommunityVersion === true);
                 const valueSQL = benchmarkEntries.map(() => hasVersionAbstentions ? '(?, ?, ?, ?)' : '(?, ?, ?)').join(', ');
                 const valueParams = benchmarkEntries.flatMap(entry => [pieID, entry.conditionID, entry.weightBasisPoints,
@@ -2094,27 +1940,12 @@ async function savePersonalPieAttempt(db, {
                     (pie_ID, target_context_ID, weight_basis_points)
                     VALUES ${referenceEntries.map(() => '(?, ?, ?)').join(', ')}`,
                 referenceEntries.flatMap(entry => [pieID, -entry.conditionID, entry.weightBasisPoints]));
-
-                if (normalizedFallbackRules.length > 0) {
-                    const ruleValueSQL = normalizedFallbackRules.map(() => '(?, ?, ?, ?)').join(', ');
-                    const ruleValueParams = [];
-                    for (const rule of normalizedFallbackRules) {
-                        const familyID = rule.entries.length
-                            ? await ensureBenchmarkFamily(connection, rule.primaryConditionID, rule.entries) : null;
-                        ruleValueParams.push(pieID, rule.primaryConditionID, familyID, rule.selectionSource ?? 'selected');
-                    }
-                    await connection.execute(`
-                        INSERT INTO personal_pie_score_rules
-                            (pie_ID, primary_benchmark_condition_ID, family_ID, selection_source)
-                        VALUES ${ruleValueSQL}`, ruleValueParams);
-                }
             }
         }
-        await pruneUnusedBenchmarkFamilies(connection, previousFamilyIDs);
         const receipt = { saved: true, requestKey: intent.key, userID: normalizedUserID,
             categoryID: resolvedCategoryID, contextValues: resolvedContextValues,
-            personalPie: { revision: savedRevision, entries: normalizedEntries, fallbackRules: normalizedFallbackRules } };
-        // The receipt and weights commit together; ranking reads must not change this outcome.
+            personalPie: { revision: savedRevision, entries: normalizedEntries, fallbackRules: [], estimationVotes: savedEstimationVotes } };
+        // The receipt, weights and votes commit together.
         await completeWriteIntent(connection, intent, { status: 200, body: receipt });
         await commitTransactionConnection(connection, 'SAVE PERSONAL PIE');
         return receipt;

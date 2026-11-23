@@ -323,7 +323,7 @@
                                 <svg id="weight-pie" viewBox="0 0 360 360" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Public index composition"></svg>
                                 <div id="personal-pie-empty" class="bp-personal-pie-empty" hidden>
                                     <strong>Add your first evaluation item</strong>
-                                    <p>Choose a benchmark or topic from <strong>Evaluation items</strong>. Fallback follows the community unless you choose otherwise.</p>
+                                    <p>Choose a benchmark or topic from <strong>Evaluation items</strong>.</p>
                                 </div>
                             </div>
                             <div id="pie-empty-compact" class="bp-pie-empty-compact" role="status">
@@ -336,17 +336,17 @@
                                     <button id="weight-add-benchmark" class="bp-quiet-action" type="button" aria-controls="benchmark-card"><i class="fa-solid fa-plus" aria-hidden="true"></i><span>Add benchmark or topic</span></button>
                                 </div>
                                 <section id="topic-reference-weights" class="bp-topic-reference-weights" aria-label="Topic references" hidden></section>
-                                <section id="inline-fallback" class="bp-inline-fallback" aria-label="Fallback" hidden>
+                                <section id="inline-fallback" class="bp-inline-fallback" aria-label="Benchmark settings" hidden>
                                     <div class="bp-inline-fallback-toolbar">
                                         <div id="inline-fallback-personal-control" class="bp-inline-fallback-personal-control">
                                             <button id="inline-fallback-toggle" class="bp-inline-fallback-toggle" type="button" data-ui-disclosure aria-controls="benchmark-settings" aria-expanded="false">
                                                 <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
-                                                <span>Fallback: Follow community</span>
+                                                <span>Advanced settings</span>
                                             </button>
                                         </div>
-                                        <button id="public-fallback-toggle" class="bp-public-fallback-toggle" type="button" data-ui-disclosure aria-controls="benchmark-settings" aria-expanded="false" hidden><i class="fa-solid fa-chevron-right" aria-hidden="true"></i><span>View fallback configurations</span></button>
+                                        <button id="public-fallback-toggle" class="bp-public-fallback-toggle" type="button" data-ui-disclosure aria-controls="benchmark-settings" aria-expanded="false" hidden><i class="fa-solid fa-chevron-right" aria-hidden="true"></i><span>Advanced settings</span></button>
                                     </div>
-                                    <section id="benchmark-settings" class="bp-benchmark-settings" aria-label="Benchmark configuration" hidden></section>
+                                    <section id="benchmark-settings" class="bp-benchmark-settings" aria-label="Advanced settings" hidden></section>
                                     <div id="inline-fallback-settings" class="bp-inline-fallback-settings" hidden>
                                         <div class="bp-fallback-configuration-heading">
                                             <div class="bp-fallback-configuration-identity"><strong id="inline-fallback-configuration-label">Current fallback</strong><span id="inline-fallback-entrance"></span></div>
@@ -427,7 +427,7 @@
                         <div class="bp-scoring-switch" role="group" aria-label="Missing benchmark scores" data-ui-component="segmented" data-mode="available">
                             <button type="button" data-score-mode="available" aria-pressed="true" aria-label="Estimated score" data-tooltip="Estimated score"><i class="fa-solid fa-wand-magic-sparkles bp-score-mode-icon" aria-hidden="true"></i><span>Estimated score</span></button>
                             <button type="button" data-score-mode="range" aria-pressed="false" aria-label="Score range" data-tooltip="Score range"><i class="fa-solid fa-arrows-left-right bp-score-mode-icon" aria-hidden="true"></i><span>Score range</span></button>
-                            <button class="bp-scoring-help bp-help-trigger" type="button" aria-label="About missing scores" data-help-text="Estimated score combines direct scores with reliable estimates from the selected fallback chains. Score range keeps measured results fixed and fills gaps with 0 or 100."><i class="fa-regular fa-circle-question" aria-hidden="true"></i></button>
+                            <button class="bp-scoring-help bp-help-trigger" type="button" aria-label="About missing scores" data-help-text="Estimated score uses measured results and reliable estimates from eligible versions of the same benchmark. Unresolved results count as 0 at full weight. Score range uses 0 and 100 for missing measurements."><i class="fa-regular fa-circle-question" aria-hidden="true"></i></button>
                         </div>
                         <div class="bp-quick-comparison" role="group" aria-label="Compare separately">
                             <button class="bp-comparison-icon" type="button" data-quick-comparison="reasoning" aria-label="Compare reasoning effort separately" data-tooltip="Compare reasoning effort separately" aria-pressed="false" disabled><i class="fa-solid fa-brain" aria-hidden="true"></i></button>
@@ -439,10 +439,10 @@
                         <span id="ranking-coverage-index" class="bp-evidence-count" tabindex="0" role="img" hidden><i class="fa-solid fa-chart-pie" aria-hidden="true"></i><span data-coverage-value aria-hidden="true"></span></span>
                     </div>
                     </div>
-                    <div id="estimation-test-control" class="bp-estimation-test">
-                        <label for="estimation-algorithm">Test algorithm</label>
-                        <select id="estimation-algorithm" aria-label="Test estimation algorithm"></select>
-                        <button type="button" class="bp-help-trigger" aria-label="About the test algorithm" data-help-text="All methods use your fallback chains to estimate missing scores. Choose Missing · unadjusted to use those estimates directly."><i class="fa-regular fa-circle-question" aria-hidden="true"></i></button>
+                    <div id="estimation-method-control" class="bp-estimation-method">
+                        <label for="estimation-algorithm">Estimation method</label>
+                        <select id="estimation-algorithm" aria-label="Estimation method"></select>
+                        <button type="button" class="bp-help-trigger" aria-label="About the estimation method" data-help-text="Uses measured scores and reliable estimates from eligible versions of the same benchmark. Unresolved results count as 0 at their full weight."><i class="fa-regular fa-circle-question" aria-hidden="true"></i></button>
                     </div>
                     <div class="bp-model-head" aria-hidden="true">
                         <span>#</span>

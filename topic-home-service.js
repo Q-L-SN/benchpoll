@@ -69,7 +69,7 @@ export function serializeTopicPreviewModels(models, catalogue = []) {
 export function createTopicHomeService({ db, rankingCache, now = () => Date.now(),
     loadTopic = getTopic, authorizeTopics = assertTopicAccess, loadFields = loadScoreFieldCatalog, loadWorkspace = getRankingWorkspace, loadRuns = loadModels } = {}) {
     const previews = new Map(), scopes = new Map();
-    let modelCatalog = null;
+    let modelCatalog = null, previewRevision = 0;
     const prune = () => {
         for (const [key, value] of previews) if (value.expiresAt <= now()) previews.delete(key);
         for (const [key, value] of scopes) if (value.expiresAt <= now()) scopes.delete(key);
@@ -88,7 +88,16 @@ export function createTopicHomeService({ db, rankingCache, now = () => Date.now(
     };
     async function preview(userID, body) {
         const options = normalizeTopicPreview(body);
+        for (;;) {
+            const revision = previewRevision;
+            const result = await readPreview(userID, options, revision);
+            if (result !== null && revision === previewRevision) return result;
+            if (options.snapshotID) fail(410, 'ranking_snapshot_expired');
+        }
+    }
+    async function readPreview(userID, options, revision) {
         const topic = await loadTopic(db, userID, options.categoryID);
+        if (revision !== previewRevision) return null;
         const mode = options.mode ?? (topic.isPrivate ? 'personal' : 'public');
         if (mode === 'personal' && userID == null) fail(401, 'authentication_required');
         if (topic.isPrivate && mode === 'public') fail(400, 'private_topic_has_no_public_index');
@@ -100,6 +109,7 @@ export function createTopicHomeService({ db, rankingCache, now = () => Date.now(
             const scope = scopes.get(options.snapshotID);
             if (!scope || scope.signature !== signature) fail(410, 'ranking_snapshot_expired');
             await authorizeTopics(db, userID, scope.topicIDs);
+            if (scopes.get(options.snapshotID) !== scope) fail(410, 'ranking_snapshot_expired');
             scopes.delete(options.snapshotID); scopes.set(options.snapshotID, scope);
             scope.expiresAt = now() + 900000;
             return modelPage(scope, options.offset);
@@ -107,11 +117,15 @@ export function createTopicHomeService({ db, rankingCache, now = () => Date.now(
         const cached = previews.get(signature);
         if (cached) {
             const result = await cached.value;
-            if (scopes.has(result.pagination.snapshotID)) {
-                await authorizeTopics(db, userID, scopes.get(result.pagination.snapshotID).topicIDs);
-                return result;
+            if (result === null) return null;
+            const snapshotID = result.pagination.snapshotID;
+            const scope = scopes.get(snapshotID);
+            if (scope) {
+                await authorizeTopics(db, userID, scope.topicIDs);
+                if (scopes.get(snapshotID) === scope) return result;
             }
             if (previews.get(signature) === cached) previews.delete(signature);
+            return null;
         }
         const entry = { categoryID: options.categoryID, expiresAt: now() + 60000, value: null };
         entry.value = (async () => {
@@ -121,9 +135,10 @@ export function createTopicHomeService({ db, rankingCache, now = () => Date.now(
                 contextValues: options.sceneID === null ? {} : { scene: String(options.sceneID) },
                 scoreMode: options.scoreMode, comparison, userID: owner, rankingCache,
                 availableInferenceVersion: options.availableInferenceVersion, jsonMemberMetadata: true });
-            const models = serializeTopicPreviewModels(rankModels(workspace.modelLeaderboards[mode]), workspace.comparison.models);
             const topicIDs = [...new Set([options.categoryID, ...(workspace.benchmarks ?? []).filter(row => row.type === 'topic').map(row => row.categoryID).filter(ID => Number.isSafeInteger(ID) && ID > 0)])];
             await authorizeTopics(db, userID, topicIDs);
+            if (revision !== previewRevision) return null;
+            const models = serializeTopicPreviewModels(rankModels(workspace.modelLeaderboards[mode]), workspace.comparison.models);
             const scope = { categoryID: options.categoryID, topicIDs, signature, models, snapshotID: randomUUID(), expiresAt: now() + 900000 };
             scopes.set(scope.snapshotID, scope);
             prune();
@@ -197,6 +212,7 @@ export function createTopicHomeService({ db, rankingCache, now = () => Date.now(
         invalidate() {
             modelCatalog = null;
             // A changed target can affect any transitive referencing topic.
+            previewRevision++;
             previews.clear();
             scopes.clear();
         } };

@@ -9,13 +9,13 @@ import { loadPersonalPie, savePersonalPie } from '../ranking-service.js';
 const rejects = code => error => error.body?.error === code;
 const edit = topic => ({ categoryID: topic.ID, expectedRevision: topic.editRevision, name: topic.name,
     description: topic.description, scenes: topic.scenes.map(scene => ({ key: 's' + scene.ID, ID: scene.ID,
-        name: scene.name, description: scene.description })), defaultSceneKey: topic.hasScenes ? 's' + topic.defaultContextID : null });
+        name: scene.name })), defaultSceneKey: topic.hasScenes ? 's' + topic.defaultContextID : null });
 
 test('private editing, publication cap, persistent aliases and favorites in isolated MySQL', { skip: !process.env.LIFECYCLE_MYSQL_ENV_FILE }, async t => {
     const database = await createLifecycleDatabase(); t.after(() => database.close());
     const db = database.pool; await seedLifecycleEvidence(db);
     const create = (name, scenes = true) => savePrivateTopic(db, '42', { name, description: 'Evaluate useful work.',
-        scenes: scenes ? [{ key: 'general', name: 'General', description: '' }, { key: 'research', name: 'Research', description: '' }] : [],
+        scenes: scenes ? [{ key: 'general', name: 'General' }, { key: 'research', name: 'Research' }] : [],
         defaultSceneKey: scenes ? 'general' : null }, randomUUID());
     let topic = await create('Work index');
     await assert.rejects(readPrivateTopicEditor(db, '43', { categoryID: topic.ID }), rejects('private_topic_not_found'));
@@ -27,12 +27,15 @@ test('private editing, publication cap, persistent aliases and favorites in isol
     assert.deepEqual(topic.scenes.map(scene => ({ ID: scene.ID, number: scene.sceneNumber })), initialScenes.reverse());
     assert.equal(topic.scenes[0].url, `/private/${topic.privateID}/2`);
     await assert.rejects(savePrivateTopic(db, '42', changes, randomUUID()), rejects('private_topic_changed'));
+    const estimationVotes = [{ conditionID: 1, vote: 'support' }];
     await savePersonalPie(db, { userID: '42', writeIdentity: randomUUID(), categoryID: topic.ID,
         contextValues: { scene: String(topic.defaultContextID) }, expectedRevision: 0,
-        entries: [{ conditionID: 1, weightBasisPoints: 10000 }], fallbackRules: [] });
+        entries: [{ conditionID: 1, weightBasisPoints: 10000 }], estimationVotes });
     topic = await setTopicVisibility(db, '42', { categoryID: topic.ID, isPublic: true }, randomUUID());
     assert.equal(topic.isPrivate, false);
-    assert.equal((await loadPersonalPie(db, topic.defaultContextID, '42')).entries[0].conditionID, 1);
+    const published = await loadPersonalPie(db, topic.defaultContextID, '42');
+    assert.equal(published.entries[0].conditionID, 1);
+    assert.deepEqual(published.estimationVotes, estimationVotes);
     assert.equal((await resolveTopicLocation(db, null, { privateID: topic.privateID })).path, `/${topic.publicID}/2`);
     const other = await create('Other', false); await setTopicVisibility(db, '42', { categoryID: other.ID, isPublic: true }, randomUUID());
     const candidates = [await create('Third', false), await create('Fourth', false)];
@@ -47,7 +50,10 @@ test('private editing, publication cap, persistent aliases and favorites in isol
     await assert.rejects(resolveTopicLocation(db, '42', { publicID: topic.publicID }), rejects('topic_not_found'));
     assert.equal((await resolveTopicLocation(db, '42', { privateID: topic.privateID })).path, `/private/${topic.privateID}/2`);
     topic = await savePrivateTopic(db, '42', { ...edit(topic), scenes: [], defaultSceneKey: null }, randomUUID());
-    assert.equal(topic.scenes.length, 0); assert.equal((await loadPersonalPie(db, topic.defaultContextID, '42')).entries[0].conditionID, 1);
+    assert.equal(topic.scenes.length, 0);
+    const privatePie = await loadPersonalPie(db, topic.defaultContextID, '42');
+    assert.equal(privatePie.entries[0].conditionID, 1);
+    assert.deepEqual(privatePie.estimationVotes, estimationVotes);
     await deletePrivateTopic(db, '42', { categoryID: topic.ID, expectedRevision: topic.editRevision }, randomUUID());
     await assert.rejects(getTopic(db, '42', topic.ID), rejects('topic_not_found'));
 });
