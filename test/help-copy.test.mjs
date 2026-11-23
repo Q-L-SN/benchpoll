@@ -54,22 +54,16 @@ test('static JavaScript question hints remain short and use ordinary language', 
 });
 
 test('short explanations name current navigation and preserve practical scoring and privacy choices', () => {
-    const sections = [...guide.matchAll(/<section([^>]*)>([\s\S]*?)<\/section>/g)];
-    const fallback = sections.find(([, attributes]) => attributes.includes('id="fallback"'));
-    assert.ok(fallback, 'Existing guide links reach the source eligibility explanation');
-    assert.match(fallback[2], /automatically considers other versions of the same benchmark/);
-    assert.match(fallback[2], /support equals or exceeds opposition, even with zero votes/);
-    assert.match(fallback[2], /Your own vote takes priority for your personal ranking/);
-    assert.match(fallback[2], /Select the same option again to clear it/);
-    for (const [, , content] of sections) {
-        for (const [, paragraph] of content.matchAll(/<p(?:\s[^>]*)?>([\s\S]*?)<\/p>/g)) assert.ok(words(plain(paragraph)) <= 55);
-    }
+    const fallback = guide.slice(guide.indexOf('<h3 id="fallback"'), guide.indexOf('<h3 id="calibration"'));
+    assert.match(fallback, /A pair is eligible by default, including with no votes or a tie/);
+    assert.match(fallback, /Your own vote takes priority for your personal ranking/);
+    assert.match(fallback, /Select the same thumb again to clear your vote/);
     assert.doesNotMatch(guide, /grouping button|optional grouping|fair-comparison control|configuration-share denominator/);
-    assert.match(guide, /topic menu to find your favorites, topics you configured or created, recent visits, or search/);
+    assert.match(guide, /topic menu to find favorites, topics you configured or created, recent visits, or search/);
     assert.match(home, /id="sidebar-topic-collection" aria-label="Topic collection"/);
-    assert.match(guide, /Use <strong>Scoring version<\/strong> to choose the version to rank on/);
-    assert.match(guide, /Another topic contributes only through an explicit reference/);
-    assert.match(guide, /Private topics and their weights never contribute to Public Weights/);
+    assert.match(guide, /Under <strong>Scoring version<\/strong>, choose an explicit target version/);
+    assert.match(guide, /Another public topic contributes only through an explicit reference/);
+    assert.match(guide, /Public topics can reference public topics and scenes/);
     assert.match(guide, /effort or harness to rank settings separately/);
     assert.match(guide, /best qualifying score per test/);
     assert.match(guide, /Missing settings stay in an unknown group/);
@@ -89,21 +83,15 @@ test('contribution instructions distinguish pending requests, public data and ru
     assert.doesNotMatch(editor, /New options need review|createFieldForm|Propose/);
 });
 
-test('guide details remain concise and the first read stays light', () => {
-    const main = guide.match(/<article[^>]*>([\s\S]*?)<\/article>/)?.[1];
-    assert.ok(main, 'Count the real article, not a slice ending at a removed section');
+test('guide and contribution instructions use concise copy', () => {
+    const main = guide.match(/<article[^>]*>([\s\S]*?)<\/article>/)?.[1].replace(/<nav[\s\S]*?<\/nav>/, '');
+    assert.ok(main);
     assert.ok(words(plain(main)) <= 1150, String(words(plain(main))));
-    const introduction = main.replace(/<details[\s\S]*?<\/details>/g, '');
-    assert.ok(words(plain(introduction)) <= 400);
-    assert.doesNotMatch(introduction, /72 hours/);
     assert.match(main, /Create a private topic, then choose <strong>Make public<\/strong>/);
-    assert.match(main, /Creation and publication are immediate and do not require review\. You can have up to three public topics at a time\./);
+    assert.match(main, /Creation and publication are immediate\. You can have up to three public topics at a time\./);
     assert.doesNotMatch(main, /Collection lasts 14 days|Proposal Hall|proposal hall/);
-    assert.doesNotMatch(main, /Public weight =|48 to 88/);
-    assert.doesNotMatch(main, /<ol\b|<table\b|Full calculation rules|Expand all/);
-    assert.match(guide, /<p id="calculation-details">[^<]*past 72 hours/);
-    assert.match(main, /automatically considers other versions of the same benchmark/);
-    assert.doesNotMatch(guide, /id="fallback-versions"|All Other Versions|No fallback/);
+    assert.match(main, /<h4 id="calculation-details"[^>]*>[^<]+<\/h4>\s*<p>[^<]*past 72 hours/);
+    assert.match(main, /eligible measured versions of the same benchmark/);
     for (const [, paragraph] of main.matchAll(/<p(?:\s[^>]*)?>([\s\S]*?)<\/p>/g)) assert.ok(words(plain(paragraph)) <= 55);
     const form = read('private/contribute.html');
     const start = form.indexOf('<div slot="body" class="contribution-guide">');

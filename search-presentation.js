@@ -3,7 +3,7 @@ import { sceneSummary } from './public/js/shared/topics.js';
 
 export const PUBLIC_DOCUMENTS = Object.freeze([
     { path: '/', title: SITE_TITLE, description: SITE_DESCRIPTION, type: 'CollectionPage' },
-    { path: '/how-it-works', title: 'How BenchPoll Works - Weights, Scores and Estimation', description: 'Understand BenchPoll public and personal AI indices, topic references, measured coverage and how votes affect missing-score estimates.' },
+    { path: '/how-it-works', title: 'How BenchPoll Works - Weights, Scores and Estimation', description: 'Learn how BenchPoll builds public and personal rankings from benchmark weights, measured scores and version-to-version estimates.' },
     { path: '/terms', title: 'Terms of Use | BenchPoll', description: 'Terms for BenchPoll accounts, evaluation contributions, public and private topics, AI indices and discussions.', modified: '2026-11-04' },
     { path: '/privacy', title: 'Privacy Policy | BenchPoll', description: 'How BenchPoll handles account information, private topics, contributions and privacy requests.', modified: '2026-11-04' },
     { path: '/cookies', title: 'Cookie and Local Storage Policy | BenchPoll', description: 'Cookies, local storage, session preferences and your choices on BenchPoll.', modified: '2026-11-04' },

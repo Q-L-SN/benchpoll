@@ -14,7 +14,16 @@ const styles = read('public/css/how-it-works.css');
 const script = read('public/js/how-it-works.js');
 const workspace = frontendSource('public/js/home-workspace.js');
 const server = read('server.js');
-const section = id => guide.match(new RegExp(`<section id="${id}"[\\s\\S]*?</section>`))?.[0] ?? '';
+const article = guide.match(/<article[\s\S]*?<\/article>/)[0];
+const mainCopy = article.replace(/<nav[\s\S]*?<\/nav>/, '');
+const headings = [...mainCopy.matchAll(/<h([1-4]) id="([^"]+)" tabindex="-1">/g)];
+function section(id) {
+    const headingIndex = headings.findIndex(([, , key]) => key === id);
+    assert.ok(headingIndex >= 0, id);
+    const heading = headings[headingIndex];
+    const next = headings.slice(headingIndex + 1).find(([, level]) => Number(level) <= Number(heading[1]));
+    return mainCopy.slice(heading.index, next?.index);
+}
 const model = (ID, scores) => ({ ID, modelID: ID, name: `Model ${ID}`, modelName: `Model ${ID}`,
     condition: { parameters: {}, scoreFields: [] },
     results: new Map(Object.entries(scores).map(([key, normalizedScore]) => [key, { normalizedScore }])) });
@@ -35,79 +44,80 @@ test('Home navigation belongs to the configuration page rather than the guide', 
     assert.match(home, /id="workspace-topic-summary"/);
 });
 
-test('guide keeps the first read short with optional calculation details', () => {
-    assert.match(guide, /How BenchPoll works/);
-    assert.equal([...guide.matchAll(/<h1>/g)].length, 1);
-    const article = guide.match(/<article[\s\S]*?<\/article>/)[0];
-    assert.ok(words(article) <= 1150, `Guide has ${words(article)} words`);
-    const introduction = article.replace(/<details[\s\S]*?<\/details>/g, '');
-    assert.ok(words(introduction) <= 400);
-    assert.doesNotMatch(introduction, /72 hours/);
-    assert.doesNotMatch(article, /<ol\b|<table\b|Expand all|Full calculation rules|&radic;|Public weight =/);
-    assert.doesNotMatch(plain(article), /\b(?:overview|showcase|subcategories|descendants|import|themes)\b|View composition/i);
-    assert.doesNotMatch(article, /percentile|denominator|basis points|pairwise-anchored/);
-    for (const [, paragraph] of article.matchAll(/<p(?:\s[^>]*)?>([\s\S]*?)<\/p>/g)) {
+test('guide provides a short, uninterrupted article and matches each heading to a native link', () => {
+    assert.match(mainCopy, /How BenchPoll works/);
+    assert.equal(headings.filter(([, level]) => level === '1').length, 1);
+    assert.ok(words(mainCopy) <= 1150, `Guide has ${words(mainCopy)} words`);
+    assert.doesNotMatch(mainCopy, /<(?:details|summary|button|figure|canvas|svg|img)\b|\bhidden\b|role="(?:tab|tablist|tabpanel)"/);
+    const contents = article.match(/<nav class="hi-toc"[\s\S]*?<\/nav>/)[0];
+    const links = [...contents.matchAll(/href="([^"]+)"/g)].map(([, href]) => href);
+    assert.deepEqual(links, headings.map(([, , id]) => '#' + id));
+    for (const id of ['overview', 'topics', 'personal', 'public', 'calculation-details', 'rankings',
+        'details', 'references', 'fallback', 'account', 'trust']) {
+        assert.ok(links.includes('#' + id), id);
+    }
+    for (const [, paragraph] of mainCopy.matchAll(/<p>([\s\S]*?)<\/p>/g)) {
         assert.ok(words(paragraph) <= 55, plain(paragraph));
     }
 });
 
-test('Topics introduction leads to the public index, evidence and personal weights', () => {
+test('topics and scenes lead to the public index, search and evidence', () => {
     const topics = section('topics');
-    assert.match(topics, /topic menu to find your favorites, topics you configured or created, recent visits, or search/);
-    assert.match(topics, /Favorite topics to find them from your profile/);
-    assert.match(topics, /Popular reflects favorites, with recent favorites carrying more weight/);
-    assert.match(topics, /Open a topic for its public index/);
-    assert.match(topics, /a model for its results and sources/);
-    assert.match(topics, /Personal weights let you build your own index/);
-    assert.match(topics, /Filters apply to every card/);
+    assert.match(topics, /Open a topic to see its public index/);
+    assert.match(topics, /one level of scenes, with the default scene first/);
+    assert.match(topics, /Each scene has its own weights and discussion/);
+    assert.match(topics, /topic menu to find favorites, topics you configured or created, recent visits, or search/);
+    assert.match(topics, /Search shows matching scenes inside their topic card/);
+    assert.match(topics, /Favorite topics appear in your profile/);
+    assert.match(topics, /recent favorites carrying more weight/);
+    assert.match(topics, /Open a model to see its results and sources/);
+    assert.match(topics, /Filters apply to every ranking card/);
     assert.match(topics, /<strong>Estimated score<\/strong> is the default/);
-    assert.match(guide, /href="\/">Browse Topics/);
 });
 
-test('Personal and Public copy keeps saving, independent topics and privacy distinct', () => {
-    assert.match(section('personal'), /Personal Weights/);
-    assert.match(section('personal'), /<strong>Index composition<\/strong> totals 100% when nonempty/);
-    assert.match(section('personal'), /With two or more items, select a block and adjust its weight/);
-    assert.match(section('personal'), /Try it without signing in/);
-    assert.match(section('personal'), /Sign in to save your weights/);
-    assert.match(section('personal'), /Unsaved changes are marked/);
-    assert.match(section('public'), /all nonempty configurations updated in this topic or scene in the past 72 hours/);
-    assert.match(section('public'), /If fewer than 10 qualify, we use the latest 10 or as many as exist/);
-    assert.match(section('public'), /Each person contributes one configuration, updated with their edits/);
-    assert.match(section('public'), /Another topic contributes only through an explicit reference/);
-    assert.match(section('public'), /Private topics and their weights never contribute to Public Weights/);
-    assert.match(section('public'), /id="calculation-details"/, 'Existing Public help links still reach the relevant short explanation');
+test('Personal and Public copy explains saving weights and the shared public sample', () => {
+    const personal = section('personal');
+    assert.match(personal, /Personal Weights/);
+    assert.match(personal, /<strong>Index composition<\/strong> adds up to 100%/);
+    assert.match(personal, /With two or more items, select a block and scroll over the chart/);
+    assert.match(personal, /You can try adjusting weights without signing in/);
+    assert.match(personal, /Sign in to save your weights/);
+    assert.match(personal, /marks unsaved changes/);
+    const community = section('public');
+    assert.match(community, /Each person contributes one configuration, updated as they save edits/);
+    assert.match(community, /Another public topic contributes only through an explicit reference/);
+    assert.match(community, /Private topics and their weights are visible only to their creator/);
+    const sample = section('calculation-details');
+    assert.match(sample, /all nonempty configurations updated for the topic or scene in the past 72 hours/);
+    assert.match(sample, /If fewer than 10 qualify, it uses the latest 10 or as many as exist/);
+    assert.match(sample, /The same sample determines community scoring version shares and estimation vote counts/);
 });
 
-test('guide explains concrete scene identity and dynamic weight resolution without double scoring', () => {
-    assert.match(section('topics'), /one level of scenes/);
-    assert.match(section('topics'), /default scene comes first/);
-    assert.match(section('topics'), /Search results show matching scenes within their topic card/);
-    assert.match(section('references'), /specific scene if it has scenes/);
-    assert.match(section('references'), /stay linked to the scene you selected/);
-    assert.match(section('references'), /Public indices always follow public target weights/);
-    assert.match(section('references'), /Personal indices prefer your saved target weights/);
-    assert.match(section('references'), /Each referenced scene uses its own estimation source votes/);
-    assert.match(section('references'), /calculates scores and coverage from those benchmark shares/);
-    assert.match(section('references'), /Empty or unavailable targets retain their missing weight/);
-    assert.match(section('references'), /Topics can reference one another in a loop/);
-    assert.match(section('references'), /no path to benchmarks adds no measured score or coverage/);
-    assert.doesNotMatch(section('references'), /acyclic|depth limit/);
-    assert.match(section('account'), /<strong>Make public<\/strong> in its editor/);
+test('topic references follow specific scenes and retain missing shares', () => {
+    const references = section('references');
+    assert.match(references, /specific scene if it has scenes/);
+    assert.match(references, /stays linked to that scene’s live weights/);
+    assert.match(references, /Public indices use the referenced scene’s public weights/);
+    assert.match(references, /Personal indices use your saved weights there when available and otherwise use public weights/);
+    assert.match(references, /Public topics can reference public topics and scenes\. Private topics can reference those and your other private topics/);
+    assert.match(references, /multiplies weights along each path and adds the shares for each benchmark version/);
+    assert.match(references, /Referenced scenes use their own estimation votes/);
+    assert.match(references, /If references form a loop, BenchPoll includes the benchmark shares reached along repeated paths/);
+    assert.match(references, /Empty or unavailable targets and loops with no path to benchmarks keep their missing weight/);
 });
 
-test('score copy distinguishes normalized measurements, estimates and unresolved gaps', () => {
+test('score copy explains version shares, zero-filled gaps, score range and measured coverage', () => {
     const scores = section('rankings');
-    assert.match(scores, /test's score range and direction/);
-    assert.match(scores, /same qualifying measurements/);
-    assert.match(scores, /chosen benchmark version takes priority/);
+    assert.match(scores, /same qualifying measurements, converted using each test’s score range and direction/);
+    assert.match(scores, /A direct score on a scoring version takes priority, including zero and negative scores/);
     assert.match(scores, /Estimated score[\s\S]*calibrated estimates at their full weights/);
     assert.match(scores, /neither a measurement nor a reliable estimate count as 0 at their full weight/);
-    assert.match(scores, /uses 0 at the lower end and 100 at the upper end for missing measurements\. Measured scores stay fixed/);
-    assert.match(scores, /Models rank by the lower end/);
-    assert.match(scores, /Coverage is the share of weight with measured results/);
-    assert.match(scores, /on selected versions/);
-    assert.match(scores, /Faded tiles show estimates or zeros for gaps in the evidence/i);
+    assert.match(scores, /<var>W<\/var> × Σ\(<var>p<sub>a<\/sub><\/var> <var>s<sub>a<\/sub><\/var>\)/);
+    assert.match(scores, /The version shares add up to 100%/);
+    assert.match(scores, /uses 0 at the lower end and 100 at the upper end for missing measurements/);
+    assert.match(scores, /Both ends use the measured scores where available\. Models rank by the lower end/);
+    assert.match(scores, /Coverage is the share of weight with measured results<\/strong> on selected versions/);
+    assert.match(scores, /A faded tile in the score preview marks a missing measurement/);
     assert.match(scores, /direct score or a reliable estimate qualifies a model to rank/);
     assert.match(scores, /effort or harness to rank settings separately/);
     assert.match(scores, /best qualifying score per test/);
@@ -115,62 +125,61 @@ test('score copy distinguishes normalized measurements, estimates and unresolved
     assert.match(scores, /Matched comparisons calibrate each qualifying run separately/);
 });
 
-test('estimation source copy specifies eligibility, votes, and calibration from measured results', () => {
+test('estimation votes cover the explicit target, directional pairs, saved votes and precedence', () => {
     const fallback = section('fallback');
-    assert.match(fallback, /Open <strong>Advanced settings<\/strong> for a benchmark/);
-    assert.match(fallback, /Use <strong>Scoring version<\/strong> to choose the version to rank on/);
-    assert.match(fallback, /under <strong>Estimation<\/strong> to support or oppose a version as a source/);
-    assert.match(fallback, /automatically considers other versions of the same benchmark/);
-    assert.match(fallback, /support equals or exceeds opposition, even with zero votes/);
-    assert.match(fallback, /Each sampled user with weight on this benchmark gets one vote per version/);
+    assert.match(section('details'), /Each community scoring choice carries that person’s benchmark weight/);
+    assert.match(section('details'), /If nobody chose a version, the primary version gets the full weight/);
+    assert.match(fallback, /open <strong>Advanced settings<\/strong> for a benchmark/);
+    assert.match(fallback, /Under <strong>Scoring version<\/strong>, choose an explicit target version to see <strong>Estimation support<\/strong>/);
+    assert.match(fallback, /B → A\. B → C has its own votes and support rate/);
+    assert.match(fallback, /Saved pair votes still count in the public sample while you use a different scoring version or follow the community/);
+    assert.match(fallback, /Choose A again to see your saved votes for estimating A/);
+    assert.match(fallback, /one vote per source and target pair/);
+    assert.match(fallback, /A pair is eligible by default, including with no votes or a tie/);
+    assert.match(fallback, /A community majority against a pair excludes that pair/);
     assert.match(fallback, /Your own vote takes priority for your personal ranking/);
-    assert.match(fallback, /Scoring versions and estimation votes use the same configurations as Public Weights/);
-    assert.match(fallback, /Each scoring choice carries that person’s benchmark weight/);
-    assert.match(fallback, /five other models measured on both versions with matching run settings/);
-    assert.match(fallback, /source scores must bracket the model’s score within 10 points/);
-    assert.match(fallback, /Held-out predictions must average at most five points of error/);
-    assert.match(fallback, /including zero and negative scores/);
-    assert.match(fallback, /lowest validation error wins, with more paired models breaking ties/);
-    assert.match(fallback, /Votes determine which sources are eligible\. Paired measurements determine the estimate\./);
-    assert.doesNotMatch(fallback, /All Other Versions|No fallback|backup order/);
 });
 
-test('account and evidence copy covers public/private creation and editable identity', () => {
-    assert.match(section('account'), /Creation and publication are immediate and do not require review/);
-    assert.match(section('account'), /up to three public topics at a time/);
-    assert.match(section('account'), /make it private before deleting it/);
-    assert.doesNotMatch(guide, /topic-proposals|collecting proposals|supporters|administrator review|proposal hall|Created by me|Configured by me/);
-    assert.match(section('account'), /Private topics and scenes are visible only to you/);
-    assert.match(section('account'), /href="\/me"/);
-    assert.match(section('account'), /href="\/settings"/);
-    assert.match(section('account'), /edit your details and privacy choices/);
-    assert.match(section('account'), /Showing a GitHub link is optional/);
-    assert.match(section('trust'), /measured results and estimates/);
-    assert.match(section('trust'), /All scores/);
-    assert.match(section('trust'), /Change information/);
-    assert.match(section('trust'), /href="\/contribute\/scores\/new"/);
+test('version estimation copy explains the evidence, error limit and normalized blend', () => {
+    const calibration = section('calibration');
+    assert.match(calibration, /eligible measured versions of the same benchmark/);
+    assert.match(calibration, /at least five other models measured on both versions with matching run settings/);
+    assert.match(calibration, /source scores must bracket the model’s source score within 10 points/);
+    assert.match(calibration, /adds the median target-minus-source difference/);
+    assert.match(calibration, /15 points higher on B than on A, an 80 on B estimates 65 on A/);
+    assert.match(calibration, /held-out data and accepts a source when the mean absolute error is at most five points/);
+    assert.match(calibration, /blends all accepted estimates/);
+    assert.match(calibration, /\(<var>n<\/var> \/ \(<var>n<\/var> \+ 5\)\) \/ \(1 \+ <var>e<\/var><sup>2<\/sup>\)/);
+    assert.match(calibration, /number of paired models and <var>e<\/var> is the held-out mean absolute error in points/);
+    assert.match(calibration, /source weights are normalized to sum to 100%/);
 });
 
-test('guide keeps branded navigation, quiet actions, focus and disclosure behavior', () => {
+test('publication and evidence copy includes settings, visibility and score contributions', () => {
+    const account = section('account');
+    assert.match(account, /<strong>Make public<\/strong> in its editor/);
+    assert.match(account, /Creation and publication are immediate/);
+    assert.match(account, /up to three public topics at a time/);
+    assert.match(account, /Make a public topic private again before deleting it/);
+    assert.match(account, /href="\/me"/);
+    assert.match(account, /href="\/settings"/);
+    assert.match(account, /edit your details and privacy choices/);
+    assert.match(account, /Showing a GitHub link is optional/);
+    const evidence = section('trust');
+    assert.match(evidence, /measured results and estimates/);
+    assert.match(evidence, /All scores/);
+    assert.match(evidence, /Change information/);
+    assert.match(evidence, /href="\/contribute\/scores\/new"/);
+});
+
+test('the shell provides a skip link, a responsive table of contents and focus styling', () => {
     assert.match(guide, /class="hi-topbar"/);
     assert.match(guide, /class="bp-brand-lockup"[^>]*src="\/assets\/benchpoll-logo\.svg"/);
-    for (const id of ['overview', 'topics', 'personal', 'public', 'rankings', 'fallback', 'account', 'trust']) {
-        assert.match(guide, new RegExp(`id="${id}"`));
-    }
-    for (const id of ['overview', 'personal', 'rankings', 'details']) assert.match(guide, new RegExp(`href="#${id}"`));
-    assert.match(styles, /\.bp-how-section\s*\{[^}]*border-top:\s*1px solid var\(--bp-line\)/s);
-    assert.doesNotMatch(styles, /border-(?:left|right|bottom):|inset\s+.*var\(--bp-(?:accent|purple)/);
-    assert.match(styles, /\.bp-how-primary-link:hover\s*\{[^}]*text-decoration:\s*none/s);
-    assert.match(styles, /\.bp-how-primary-link i\s*\{[^}]*color:\s*inherit/s);
+    assert.match(guide, /<a class="hi-skip" href="#overview">/);
+    assert.match(guide, /<summary>Contents/);
     assert.match(styles, /focus-visible/);
-    assert.match(styles, /min-height:\s*44px/);
-    assert.match(styles, /@media \(max-width:\s*760px\)/);
-    assert.match(guide, /id="how-motion"/);
-    assert.match(styles, /prefers-reduced-motion/);
-    assert.match(script, /requestAnimationFrame\(updateActiveSection\)/);
-    assert.match(script, /mountDisclosureMotion\(document\.querySelector\('\.bp-how-content'\), 'details'\)/);
-    assert.match(script, /setDisclosureOpen\(details, true, \{ animate: false \}\)/);
-    assert.doesNotMatch(script, /how-expand-rules|updateExpandLabel|ruleDetails/);
+    assert.match(styles, /@media \(max-width: 760px\)/);
+    assert.match(script, /addEventListener\('hashchange', updateCurrentLink\)/);
+    assert.doesNotMatch(script, /preventDefault|pushState|replaceState|scrollIntoView/);
 });
 
 test('How it works route resolves before the generic error-page catchall', () => {

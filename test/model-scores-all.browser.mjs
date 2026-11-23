@@ -203,17 +203,14 @@ export async function runAllScoresBrowserQA({ output = 'D:/Codex-artifacts/websi
             });
             const details = page.locator('.bp-model-calculation-details');
             await details.waitFor();
-            assert.equal(await details.evaluate(node => node.open), false);
-            assert.equal(await details.locator('p').isVisible(), false);
-            assert.match(await page.locator('#model-scores-summary').innerText(), /30.00% of the weight uses estimated results/);
+            assert.deepEqual(await details.locator('p').allTextContents(), ['Before adjustment: 68', 'After adjustment: 60']);
+            const guideLink = details.getByRole('link', { name: 'How it works' });
+            assert.equal(await guideLink.isVisible(), true);
+            assert.equal(await guideLink.getAttribute('href'), '/how-it-works#rankings');
+            assert.match(await page.locator('#model-scores-summary').innerText(), /30.00% of the weight uses estimates from shared-test comparisons/);
             assert.match(await page.locator('#model-scores-summary').innerText(), /10.00% of the weight has no measurement or estimate/);
-            await details.locator('summary').focus();
-            await page.keyboard.press('Enter');
-            assert.equal(await details.locator('p').isVisible(), true);
             await page.screenshot({ path: resolve(output, 'calculation-guidance-' + width + '.png'), fullPage: true });
             assert.equal(await page.locator('#model-scores-summary').evaluate(node => node.scrollWidth > node.clientWidth + 1), false);
-            await page.keyboard.press('Enter');
-            assert.equal(await details.locator('p').isVisible(), false);
             await page.evaluate(() => {
                 const model = window.qa.models[0];
                 delete model.availableInference;

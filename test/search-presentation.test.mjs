@@ -178,7 +178,8 @@ test('legal and methodology pages have canonical social metadata without changin
         assert.match(html, new RegExp('<link rel="canonical" href="' + origin + item.path + '"'));
         assert.match(html, /name="twitter:card" content="summary_large_image"/);
         assert.match(html, /property="og:image"/);
-        assert.match(html, /<h1>/);
+        assert.match(html, /<h1(?:\s[^>]*)?>/);
+        if (item.path === '/how-it-works') assert.ok(html.includes(`name="description" content="${item.description}"`));
     }
 });
 

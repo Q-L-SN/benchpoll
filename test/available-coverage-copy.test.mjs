@@ -8,6 +8,8 @@ import { isMissingInferenceMethod } from '../public/js/shared/estimation-algorit
 
 const read = path => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 const guide = read('private/how-it-works.html');
+const rankingGuide = guide.slice(guide.indexOf('<h2 id="rankings"'), guide.indexOf('<h2 id="details"'));
+const estimationGuide = guide.slice(guide.indexOf('<h3 id="fallback"'), guide.indexOf('<h2 id="publishing"'));
 const scores = read('public/js/workspace/model-scores.js');
 const start = scores.indexOf('function renderCalculationResults(');
 const end = scores.indexOf('function openApprovedModelResults(', start);
@@ -35,31 +37,25 @@ function factorInference(raw, coverage, inferredFraction = 0) {
 }
 
 test('brief help distinguishes calibrated estimates from measured weighted coverage', () => {
-    const brief = guide.match(/<section id="rankings"[\s\S]*?<\/section>/)?.[0];
-    assert.ok(brief);
-    assert.match(brief, /Estimated score[\s\S]*calibrated estimates at their full weights/);
-    assert.match(brief, /neither a measurement nor a reliable estimate count as 0 at their full weight/);
-    assert.match(brief, /Coverage is the share of weight with measured results/);
-    assert.match(brief, /on selected versions/);
-    assert.match(brief, /Version-based estimation/);
+    assert.match(rankingGuide, /Estimated score[\s\S]*calibrated estimates at their full weights/);
+    assert.match(rankingGuide, /neither a measurement nor a reliable estimate count as 0 at their full weight/);
+    assert.match(rankingGuide, /Coverage is the share of weight with measured results/);
+    assert.match(rankingGuide, /on selected versions/);
+    assert.match(rankingGuide, /Version-based estimation/);
     assert.doesNotMatch(guide, /coverage factor|test algorithm|midpoint|Power 0\.35|experiment/i);
     assert.doesNotMatch(guide, /deduct(?:s|ion)?|2 points (?:for every|per) missing 10%|20\s*(?:points|\*)/i);
 });
 
 test('short score help preserves range endpoints, unresolved gaps and direct-first evidence', () => {
-    const brief = guide.match(/<section id="rankings"[\s\S]*?<\/section>/)?.[0];
-    assert.ok(brief);
-    assert.match(brief, /same qualifying measurements, converted using each test's score range and direction/);
-    assert.match(brief, /chosen benchmark version takes priority/);
-    assert.match(brief, /uses 0 at the lower end and 100 at the upper end for missing measurements\. Measured scores stay fixed/);
-    assert.match(brief, /Models rank by the lower end/);
-    assert.match(brief, /count as 0 at their full weight/);
-    assert.match(brief, /direct score or a reliable estimate qualifies a model to rank/);
-    const fallback = guide.match(/<section id="fallback"[\s\S]*?<\/section>/)?.[0];
-    assert.ok(fallback);
-    assert.match(fallback, /automatically considers other versions of the same benchmark/);
-    assert.match(fallback, /Votes determine which sources are eligible\. Paired measurements determine the estimate\./);
-    assert.match(fallback, /Direct scores count, including zero and negative scores/);
+    assert.match(rankingGuide, /same qualifying measurements, converted using each test’s score range and direction/);
+    assert.match(rankingGuide, /A direct score on a scoring version takes priority, including zero and negative scores/);
+    assert.match(rankingGuide, /uses 0 at the lower end and 100 at the upper end for missing measurements/);
+    assert.match(rankingGuide, /Both ends use the measured scores where available\. Models rank by the lower end/);
+    assert.match(rankingGuide, /count as 0 at their full weight/);
+    assert.match(rankingGuide, /direct score or a reliable estimate qualifies a model to rank/);
+    assert.match(estimationGuide, /A pair is eligible by default, including with no votes or a tie/);
+    assert.match(estimationGuide, /eligible measured versions of the same benchmark/);
+    assert.match(estimationGuide, /BenchPoll blends all accepted estimates/);
 });
 
 test('model details display archived before and after scores', () => {
