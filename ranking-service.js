@@ -11,11 +11,13 @@ import { topicURL, sceneSummary } from './public/js/shared/topics.js';
 import { currentScoreSQL } from './score-aggregation.js';
 import { scoreEvidenceHash } from './score-evidence.js';
 import { FALLBACK_RULE_MODE, familyKey, resolvedFamilyConditionIDs, resolveFallbackChain } from './public/js/shared/benchmark-families.js';
-import { normalizeEstimationVotes } from './public/js/shared/estimation-votes.js';
+import {
+    compareEstimationVotePairs, estimationVotePairKey, normalizeEstimationVotes, normalizePersistedEstimationVotes
+} from './public/js/shared/estimation-votes.js';
 import { normalizeAvailableInferenceVersion,
     AVAILABLE_INFERENCE_VERSION } from './public/js/shared/available-score.js';
 import { createFallbackCalibration } from './fallback-calibration.js';
-import { fallbackInference } from './public/js/shared/fallback-inference.js';
+import { combineVersionEstimates, fallbackInference } from './public/js/shared/fallback-inference.js';
 import { DEFAULT_ESTIMATION_ALGORITHM, normalizeEstimationAlgorithm } from './public/js/shared/estimation-algorithms.js';
 import { benchmarkVersionTieOrder, benchmarkEvaluationOrder } from './public/js/shared/benchmark-version-order.js';
 import { communityVersionComposition, expandCommunityVersions } from './public/js/shared/benchmark-version-choice.js';
@@ -468,7 +470,7 @@ async function loadMatchingContexts(connection, context) {
 function readStoredEstimationVotes(value, pieID) {
     if (value == null) return [];
     try {
-        return normalizeEstimationVotes(typeof value === 'string' ? JSON.parse(value) : value);
+        return normalizePersistedEstimationVotes(typeof value === 'string' ? JSON.parse(value) : value);
     } catch {
         throw requestError(409, 'stored_estimation_votes_invalid', { pieID });
     }
@@ -481,11 +483,15 @@ function scopeEstimationVotes(votes, entries, conditionsByID, { strict = false, 
         const condition = entry.conditionID > 0 ? conditionsByID.get(entry.conditionID) : null;
         if (condition && !condition.excludedFromRanking) weightedBenchmarks.add(condition.benchmarkID);
     }
-    return votes.filter(({ conditionID }) => {
-        const condition = conditionsByID.get(conditionID);
-        if (condition && !condition.excludedFromRanking && weightedBenchmarks.has(condition.benchmarkID)
-            && (lockedConditionIDs === undefined || lockedConditionIDs.has(conditionID))) return true;
-        if (strict) throw requestError(400, 'estimation_vote_condition_unavailable', { conditionID });
+    // A ballot stays with its benchmark after a switch to a different version.
+    return votes.filter(({ targetConditionID, sourceConditionID }) => {
+        const target = conditionsByID.get(targetConditionID);
+        const source = conditionsByID.get(sourceConditionID);
+        const endpointsLocked = lockedConditionIDs === undefined
+            || (lockedConditionIDs.has(targetConditionID) && lockedConditionIDs.has(sourceConditionID));
+        if (target && source && !target.excludedFromRanking && !source.excludedFromRanking
+            && target.benchmarkID === source.benchmarkID && weightedBenchmarks.has(target.benchmarkID) && endpointsLocked) return true;
+        if (strict) throw requestError(400, 'estimation_vote_condition_unavailable', { targetConditionID, sourceConditionID });
         return false;
     });
 }
@@ -494,14 +500,15 @@ function aggregateEstimationVotes(pies, conditionsByID) {
     const counts = new Map();
     for (const [pieID, pie] of pies) {
         const votes = scopeEstimationVotes(readStoredEstimationVotes(pie.estimationVotes, pieID), pie.entries, conditionsByID);
-        for (const { conditionID, vote } of votes) {
-            const tally = counts.get(conditionID) ?? { conditionID, supportCount: 0, opposeCount: 0 };
+        for (const { targetConditionID, sourceConditionID, vote } of votes) {
+            const key = estimationVotePairKey(targetConditionID, sourceConditionID);
+            const tally = counts.get(key) ?? { targetConditionID, sourceConditionID, supportCount: 0, opposeCount: 0 };
             if (vote === 'support') tally.supportCount++;
             else tally.opposeCount++;
-            counts.set(conditionID, tally);
+            counts.set(key, tally);
         }
     }
-    return [...counts.values()].sort((left, right) => left.conditionID - right.conditionID);
+    return [...counts.values()].sort(compareEstimationVotePairs);
 }
 
 export async function loadPublicPie(connection, context, conditionsByID) {
@@ -971,22 +978,19 @@ function eligibleEstimationSources(entry, excludedConditionIDs) {
     if (!Array.isArray(sources) || sources.some(ID => !Number.isSafeInteger(ID) || ID < 1 || ID === entry.conditionID)
         || new Set(sources).size !== sources.length) throw new TypeError('Invalid estimation sources');
     return entry.conditionID < 1 || excludedConditionIDs.has(entry.conditionID) ? []
-        : sources.filter(ID => !excludedConditionIDs.has(ID));
+        : sources.filter(ID => !excludedConditionIDs.has(ID)).sort((left, right) => left - right);
 }
 
-function bestVersionEstimate(model, sources, predict) {
-    let best = null;
+function estimateFromVersions(model, sources, predict) {
+    const estimates = [];
     for (const sourceID of sources) {
         const sourceScore = model.results.get(resultKey(sourceID))?.normalizedScore;
         if (sourceScore == null) continue;
         if (!Number.isFinite(sourceScore)) throw new TypeError('Invalid estimation source score');
         const estimate = predict(sourceID, sourceScore);
-        if (estimate && (!best || (estimate.validationError - best.validationError
-            || best.referenceCount - estimate.referenceCount || estimate.sourceConditionID - best.sourceConditionID) < 0)) {
-            best = estimate;
-        }
+        if (estimate) estimates.push(estimate);
     }
-    return best;
+    return combineVersionEstimates(estimates);
 }
 
 export function scoreModels(models, weightedEntries, totalBasisPoints, { fallbackRules = [], familyComposition = [], fallbackScope = 'personal', scoreMode = 'range', availableInferenceVersion = AVAILABLE_INFERENCE_VERSION, estimationAlgorithm = DEFAULT_ESTIMATION_ALGORITHM, fallbackCalibration = null, comparisonScoreIndexes = null, deferMetadata = false, excludedConditionIDs = new Set() } = {}) {
@@ -1072,15 +1076,16 @@ export function scoreModels(models, weightedEntries, totalBasisPoints, { fallbac
                     continue;
                 }
                 upper += entryFraction * fraction * 100;
-                const prediction = automatic && scoreMode === 'available' ? bestVersionEstimate(model, sources, predict) : resolved.prediction;
+                const prediction = automatic && scoreMode === 'available' ? estimateFromVersions(model, sources, predict) : resolved.prediction;
                 if (prediction) {
-                    resultKeys.add(resultKey(prediction.sourceConditionID));
+                    if (automatic) {
+                        for (const source of prediction.sources) resultKeys.add(resultKey(source.sourceConditionID));
+                    } else resultKeys.add(resultKey(prediction.sourceConditionID));
                     estimatedTargets.add(entry.conditionID);
                     calibratedBasisPoints += weight;
                     if (scoreMode === 'available') {
                         inferredScores.push({ conditionID: entry.conditionID, familyID: family.familyID ?? null,
-                            familyConditionIDs: automatic ? [entry.conditionID, prediction.sourceConditionID] : chain,
-                            ...(automatic ? { selection: 'automatic' } : {}), ...prediction,
+                            ...(automatic ? { selection: 'automatic' } : { familyConditionIDs: chain }), ...prediction,
                             weightBasisPoints: weight, originalWeight: weight / totalBasisPoints * 100 });
                     }
                 }
@@ -1570,9 +1575,9 @@ async function buildRankingWorkspace(db, {
                 conditionID: entry.conditionID, rawWeight: entry.weightBasisPoints
             }))).map(entry => ({ ...entry, ...(eligible.find(item => item.conditionID === entry.conditionID)?.followCommunityVersion
                 ? { followCommunityVersion: true } : {}) }));
+            const personalVotes = scopeEstimationVotes(personal?.estimationVotes ?? [], selected, conditionsByID);
             return { contextID: targetID, name: target.name,
-                entries: planEstimates(expandCommunityVersions(selected, publicTarget.versionComposition),
-                    publicTarget.estimationVotes, personal?.estimationVotes) };
+                entries: planEstimates(expandCommunityVersions(selected, publicTarget.versionComposition), publicTarget.estimationVotes, personalVotes) };
         } });
     };
     const personalExpanded = await expandedFor('personal', personalVersionEntries);
@@ -1741,7 +1746,8 @@ function validateEstimationVotes(estimationVotes, entries) {
     try { votes = normalizeEstimationVotes(estimationVotes); }
     catch { throw requestError(400, 'invalid_estimation_votes'); }
     if (votes.length && !entries.some(entry => entry.conditionID > 0)) {
-        throw requestError(400, 'estimation_vote_condition_unavailable', { conditionID: votes[0].conditionID });
+        const { targetConditionID, sourceConditionID } = votes[0];
+        throw requestError(400, 'estimation_vote_condition_unavailable', { targetConditionID, sourceConditionID });
     }
     return votes;
 }
@@ -1869,8 +1875,9 @@ async function savePersonalPieAttempt(db, {
                 const referenceEntries = normalizedEntries.filter(entry => entry.conditionID < 0);
                 const conditionIDs = benchmarkEntries.map(entry => entry.conditionID);
                 const requestedVotes = normalizedEstimationVotes ?? readStoredEstimationVotes(pies[0]?.estimation_votes, Number(pies[0]?.ID));
-                const requestedConditionIDs = [...new Set([...conditionIDs, ...requestedVotes.map(vote => vote.conditionID)])]
-                    .sort((left, right) => left - right);
+                const voteConditionIDs = requestedVotes.flatMap(({ targetConditionID, sourceConditionID }) =>
+                    [targetConditionID, sourceConditionID]);
+                const requestedConditionIDs = [...new Set([...conditionIDs, ...voteConditionIDs])].sort((left, right) => left - right);
                 const [conditions] = requestedConditionIDs.length ? await connection.execute(`
                     SELECT ID
                     FROM benchmark_conditions

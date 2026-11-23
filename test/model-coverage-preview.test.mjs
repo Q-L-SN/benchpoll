@@ -58,11 +58,13 @@ test('uncovered blocks use only estimates from this ranking', () => {
     assert.equal(buildModelCoverageEntries([entry(11, 1, 10000)], undefined), null);
 });
 
-test('estimated blocks combine repeated version weights, including supported zeros and unresolved shares', () => {
+test('estimated blocks combine scoped target estimates, including supported zeros and unresolved shares', () => {
     const entries = [entry(11, 1, 1000), entry(11, 1, 1000), entry(12, 1, 2000), entry(21, 2, 6000)];
     const coverage = [adopted(11, 2000, 0, null), adopted(12, 2000, 0, null), adopted(21, 6000, 0, null)];
     const estimates = [{ conditionID: 11, normalizedScore: 0, originalWeight: 5 },
-        { conditionID: 11, normalizedScore: 40, weightBasisPoints: 1500 },
+        { conditionID: 11, selection: 'automatic', normalizedScore: 40, weightBasisPoints: 1500,
+            sources: [{ sourceConditionID: 91, normalizedScore: 30, weightFraction: .5 },
+                { sourceConditionID: 92, normalizedScore: 50, weightFraction: .5 }] },
         { conditionID: 12, normalizedScore: 60, weightBasisPoints: 1000 },
         { conditionID: 21, sourceConditionID: 91, sourceScore: 35, normalizedScore: 0, weightBasisPoints: 6000 }];
     const blocks = buildModelCoverageEntries(entries, coverage, [], estimates);

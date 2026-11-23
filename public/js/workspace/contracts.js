@@ -1,4 +1,4 @@
-import { FALLBACK_INFERENCE_METHOD, storedFallbackInference, MIN_PAIRED_MODELS, MAX_HELD_OUT_ERROR } from '../shared/fallback-inference.js';
+import { combineVersionEstimates, FALLBACK_INFERENCE_METHOD, storedFallbackInference, MIN_PAIRED_MODELS, MAX_HELD_OUT_ERROR } from '../shared/fallback-inference.js';
 import { FALLBACK_RULE_MODE } from './constants.js';
 import { expandCommunityVersions } from '../shared/benchmark-version-choice.js';
 import { familyKey, resolvedFamilyConditionIDs } from '../shared/benchmark-families.js';
@@ -9,7 +9,7 @@ import { storedAvailableResultInference, PAIRWISE_INFERENCE_METHOD, PAIRWISE_COV
 import { canonicalAccountID } from '../shared/account-identity.js';
 import { isMissingInferenceMethod, normalizeEstimationAlgorithm, ORIGINAL_WEIGHT_POLICY } from '../shared/estimation-algorithms.js';
 import { normalizeRankingResume, RANKING_PAGE_SIZE } from '../shared/ranking-resume.js';
-import { normalizeEstimationVotes } from '../shared/estimation-votes.js';
+import { estimationVotePairKey, normalizeEstimationVotes } from '../shared/estimation-votes.js';
 
 function invalidWorkspaceResponse(path, message) {
     const error = new Error(`Invalid workspace response: ${path} ${message}`);
@@ -180,15 +180,39 @@ function requireFamilyEntry(entry, path) {
     return requireWorkspaceConditionIdentity(entry, path);
 }
 
+function validCombinedEstimate(score) {
+    const { sources } = score;
+    if (score.familyID !== null || !Array.isArray(sources) || !sources.length) return false;
+    const IDs = new Set();
+    let totalWeight = 0;
+    for (const source of sources) {
+        if (!source || !Number.isSafeInteger(source.sourceConditionID) || source.sourceConditionID <= 0
+            || source.sourceConditionID === score.conditionID || IDs.has(source.sourceConditionID)
+            || !Number.isFinite(source.sourceScore) || !Number.isFinite(source.normalizedScore)
+            || !Number.isSafeInteger(source.referenceCount) || source.referenceCount < MIN_PAIRED_MODELS
+            || !Number.isFinite(source.validationError) || source.validationError < 0 || source.validationError > MAX_HELD_OUT_ERROR
+            || !Number.isFinite(source.weightFraction) || source.weightFraction <= 0 || source.weightFraction > 1) return false;
+        IDs.add(source.sourceConditionID);
+        totalWeight += source.weightFraction;
+    }
+    const expected = combineVersionEstimates(sources);
+    return Math.abs(totalWeight - 1) < 1e-9
+        && Math.abs(score.normalizedScore - expected.normalizedScore) <= 1e-9 * Math.max(1, Math.abs(expected.normalizedScore))
+        && sources.every((source, index) => Math.abs(source.weightFraction - expected.sources[index].weightFraction) < 1e-9);
+}
+
 function validPredictionSource(score, inference, chain, pairwise) {
+    if (score.selection === 'automatic') {
+        return chain && inference.weightPolicy === ORIGINAL_WEIGHT_POLICY && validCombinedEstimate(score);
+    }
+    if (score.selection !== undefined || !Number.isSafeInteger(score.referenceCount)
+        || score.referenceCount < (chain ? MIN_PAIRED_MODELS : pairwise ? 2 : 1)) return false;
     if (chain) {
         const path = score.familyConditionIDs;
         return Number.isSafeInteger(score.sourceConditionID) && score.sourceConditionID > 0
             && Number.isFinite(score.sourceScore) && Number.isFinite(score.validationError)
             && score.validationError >= 0 && score.validationError <= MAX_HELD_OUT_ERROR
-            && Array.isArray(path) && path[0] === score.conditionID && path.indexOf(score.sourceConditionID) > 0
-            && (score.selection === undefined || (score.selection === 'automatic' && inference.weightPolicy === ORIGINAL_WEIGHT_POLICY
-                && path.length === 2 && score.familyID === null));
+            && Array.isArray(path) && path[0] === score.conditionID && path.indexOf(score.sourceConditionID) > 0;
     }
     if (!pairwise) return score.percentile === inference.percentile;
     return Number.isFinite(score.percentile) && score.percentile >= 0 && score.percentile <= 1
@@ -244,7 +268,6 @@ function requireRankedModel(value, path, scoreMode) {
             if (!Number.isSafeInteger(score.conditionID) || score.conditionID < 1
                 || !Number.isFinite(score.normalizedScore)
                 || !validPredictionSource(score, inference, chain, pairwise)
-                || !Number.isSafeInteger(score.referenceCount) || score.referenceCount < (chain ? MIN_PAIRED_MODELS : pairwise ? 2 : 1)
                 || !Number.isFinite(score.originalWeight) || score.originalWeight <= 0 || score.originalWeight > 100 + 1e-6
                 || !Number.isFinite(score.effectiveWeight) || score.effectiveWeight <= 0 || score.effectiveWeight > 100 + 1e-6
                 || !Number.isFinite(score.contribution) || Math.abs(score.contribution - score.normalizedScore * (score.effectiveWeight / 100)) > .000001
@@ -379,27 +402,31 @@ function validateWorkspaceEstimationVotes(response, personalEntries, versionComp
     const personalPath = 'personalPie.estimationVotes';
     let personalVotes;
     try { personalVotes = normalizeEstimationVotes(response.personalPie.estimationVotes); }
-    catch { throw invalidWorkspaceResponse(personalPath, 'must contain unique support or oppose votes'); }
+    catch { throw invalidWorkspaceResponse(personalPath, 'must contain unique support or oppose votes for directed version pairs'); }
     const communityVotes = requireWorkspaceArray(response.communityEstimationVotes, 'communityEstimationVotes');
     if (!personalVotes.length && !communityVotes.length) return;
     const groupsByCondition = new Map((versionComposition ?? []).flatMap(group =>
         group.versions.map(version => [version.conditionID, group.benchmarkID])));
     const weightedBenchmarks = new Set(personalEntries.filter(entry => entry.weightBasisPoints > 0)
         .map(entry => groupsByCondition.get(entry.conditionID)));
-    if (personalVotes.some(vote => !groupsByCondition.has(vote.conditionID)
-        || !weightedBenchmarks.has(groupsByCondition.get(vote.conditionID)))) {
-        throw invalidWorkspaceResponse(personalPath, 'must vote on versions of personally weighted benchmarks');
+    const eligiblePair = ({ targetConditionID, sourceConditionID }) => targetConditionID !== sourceConditionID
+        && groupsByCondition.has(targetConditionID)
+        && groupsByCondition.get(targetConditionID) === groupsByCondition.get(sourceConditionID);
+    if (personalVotes.some(vote => !eligiblePair(vote)
+        || !weightedBenchmarks.has(groupsByCondition.get(vote.targetConditionID)))) {
+        throw invalidWorkspaceResponse(personalPath, 'must vote on eligible version pairs of personally weighted benchmarks');
     }
     const seen = new Set();
     communityVotes.forEach((item, index) => {
         const path = `communityEstimationVotes[${index}]`;
         const counts = requireWorkspaceObject(item, path);
-        if (!groupsByCondition.has(counts.conditionID) || seen.has(counts.conditionID) || Object.keys(counts).length !== 3
+        const pair = eligiblePair(counts) && estimationVotePairKey(counts.targetConditionID, counts.sourceConditionID);
+        if (!pair || seen.has(pair) || Object.keys(counts).length !== 4
             || !Number.isSafeInteger(counts.supportCount) || counts.supportCount < 0
             || !Number.isSafeInteger(counts.opposeCount) || counts.opposeCount < 0) {
-            throw invalidWorkspaceResponse(path, 'must contain unique counts for an eligible version');
+            throw invalidWorkspaceResponse(path, 'must contain unique counts for an eligible directed version pair');
         }
-        seen.add(counts.conditionID);
+        seen.add(pair);
     });
 }
 

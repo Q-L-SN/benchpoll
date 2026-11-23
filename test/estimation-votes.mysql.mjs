@@ -26,11 +26,26 @@ const unresolved = 3;
 const preciseSource = 4;
 const alternateSource = 5;
 const excludedSource = 6;
-const support = conditionID => ({ conditionID, vote: 'support' });
-const oppose = conditionID => ({ conditionID, vote: 'oppose' });
+const secondTarget = 7;
+const noisySource = 8;
+const sparseSource = 9;
+const support = (targetConditionID, sourceConditionID) => ({ targetConditionID, sourceConditionID, vote: 'support' });
+const oppose = (targetConditionID, sourceConditionID) => ({ targetConditionID, sourceConditionID, vote: 'oppose' });
+const tally = (targetConditionID, sourceConditionID, supportCount, opposeCount) =>
+    ({ targetConditionID, sourceConditionID, supportCount, opposeCount });
 const entry = (conditionID, weightBasisPoints = 10000) => ({ conditionID, weightBasisPoints });
 const comparison = { mode: 'best', keys: ['model'] };
 const sceneValues = ID => ({ scene: String(ID) });
+
+const preciseEstimate = { sourceConditionID: preciseSource, sourceScore: 58, normalizedScore: 48,
+    referenceCount: 6, validationError: 0, weightFraction: 1 };
+const alternateEstimate = { sourceConditionID: alternateSource, sourceScore: 42, normalizedScore: 52,
+    referenceCount: 5, validationError: 2, weightFraction: 1 };
+// The fixture's two reliabilities are 6/11 and 1/10.
+const blendedSources = [{ ...preciseEstimate, weightFraction: 60 / 71 }, { ...alternateEstimate, weightFraction: 11 / 71 }];
+const blendedScore = 3452 / 71;
+const secondTargetSources = blendedSources.map(source => ({ ...source, normalizedScore: source.normalizedScore + 3 }));
+const secondTargetScore = 3665 / 71;
 
 async function createFixture(t) {
     const database = await createLifecycleDatabase();
@@ -41,7 +56,10 @@ async function createFixture(t) {
         (ID, benchmark_ID, condition_key, name, score_direction, uses_percentage_scale, score_source)
         VALUES (4, 1, 'precise', 'Precise', 'higher', 1, NULL),
                (5, 1, 'alternate', 'Alternate', 'higher', 1, NULL),
-               (6, 1, 'excluded', 'Excluded', 'higher', 1, 'aa')`);
+               (6, 1, 'excluded', 'Excluded', 'higher', 1, 'aa'),
+               (7, 1, 'second-target', 'Second target', 'higher', 1, NULL),
+               (8, 1, 'noisy', 'Noisy', 'higher', 1, NULL),
+               (9, 1, 'sparse', 'Sparse', 'higher', 1, NULL)`);
     for (let ID = 4; ID <= 7; ID++) {
         await db.execute('INSERT INTO models (ID, vendor_ID, slug, name) VALUES (?, 1, ?, ?)', [ID, 'model-' + ID, 'Model ' + ID]);
     }
@@ -54,14 +72,20 @@ async function createFixture(t) {
     await score(1, preciseSource, 58);
     await score(1, alternateSource, 42);
     await score(1, excludedSource, 60);
+    await score(1, noisySource, 50);
+    await score(1, sparseSource, 49);
+    const alternateOffsets = [13, 11, 10, 9, 7];
     for (let modelID = 2; modelID <= 7; modelID++) {
         const targetScore = 45 + modelID;
         await score(modelID, target, targetScore);
         await score(modelID, independent, targetScore + 4);
         await score(modelID, unresolved, 20 + modelID);
         await score(modelID, preciseSource, targetScore + 10);
-        await score(modelID, alternateSource, targetScore - 10 + (modelID % 2 ? -1 : 1));
+        if (modelID <= 6) await score(modelID, alternateSource, targetScore - alternateOffsets[modelID - 2]);
         await score(modelID, excludedSource, targetScore + 8);
+        await score(modelID, secondTarget, targetScore + 3);
+        await score(modelID, noisySource, targetScore + (modelID % 2 ? 7 : -7));
+        if (modelID <= 5) await score(modelID, sparseSource, targetScore + 1);
     }
     return db;
 }
@@ -98,20 +122,33 @@ function near(actual, expected) {
     assert.ok(Number.isFinite(actual) && Math.abs(actual - expected) < 1e-10, `Expected ${expected}, received ${actual}`);
 }
 
-function checkEstimate(row, source, sourceScore, prediction, originalWeight) {
+function checkEstimate(row, conditionID, sources, prediction, originalWeight) {
     assert.equal(row.inferredScores.length, 1);
-    const [estimate] = row.inferredScores;
-    assert.deepEqual([estimate.conditionID, estimate.sourceConditionID, estimate.referenceCount, estimate.selection],
-        [target, source, 6, 'automatic']);
-    near(estimate.originalWeight, originalWeight * 100);
-    near(estimate.sourceScore, sourceScore);
-    near(estimate.normalizedScore, prediction);
-    near(estimate.contribution, prediction * originalWeight);
-    if (source === preciseSource) near(estimate.validationError, 0);
-    else assert.ok(estimate.validationError > 0 && estimate.validationError <= 5);
+    checkInferenceLine(row.inferredScores[0], conditionID, sources, prediction, originalWeight);
 }
 
-test('SQL workspaces keep source ballots separate from scoring versions, scenes, and guest previews', { timeout: 60000 }, async t => {
+function checkInferenceLine(estimate, conditionID, sources, prediction, originalWeight) {
+    assert.ok(estimate, `Expected an inference for condition ${conditionID}`);
+    assert.deepEqual([estimate.conditionID, estimate.selection], [conditionID, 'automatic']);
+    for (const key of ['sourceConditionID', 'sourceScore', 'referenceCount', 'validationError']) {
+        assert.equal(Object.hasOwn(estimate, key), false, key);
+    }
+    near(estimate.originalWeight, originalWeight * 100);
+    near(estimate.effectiveWeight, originalWeight * 100);
+    near(estimate.normalizedScore, prediction);
+    near(estimate.contribution, prediction * originalWeight);
+    assert.deepEqual(estimate.sources.map(source => source.sourceConditionID), sources.map(source => source.sourceConditionID));
+    for (const [index, source] of estimate.sources.entries()) {
+        const expected = sources[index];
+        assert.deepEqual(Object.keys(source).sort(), Object.keys(expected).sort());
+        for (const key of ['sourceScore', 'normalizedScore', 'referenceCount', 'validationError', 'weightFraction']) {
+            near(source[key], expected[key]);
+        }
+    }
+    near(estimate.sources.reduce((sum, source) => sum + source.weightFraction, 0), 1);
+}
+
+test('SQL workspaces sample pair ballots per scene and blend only qualifying measured sources', { timeout: 60000 }, async t => {
     const db = await createFixture(t);
     const topic = await publicTopic(db, 'Scene ballots');
     const [general, specialized] = await addScenes(db, topic.ID);
@@ -119,99 +156,168 @@ test('SQL workspaces keep source ballots separate from scoring versions, scenes,
     const specializedScope = { categoryID: topic.ID, contextValues: sceneValues(specialized) };
     const entries = [entry(target, 6000), entry(independent, 2000), entry(unresolved, 2000)];
     const followerEntries = [{ ...entries[0], followCommunityVersion: true }, ...entries.slice(1)];
-    await save(db, scope, '42', followerEntries, [support(preciseSource)]);
-    for (const userID of ['43', '1001']) await save(db, scope, userID, entries, [oppose(preciseSource)]);
-    for (const userID of ['1002', '1003']) await save(db, scope, userID, entries, [support(preciseSource)]);
-    await db.execute(`UPDATE personal_pies SET updated_at = NOW() - INTERVAL 15 DAY WHERE user_ID = 1002 AND context_ID = ?`, [general]);
+    await save(db, scope, '42', followerEntries, [support(target, preciseSource)]);
+    for (const userID of ['43', '1001']) await save(db, scope, userID, entries, [oppose(target, preciseSource)]);
+    for (const userID of ['1002', '1003']) await save(db, scope, userID, entries, [support(target, preciseSource)]);
+    await db.execute(`UPDATE personal_pies SET updated_at = NOW() - INTERVAL 73 HOUR WHERE user_ID = 1002 AND context_ID = ?`, [general]);
     await db.execute('UPDATE users SET banned_at = NOW() WHERE ID = 1003');
-    await save(db, specializedScope, '42', [entry(target)], [support(preciseSource)]);
-    await save(db, specializedScope, '43', [entry(target)], [oppose(preciseSource)]);
-    const preciseUsage = await conditionImpact(db, 'benchmark', 1, preciseSource);
-    assert.deepEqual(preciseUsage, { resultCount: 7, pieCount: 7 });
+    await save(db, specializedScope, '42', [entry(target)], [support(target, preciseSource)]);
+    await save(db, specializedScope, '43', [entry(target)], [oppose(target, preciseSource)]);
+    for (let userID = 1004; userID <= 1011; userID++) await save(db, specializedScope, String(userID), [entry(target)]);
+    await save(db, specializedScope, '1012', [entry(target)], [oppose(target, preciseSource)]);
+    await db.execute(`UPDATE personal_pies SET updated_at = NOW() - INTERVAL 90 HOUR
+        WHERE user_ID BETWEEN 1004 AND 1011 AND context_ID = ?`, [specialized]);
+    await db.execute(`UPDATE personal_pies SET updated_at = NOW() - INTERVAL 100 HOUR
+        WHERE user_ID = 1012 AND context_ID = ?`, [specialized]);
 
     const rankingCache = createRankingReadCache();
     const read = options => getRankingWorkspace(db, { ...scope, comparison, rankingCache, jsonMemberMetadata: true, ...options });
     const sparse = await read();
     assert.equal(sparse.publicPie.participantCount, 4);
-    assert.deepEqual(sparse.communityEstimationVotes, [{ conditionID: preciseSource, supportCount: 2, opposeCount: 2 }]);
+    assert.deepEqual(sparse.communityEstimationVotes, [tally(target, preciseSource, 2, 2)]);
     assert.equal(sparse.versionComposition.find(group => group.benchmarkID === 1).configuredPieCount, 3);
-    checkEstimate(modelOne(sparse.modelLeaderboards.public), preciseSource, 58, 48, .6);
+    checkEstimate(modelOne(sparse.modelLeaderboards.public), target, blendedSources, blendedScore, .6);
 
-    for (let userID = 1004; userID <= 1010; userID++) await save(db, scope, String(userID), followerEntries);
+    for (let userID = 1004; userID <= 1011; userID++) await save(db, scope, String(userID), followerEntries);
+    await db.execute(`UPDATE personal_pies SET updated_at = NOW() - INTERVAL 71 HOUR WHERE user_ID = 1004 AND context_ID = ?`, [general]);
+    await db.execute('UPDATE personal_pies SET estimation_votes = ? WHERE user_ID = 1011 AND context_ID = ?',
+        [JSON.stringify([{ conditionID: alternateSource, vote: 'oppose' }]), general]);
     const initial = await read({ userID: '42' });
     assert.equal(initial.scoreMode, 'available');
-    assert.equal(initial.publicPie.participantCount, 10);
-    const initialVotes = [{ conditionID: preciseSource, supportCount: 1, opposeCount: 2 }];
+    assert.equal(initial.publicPie.participantCount, 11);
+    const initialVotes = [tally(target, preciseSource, 1, 2)];
     assert.deepEqual(initial.communityEstimationVotes, initialVotes);
-    assert.deepEqual(initial.personalPie.estimationVotes, [support(preciseSource)]);
+    assert.deepEqual(initial.personalPie.estimationVotes, [support(target, preciseSource)]);
+    assert.deepEqual((await read({ userID: '1011' })).personalPie.estimationVotes, []);
     assert.equal(initial.personalPie.entries.find(row => row.conditionID === target).followCommunityVersion, true);
     assert.equal(initial.versionComposition.find(group => group.benchmarkID === 1).configuredPieCount, 2);
 
     const personal = modelOne(initial.modelLeaderboards.personal);
     const publicRow = modelOne(initial.modelLeaderboards.public);
-    checkEstimate(personal, preciseSource, 58, 48, .6);
-    checkEstimate(publicRow, alternateSource, 42, 52, .6);
+    checkEstimate(personal, target, blendedSources, blendedScore, .6);
+    checkEstimate(publicRow, target, [alternateEstimate], 52, .6);
     const olderOwner = await read({ userID: '1002' });
-    checkEstimate(modelOne(olderOwner.modelLeaderboards.personal), preciseSource, 58, 48, .6);
-    assert.deepEqual([personal.lower, personal.upper, personal.coverage], [39.8, 39.8, 20]);
+    checkEstimate(modelOne(olderOwner.modelLeaderboards.personal), target, blendedSources, blendedScore, .6);
+    assert.deepEqual([personal.lower, personal.upper, personal.coverage], [40.17, 40.17, 20]);
     assert.deepEqual([publicRow.lower, publicRow.upper, publicRow.coverage], [42.2, 42.2, 20]);
+    assert.deepEqual([personal.fallbackUsageCount, personal.fallbackCoverage], [1, 60]);
     near(personal.availableInference.observedContribution, 11);
+    near(personal.availableInference.inferredContribution, blendedScore * .6);
+    near(personal.availableInference.inferredFraction, .6);
     near(personal.availableInference.unresolvedFraction, .2);
     assert.equal(personal.availableInference.unresolvedContribution, 0);
     assert.deepEqual(personal.calculationScores.map(score => score.conditionID), [independent]);
     const missingCoverage = personal.coverageEntries.find(item => item.conditionID === target);
     assert.deepEqual([missingCoverage.coveredWeightBasisPoints, missingCoverage.normalizedScore], [0, null]);
+    const measured = initial.modelLeaderboards.public.find(row => row.modelID === 2);
+    assert.deepEqual([measured.coverage, measured.inferredScores, measured.calculationScores.find(score => score.conditionID === target).normalizedScore],
+        [100, [], 47]);
 
     for (const options of [{ rankingCache: null }, { comparison: { ...comparison, mode: 'matched' } }]) {
         const result = await read({ userID: '42', ...options });
-        checkEstimate(modelOne(result.modelLeaderboards.personal), preciseSource, 58, 48, .6);
-        checkEstimate(modelOne(result.modelLeaderboards.public), alternateSource, 42, 52, .6);
+        checkEstimate(modelOne(result.modelLeaderboards.personal), target, blendedSources, blendedScore, .6);
+        checkEstimate(modelOne(result.modelLeaderboards.public), target, [alternateEstimate], 52, .6);
     }
 
     const secondary = await read(specializedScope);
-    assert.deepEqual(secondary.communityEstimationVotes, [{ conditionID: preciseSource, supportCount: 1, opposeCount: 1 }]);
-    checkEstimate(modelOne(secondary.modelLeaderboards.public), preciseSource, 58, 48, 1);
+    assert.equal(secondary.publicPie.participantCount, 10);
+    assert.deepEqual(secondary.communityEstimationVotes, [tally(target, preciseSource, 1, 1)]);
+    checkEstimate(modelOne(secondary.modelLeaderboards.public), target, blendedSources, blendedScore, 1);
     const range = modelOne((await read({ userID: '42', scoreMode: 'range' })).modelLeaderboards.personal);
     assert.deepEqual([range.lower, range.upper, range.coverage, range.inferredScores], [11, 91, 20, []]);
 
-    const guest = await read({ previewPersonalPie: { entries, estimationVotes: [support(preciseSource)] } });
-    checkEstimate(modelOne(guest.modelLeaderboards.personal), preciseSource, 58, 48, .6);
-    checkEstimate(modelOne(guest.modelLeaderboards.public), alternateSource, 42, 52, .6);
+    const guest = await read({ previewPersonalPie: { entries, estimationVotes: [support(target, preciseSource)] } });
+    checkEstimate(modelOne(guest.modelLeaderboards.personal), target, blendedSources, blendedScore, .6);
+    checkEstimate(modelOne(guest.modelLeaderboards.public), target, [alternateEstimate], 52, .6);
     assert.deepEqual((await read()).personalPie.estimationVotes, []);
     assert.deepEqual((await read()).communityEstimationVotes, initialVotes);
 
-    const unavailableVote = failure => failure.status === 400 && failure.body?.error === 'estimation_vote_condition_unavailable';
-    for (const conditionID of [independent, excludedSource]) {
-        const badPreview = { entries: [entry(target)], estimationVotes: [support(conditionID)] };
+    for (const vote of [support(target, independent), support(independent, preciseSource),
+        support(target, excludedSource), support(excludedSource, preciseSource)]) {
+        const unavailableVote = failure => failure.status === 400 && failure.body?.error === 'estimation_vote_condition_unavailable'
+            && failure.body.targetConditionID === vote.targetConditionID && failure.body.sourceConditionID === vote.sourceConditionID;
+        const badPreview = { entries: [entry(target)], estimationVotes: [vote] };
         await assert.rejects(read({ previewPersonalPie: badPreview }), unavailableVote);
         await assert.rejects(save(db, scope, '42', badPreview.entries, badPreview.estimationVotes, 1), unavailableVote);
     }
     const noSources = await read({ previewPersonalPie: {
-        entries: [entry(target)], estimationVotes: [oppose(preciseSource), oppose(alternateSource)]
+        entries: [entry(target)], estimationVotes: [oppose(target, preciseSource), oppose(target, alternateSource),
+            support(target, noisySource), support(target, sparseSource)]
     } });
     const unranked = modelOne(noSources.modelLeaderboards.personal);
     assert.deepEqual([unranked.lower, unranked.coverage, unranked.inferredScores], [null, 0, []]);
-
-    const alternateEntries = [entry(alternateSource, 6000), ...entries.slice(1)];
-    for (const userID of ['43', '1001']) await save(db, scope, userID, alternateEntries, [oppose(preciseSource)], 1);
-    const changedCommunity = await read({ userID: '42' });
-    assert.deepEqual(changedCommunity.communityEstimationVotes, initialVotes);
-    assert.equal(changedCommunity.personalPie.revision, 1);
-    assert.ok(changedCommunity.personalPie.effectiveEntries.some(item => item.conditionID === alternateSource));
-    assert.deepEqual([modelOne(changedCommunity.modelLeaderboards.personal).lower,
-        modelOne(changedCommunity.modelLeaderboards.personal).inferredScores], [36.2, []]);
-
-    const explicitEntries = [entry(preciseSource, 6000), ...entries.slice(1)];
-    const receipt = await savePersonalPie(db, { ...scope, userID: '42', writeIdentity: randomUUID(), expectedRevision: 1,
-        entries: explicitEntries });
-    assert.deepEqual(receipt.personalPie.estimationVotes, [support(preciseSource)]);
-    const persisted = await loadPersonalPie(db, general, '42');
-    assert.ok(persisted.entries.some(item => item.conditionID === preciseSource && !item.followCommunityVersion));
-    assert.deepEqual(persisted.estimationVotes, [support(preciseSource)]);
-    assert.deepEqual(await conditionImpact(db, 'benchmark', 1, preciseSource), preciseUsage);
-    assert.deepEqual(await conditionImpact(db, 'benchmark', 1, alternateSource), { resultCount: 7, pieCount: 2 });
-    assert.equal(modelOne((await read({ userID: '42' })).modelLeaderboards.personal).lower, 45.8);
     assert.ok(rankingCache.stats.entries > 0);
+});
+
+test('SQL ballots retain their target through version changes and follow-community choices', { timeout: 60000 }, async t => {
+    const db = await createFixture(t);
+    const topic = await publicTopic(db, 'Directional pairs');
+    const scope = { categoryID: topic.ID };
+    const read = () => getRankingWorkspace(db, { ...scope, comparison, userID: '42' });
+    const firstTargetVotes = [tally(target, preciseSource, 1, 2)];
+    const ownerFirstVote = support(target, preciseSource);
+    const otherFirstVote = oppose(target, preciseSource);
+    await save(db, scope, '42', [{ ...entry(target), followCommunityVersion: true }], [ownerFirstVote]);
+    for (const userID of ['43', '1001']) await save(db, scope, userID, [entry(target)], [otherFirstVote]);
+    checkEstimate(modelOne((await read()).modelLeaderboards.public), target, [alternateEstimate], 52, 1);
+
+    const change = (userID, entries, expectedRevision) => savePersonalPie(db, {
+        ...scope, userID, writeIdentity: randomUUID(), expectedRevision, entries
+    });
+    const secondEntries = [entry(secondTarget)];
+    assert.deepEqual((await change('43', secondEntries, 1)).personalPie.estimationVotes, [otherFirstVote]);
+    await save(db, scope, '1001', secondEntries, [otherFirstVote], 1);
+
+    const changedCommunity = await read();
+    assert.deepEqual(changedCommunity.communityEstimationVotes, firstTargetVotes);
+    assert.deepEqual(changedCommunity.personalPie.estimationVotes, [ownerFirstVote]);
+    assert.equal(changedCommunity.personalPie.revision, 1);
+    assert.deepEqual(changedCommunity.personalPie.effectiveEntries.map(item => item.conditionID), [secondTarget]);
+    for (const mode of ['public', 'personal']) {
+        checkEstimate(modelOne(changedCommunity.modelLeaderboards[mode]), secondTarget, secondTargetSources, secondTargetScore, 1);
+    }
+
+    const ownerVotes = [ownerFirstVote, oppose(secondTarget, preciseSource)];
+    await save(db, scope, '42', secondEntries, ownerVotes, 1);
+    await save(db, scope, '43', secondEntries, [otherFirstVote, support(secondTarget, preciseSource)], 2);
+    const distinctPairs = await read();
+    const twoTallies = [...firstTargetVotes, tally(secondTarget, preciseSource, 1, 1)];
+    const alternateSecondEstimate = { ...alternateEstimate, normalizedScore: 55 };
+    assert.deepEqual(distinctPairs.communityEstimationVotes, twoTallies);
+    checkEstimate(modelOne(distinctPairs.modelLeaderboards.public), secondTarget, secondTargetSources, secondTargetScore, 1);
+    checkEstimate(modelOne(distinctPairs.modelLeaderboards.personal), secondTarget, [alternateSecondEstimate], 55, 1);
+
+    const receipt = await change('42', [entry(target)], 2);
+    assert.deepEqual(receipt.personalPie.estimationVotes, ownerVotes);
+    const persisted = await loadPersonalPie(db, distinctPairs.context.ID, '42');
+    assert.deepEqual(persisted.entries, [entry(target)]);
+    assert.deepEqual(persisted.estimationVotes, ownerVotes);
+    const restored = await read();
+    assert.deepEqual(restored.communityEstimationVotes, twoTallies);
+    checkEstimate(modelOne(restored.modelLeaderboards.personal), target, blendedSources, blendedScore, 1);
+    const publicRow = modelOne(restored.modelLeaderboards.public);
+    assert.equal(publicRow.inferredScores.length, 2);
+    checkInferenceLine(publicRow.inferredScores.find(item => item.conditionID === target), target, [alternateEstimate], 52, 1 / 3);
+    checkInferenceLine(publicRow.inferredScores.find(item => item.conditionID === secondTarget), secondTarget, secondTargetSources, secondTargetScore, 2 / 3);
+    assert.deepEqual([publicRow.lower, publicRow.coverage, publicRow.fallbackCoverage], [51.75, 0, 100]);
+    assert.deepEqual(await conditionImpact(db, 'benchmark', 1, target), { resultCount: 6, pieCount: 3 });
+    assert.deepEqual(await conditionImpact(db, 'benchmark', 1, secondTarget), { resultCount: 6, pieCount: 3 });
+    assert.deepEqual(await conditionImpact(db, 'benchmark', 1, preciseSource), { resultCount: 7, pieCount: 3 });
+
+    const followerEntry = { ...entry(target), followCommunityVersion: true };
+    assert.deepEqual((await change('42', [followerEntry], 3)).personalPie.estimationVotes, ownerVotes);
+    const followed = await read();
+    assert.deepEqual(followed.communityEstimationVotes, twoTallies);
+    assert.deepEqual(followed.personalPie.effectiveEntries.map(item => item.conditionID), [secondTarget]);
+    checkEstimate(modelOne(followed.modelLeaderboards.personal), secondTarget, [alternateSecondEstimate], 55, 1);
+
+    assert.deepEqual((await change('42', [entry(independent)], 4)).personalPie.estimationVotes, []);
+    assert.deepEqual((await read()).communityEstimationVotes,
+        [tally(target, preciseSource, 0, 2), tally(secondTarget, preciseSource, 1, 0)]);
+    const cleared = await change('43', [], 3);
+    assert.deepEqual([cleared.personalPie.revision, cleared.personalPie.estimationVotes], [0, []]);
+    assert.equal(await loadPersonalPie(db, distinctPairs.context.ID, '43'), null);
+    assert.deepEqual((await read()).communityEstimationVotes, [tally(target, preciseSource, 0, 1)]);
 });
 
 async function openFixtureAPI(t, db, rankingCache) {
@@ -253,7 +359,7 @@ async function openFixtureAPI(t, db, rankingCache) {
     return { post, searchPresentation };
 }
 
-test('HTTP workspace and homepage preserve local sources in cyclic references and refresh after a vote-only save', { timeout: 60000 }, async t => {
+test('HTTP workspace and homepage preserve local blends in cyclic references and refresh after a vote-only save', { timeout: 60000 }, async t => {
     const db = await createFixture(t);
     const root = await publicTopic(db, 'Root with two paths');
     const branchA = await publicTopic(db, 'Precise branch');
@@ -265,9 +371,9 @@ test('HTTP workspace and homepage preserve local sources in cyclic references an
     const rootEntries = [entry(-contextA, 5000), entry(-contextB, 5000)];
     const branchAEntries = [entry(target, 5000), entry(-contextB, 5000)];
     const branchBEntries = [entry(target, 5000), entry(-contextA, 5000)];
-    await save(db, scope(branchA), '42', [entry(target)], [oppose(alternateSource)]);
-    await save(db, scope(branchB), '42', branchBEntries, [oppose(preciseSource)]);
-    await save(db, scope(branchA), '42', branchAEntries, [oppose(alternateSource)], 1);
+    await save(db, scope(branchA), '42', [entry(target)]);
+    await save(db, scope(branchB), '42', branchBEntries, [oppose(target, preciseSource)]);
+    await save(db, scope(branchA), '42', branchAEntries, [], 1);
     await save(db, scope(root), '42', rootEntries);
 
     const { post, searchPresentation } = await openFixtureAPI(t, db, rankingCache);
@@ -275,39 +381,51 @@ test('HTTP workspace and homepage preserve local sources in cyclic references an
     const initial = await post('get_weighted_workspace', request);
     validateWorkspacePayload(initial);
     const publicRow = modelOne(initial.modelLeaderboards.public);
-    assert.deepEqual([publicRow.lower, publicRow.upper, publicRow.coverage], [50, 50, 0]);
-    const inferred = publicRow.inferredScores.slice().sort((a, b) => a.sourceConditionID - b.sourceConditionID);
-    assert.deepEqual(inferred.map(item => [item.conditionID, item.sourceConditionID, item.originalWeight]),
-        [[target, preciseSource, 50], [target, alternateSource, 50]]);
-    near(inferred[0].normalizedScore, 48);
-    near(inferred[1].normalizedScore, 52);
+    assert.deepEqual([publicRow.lower, publicRow.upper, publicRow.coverage], [50.31, 50.31, 0]);
+    assert.deepEqual(initial.publicPie.referenceIssues, []);
+    assert.equal(publicRow.inferredScores.length, 2);
+    checkInferenceLine(publicRow.inferredScores.find(estimate => estimate.sources.length === 2), target, blendedSources, blendedScore, .5);
+    checkInferenceLine(publicRow.inferredScores.find(estimate => estimate.sources.length === 1), target, [alternateEstimate], 52, .5);
+    near(publicRow.availableInference.inferredContribution, 3572 / 71);
     const personal = await post('get_weighted_workspace', { ...request, initialMode: 'personal' }, { userID: '42' });
-    assert.equal(modelOne(personal.modelLeaderboards.personal).lower, 50);
+    assert.equal(modelOne(personal.modelLeaderboards.personal).lower, 50.31);
 
-    const preview = await post('get_weighted_workspace', { ...request, ...scope(branchA), initialMode: 'personal',
-        previewPersonalPie: { entries: branchAEntries, estimationVotes: [oppose(preciseSource), support(alternateSource)] } });
+    const previewRequest = { ...request, ...scope(branchA), previewPersonalPie: {
+        entries: branchAEntries, estimationVotes: [oppose(target, preciseSource), support(target, alternateSource)]
+    } };
+    const preview = await post('get_weighted_workspace', { ...previewRequest, initialMode: 'personal' });
+    validateWorkspacePayload(preview);
     assert.equal(modelOne(preview.modelLeaderboards.personal).lower, 52);
-    checkEstimate(modelOne(preview.modelLeaderboards.personal), alternateSource, 42, 52, 1);
+    checkEstimate(modelOne(preview.modelLeaderboards.personal), target, [alternateEstimate], 52, 1);
+    const publicPreview = await post('get_weighted_workspace', previewRequest);
+    assert.equal(modelOne(publicPreview.modelLeaderboards.public).lower, 49.75);
 
     const homeRequest = { categoryID: root.ID };
     const homeBefore = await post('get_topic_preview', homeRequest);
-    assert.equal(modelOne(homeBefore.models).lower, 50);
+    assert.equal(modelOne(homeBefore.models).lower, 50.31);
     assert.equal((await post('get_topic_preview', homeRequest)).pagination.snapshotID, homeBefore.pagination.snapshotID);
     const crawlerPreview = async () => {
         const topic = (await searchPresentation.topics()).find(item => item.ID === root.ID);
         return searchPresentation.snapshot(topic, null);
     };
-    assert.equal(modelOne((await crawlerPreview()).models).lower, 50);
+    assert.equal(modelOne((await crawlerPreview()).models).lower, 50.31);
 
-    const receipt = await post('save_personal_pie', { ...scope(branchA), expectedRevision: 2,
-        expectedUserID: '42', entries: branchAEntries, estimationVotes: [oppose(preciseSource)] }, { userID: '42' });
-    assert.deepEqual(receipt.personalPie.estimationVotes, [oppose(preciseSource)]);
+    const saveRequest = { ...scope(branchA), expectedRevision: 2, expectedUserID: '42', entries: branchAEntries };
+    const validVote = oppose(target, preciseSource);
+    for (const estimationVotes of [[{ conditionID: preciseSource, vote: 'oppose' }],
+        [oppose(target, target)], [validVote, support(target, preciseSource)]]) {
+        const failure = await post('save_personal_pie', { ...saveRequest, estimationVotes }, { userID: '42', status: 400 });
+        assert.equal(failure.error, 'invalid_estimation_votes');
+    }
+    const receipt = await post('save_personal_pie', { ...saveRequest, estimationVotes: [validVote] }, { userID: '42' });
+    assert.deepEqual(receipt.personalPie.estimationVotes, [validVote]);
     assert.equal(receipt.personalPie.revision, 3);
 
     const fresh = await post('get_weighted_workspace', request);
+    validateWorkspacePayload(fresh);
     const freshRow = modelOne(fresh.modelLeaderboards.public);
     assert.equal(freshRow.lower, 52);
-    checkEstimate(freshRow, alternateSource, 42, 52, 1);
+    checkEstimate(freshRow, target, [alternateEstimate], 52, 1);
     const homeAfter = await post('get_topic_preview', homeRequest);
     assert.equal(modelOne(homeAfter.models).lower, 52);
     assert.notEqual(homeAfter.pagination.snapshotID, homeBefore.pagination.snapshotID);

@@ -19,8 +19,13 @@ before(async () => {
             }));
             const state = { group: { benchmarkID: 101, name: 'Review benchmark', primaryConditionID: 1, versions },
                 entries: [{ conditionID: 1, ...(readOnly ? {} : { followCommunityVersion: true }) }],
-                personalEstimationVotes: readOnly ? [{ conditionID: 1, vote: 'support' }] : [],
-                communityEstimationVotes: [{ conditionID: 1, supportCount: 4, opposeCount: 2 }],
+                estimationVoting: true,
+                personalEstimationVotes: readOnly ? [{ targetConditionID: 1, sourceConditionID: 2, vote: 'support' }] : [],
+                communityEstimationVotes: [
+                    { targetConditionID: 1, sourceConditionID: 2, supportCount: 4, opposeCount: 2 },
+                    { targetConditionID: 1, sourceConditionID: 4, supportCount: 0, opposeCount: 2 },
+                    { targetConditionID: 3, sourceConditionID: 2, supportCount: 1, opposeCount: 3 }
+                ],
                 readOnly, editable: !readOnly, busy: false, calls: [] };
             const settings = createBenchmarkSettings({ host: document.getElementById('settings'),
                 getScope: () => readOnly ? 'public' : 'personal', getData: () => state,
@@ -30,10 +35,12 @@ before(async () => {
                         ...(conditionID === null ? { followCommunityVersion: true } : {}) }];
                     return true;
                 },
-                onVote(group, conditionID, vote) {
-                    state.calls.push({ conditionID, vote });
-                    state.personalEstimationVotes = state.personalEstimationVotes.filter(item => item.conditionID !== conditionID);
-                    if (vote) state.personalEstimationVotes.push({ conditionID, vote });
+                onVote(group, targetConditionID, sourceConditionID, vote) {
+                    const pair = { targetConditionID, sourceConditionID, vote };
+                    state.calls.push(pair);
+                    state.personalEstimationVotes = state.personalEstimationVotes.filter(item => item.targetConditionID !== targetConditionID
+                        || item.sourceConditionID !== sourceConditionID);
+                    if (vote) state.personalEstimationVotes.push(pair);
                     return true;
                 }
             });
@@ -67,58 +74,85 @@ for (const [engine, width] of [[chromium, 1440], [chromium, 320], [webkit, 390]]
         await page.evaluate(() => mountSettings(false));
         const settings = page.locator('#settings');
         const score = conditionID => settings.getByRole('button', { name: `Use Evaluation ${conditionID} for scoring`, exact: true });
-        const support = conditionID => settings.getByRole('button', { name: `Support Evaluation ${conditionID} for score estimation`, exact: true });
-        const oppose = conditionID => settings.getByRole('button', { name: `Oppose Evaluation ${conditionID} for score estimation`, exact: true });
+        const vote = (action, source, target) => settings.getByRole('button', {
+            name: `${action} Evaluation ${source} as an estimation source for Evaluation ${target}`, exact: true
+        });
+        const row = conditionID => settings.locator(`.bp-version-choice-row[data-condition-id="${conditionID}"]`);
+        const rates = settings.locator('.bp-estimation-rate');
+        const rate = conditionID => row(conditionID).locator('.bp-estimation-rate');
         assert.equal(await settings.getByRole('listitem').count(), 42);
         assert.equal(await settings.locator('[aria-pressed="true"], .bp-choice-pagination, .bp-fallback-picker-embedded').count(), 0);
+        assert.equal(await settings.locator('.bp-version-choice-share').count(), 42);
+        assert.equal(await rates.count(), 0);
+        assert.equal(await settings.locator('button[data-vote]').count(), 0);
         assert.match(await settings.getByRole('status').textContent(), /Following community/);
-        assert.equal(await support(1).textContent(), '4');
-        assert.equal(await oppose(1).textContent(), '2');
+
+        await score(1).press('Enter');
+        assert.equal(await score(1).getAttribute('aria-pressed'), 'true');
+        assert.equal(await rates.count(), 41);
+        assert.equal(await row(1).locator('[data-vote], .bp-estimation-rate').count(), 0);
+        assert.equal(await rate(2).textContent(), '66.67%');
+        assert.equal(await rate(3).textContent(), 'No votes · Eligible by default');
+        assert.equal(await rate(4).textContent(), '0%');
+        const support = vote('Support', 2, 1);
+        assert.equal(await support.textContent(), '4');
+        assert.equal(await vote('Oppose', 2, 1).textContent(), '2');
+        await support.press('Space');
+        assert.equal(await support.getAttribute('aria-pressed'), 'true');
+        assert.equal(await support.evaluate(button => button.matches(':focus')), true);
+
+        await score(3).click();
+        assert.equal(await score(1).getAttribute('aria-pressed'), 'false');
+        assert.equal(await score(3).getAttribute('aria-pressed'), 'true');
+        assert.equal(await rate(2).textContent(), '25%');
+        assert.equal(await vote('Support', 2, 3).getAttribute('aria-pressed'), 'false');
+        await vote('Oppose', 2, 3).click();
+        assert.equal(await vote('Oppose', 2, 3).getAttribute('aria-pressed'), 'true');
+        await score(3).click();
+        assert.equal(await score(3).getAttribute('aria-pressed'), 'false');
+        assert.equal(await rates.count(), 0);
+        assert.equal(await settings.locator('button[data-vote]').count(), 0);
 
         await score(1).click();
-        await support(1).focus();
-        await support(1).press('Space');
-        assert.equal(await support(1).getAttribute('aria-pressed'), 'true');
-        assert.equal(await support(1).evaluate(button => button.matches(':focus')), true);
-        assert.equal(await score(1).getAttribute('aria-pressed'), 'true');
-
-        await oppose(1).click();
-        await support(2).click();
-        await score(2).click();
-        assert.equal(await score(1).getAttribute('aria-pressed'), 'false');
-        assert.equal(await score(2).getAttribute('aria-pressed'), 'true');
-        assert.equal(await support(1).getAttribute('aria-pressed'), 'false');
-        assert.equal(await oppose(1).getAttribute('aria-pressed'), 'true');
-        assert.equal(await support(2).getAttribute('aria-pressed'), 'true');
-        await score(2).click();
-        await oppose(1).click();
-        assert.equal(await score(2).getAttribute('aria-pressed'), 'false');
-        assert.equal(await oppose(1).getAttribute('aria-pressed'), 'false');
-        assert.equal(await support(2).getAttribute('aria-pressed'), 'true');
-
-        await support(42).click();
-        assert.equal(await support(42).getAttribute('aria-pressed'), 'true');
+        assert.equal(await support.getAttribute('aria-pressed'), 'true');
+        await support.click();
+        assert.equal(await support.getAttribute('aria-pressed'), 'false');
+        await vote('Support', 42, 1).click();
+        assert.equal(await vote('Support', 42, 1).getAttribute('aria-pressed'), 'true');
         assert.equal(await settings.evaluate(node => node.scrollWidth <= node.clientWidth + 1), true);
         assert.deepEqual(await page.evaluate(() => settingsFixture.state.calls), [
-            { scoringVersion: 1 }, { conditionID: 1, vote: 'support' }, { conditionID: 1, vote: 'oppose' },
-            { conditionID: 2, vote: 'support' }, { scoringVersion: 2 }, { scoringVersion: null },
-            { conditionID: 1, vote: null }, { conditionID: 42, vote: 'support' }
+            { scoringVersion: 1 }, { targetConditionID: 1, sourceConditionID: 2, vote: 'support' },
+            { scoringVersion: 3 }, { targetConditionID: 3, sourceConditionID: 2, vote: 'oppose' },
+            { scoringVersion: null }, { scoringVersion: 1 }, { targetConditionID: 1, sourceConditionID: 2, vote: null },
+            { targetConditionID: 1, sourceConditionID: 42, vote: 'support' }
         ]);
     });
 
-    test(`${engine.name()} ${width}: public settings show neutral community counts and version shares`, async t => {
+    test(`${engine.name()} ${width}: public settings inspect directional community rates without editing`, async t => {
         const page = await pageFor(t, engine, width);
         await page.evaluate(() => mountSettings(true));
         const settings = page.locator('#settings');
-        assert.equal(await settings.getByRole('status').textContent(), 'Read-only');
-        assert.equal(await settings.getByRole('button').count(), 1);
-        assert.equal(await settings.locator('[aria-pressed], [aria-current]').count(), 0);
-        assert.equal(await settings.getByRole('img', { name: '4 votes supporting Evaluation 1 for score estimation', exact: true }).textContent(), '4');
-        assert.equal(await settings.getByRole('img', { name: '2 votes opposing Evaluation 1 for score estimation', exact: true }).textContent(), '2');
-        assert.equal(await settings.getByRole('img', { name: '0 votes opposing Evaluation 2 for score estimation', exact: true }).textContent(), '0');
-        assert.equal(await settings.getByRole('img', { name: '100% community scoring version share', exact: true }).textContent(), '100%');
-        await settings.locator('.bp-version-choice').first().click();
-        await settings.locator('.bp-estimation-vote').first().click();
+        const inspect = conditionID => settings.getByRole('button', { name: `Inspect estimation sources for Evaluation ${conditionID}`, exact: true });
+        const rate = conditionID => settings.locator(`.bp-version-choice-row[data-condition-id="${conditionID}"] .bp-estimation-rate`);
+        assert.match(await settings.getByRole('status').textContent(), /^Read-only\. Choose a version to inspect/);
+        assert.equal(await settings.locator('.bp-version-choice-share').first().textContent(), '100%');
+        assert.equal(await settings.locator('.bp-estimation-rate, [aria-pressed="true"]').count(), 0);
+
+        if (width < 760) await inspect(1).tap();
+        else await inspect(1).press('Space');
+        assert.equal(await inspect(1).getAttribute('aria-pressed'), 'true');
+        assert.match(await settings.getByRole('status').textContent(), /^Read-only\. Inspecting estimation sources for Evaluation 1/);
+        assert.equal(await rate(1).count(), 0);
+        assert.equal(await rate(2).textContent(), '66.67%');
+        assert.match(await rate(2).getAttribute('aria-label'), /4 in support, 2 opposed/);
+        assert.equal(await rate(3).textContent(), 'No votes · Eligible by default');
+        assert.equal(await settings.locator('.bp-estimation-vote').count(), 0);
+        await inspect(3).click();
+        assert.equal(await inspect(1).getAttribute('aria-pressed'), 'false');
+        assert.equal(await rate(2).textContent(), '25%');
+        assert.equal(await rate(3).count(), 0);
+        await inspect(3).click();
+        assert.equal(await settings.locator('.bp-estimation-rate, [aria-pressed="true"]').count(), 0);
         assert.deepEqual(await page.evaluate(() => settingsFixture.state.calls), []);
     });
 }

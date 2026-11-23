@@ -17,8 +17,9 @@ export async function conditionImpact(connection, kind, targetID, conditionID) {
         (SELECT COUNT(*) FROM (
             SELECT pie_ID FROM personal_pie_weights WHERE benchmark_condition_ID = ?
             UNION SELECT ID AS pie_ID FROM personal_pies
-                WHERE JSON_CONTAINS(estimation_votes, JSON_OBJECT('conditionID', CAST(? AS UNSIGNED)))
-        ) AS linked_pies) AS pieCount`, [conditionID, conditionID, conditionID]);
+                WHERE JSON_CONTAINS(estimation_votes, JSON_OBJECT('targetConditionID', CAST(? AS UNSIGNED)))
+                   OR JSON_CONTAINS(estimation_votes, JSON_OBJECT('sourceConditionID', CAST(? AS UNSIGNED)))
+        ) AS linked_pies) AS pieCount`, [conditionID, conditionID, conditionID, conditionID]);
     if (!usage) fail('benchmark_condition_dependency_check_failed', { ID: conditionID });
     return { resultCount: Number(usage.resultCount), pieCount: Number(usage.pieCount) };
 }

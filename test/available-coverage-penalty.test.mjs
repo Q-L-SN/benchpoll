@@ -143,9 +143,9 @@ test('fresh legacy-version requests no longer select archived deduction algorith
             assert.ok(rows.every(row => !Object.hasOwn(row.availableInference, 'coveragePenalty')));
         }
     }
-    assert.equal(AVAILABLE_INFERENCE_VERSION, 9);
-    assert.equal(rankingReadBody('/api/get_weighted_workspace', {}).availableInferenceVersion, 9);
-    for (const version of [1, 2, 5, 6, 8]) assert.equal(rankingReadBody('/api/get_weighted_workspace', { availableInferenceVersion: version }).availableInferenceVersion, 9);
+    assert.equal(AVAILABLE_INFERENCE_VERSION, 10);
+    assert.equal(rankingReadBody('/api/get_weighted_workspace', {}).availableInferenceVersion, 10);
+    for (const version of [1, 2, 5, 6, 8]) assert.equal(rankingReadBody('/api/get_weighted_workspace', { availableInferenceVersion: version }).availableInferenceVersion, 10);
 });
 
 test('workspace validation requires an accurate separate deduction and pre-deduction contribution trace', () => {

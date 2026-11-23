@@ -6,7 +6,8 @@ import { AVAILABLE_INFERENCE_VERSION } from '../../public/js/shared/available-sc
 import { normalizeEstimationAlgorithm } from '../../public/js/shared/estimation-algorithms.js';
 import { familyKey } from '../../public/js/shared/benchmark-families.js';
 import { communityVersionComposition, expandCommunityVersions } from '../../public/js/shared/benchmark-version-choice.js';
-import { normalizeEstimationVotes } from '../../public/js/shared/estimation-votes.js';
+import { compareEstimationVotePairs, estimationVotePairKey, normalizeEstimationVotes } from '../../public/js/shared/estimation-votes.js';
+import { excludedFromRanking } from '../../public/js/shared/aa-ranking-policy.js';
 import { createVersionEstimationPlanner } from '../../public/js/shared/version-estimation-policy.js';
 // Synthetic records for the isolated frontend harness; never imported by the app.
 const fixtureRankingPager = createRankingPager();
@@ -53,18 +54,39 @@ export const models = modelNames.map((name, index) => ({
     lower: 86.2 - index * 3.75, upper: 92.2 - index * 2.1, coverage: 94 - index * 2,
     resultCount: 7, fallbackUsageCount: 0
 }));
-export function weightedEntries(weights) {
-    return weights.map(entry => ({ ...[...benchmarks, secondaryBenchmark, sparseBenchmark, ...mixedAABenchmarks].find(item => item.conditionID === entry.conditionID), ...entry, weight: entry.weightBasisPoints / 100 }));
+export function weightedEntries(weights, conditions = [...benchmarks, secondaryBenchmark, sparseBenchmark, ...mixedAABenchmarks]) {
+    return weights.map(entry => ({ ...conditions.find(item => item.conditionID === entry.conditionID), ...entry, weight: entry.weightBasisPoints / 100 }));
 }
 export function familyEntries(entries) {
     const catalogue = [...benchmarks, secondaryBenchmark, sparseBenchmark];
     return entries.map(entry => ({ ...catalogue.find(item => item.conditionID === entry.conditionID), ...entry }));
 }
-function fixtureEstimationVotes(votes, entries, groupsByCondition, strict = false) {
-    const weightedBenchmarks = new Set(entries.map(entry => groupsByCondition.get(entry.conditionID)));
-    return normalizeEstimationVotes(votes).filter(({ conditionID }) => {
-        if (groupsByCondition.has(conditionID) && weightedBenchmarks.has(groupsByCondition.get(conditionID))) return true;
-        if (strict) throw { status: 400, body: { error: 'estimation_vote_condition_unavailable', conditionID } };
+export function fixtureBenchmarkRows(state) {
+    const extraBenchmarks = state.rankingStress ? Array.from({ length: 85 }, (_, index) => ({
+        ...benchmarks[0], ID: index + 9, conditionID: index + 9, benchmarkID: index + 109,
+        rank: index + 9, name: `Additional benchmark ${index + 1}`,
+        publicWeight: 0, personalWeight: null
+    })) : [];
+    const sparseBenchmarks = state.sparseBenchmark ? [{ ...sparseBenchmark, rank: 8 }] : [];
+    const secondaryBenchmarks = state.secondaryBenchmark ? [{ ...secondaryBenchmark, rank: 8 }] : [];
+    const aaBenchmarks = state.aaBenchmarks ? [{ ...benchmarks[0], ID: 9901, conditionID: 9901, benchmarkID: 9902,
+        name: 'AA Example', rank: 9, excludedFromRanking: true, publicWeight: 0, personalWeight: null }] : [];
+    return [...benchmarks, ...extraBenchmarks, ...secondaryBenchmarks, ...sparseBenchmarks, ...aaBenchmarks,
+        ...(state.mixedAABenchmarks ? mixedAABenchmarks : []), ...(state.additionalBenchmarkVersions ?? [])];
+}
+export function fixtureEstimationVotes(votes, entries, conditions, strict = false) {
+    let normalized;
+    try { normalized = normalizeEstimationVotes(votes); }
+    catch { throw { status: 400, body: { error: 'invalid_estimation_votes' } }; }
+    if (!normalized.length) return normalized;
+    const groupsByCondition = new Map(conditions.filter(row => row.conditionID > 0 && !excludedFromRanking(row))
+        .map(row => [row.conditionID, row.benchmarkID]));
+    const weightedBenchmarks = new Set(entries.filter(entry => entry.weightBasisPoints > 0)
+        .map(entry => groupsByCondition.get(entry.conditionID)));
+    return normalized.filter(({ targetConditionID, sourceConditionID }) => {
+        const benchmarkID = groupsByCondition.get(targetConditionID);
+        if (benchmarkID !== undefined && benchmarkID === groupsByCondition.get(sourceConditionID) && weightedBenchmarks.has(benchmarkID)) return true;
+        if (strict) throw { status: 400, body: { error: 'estimation_vote_condition_unavailable', targetConditionID, sourceConditionID } };
         return false;
     });
 }
@@ -91,21 +113,14 @@ export function workspace(state, body, { paginate = true } = {}) {
     const publicEmpty = state.empty || publicWeights.length === 0;
     const preview = body.previewPersonalPie ?? null;
     const estimationVoting = state.estimationSources || Object.hasOwn(state, 'communityEstimationVotes') || Object.hasOwn(state, 'personalEstimationVotes');
+    const versionChoices = state.communityVersions || estimationVoting;
+    const benchmarkRows = fixtureBenchmarkRows(state);
     const personalEntries = preview
-        ? weightedEntries(preview.entries)
+        ? weightedEntries(preview.entries, benchmarkRows)
         : state.empty || !state.authenticated ? [] : state.personalEntries;
     const personalFallbackRules = estimationVoting ? [] : preview
         ? preview.fallbackRules.map(rule => ({ ...rule, entries: familyEntries(rule.entries, rule.primaryConditionID) }))
         : state.empty || !state.authenticated ? [] : state.fallbackRules;
-    const extraBenchmarks = state.rankingStress ? Array.from({ length: 85 }, (_, index) => ({
-        ...benchmarks[0], ID: index + 9, conditionID: index + 9, benchmarkID: index + 109,
-        rank: index + 9, name: `Additional benchmark ${index + 1}`,
-        publicWeight: 0, personalWeight: null
-    })) : [];
-    const sparseBenchmarks = state.sparseBenchmark ? [{ ...sparseBenchmark, rank: 8 }] : [];
-    const secondaryBenchmarks = state.secondaryBenchmark ? [{ ...secondaryBenchmark, rank: 8 }] : [];
-    const aaBenchmarks = state.aaBenchmarks ? [{ ...benchmarks[0], ID: 9901, conditionID: 9901, benchmarkID: 9902,
-        name: 'AA Example', rank: 9, excludedFromRanking: true, publicWeight: 0, personalWeight: null }] : [];
     const extraModels = state.rankingStress ? Array.from({ length: 58 }, (_, index) => ({
         ...models[0], ID: index + 1001, modelID: index + 2001,
         name: `Additional model ${index + 1}`, lower: 58 - index,
@@ -135,14 +150,13 @@ export function workspace(state, body, { paginate = true } = {}) {
                 { categoryID: 3, name: 'Coding', pieCount: 16, weightBasisPoints: 1250 }
             ] : [{ categoryID: category.ID, name: category.name, pieCount: 128, weightBasisPoints: 10000 }])
                 .map(source => publicEmpty ? { ...source, pieCount: 0, weightBasisPoints: 0 } : source),
-            entries: publicEmpty ? [] : weightedEntries(publicWeights) },
-        benchmarks: state.empty ? [] : [...benchmarks, ...extraBenchmarks, ...secondaryBenchmarks, ...sparseBenchmarks, ...aaBenchmarks,
-            ...(state.mixedAABenchmarks ? mixedAABenchmarks : []), ...(state.additionalBenchmarkVersions ?? [])].map(benchmark => ({
+            entries: publicEmpty ? [] : weightedEntries(publicWeights, benchmarkRows) },
+        benchmarks: state.empty ? [] : benchmarkRows.map(benchmark => ({
             ...benchmark,
             publicWeightBasisPoints: publicWeights.find(entry => entry.conditionID === benchmark.conditionID)?.weightBasisPoints ?? 0,
             publicWeight: (publicWeights.find(entry => entry.conditionID === benchmark.conditionID)?.weightBasisPoints ?? 0) / 100,
             personalWeight: personalEntries.find(entry => entry.conditionID === benchmark.conditionID)?.weight ?? null,
-            ...(state.communityVersions ? { personalWeightBasisPoints: personalEntries.find(entry => entry.conditionID === benchmark.conditionID)?.weightBasisPoints ?? null } : {})
+            ...(versionChoices ? { personalWeightBasisPoints: personalEntries.find(entry => entry.conditionID === benchmark.conditionID)?.weightBasisPoints ?? null } : {})
         })),
         comparison: options ?? { mode: body.comparison?.mode ?? 'best', keys: body.comparison?.keys ?? ['model'], controlKeys: body.comparison?.controlKeys ?? null,
             filters: body.comparison?.filters ?? [], availableKeys: ['model', 'field:1', 'field:2', 'field:3'], fields: catalog().scoreFields,
@@ -150,20 +164,28 @@ export function workspace(state, body, { paginate = true } = {}) {
         modelLeaderboards: { public: [], personal: [] },
         scoreScale: { min: 0, max: 100 }, limits: { totalBasisPoints: 10000, maxPieItems: 100 }, serverTime: new Date().toISOString()
     };
-    const groupsByCondition = new Map(data.benchmarks.filter(row => !row.excludedFromRanking && row.conditionID > 0)
-        .map(row => [row.conditionID, row.benchmarkID]));
-    const savedVotes = state.empty ? [] : fixtureEstimationVotes(state.personalEstimationVotes ?? [], state.personalEntries, groupsByCondition);
-    const communityVotesByID = new Map((state.isPrivate ? [] : state.communityEstimationVotes ?? [])
-        .map(item => [item.conditionID, { ...item }]));
-    if (!state.isPrivate) for (const { conditionID, vote } of savedVotes) {
-        const count = communityVotesByID.get(conditionID) ?? { conditionID, supportCount: 0, opposeCount: 0 };
+    const savedVotes = state.empty ? [] : fixtureEstimationVotes(state.personalEstimationVotes ?? [], state.personalEntries, data.benchmarks);
+    const communityVotesByPair = new Map((state.isPrivate || state.empty ? [] : state.communityEstimationVotes ?? [])
+        .map(item => [estimationVotePairKey(item.targetConditionID, item.sourceConditionID), { ...item }]));
+    if (!state.isPrivate) for (const { targetConditionID, sourceConditionID, vote } of savedVotes) {
+        const pair = estimationVotePairKey(targetConditionID, sourceConditionID);
+        const count = communityVotesByPair.get(pair) ?? { targetConditionID, sourceConditionID, supportCount: 0, opposeCount: 0 };
         count[`${vote}Count`]++;
-        communityVotesByID.set(conditionID, count);
+        communityVotesByPair.set(pair, count);
     }
-    const communityVotes = [...communityVotesByID.values()].sort((left, right) => left.conditionID - right.conditionID);
+    const communityVotes = [...communityVotesByPair.values()].sort(compareEstimationVotePairs);
     const explicitBallot = preview && Object.hasOwn(preview, 'estimationVotes');
     const personalVotes = fixtureEstimationVotes(explicitBallot ? preview.estimationVotes : state.authenticated ? savedVotes : [],
-        personalEntries, groupsByCondition, explicitBallot);
+        personalEntries, data.benchmarks, explicitBallot);
+    if (versionChoices) {
+        data.versionComposition = communityVersionComposition(new Map([
+            ...(state.versionVoters ?? []),
+            ...(state.authenticated ? [[state.userID, { entries: state.personalEntries }]] : [])
+        ]), data.benchmarks);
+        data.publicPie.entries = data.publicPie.entries.map(entry => entry.conditionID > 0 ? { ...entry, followCommunityVersion: true } : entry);
+        data.personalPie.effectiveEntries = weightedEntries(expandCommunityVersions(personalEntries, data.versionComposition), benchmarkRows);
+        data.publicPie.effectiveEntries = weightedEntries(expandCommunityVersions(data.publicPie.entries, data.versionComposition), benchmarkRows);
+    }
     data.personalPie.communityFallbackComposition = personalEntries.map(entry => {
         const group = data.publicPie.familyComposition.find(group => group.primaryConditionID === entry.conditionID)
             ?? { primaryConditionID: entry.conditionID, configuredPieCount: 0, isDefault: true,
@@ -173,10 +195,10 @@ export function workspace(state, body, { paginate = true } = {}) {
     });
     const estimationPlans = estimationVoting ? createVersionEstimationPlanner(data.benchmarks) : null;
     data.modelLeaderboards = options ? {
-        public: scoreComparison(state.comparisonModels, estimationPlans?.(publicWeights, communityVotes) ?? publicWeights, 10000, {
+        public: scoreComparison(state.comparisonModels, estimationPlans?.(data.publicPie.effectiveEntries, communityVotes) ?? publicWeights, 10000, {
             scoreMode, estimationAlgorithm, availableInferenceVersion: body.availableInferenceVersion ?? AVAILABLE_INFERENCE_VERSION, fallbackScope: 'public', familyComposition: data.publicPie.familyComposition
         }, options),
-        personal: scoreComparison(state.comparisonModels, estimationPlans?.(personalEntries, communityVotes, personalVotes) ?? personalEntries, 10000, { fallbackRules: personalFallbackRules,
+        personal: scoreComparison(state.comparisonModels, estimationPlans?.(data.personalPie.effectiveEntries, communityVotes, personalVotes) ?? personalEntries, 10000, { fallbackRules: personalFallbackRules,
             familyComposition: data.personalPie.communityFallbackComposition, scoreMode, estimationAlgorithm,
             availableInferenceVersion: body.availableInferenceVersion ?? AVAILABLE_INFERENCE_VERSION }, options)
     } : {
@@ -220,14 +242,7 @@ export function workspace(state, body, { paginate = true } = {}) {
     if (options) for (const mode of ['personal', 'public']) for (const model of data.modelLeaderboards[mode]) {
         for (const score of model.calculationScores) score.memberEvidence = [...new Set(score.memberIDs)].map(ID => ({ ID, hash: 'f'.repeat(64) }));
     }
-    if (state.communityVersions) {
-        data.versionComposition = communityVersionComposition(new Map([
-            ...(state.versionVoters ?? []),
-            ...(state.authenticated ? [[state.userID, { entries: state.personalEntries }]] : [])
-        ]), data.benchmarks.filter(row => !row.isFamily));
-        data.personalPie.effectiveEntries = weightedEntries(expandCommunityVersions(personalEntries, data.versionComposition));
-        data.publicPie.entries = data.publicPie.entries.map(entry => ({ ...entry, followCommunityVersion: true }));
-        data.publicPie.effectiveEntries = weightedEntries(expandCommunityVersions(data.publicPie.entries, data.versionComposition));
+    if (versionChoices && !estimationVoting) {
         const compositionFor = entries => {
             const weights = new Map();
             for (const entry of entries) weights.set(entry.conditionID, (weights.get(entry.conditionID) ?? 0) + entry.weightBasisPoints);

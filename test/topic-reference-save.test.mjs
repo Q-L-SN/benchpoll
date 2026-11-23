@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { randomUUID } from 'node:crypto';
 import { loadPersonalPie, savePersonalPie } from '../ranking-service.js';
-import { createPieSaveDatabase } from '../scripts/personal-pie-save-fixture.mjs';
+import { createPieSaveDatabase, pieConditionRows } from '../scripts/personal-pie-save-fixture.mjs';
 
 const weight = (conditionID, weightBasisPoints = 10000) => ({ conditionID, weightBasisPoints });
 const request = (extra = {}) => ({ userID: '7', writeIdentity: randomUUID(), categoryID: 1,
@@ -11,6 +11,10 @@ const error = code => value => {
     assert.equal(value.body?.error, code, value.message ?? JSON.stringify(value)); return true;
 };
 const order = entries => [...entries].sort((a, b) => a.conditionID - b.conditionID);
+const estimationVote = (targetConditionID, sourceConditionID, vote) => ({ targetConditionID, sourceConditionID, vote });
+const conditionRows = [...pieConditionRows, ...[pieConditionRows[0], pieConditionRows[2]].map(row => ({
+    ...row, condition_ID: row.condition_ID + 10, condition_key: 'extended', condition_name: 'Extended', is_default: 0, is_primary: 0
+}))];
 
 function database({ seedReferences = true, ...options } = {}) {
     const sourcePies = options.pies ?? (options.revision === 0 ? [] : [{ ID: 70, user_ID: '7', context_ID: 10,
@@ -32,13 +36,13 @@ function database({ seedReferences = true, ...options } = {}) {
         scenes: [{ context_ID: 50, category_ID: 5, name: 'General', is_default: 1 },
             { context_ID: 51, category_ID: 5, name: 'Focused' },
             { context_ID: 53, category_ID: 5, name: 'Retired', is_active: 0 }],
-        ...options, pies: [...sourcePies, ...targetPies]
+        conditionRows, ...options, pies: [...sourcePies, ...targetPies]
     });
 }
 
 test('mixed weights commit to separate tables and loadPersonalPie projects stable negative context IDs', async () => {
     const db = database(), entries = [weight(1, 6000), weight(-20, 2500), weight(-51, 1500)];
-    const estimationVotes = [{ conditionID: 1, vote: 'support' }];
+    const estimationVotes = [estimationVote(1, 11, 'support')];
     const receipt = await savePersonalPie(db, request({ entries, estimationVotes }));
     assert.equal(receipt.personalPie.revision, 2);
     assert.deepEqual(db.stored.weights, [weight(1, 6000)]);
@@ -65,7 +69,7 @@ test('a pure-reference pie is stored without fabricated benchmark weights or est
 
 test('replacement clears old reference rows and discards votes for benchmarks no longer weighted', async () => {
     const db = database();
-    const estimationVotes = [{ conditionID: 1, vote: 'oppose' }];
+    const estimationVotes = [estimationVote(1, 11, 'oppose')];
     await savePersonalPie(db, request({ entries: [weight(1, 5000), weight(-20, 5000)], estimationVotes }));
     assert.deepEqual((await loadPersonalPie(db, 10, '7')).estimationVotes, estimationVotes);
     const replacement = await savePersonalPie(db, request({ expectedRevision: 2, entries: [weight(-51)] }));
@@ -81,7 +85,7 @@ test('replacement clears old reference rows and discards votes for benchmarks no
 test('dropping an estimation vote preserves distinct votes on another mixed pie', async () => {
     const db = database();
     const entries = [weight(1, 5000), weight(-51, 5000)];
-    const estimationVotes = [{ conditionID: 1, vote: 'support' }];
+    const estimationVotes = [estimationVote(1, 11, 'support')];
     await savePersonalPie(db, request({ entries, estimationVotes }));
     await savePersonalPie(db, request({ categoryID: 2, userID: '8', expectedRevision: 0, entries, estimationVotes }));
     await savePersonalPie(db, request({ expectedRevision: 2, entries: [weight(-51)] }));
@@ -95,9 +99,9 @@ for (const [name, options, message] of [
 ]) test(`${name} failure rolls back both weight tables, revision, estimation votes, and write intent`, async () => {
     const db = database({ ...options, pies: [{ ID: 70, user_ID: '7', context_ID: 10, revision: 4,
         weights: [weight(1, 6000)], topicWeights: [{ targetContextID: 20, weightBasisPoints: 4000 }],
-        estimation_votes: [{ conditionID: 1, vote: 'oppose' }] }] }), before = db.stored;
+        estimation_votes: [estimationVote(1, 11, 'oppose')] }] }), before = db.stored;
     await assert.rejects(savePersonalPie(db, request({ expectedRevision: 4, entries: [weight(3, 6000), weight(-51, 4000)],
-        estimationVotes: [{ conditionID: 3, vote: 'support' }] })), message);
+        estimationVotes: [estimationVote(3, 13, 'support')] })), message);
     assert.deepEqual(db.stored, before);
     assert.equal(db.mutations, 0); assert.equal(db.commits, 0);
     assert.equal(db.events.at(-2), 'rollback');
@@ -228,8 +232,8 @@ test('mixed totals, duplicate reference IDs and reference-only estimation votes 
         [{ entries: [weight(1, 6000), weight(-20, 5000)] }, 'pie_total_must_equal_100_percent'],
         [{ entries: [weight(-20, 5000), weight(-20, 5000)] }, 'invalid_pie_entry'],
         [{ entries: [weight(0)] }, 'invalid_pie_entry'],
-        [{ estimationVotes: [{ conditionID: 1, vote: 'support' }] }, 'estimation_vote_condition_unavailable'],
-        [{ entries: [weight(1)], estimationVotes: [{ conditionID: -20, vote: 'support' }] }, 'invalid_estimation_votes']
+        [{ estimationVotes: [estimationVote(1, 11, 'support')] }, 'estimation_vote_condition_unavailable'],
+        [{ entries: [weight(1)], estimationVotes: [estimationVote(1, -20, 'support')] }, 'invalid_estimation_votes']
     ]) {
         const db = database();
         await assert.rejects(savePersonalPie(db, request(extra)), error(code));

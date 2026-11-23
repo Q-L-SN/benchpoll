@@ -13,6 +13,6 @@ test('impact counts distinct personal mixes and checks condition ownership befor
     assert.deepEqual(await conditionImpact(connection, 'benchmark', 10, 1), { resultCount: 5, pieCount: 2 });
     assert.deepEqual(statements[0].params, [1, 10]);
     assert.match(statements[1].sql, /UNION SELECT ID AS pie_ID FROM personal_pies/);
-    assert.match(statements[1].sql, /JSON_CONTAINS\(estimation_votes, JSON_OBJECT\('conditionID', CAST\(\? AS UNSIGNED\)\)\)/);
-    assert.deepEqual(statements[1].params, [1, 1, 1]);
+    assert.match(statements[1].sql, /JSON_CONTAINS\(estimation_votes, JSON_OBJECT\('targetConditionID', CAST\(\? AS UNSIGNED\)\)\)\s+OR JSON_CONTAINS\(estimation_votes, JSON_OBJECT\('sourceConditionID', CAST\(\? AS UNSIGNED\)\)\)/);
+    assert.deepEqual(statements[1].params, [1, 1, 1, 1]);
 });

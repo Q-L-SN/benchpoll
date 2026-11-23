@@ -105,7 +105,7 @@ test('both startup paths request version-based scoring without reading a retired
             try {
                 await tick(); await tick();
                 const request = JSON.parse(calls.find(call => call.url === '/api/get_weighted_workspace').options.body);
-                assert.equal(request.availableInferenceVersion, 9);
+                assert.equal(request.availableInferenceVersion, 10);
                 assert.ok(await reads.take('/api/get_weighted_workspace', { ...body, availableInferenceVersion: 4 }));
             } finally { reads.stop(); }
         }

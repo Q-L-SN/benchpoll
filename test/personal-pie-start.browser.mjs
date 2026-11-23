@@ -137,9 +137,10 @@ for (const [engine, width] of [[chromium, 1440], [webkit, 390]]) {
 }
 
 test('resetting clears personal ballots only after confirmation and Undo restores them', async t => {
-    const votes = [{ conditionID: 901, vote: 'oppose' }];
+    const votes = [{ targetConditionID: 1, sourceConditionID: 901, vote: 'oppose' }];
     const { fixture, page, save, saves, overlay } = await setup(t, chromium, 1440, { secondaryBenchmark: true,
-        personalEstimationVotes: votes, communityEstimationVotes: [{ conditionID: 901, supportCount: 5, opposeCount: 2 }] });
+        personalEstimationVotes: votes,
+        communityEstimationVotes: [{ targetConditionID: 1, sourceConditionID: 901, supportCount: 5, opposeCount: 2 }] });
     await page.locator('#pie-mode-personal').click();
     const original = structuredClone(fixture.state.personalEntries);
     await page.locator('#workspace-reset').click();

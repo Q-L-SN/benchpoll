@@ -53,13 +53,13 @@ test('the live score trace includes the full unresolved weight and leaves ranges
         scoreModels(models, weights, 10000, { scoreMode: 'range', availableInferenceVersion: 4 }));
 });
 
-test('coverage has no preference API and all supported stale request versions upgrade to v9', () => {
+test('coverage has no preference API and all supported stale request versions upgrade to the current version', () => {
     assert.deepEqual(Object.keys(coveragePenalty).sort(), ['RATIONAL_COVERAGE_A', 'coverageMultiplier']);
-    assert.equal(AVAILABLE_INFERENCE_VERSION, 9);
-    assert.equal(createWorkspaceState().availableInferenceVersion, 9);
-    assert.equal(normalizeAvailableInferenceVersion(), 9);
-    for (const version of [1, 2, 3, 4, 5, 6, 7, 8]) assert.equal(normalizeAvailableInferenceVersion(version), 9);
-    for (const version of [0, 10, '5', null, NaN]) assert.throws(() => normalizeAvailableInferenceVersion(version));
+    assert.equal(AVAILABLE_INFERENCE_VERSION, 10);
+    assert.equal(createWorkspaceState().availableInferenceVersion, 10);
+    assert.equal(normalizeAvailableInferenceVersion(), 10);
+    for (const version of [1, 2, 3, 4, 5, 6, 7, 8, 9]) assert.equal(normalizeAvailableInferenceVersion(version), 10);
+    for (const version of [0, 11, '5', null, NaN]) assert.throws(() => normalizeAvailableInferenceVersion(version));
 });
 
 test('the fresh inference API cannot opt back into the retired formula', () => {
@@ -87,7 +87,7 @@ test('stored v4 evidence is still validated with its recorded factors, independe
     assert.throws(() => validateWorkspacePayload(changed), /Invalid workspace response/);
 });
 
-test('fresh and stale Home requests share the v9 cache and pagination, including concurrent reads', async () => {
+test('fresh and stale Home requests share the current cache and pagination, including concurrent reads', async () => {
     const versions = [];
     const db = { async execute(sql, parameters) {
         assert.match(sql, /SELECT ID FROM categories WHERE ID IN/);
@@ -103,10 +103,10 @@ test('fresh and stale Home requests share the v9 cache and pagination, including
     const [fresh, stale, explicit] = await Promise.all([service.preview(null, { categoryID: 54 }),
         service.preview(null, { categoryID: 54, availableInferenceVersion: 4 }),
         service.preview(null, { categoryID: 54, availableInferenceVersion: 5 })]);
-    assert.deepEqual(versions, [9]);
+    assert.deepEqual(versions, [AVAILABLE_INFERENCE_VERSION]);
     assert.equal(fresh, stale); assert.equal(fresh, explicit);
-    assert.equal(fresh.models[0].lower, 9);
+    assert.equal(fresh.models[0].lower, AVAILABLE_INFERENCE_VERSION);
     const page = await service.preview(null, { categoryID: 54, availableInferenceVersion: 4, snapshotID: fresh.pagination.snapshotID });
     assert.equal(page.pagination.snapshotID, fresh.pagination.snapshotID);
-    for (const value of [0, 10, '5', null]) assert.throws(() => normalizeTopicPreview({ categoryID: 54, availableInferenceVersion: value }));
+    for (const value of [0, 11, '5', null]) assert.throws(() => normalizeTopicPreview({ categoryID: 54, availableInferenceVersion: value }));
 });

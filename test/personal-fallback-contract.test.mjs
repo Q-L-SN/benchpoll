@@ -16,8 +16,9 @@ test('ordered families replace weighted component storage and retain entrance-we
     assert.doesNotMatch(ranking, /personal_pie_score_rule_components/);
 });
 
-test('personal previews accept independent source opinions with an explicit scoring version or community versions', () => {
-    const estimationVotes = [{ conditionID: 1, vote: 'oppose' }, { conditionID: 2, vote: 'support' }];
+test('personal previews accept directed source opinions with an explicit scoring version or community versions', () => {
+    const estimationVotes = [{ targetConditionID: 1, sourceConditionID: 2, vote: 'support' },
+        { targetConditionID: 2, sourceConditionID: 1, vote: 'oppose' }];
     for (const selection of [{}, { followCommunityVersion: true }]) {
         const entries = [{ conditionID: 1, weightBasisPoints: 10000, ...selection }];
         assert.deepEqual(normalizePreviewPersonalPie({ entries, estimationVotes }), { entries, estimationVotes });
@@ -27,7 +28,7 @@ test('personal previews accept independent source opinions with an explicit scor
 
 test('a personal preview rejects contradictory votes and never treats a topic as a version', () => {
     const entries = [{ conditionID: 1, weightBasisPoints: 10000 }];
-    const vote = { conditionID: 2, vote: 'support' };
+    const vote = { targetConditionID: 1, sourceConditionID: 2, vote: 'support' };
     assert.throws(() => normalizePreviewPersonalPie({ entries, estimationVotes: [vote, { ...vote, vote: 'oppose' }] }),
         error => error.body.error === 'invalid_estimation_votes');
     assert.throws(() => normalizePreviewPersonalPie({ entries: [{ conditionID: -10, weightBasisPoints: 10000 }], estimationVotes: [vote] }),

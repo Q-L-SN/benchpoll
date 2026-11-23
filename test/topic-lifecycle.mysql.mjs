@@ -27,7 +27,10 @@ test('private editing, publication cap, persistent aliases and favorites in isol
     assert.deepEqual(topic.scenes.map(scene => ({ ID: scene.ID, number: scene.sceneNumber })), initialScenes.reverse());
     assert.equal(topic.scenes[0].url, `/private/${topic.privateID}/2`);
     await assert.rejects(savePrivateTopic(db, '42', changes, randomUUID()), rejects('private_topic_changed'));
-    const estimationVotes = [{ conditionID: 1, vote: 'support' }];
+    await db.execute(`INSERT INTO benchmark_conditions
+        (ID, benchmark_ID, condition_key, name, score_direction, uses_percentage_scale)
+        VALUES (4, 1, 'extended', 'Extended', 'higher', 1)`);
+    const estimationVotes = [{ targetConditionID: 1, sourceConditionID: 4, vote: 'support' }];
     await savePersonalPie(db, { userID: '42', writeIdentity: randomUUID(), categoryID: topic.ID,
         contextValues: { scene: String(topic.defaultContextID) }, expectedRevision: 0,
         entries: [{ conditionID: 1, weightBasisPoints: 10000 }], estimationVotes });

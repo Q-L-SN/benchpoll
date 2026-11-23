@@ -1,4 +1,5 @@
 import { excludedFromRanking } from './aa-ranking-policy.js';
+import { estimationVotePairKey } from './estimation-votes.js';
 
 // The catalogue is shared across a ranking read. Ballots belong to the scene that
 // supplied the weight, including when that scene is reached through another topic.
@@ -17,15 +18,16 @@ export function createVersionEstimationPlanner(conditions) {
 
     return (entries, communityVotes = [], personalVotes = []) => {
         const blocked = new Set(communityVotes.filter(row => row.opposeCount > row.supportCount)
-            .map(row => row.conditionID));
-        for (const { conditionID, vote } of personalVotes) {
-            if (vote === 'oppose') blocked.add(conditionID);
-            else if (vote === 'support') blocked.delete(conditionID);
+            .map(row => estimationVotePairKey(row.targetConditionID, row.sourceConditionID)));
+        for (const { targetConditionID, sourceConditionID, vote } of personalVotes) {
+            const pair = estimationVotePairKey(targetConditionID, sourceConditionID);
+            if (vote === 'oppose') blocked.add(pair);
+            else if (vote === 'support') blocked.delete(pair);
         }
         const sources = new Map();
         return entries.map(({ conditionID, weightBasisPoints }) => {
             if (!sources.has(conditionID)) sources.set(conditionID, (siblingsByID.get(conditionID) ?? [])
-                .filter(ID => ID !== conditionID && !blocked.has(ID)));
+                .filter(ID => ID !== conditionID && !blocked.has(estimationVotePairKey(conditionID, ID))));
             return { conditionID, weightBasisPoints, estimationSourceIDs: sources.get(conditionID) };
         });
     };

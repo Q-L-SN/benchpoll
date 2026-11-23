@@ -208,7 +208,7 @@ test('a personal page already in flight cannot append results after a new source
     const page = h.api.loadPage('personal');
     await waitFor(() => h.requests.length === 1);
     assert.ok(h.requests[0].payload.items.length > 0);
-    h.state.personalEstimationVotes = [{ conditionID: 1, vote: 'oppose' }];
+    h.state.personalEstimationVotes = [{ targetConditionID: 1, sourceConditionID: 901, vote: 'oppose' }];
     h.state.personalEditVersion++;
     h.state.personalRankingDirty = true;
     h.requests[0].resolve(h.requests[0].payload);

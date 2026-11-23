@@ -50,7 +50,7 @@ test('a restricted primary does not block saving an independent version or its c
     await assert.rejects(save([{ conditionID: 1, weightBasisPoints: 10000 }]), excluded);
     await assert.rejects(save([{ conditionID: 2, weightBasisPoints: 10000, followCommunityVersion: true }]), excluded);
     await assert.rejects(save([{ conditionID: 4, weightBasisPoints: 10000 }],
-        [{ conditionID: 1, vote: 'support' }]), error => error.body?.error === 'estimation_vote_condition_unavailable');
+        [{ targetConditionID: 4, sourceConditionID: 1, vote: 'support' }]), error => error.body?.error === 'estimation_vote_condition_unavailable');
     await save([{ conditionID: available.conditionID, weightBasisPoints: 10000, followCommunityVersion: true }]);
     const saved = await read();
     validateWorkspacePayload(createRankingPager().create(saved));

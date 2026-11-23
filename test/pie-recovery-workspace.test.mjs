@@ -146,35 +146,42 @@ test('an account switch between verified read phases cannot restore or write eit
 test('a recovered vote save replays its acknowledged ballot before submitting the newer choice', async t => {
     const fixture = createFixtureState({ userID: '7', communityVersions: true, secondaryBenchmark: true, personalEstimationVotes: [] });
     const first = await createPieRecoveryHarness({ fixture }); t.after(() => first.close()); await first.load();
-    const oppose = [{ conditionID: 901, vote: 'oppose' }], support = [{ conditionID: 901, vote: 'support' }];
+    const oppose = [{ targetConditionID: 1, sourceConditionID: 901, vote: 'oppose' }];
+    const updated = [...oppose, { targetConditionID: 901, sourceConditionID: 1, vote: 'support' }];
     first.edit({ ...draft(6000), estimationVotes: oppose });
     const saving = first.save(); await first.drain(); first.commit(0);
-    first.edit({ ...draft(6000), estimationVotes: support });
+    const alternate = { ...draft(6000), entries: [{ conditionID: 901, weightBasisPoints: 6000 }, ...draft(6000).entries.slice(1)] };
+    first.edit({ ...alternate, estimationVotes: updated });
     const next = await createPieRecoveryHarness({ fixture, storage: first.storage, receipts: first.receipts });
     t.after(() => next.close()); await next.load();
-    assert.deepEqual(plain(next.state.personalEstimationVotes), support);
-    assert.deepEqual(plain(next.state.communityEstimationVotes), [{ conditionID: 901, supportCount: 0, opposeCount: 1 }]);
-    assert.deepEqual(next.reads.at(-1).previewPersonalPie.estimationVotes, support);
+    const initialCount = { targetConditionID: 1, sourceConditionID: 901, supportCount: 0, opposeCount: 1 };
+    assert.deepEqual(plain(next.state.personalEstimationVotes), updated);
+    assert.deepEqual(plain(next.state.communityEstimationVotes), [initialCount]);
+    assert.deepEqual(next.reads.at(-1).previewPersonalPie.estimationVotes, updated);
     assert.equal(next.writes.length, 0);
     const confirm = next.confirm(); await next.drain();
     assert.equal(next.writes[0].key, first.writes[0].key);
     assert.deepEqual(next.writes[0].body.estimationVotes, oppose);
     await next.acknowledge(0);
     assert.notEqual(next.writes[1].key, first.writes[0].key);
-    assert.deepEqual(next.writes[1].body.estimationVotes, support);
+    assert.deepEqual(next.writes[1].body.estimationVotes, updated);
     await next.acknowledge(1); await confirm;
-    assert.deepEqual(plain(next.state.personalEstimationVotes), support);
-    assert.deepEqual(plain(next.state.communityEstimationVotes), [{ conditionID: 901, supportCount: 1, opposeCount: 0 }]);
+    assert.deepEqual(plain(next.state.personalEstimationVotes), updated);
+    assert.deepEqual(plain(next.state.communityEstimationVotes), [initialCount,
+        { targetConditionID: 901, sourceConditionID: 1, supportCount: 1, opposeCount: 0 }]);
     assert.equal(next.recovery.lookup('7', 1, context), null);
     await first.fail(0); assert.equal(await saving, false);
 });
 
-test('guest ballot recovery stays a preview until the signed-in user confirms it', async t => {
+test('guest ballots for different targets stay a preview until the signed-in user confirms them', async t => {
     const storage = createRecoveryMemoryStorage();
-    const fixture = createFixtureState({ authenticated: false, communityVersions: true, secondaryBenchmark: true, personalEstimationVotes: [] });
+    const fixture = createFixtureState({ authenticated: false, communityVersions: true, secondaryBenchmark: true,
+        sparseBenchmark: true, personalEstimationVotes: [] });
     const guest = await createPieRecoveryHarness({ storage, fixture, ownerID: null }); t.after(() => guest.close()); await guest.load();
-    const estimationVotes = [{ conditionID: 901, vote: 'oppose' }];
-    guest.edit({ ...draft(6000), estimationVotes }); assert.equal(await guest.save(), true);
+    const estimationVotes = [{ targetConditionID: 1, sourceConditionID: 901, vote: 'oppose' },
+        { targetConditionID: 900, sourceConditionID: 901, vote: 'support' }];
+    const entries = [{ conditionID: 1, weightBasisPoints: 6000, followCommunityVersion: true }, { conditionID: 2, weightBasisPoints: 4000 }];
+    guest.edit({ entries, fallbackRules: [], estimationVotes }); assert.equal(await guest.save(), true);
     assert.deepEqual(guest.guestDrafts.get(key).estimationVotes, estimationVotes);
     assert.deepEqual(plain(guest.state.communityEstimationVotes), []);
     const next = await createPieRecoveryHarness({ storage, fixture: { ...fixture, authenticated: true, userID: '7' } });
@@ -186,14 +193,44 @@ test('guest ballot recovery stays a preview until the signed-in user confirms it
     assert.equal(next.guestDrafts.get(key), null);
     assert.deepEqual(next.writes[0].body.estimationVotes, estimationVotes);
     await next.acknowledge(0); await confirm;
-    assert.deepEqual(plain(next.state.communityEstimationVotes), [{ conditionID: 901, supportCount: 0, opposeCount: 1 }]);
+    assert.deepEqual(next.writes[0].body.entries, entries);
+    assert.deepEqual(plain(next.state.communityEstimationVotes), [
+        { targetConditionID: 1, sourceConditionID: 901, supportCount: 0, opposeCount: 1 },
+        { targetConditionID: 900, sourceConditionID: 901, supportCount: 1, opposeCount: 0 }]);
+});
+
+test('recovery keeps weights from a retired source-only pending save and starts a fresh confirmed write', async t => {
+    const fixture = createFixtureState({ userID: '7', secondaryBenchmark: true, personalEstimationVotes: [] });
+    const first = await createPieRecoveryHarness({ fixture }); t.after(() => first.close()); await first.load();
+    first.edit({ ...draft(6000), estimationVotes: [{ targetConditionID: 1, sourceConditionID: 901, vote: 'oppose' }] });
+    const lost = first.save(); await first.drain(); await first.fail(0); await lost;
+    const slot = `benchpoll:owned-pie:v1:${encodeURIComponent(`7:${key}`)}`;
+    const record = JSON.parse(first.storage.getItem(slot));
+    const sourceOnlyVotes = [{ conditionID: 901, vote: 'oppose' }];
+    record.value.draft.estimationVotes = sourceOnlyVotes;
+    record.value.pending.body.estimationVotes = sourceOnlyVotes;
+    first.storage.setItem(slot, JSON.stringify(record));
+    fixture.revision = 2;
+
+    const next = await createPieRecoveryHarness({ fixture, storage: first.storage }); t.after(() => next.close()); await next.load();
+    assert.deepEqual(plain(weights(next)), [6000, 4000]);
+    assert.deepEqual(plain(next.state.personalEstimationVotes), []);
+    assert.equal(next.state.personalSaveRequest, null);
+    assert.equal(next.writes.length, 0);
+    assert.equal(JSON.parse(first.storage.getItem(slot)).value.pending.key, record.value.pending.key);
+    const confirmed = next.confirm(); await next.drain();
+    assert.notEqual(next.writes[0].key, record.value.pending.key);
+    assert.deepEqual(next.writes[0].body.estimationVotes, []);
+    assert.equal(next.writes[0].body.expectedRevision, 2);
+    await next.acknowledge(0); await confirmed;
+    assert.equal(fixture.revision, 3);
 });
 
 test('an unavailable source version keeps its draft for explicit recovery or discard', async t => {
     const storage = createRecoveryMemoryStorage();
     const fixture = createFixtureState({ userID: '7', communityVersions: true, secondaryBenchmark: true, personalEstimationVotes: [] });
     const first = await createPieRecoveryHarness({ fixture, storage }); t.after(() => first.close()); await first.load();
-    const edit = { ...draft(6000), estimationVotes: [{ conditionID: 901, vote: 'support' }] };
+    const edit = { ...draft(6000), estimationVotes: [{ targetConditionID: 1, sourceConditionID: 901, vote: 'support' }] };
     first.edit(edit);
     const next = await createPieRecoveryHarness({ fixture, storage }); t.after(() => next.close());
     next.setReadHook(body => {
@@ -214,7 +251,7 @@ test('a legacy scoring mix can keep its ballot draft while the user corrects the
     const fixture = createFixtureState({ userID: '7', communityVersions: true, secondaryBenchmark: true,
         personalEntries: weightedEntries(entries), personalEstimationVotes: [] });
     const h = await createPieRecoveryHarness({ fixture }); t.after(() => h.close()); await h.load();
-    const edit = { entries, fallbackRules: [], estimationVotes: [{ conditionID: 901, vote: 'oppose' }] };
+    const edit = { entries, fallbackRules: [], estimationVotes: [{ targetConditionID: 1, sourceConditionID: 901, vote: 'oppose' }] };
     h.edit(edit);
     const invalid = h.save(); await h.drain(); await h.fail(0, 400, 'pie_benchmark_version_conflict');
     assert.equal(await invalid, false);

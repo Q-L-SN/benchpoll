@@ -37,7 +37,7 @@ import { createFamilyView } from './workspace/family-view.js?v=percentile-rankin
 import { createBenchmarkRowFocus } from './workspace/benchmark-family-row.js?v=fallback-picker-20261008';
 import { createBenchmarkFallbackCatalogue } from './workspace/benchmark-fallback-catalogue.js?v=fallback-picker-20261008';
 import { createFallbackPicker } from './workspace/fallback-picker.js?v=fallback-controls-20261009';
-import { createBenchmarkSettings } from './workspace/benchmark-settings.js';
+import { createBenchmarkSettings, selectedScoringCondition } from './workspace/benchmark-settings.js';
 import { revealInPanel } from './workspace/reveal-in-panel.js';
 import { createPersonalPieStart, publicWeightStart } from './workspace/personal-pie-start.js';
 import { fallbackStatusLabel } from './shared/fallback-choice.js';
@@ -216,7 +216,7 @@ const benchmarkSettings = createBenchmarkSettings({
         if (!group) return null;
         const IDs = new Set(group.versions.map(version => version.conditionID));
         const entries = state.personalEntries.filter(entry => IDs.has(entry.conditionID));
-        return { group, entries, personalEstimationVotes: state.personalEstimationVotes,
+        return { group, entries, estimationVoting: state.estimationVoting, personalEstimationVotes: state.personalEstimationVotes,
             communityEstimationVotes: state.communityEstimationVotes,
             editable: state.mode === 'personal' && !isExpandedWeightView() && entries.length > 0,
             readOnly: state.mode === 'public' || isExpandedWeightView(),
@@ -1634,13 +1634,16 @@ function chooseBenchmarkVersion(group, conditionID) {
     return true;
 }
 
-function chooseBenchmarkEstimationVote(group, conditionID, vote) {
-    if (state.mode !== 'personal' || state.loading || state.gestureOpen
-        || !group.versions.some(version => version.conditionID === conditionID)
-        || !state.personalEntries.some(entry => entry.benchmarkID === group.benchmarkID) || !beginMutation()) return false;
-    const votes = state.personalEstimationVotes.filter(item => item.conditionID !== conditionID);
-    if (vote) votes.push({ conditionID, vote });
-    state.personalEstimationVotes = votes;
+function chooseBenchmarkEstimationVote(group, targetConditionID, sourceConditionID, vote) {
+    if (!state.estimationVoting || state.mode !== 'personal' || state.loading || state.gestureOpen
+        || targetConditionID === sourceConditionID
+        || !group.versions.some(version => version.conditionID === targetConditionID)
+        || !group.versions.some(version => version.conditionID === sourceConditionID)) return false;
+    const entries = state.personalEntries.filter(entry => entry.benchmarkID === group.benchmarkID);
+    if (selectedScoringCondition(entries) !== targetConditionID || !beginMutation()) return false;
+    state.personalEstimationVotes = state.personalEstimationVotes.filter(item => item.targetConditionID !== targetConditionID
+        || item.sourceConditionID !== sourceConditionID);
+    if (vote) state.personalEstimationVotes.push({ targetConditionID, sourceConditionID, vote });
     scheduleSave();
     return true;
 }
@@ -1756,15 +1759,10 @@ function objectInPersonalPie(object) {
 
 function removeObjectFromPersonalPie(object) {
     const objectID = Number(object.ID);
-    if (!state.personalEntries.some(entry => Number(entry.conditionID) === objectID)) {
-        return false;
-    }
-    if (!beginMutation()) {
-        return false;
-    }
-
-    const removed = state.personalEntries.filter(entry => entry.conditionID === objectID
+    const removed = state.personalEntries.filter(entry => Number(entry.conditionID) === objectID
         || object.isBenchmarkGroup && entry.benchmarkID === object.benchmarkID);
+    if (!removed.length || !beginMutation()) return false;
+
     const removedIDs = new Set(removed.map(entry => entry.conditionID));
     state.personalEntries = distributeToTarget(
         state.personalEntries.filter(entry => !removedIDs.has(entry.conditionID)),
@@ -1777,11 +1775,12 @@ function removeObjectFromPersonalPie(object) {
     if (state.personalEstimationVotes.length && state.versionComposition) {
         const retainedBenchmarks = new Set(state.personalEntries.map(entry => entry.benchmarkID));
         const removedBenchmarks = new Set(removed.map(entry => entry.benchmarkID).filter(ID => !retainedBenchmarks.has(ID)));
-        const removedSources = new Set(state.versionComposition.filter(group => removedBenchmarks.has(group.benchmarkID))
+        const removedTargets = new Set(state.versionComposition.filter(group => removedBenchmarks.has(group.benchmarkID))
             .flatMap(group => group.versions.map(version => version.conditionID)));
-        state.personalEstimationVotes = state.personalEstimationVotes.filter(vote => !removedSources.has(vote.conditionID));
+        state.personalEstimationVotes = state.personalEstimationVotes.filter(vote => !removedTargets.has(vote.targetConditionID));
     }
-    if (state.mode === 'personal' && Number(state.selectedObjectID) === objectID) {
+    const selectedID = Number(state.selectedObjectID);
+    if (state.mode === 'personal' && (selectedID === objectID || removedIDs.has(selectedID))) {
         deactivateInlineFallbackTarget();
         state.selectedObjectID = null;
         if (state.workspaceView === 'focus') {

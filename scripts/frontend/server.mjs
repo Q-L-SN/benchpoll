@@ -4,7 +4,8 @@ import { readFile } from 'node:fs/promises';
 import { resolve, sep, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
-import { categories, createFixtureState, weightedEntries, familyEntries, workspace, rankingPage, rankingModelLocation, rankingModelSearch, catalog, approvedResults } from './fixtures.mjs';
+import { categories, createFixtureState, weightedEntries, familyEntries, workspace, rankingPage, rankingModelLocation, rankingModelSearch,
+    catalog, approvedResults, fixtureBenchmarkRows, fixtureEstimationVotes } from './fixtures.mjs';
 import { discussionFixture } from './discussions.mjs';
 import { categoryPathParts } from '../../public/js/shared/category-route.js';
 import { familyKey } from '../../public/js/shared/benchmark-families.js';
@@ -21,7 +22,6 @@ import { topicSlug, topicURL, parseTopicPath, scenePath } from '../../public/js/
 import { normalizeTopicRequest } from '../../topic-service.js';
 import { topicPreviewComparison, normalizeHomeComparison } from '../../topic-home-service.js';
 import { AA_DISPLAY_RESTRICTION } from '../../public/js/shared/aa-ranking-policy.js';
-import { normalizeEstimationVotes } from '../../public/js/shared/estimation-votes.js';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const publicRoot = resolve(root, 'public');
@@ -188,12 +188,14 @@ export async function startPreview({ port = 0, ...options } = {}) {
                     if (state.saveFailure) return send(state.saveFailure, { error: state.saveFailure === 409 ? 'pie_revision_conflict' : 'fixture_save_failure' });
                     if (!state.authenticated) return send(401, { error: 'unauthorized' });
                     if (body.expectedRevision !== state.revision) return send(409, { error: 'pie_revision_conflict' });
-                    if (Object.hasOwn(body, 'estimationVotes')) {
-                        try { state.personalEstimationVotes = normalizeEstimationVotes(body.estimationVotes); }
-                        catch { return send(400, { error: 'invalid_estimation_votes' }); }
-                    }
+                    const conditions = fixtureBenchmarkRows(state);
+                    const explicitBallot = Object.hasOwn(body, 'estimationVotes');
+                    const votes = explicitBallot || Object.hasOwn(state, 'personalEstimationVotes')
+                        ? fixtureEstimationVotes(explicitBallot ? body.estimationVotes : state.personalEstimationVotes, body.entries, conditions, explicitBallot)
+                        : undefined;
+                    if (votes !== undefined) state.personalEstimationVotes = votes;
                     state.revision = body.entries.length ? state.revision + 1 : 0;
-                    state.personalEntries = weightedEntries(body.entries);
+                    state.personalEntries = weightedEntries(body.entries, conditions);
                     state.fallbackRules = body.fallbackRules.map(rule => {
                         if (!rule.entries.length) return { ...rule, familyID: null };
                         const key = familyKey(rule.primaryConditionID, rule.entries);

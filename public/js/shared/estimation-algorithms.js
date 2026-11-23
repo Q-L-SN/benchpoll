@@ -4,7 +4,7 @@ export const DEFAULT_ESTIMATION_ALGORITHM = 'current';
 export const ORIGINAL_WEIGHT_POLICY = 'original';
 export const ESTIMATION_ALGORITHMS = Object.freeze([
     { ID: DEFAULT_ESTIMATION_ALGORITHM, label: 'Version-based estimation',
-        description: 'Uses measured scores and reliable estimates from eligible versions of the same benchmark. Unresolved results count as 0 at their full weight.' }
+        description: 'When a score is missing, combines reliable estimates from eligible versions of the same benchmark. Unresolved results count as 0 at their full weight.' }
 ].map(Object.freeze));
 const retiredAlgorithms = new Set(['missing-raw', 'missing-rational', 'missing-linear', 'missing-sqrt', 'missing-midpoint']);
 export function normalizeEstimationAlgorithm(value = DEFAULT_ESTIMATION_ALGORITHM) {

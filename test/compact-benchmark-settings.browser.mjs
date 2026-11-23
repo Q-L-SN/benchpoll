@@ -37,6 +37,12 @@ for (const [engine, width, height] of built ? [[chromium, 1440, 900], [chromium,
         assert.equal(await rows.count(), 27);
         assert.equal(await settings.locator('.bp-choice-pagination, .bp-choice-load-sentinel').count(), 0);
         assert.equal(await list.evaluate(node => ['auto', 'scroll'].includes(getComputedStyle(node).overflowY)), false);
+        assert.equal(await settings.locator('.bp-estimation-rate, button[data-vote]').count(), 0);
+        const score = settings.getByRole('button', { name: 'Use Default evaluation for scoring', exact: true });
+        const scoringSave = page.waitForResponse(response => response.url().endsWith('/api/save_personal_pie') && response.ok());
+        await score.click();
+        await scoringSave;
+        assert.equal(await settings.locator('.bp-estimation-rate').count(), 26);
         const geometry = await settings.evaluate(node => {
             const longChoice = node.querySelector('.bp-version-choice[data-condition-id="105"]');
             const first = node.querySelector('.bp-version-choice');
@@ -52,10 +58,12 @@ for (const [engine, width, height] of built ? [[chromium, 1440, 900], [chromium,
         const saved = page.waitForResponse(response => response.url().endsWith('/api/save_personal_pie') && response.ok());
         await last.click();
         const { estimationVotes, fallbackRules } = (await saved).request().postDataJSON();
-        assert.deepEqual(estimationVotes, [{ conditionID: Number(await rows.last().getAttribute('data-condition-id')), vote: 'support' }]);
+        assert.deepEqual(estimationVotes, [{
+            targetConditionID: 1, sourceConditionID: Number(await rows.last().getAttribute('data-condition-id')), vote: 'support'
+        }]);
         assert.deepEqual(fallbackRules, []);
         assert.equal(await last.getAttribute('aria-pressed'), 'true');
-        assert.equal(await settings.locator('.bp-version-choice[aria-pressed="true"]').count(), 0);
+        assert.equal(await score.getAttribute('aria-pressed'), 'true');
         const longChoice = settings.locator('.bp-version-choice[data-condition-id="105"]');
         await longChoice.evaluate(node => node.scrollIntoView({ block: 'center' }));
         await page.mouse.move(1, 1);

@@ -16,7 +16,7 @@ const storage = () => {
 };
 
 test('personal reads return saved source opinions independently of an explicit scoring version', async () => {
-    for (const estimationVotes of [[{ conditionID: 2, vote: 'oppose' }], []]) {
+    for (const estimationVotes of [[{ targetConditionID: 1, sourceConditionID: 2, vote: 'oppose' }], []]) {
         const db = { async execute(sql) {
             if (sql.includes('FROM personal_pies')) return [[{ ID: 1, revision: 2,
                 estimation_votes: estimationVotes.length ? JSON.stringify(estimationVotes) : null }]];

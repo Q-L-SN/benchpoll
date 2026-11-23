@@ -40,14 +40,14 @@ for (const [engine, width] of built ? [[chromium, 390]] : [[chromium, 1440], [ch
         assert.equal(await page.locator('#weight-add-actions button').count(), 1);
         await page.locator('#weight-pie [data-object-id="1"]').click();
         const entry = page.locator('#inline-fallback-toggle');
-        await page.getByRole('button', { name: 'Advanced settings', exact: true }).waitFor();
-        assert.equal(await entry.innerText(), 'Advanced settings');
+        await entry.getByText('Advanced settings', { exact: true }).waitFor();
         await entry.click();
         const settings = page.locator('#benchmark-settings');
         await settings.waitFor();
         assert.match(await settings.getByRole('status').textContent(), /Following community/);
         assert.equal(await settings.locator('.bp-version-choice').first().getAttribute('data-condition-id'), '901');
         assert.equal(await settings.locator('.bp-version-choice[data-condition-id="901"] .bp-version-choice-share').textContent(), '75%');
+        assert.equal(await settings.locator('.bp-estimation-rate, button[data-vote]').count(), 0);
         await page.screenshot({ path: `${output}/${engine.name()}-${width}${built ? '-built' : ''}-settings.png` });
         const primary = settings.getByRole('button', { name: 'Use Default evaluation for scoring', exact: true });
         const extended = settings.getByRole('button', { name: 'Use Extended for scoring', exact: true });

@@ -31,6 +31,7 @@ const siblingConditionRows = pieConditionRows.map(row => row.condition_ID === 2 
     ...row, benchmark_ID: 1, name: pieConditionRows[0].name, condition_key: 'extended', condition_name: 'Extended',
     is_default: 0, is_primary: 0
 } : row);
+const estimationVote = (targetConditionID, sourceConditionID, vote) => ({ targetConditionID, sourceConditionID, vote });
 
 function createPieSaveDatabase(options) {
     const db = createTransactionalPieSaveDatabase(options);
@@ -90,20 +91,32 @@ test('an unavailable graph lock schema fails without claiming a write or changin
     assert.deepEqual(db.events, ['begin', 'rollback', 'release']);
 });
 
-test('an estimation vote survives switching scoring versions and following the community', async () => {
-    const db = createPieSaveDatabase({ conditionRows: siblingConditionRows });
+test('an estimation vote survives switching scoring versions, following the community, and reopening the original target', async () => {
+    const thirdVersion = { ...siblingConditionRows[1], condition_ID: 4, condition_key: 'third', condition_name: 'Third' };
+    const db = createPieSaveDatabase({ conditionRows: [...siblingConditionRows, thirdVersion] });
     const entries = [{ conditionID: 1, weightBasisPoints: 10000 }];
-    const estimationVotes = [{ conditionID: 2, vote: 'oppose' }];
+    const estimationVotes = [estimationVote(1, 2, 'oppose')];
     const body = request({ entries, estimationVotes });
     const receipt = await savePersonalPie(db, body);
     assert.deepEqual(receipt.personalPie.estimationVotes, estimationVotes);
     assert.deepEqual(await savePersonalPie(db, body), receipt);
+
+    const switchedEntries = [{ conditionID: 4, weightBasisPoints: 10000 }];
+    const switched = await savePersonalPie(db, request({ expectedRevision: 2, entries: switchedEntries, estimationVotes }));
+    assert.deepEqual(switched.personalPie.estimationVotes, estimationVotes);
+    assert.deepEqual(db.stored.weights, switchedEntries);
+    assert.deepEqual(db.statements.findLast(({ sql }) => sql.includes('FROM benchmark_conditions WHERE ID IN')).params, [1, 2, 4]);
+
     const followingEntries = [{ conditionID: 2, weightBasisPoints: 10000, followCommunityVersion: true }];
-    const following = await savePersonalPie(db, request({ expectedRevision: 2, entries: followingEntries }));
+    const following = await savePersonalPie(db, request({ expectedRevision: 3, entries: followingEntries }));
     assert.deepEqual(following.personalPie.estimationVotes, estimationVotes);
     assert.deepEqual(db.stored.weights, followingEntries);
     assert.deepEqual((await loadPersonalPie(db, 10, '7')).estimationVotes, estimationVotes);
-    const cleared = await savePersonalPie(db, request({ expectedRevision: 3, entries, estimationVotes: [] }));
+
+    const changedVotes = [estimationVote(1, 2, 'support')];
+    const changed = await savePersonalPie(db, request({ expectedRevision: 4, entries, estimationVotes: changedVotes }));
+    assert.deepEqual(changed.personalPie.estimationVotes, changedVotes);
+    const cleared = await savePersonalPie(db, request({ expectedRevision: 5, entries, estimationVotes: [] }));
     assert.deepEqual(cleared.personalPie.estimationVotes, []);
     assert.equal(db.stored.pie.estimation_votes, null);
 });
@@ -111,7 +124,7 @@ test('an estimation vote survives switching scoring versions and following the c
 test('a removed benchmark loses its retained estimation votes on an older client save', async () => {
     const db = createPieSaveDatabase({ conditionRows: siblingConditionRows });
     await savePersonalPie(db, request({ entries: [{ conditionID: 1, weightBasisPoints: 10000 }],
-        estimationVotes: [{ conditionID: 2, vote: 'support' }] }));
+        estimationVotes: [estimationVote(1, 2, 'support')] }));
     const receipt = await savePersonalPie(db, request({ expectedRevision: 2,
         entries: [{ conditionID: 3, weightBasisPoints: 10000 }] }));
     assert.deepEqual(receipt.personalPie.estimationVotes, []);
@@ -140,24 +153,27 @@ for (const failures of [1, Infinity]) test(`deadlock retry is bounded and reuses
     }
 });
 
-for (const kind of ['scoring version', 'estimation vote']) test(`server refuses an AA ${kind} even when directly submitted`, async () => {
+for (const kind of ['scoring version', 'estimation source', 'estimation target']) test(`server refuses an AA ${kind} even when directly submitted`, async () => {
     const conditionRows = siblingConditionRows.map(row => row.condition_ID === 2
         ? { ...row, condition_key: 'aa-run', condition_name: 'AA run' } : row);
     const db = createPieSaveDatabase({ conditionRows });
     const body = kind === 'scoring version' ? request({ entries: [{ conditionID: 2, weightBasisPoints: 10000 }] })
-        : request({ entries: [{ conditionID: 1, weightBasisPoints: 10000 }], estimationVotes: [{ conditionID: 2, vote: 'support' }] });
+        : request({ entries: [{ conditionID: 1, weightBasisPoints: 10000 }],
+            estimationVotes: [kind === 'estimation source' ? estimationVote(1, 2, 'support') : estimationVote(2, 1, 'support')] });
     await assert.rejects(savePersonalPie(db, body), error(kind === 'scoring version'
         ? 'pie_benchmark_condition_excluded' : 'estimation_vote_condition_unavailable'));
     assert.equal(db.mutations, 0);
     assert.equal(db.stored.receipts.size, 0);
 });
 
-test('estimation votes must refer to an available version of a weighted benchmark', async () => {
-    const db = createPieSaveDatabase({ conditionRows: siblingConditionRows });
-    for (const conditionID of [3, 999]) {
+test('estimation vote endpoints must be available versions of the same directly weighted benchmark', async () => {
+    const independentSibling = { ...siblingConditionRows[1], condition_ID: 4, benchmark_ID: 3, name: pieConditionRows[2].name };
+    const db = createPieSaveDatabase({ conditionRows: [...siblingConditionRows, independentSibling] });
+    for (const [targetConditionID, sourceConditionID] of [[1, 3], [3, 2], [999, 2], [1, 999], [3, 4]]) {
         await assert.rejects(savePersonalPie(db, request({ entries: [{ conditionID: 1, weightBasisPoints: 10000 }],
-            estimationVotes: [{ conditionID, vote: 'support' }] })), value =>
-            value.status === 400 && value.body?.error === 'estimation_vote_condition_unavailable' && value.body.conditionID === conditionID);
+            estimationVotes: [estimationVote(targetConditionID, sourceConditionID, 'support')] })), value =>
+            value.status === 400 && value.body?.error === 'estimation_vote_condition_unavailable'
+            && value.body.targetConditionID === targetConditionID && value.body.sourceConditionID === sourceConditionID);
     }
     assert.equal(db.mutations, 0);
     assert.equal(db.stored.receipts.size, 0);
@@ -190,7 +206,7 @@ test('the actual save route enforces owner and identity then sends a private JSO
     await new Promise(resolve => server.once('listening', resolve));
     t.after(() => new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve())));
     const body = { expectedUserID: '7', categoryID: 1, contextValues: {}, expectedRevision: 1,
-        entries: [{ conditionID: 1, weightBasisPoints: 10000 }], estimationVotes: [{ conditionID: 2, vote: 'support' }] };
+        entries: [{ conditionID: 1, weightBasisPoints: 10000 }], estimationVotes: [estimationVote(1, 2, 'support')] };
     const key = randomUUID();
     const send = (extraHeaders = {}, extraBody = {}) => fetch(`http://127.0.0.1:${server.address().port}/save_personal_pie`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', ...extraHeaders }, body: JSON.stringify({ ...body, ...extraBody })
@@ -260,10 +276,10 @@ for (let repetition = 1; repetition <= 2; repetition++) {
         await assert.rejects(savePersonalPie(db, { ...body, entries: [{ conditionID: 1, weightBasisPoints: 10000 }] }), error('write_identity_reused'));
         assert.equal(db.mutations, 1);
     });
-    test(`estimation votes commit and replay with canonical condition order (${repetition})`, async () => {
+    test(`estimation votes commit and replay with canonical pair order (${repetition})`, async () => {
         const db = createPieSaveDatabase({ conditionRows: siblingConditionRows });
         const body = request({ entries: [{ conditionID: 1, weightBasisPoints: 10000 }],
-            estimationVotes: [{ conditionID: 2, vote: 'support' }, { conditionID: 1, vote: 'oppose' }] });
+            estimationVotes: [estimationVote(2, 1, 'support'), estimationVote(1, 2, 'oppose')] });
         const result = await savePersonalPie(db, body);
         const canonical = [...body.estimationVotes].reverse();
         assert.deepEqual(result.personalPie.estimationVotes, canonical);
@@ -299,12 +315,14 @@ test('save receipts reject missing, mismatched and malformed confirmations befor
 test('a vote-bearing save receipt must confirm every requested ballot independently of order', () => {
     const body = { expectedUserID: '7', categoryID: 1, contextValues: {}, expectedRevision: 1,
         entries: [{ conditionID: 1, weightBasisPoints: 10000 }], fallbackRules: [],
-        estimationVotes: [{ conditionID: 901, vote: 'oppose' }, { conditionID: 1, vote: 'support' }] };
+        estimationVotes: [{ targetConditionID: 901, sourceConditionID: 900, vote: 'oppose' },
+            { targetConditionID: 1, sourceConditionID: 900, vote: 'support' }] };
     const receipt = estimationVotes => ({ saved: true, requestKey: 'key', userID: '7', categoryID: 1, contextValues: {},
         personalPie: { revision: 2, entries: body.entries, fallbackRules: [], estimationVotes } });
     const sorted = [...body.estimationVotes].reverse();
     assert.deepEqual(validatePersonalPieSave(receipt(sorted), body, 'key').personalPie.estimationVotes, sorted);
-    for (const votes of [undefined, null, [], [...sorted, sorted[0]], [{ ...sorted[0], vote: 'oppose' }, sorted[1]]]) {
+    for (const votes of [undefined, null, [], [...sorted, sorted[0]], [{ ...sorted[0], vote: 'oppose' }, sorted[1]],
+        [{ ...sorted[0], targetConditionID: 900, sourceConditionID: 1 }, sorted[1]]]) {
         assert.throws(() => validatePersonalPieSave(receipt(votes), body, 'key'), error => error.code === 'invalid_personal_pie_receipt');
     }
 });

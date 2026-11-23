@@ -48,10 +48,12 @@ for (const [engine, width] of [[chromium, 1440], [webkit, 390]]) {
         assert.deepEqual(await order(), [900, 1, 901], 'Reopening uses the updated community proportions');
         await choose(() => version(900).click());
         assert.equal(await version(900).getAttribute('aria-pressed'), 'false');
-        assert.equal(await support.getAttribute('aria-pressed'), 'true');
+        assert.equal(await settings.locator('button[data-vote]').count(), 0);
         assert.deepEqual(await order(), [900, 1, 901], 'Deselecting also keeps the current visit stable');
         await page.locator('#weight-pie [data-object-id="2"]').click();
         await page.locator('#weight-pie [data-object-id="1"]').click();
         assert.deepEqual(await order(), [1, 901, 900], 'Returning from another benchmark starts a fresh order');
+        await choose(() => version(1).click());
+        assert.equal(await support.getAttribute('aria-pressed'), 'true');
     });
 }

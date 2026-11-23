@@ -25,7 +25,7 @@ test('redistribution conserves exact total, minimum weight, identity and source 
 test('undo snapshots and separate workspace instances do not share mutable data', () => {
     const original = { entries: [{ conditionID: 1, weightBasisPoints: 10000 }],
         fallbackRules: [{ primaryConditionID: 1, entries: [{ conditionID: 2, weightBasisPoints: 10000 }] }],
-        estimationVotes: [{ conditionID: 2, vote: 'support' }] };
+        estimationVotes: [{ targetConditionID: 1, sourceConditionID: 2, vote: 'support' }] };
     const snapshot = clonePersonalPieSnapshot(original);
     snapshot.entries[0].weightBasisPoints = 100;
     snapshot.fallbackRules[0].entries[0].conditionID = 3;
@@ -35,32 +35,42 @@ test('undo snapshots and separate workspace instances do not share mutable data'
     assert.equal(original.estimationVotes[0].vote, 'support');
     const first = createWorkspaceState(), second = createWorkspaceState();
     first.personalEntries.push({ conditionID: 1 });
-    first.personalEstimationVotes.push({ conditionID: 2, vote: 'support' });
+    first.personalEstimationVotes.push({ targetConditionID: 1, sourceConditionID: 2, vote: 'support' });
     first.pieOrderByObjectID.set(1, 0);
     assert.equal(second.personalEntries.length, 0);
     assert.equal(second.personalEstimationVotes.length, 0);
     assert.equal(second.pieOrderByObjectID.size, 0);
 });
 
-test('workspace ballots identify eligible versions and keep personal choices and public counts separate', () => {
-    const estimationVotes = [{ conditionID: 901, vote: 'support' }];
-    const valid = workspace(createFixtureState({ communityVersions: true, secondaryBenchmark: true,
-        personalEstimationVotes: estimationVotes, communityEstimationVotes: [{ conditionID: 8, supportCount: 2, opposeCount: 1 }] }), {});
+test('workspace ballots keep directed pairs independent and require both versions to be eligible siblings', () => {
+    const estimationVotes = [{ targetConditionID: 1, sourceConditionID: 901, vote: 'support' },
+        { targetConditionID: 900, sourceConditionID: 901, vote: 'oppose' },
+        { targetConditionID: 901, sourceConditionID: 1, vote: 'support' }];
+    const otherCommunityVotes = { targetConditionID: 9912, sourceConditionID: 9913, supportCount: 2, opposeCount: 1 };
+    const valid = workspace(createFixtureState({ secondaryBenchmark: true, sparseBenchmark: true, mixedAABenchmarks: true,
+        personalEstimationVotes: estimationVotes, communityEstimationVotes: [otherCommunityVotes] }), {});
     assert.equal(validateWorkspacePayload(valid), valid);
     assert.deepEqual(valid.personalPie.estimationVotes, estimationVotes);
-    assert.deepEqual(valid.communityEstimationVotes, [{ conditionID: 8, supportCount: 2, opposeCount: 1 },
-        { conditionID: 901, supportCount: 1, opposeCount: 0 }]);
+    assert.deepEqual(valid.communityEstimationVotes, [
+        { targetConditionID: 1, sourceConditionID: 901, supportCount: 1, opposeCount: 0 },
+        { targetConditionID: 900, sourceConditionID: 901, supportCount: 0, opposeCount: 1 },
+        { targetConditionID: 901, sourceConditionID: 1, supportCount: 1, opposeCount: 0 }, otherCommunityVotes]);
     assert.ok(valid.personalPie.entries.every(entry => entry.conditionID !== 901));
 
     const malformed = [
         payload => { delete payload.communityEstimationVotes; },
         payload => { payload.personalPie.estimationVotes = null; },
-        payload => { payload.personalPie.estimationVotes.push({ conditionID: 901, vote: 'oppose' }); },
-        payload => { payload.personalPie.estimationVotes[0].conditionID = 8; },
-        payload => { payload.personalPie.estimationVotes[0].conditionID = 9999; },
+        payload => { payload.personalPie.estimationVotes.push({ ...estimationVotes[0], vote: 'oppose' }); },
+        payload => { payload.personalPie.estimationVotes[0] = { conditionID: 901, vote: 'support' }; },
+        payload => { payload.personalPie.estimationVotes[0].targetConditionID = 8; },
+        payload => { payload.personalPie.estimationVotes[0].sourceConditionID = 9999; },
+        payload => { payload.personalPie.estimationVotes[0].sourceConditionID = 1; },
+        payload => { payload.personalPie.estimationVotes[0] = { targetConditionID: 9912, sourceConditionID: 9913, vote: 'support' }; },
         payload => { payload.personalPie.estimationVotes[0].vote = 'abstain'; },
         payload => { payload.communityEstimationVotes[0].supportCount = -1; },
-        payload => { payload.communityEstimationVotes[0].conditionID = '8'; },
+        payload => { payload.communityEstimationVotes[0].sourceConditionID = '901'; },
+        payload => { payload.communityEstimationVotes[0].sourceConditionID = 9913; },
+        payload => { payload.communityEstimationVotes[3].targetConditionID = 9911; },
         payload => { payload.communityEstimationVotes[0].accountID = '7'; },
         payload => { payload.communityEstimationVotes.push(payload.communityEstimationVotes[0]); }
     ];

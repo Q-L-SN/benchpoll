@@ -29,7 +29,7 @@
 .bp-model-inferred-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 14px; padding: 13px 0; }
 .bp-model-inferred-row > :is(strong, small, span) { min-width: 0; overflow-wrap: anywhere; }
 .bp-model-inferred-row > :is(small, span) { color: var(--bp-muted); font-size: 11px; }
-.bp-model-inferred-row > :nth-child(even) { text-align: right; font-variant-numeric: tabular-nums; }
+.bp-model-inferred-row > :is(strong, span):nth-child(even) { text-align: right; font-variant-numeric: tabular-nums; }
 @media (max-width: 760px) {
     .bp-home .bp-model-card { overflow: clip; }
     .bp-model-viewport { display: block; }

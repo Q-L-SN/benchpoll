@@ -71,12 +71,17 @@ async function setup(t, width = 1360) {
         const original = [{ type: 'topic', conditionID: -10, name: 'Nested topic', weightBasisPoints: 7000 }, expanded[3]];
         state.publicEntries = original;
         state.benchmarkDetailsByID.set(11, expanded[0]);
+        state.benchmarkDetailsByID.set(21, expanded[2]);
+        state.benchmarkDetailsByID.set(85, { ...entry(85, 2, 0, 'Beta test'), conditionName: 'Challenge' });
+        state.benchmarkDetailsByID.set(86, { ...entry(86, 2, 0, 'Beta test'), isDefaultCondition: true });
         const adopted = (conditionID, weightBasisPoints, coveredWeightBasisPoints, normalizedScore) =>
             ({ conditionID, weightBasisPoints, coveredWeightBasisPoints, normalizedScore, coverage: coveredWeightBasisPoints / weightBasisPoints * 100 });
         const modelA = { ID: 1, name: 'Model A', lower: 39.4, upper: 39.4, coverage: 55, missingWeight: 45,
             availableInference: { method: 'calibrated-fallback', weightPolicy: 'original', inferredFraction: .3, unresolvedFraction: .15 },
-            inferredScores: [{ conditionID: 21, sourceConditionID: 85, sourceScore: 86, normalizedScore: 74.25,
-                validationError: .1, referenceCount: 5, originalWeight: 30, weightBasisPoints: 3000, contribution: 22.275 }],
+            inferredScores: [{ conditionID: 21, selection: 'automatic', familyID: null, normalizedScore: 74.25,
+                originalWeight: 30, effectiveWeight: 30, weightBasisPoints: 3000, contribution: 22.275,
+                sources: [{ sourceConditionID: 85, sourceScore: 86, normalizedScore: 85, validationError: 0, referenceCount: 5, weightFraction: .5 },
+                    { sourceConditionID: 86, sourceScore: 73.5, normalizedScore: 63.5, validationError: 0, referenceCount: 5, weightFraction: .5 }] }],
             calculationScores: [{ conditionID: 11, fallbackFor: null, normalizedScore: 68.5,
                 effectiveWeight: 25, contribution: 17.125, matchedCount: null, memberIDs: [1], memberWeights: [{ ID: 1, weight: 1 }],
                 memberEvidence: [{ ID: 1, hash: 'a'.repeat(64) }] }],
@@ -306,4 +311,56 @@ test('mobile Used in this ranking shows the same treemap in a fullscreen dialog 
     await page.evaluate(() => { window.coverageQA.state.loadSequence++; });
     await page.waitForFunction(() => window.coverageQA.requests[1].aborted);
     assert.equal(await page.locator('#model-scores-dialog').isVisible(), false);
+});
+
+test('320px evidence retains every source and both contributions when a target is estimated in two scopes', async t => {
+    const page = await setup(t, 320);
+    await page.evaluate(() => {
+        const { modelA, state, view } = window.coverageQA;
+        const [estimate] = modelA.inferredScores;
+        const sources = [50, 54, 58, 62, 66, 70].map((normalizedScore, index) => {
+            const sourceConditionID = 85 + index;
+            if (!state.benchmarkDetailsByID.has(sourceConditionID)) state.benchmarkDetailsByID.set(sourceConditionID,
+                { conditionID: sourceConditionID, benchmarkID: 2, name: 'Beta test', conditionName: `Release ${index + 1} with long-form instructions` });
+            return { ...estimate.sources[0], sourceConditionID, sourceScore: normalizedScore + 10, normalizedScore, weightFraction: 1 / 6 };
+        });
+        state.benchmarkDetailsByID.set(98, { conditionID: 98, benchmarkID: 2, name: 'Beta test', conditionName: 'Short-answer release' });
+        modelA.inferredScores = [
+            { ...estimate, normalizedScore: 60, weightBasisPoints: 1000, originalWeight: 10, effectiveWeight: 10, contribution: 6, sources },
+            { ...estimate, normalizedScore: 80, weightBasisPoints: 2000, originalWeight: 20, effectiveWeight: 20, contribution: 16,
+                sources: [{ ...sources[0], sourceConditionID: 98, sourceScore: 78, normalizedScore: 80, weightFraction: 1 }] }
+        ];
+        view.openApprovedModelResults(modelA);
+    });
+    const tile = page.locator('.bp-model-coverage-figure [data-object-id="21"]');
+    assert.equal(await tile.locator('[data-estimated-score]').textContent(), '73.33');
+    assert.equal(await tile.getAttribute('aria-label'), 'Beta test. Estimated score 73.33 / 100.');
+    const rows = page.locator('.bp-model-inferred-row[data-condition-id="21"]');
+    assert.equal(await rows.count(), 2);
+    const first = rows.nth(0), second = rows.nth(1);
+    const firstSources = first.getByRole('listitem');
+    assert.equal(await firstSources.count(), 6);
+    assert.match(await firstSources.nth(1).innerText(), /Default benchmark version/);
+    assert.match(await first.innerText(), /10\.00% of total weight/);
+    assert.equal(await first.getByText('6.00 points added to total', { exact: true }).count(), 1);
+    assert.equal(await second.getByRole('listitem').count(), 1);
+    assert.match(await second.innerText(), /20\.00% of total weight/);
+    assert.match(await second.innerText(), /100\.00%/);
+    assert.equal(await second.getByText('16.00 points added to total', { exact: true }).count(), 1);
+    await second.scrollIntoViewIfNeeded();
+    assert.equal(await rows.last().evaluate(node => node.parentElement.scrollTop > 0 && node.parentElement.scrollWidth <= node.parentElement.clientWidth), true);
+});
+
+test('legacy calibrated estimates continue to show their single measured source', async t => {
+    const page = await setup(t);
+    await page.evaluate(() => {
+        const { modelA, view } = window.coverageQA;
+        modelA.inferredScores = [{ conditionID: 21, sourceConditionID: 85, sourceScore: 86, normalizedScore: 74.25,
+            validationError: .1, referenceCount: 5, originalWeight: 30, weightBasisPoints: 3000, contribution: 22.275 }];
+        view.openApprovedModelResults(modelA);
+    });
+    const row = page.locator('.bp-model-inferred-row');
+    assert.match(await row.innerText(), /Estimated from Beta test\s*Challenge\s*\(86 measured\).*5 paired models/);
+    assert.equal(await row.getByRole('listitem').count(), 0);
+    assert.equal(await row.getByText('22.27 points added to total', { exact: true }).count(), 1);
 });

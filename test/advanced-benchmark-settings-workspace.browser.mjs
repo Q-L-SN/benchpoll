@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { mkdir, readFile } from 'node:fs/promises';
 import { chromium, webkit } from 'playwright';
 import { startPreview } from '../scripts/frontend/server.mjs';
-import { weightedEntries } from '../scripts/frontend/fixtures.mjs';
+import { benchmarks, weightedEntries } from '../scripts/frontend/fixtures.mjs';
 
 const output = process.env.BP_SETTINGS_ARTIFACTS ?? 'artifacts/advanced-benchmark-settings';
 const built = process.env.BP_TEST_BUILT === '1';
@@ -13,7 +13,10 @@ async function setup(t, engine, width, height, options = {}) {
     const fixture = await startPreview({ communityVersions: true, secondaryBenchmark: true, sparseBenchmark: true,
         personalEntries: weightedEntries([{ conditionID: 1, weightBasisPoints: 6000, followCommunityVersion: true },
             { conditionID: 2, weightBasisPoints: 4000 }]),
-        communityEstimationVotes: [{ conditionID: 901, supportCount: 5, opposeCount: 2 }],
+        communityEstimationVotes: [
+            { targetConditionID: 1, sourceConditionID: 901, supportCount: 5, opposeCount: 2 },
+            { targetConditionID: 900, sourceConditionID: 901, supportCount: 1, opposeCount: 3 }
+        ],
         ...options });
     const browser = await engine.launch({ headless: true });
     const page = await browser.newPage({ viewport: { width, height }, isMobile: width < 760, hasTouch: width < 760,
@@ -62,15 +65,29 @@ for (const [engine, width, height] of [[chromium, 1440, 900], [chromium, 320, 56
                 && firstRow.bottom <= bounds('.bp-mobile-panels').top + 1;
         });
         const scoreDefault = settings.getByRole('button', { name: 'Use Default evaluation for scoring', exact: true });
-        const scoreExtended = settings.getByRole('button', { name: 'Use Extended for scoring', exact: true });
-        const supportDefault = settings.getByRole('button', { name: 'Support Default evaluation for score estimation', exact: true });
-        const opposeExtended = settings.getByRole('button', { name: 'Oppose Extended for score estimation', exact: true });
+        const scoreExperimental = settings.getByRole('button', { name: 'Use Experimental for scoring', exact: true });
+        const opposeExtendedForDefault = settings.getByRole('button', {
+            name: 'Oppose Extended as an estimation source for Default evaluation', exact: true
+        });
+        const supportExtendedForExperimental = settings.getByRole('button', {
+            name: 'Support Extended as an estimation source for Experimental', exact: true
+        });
+        const row = conditionID => settings.locator(`.bp-version-choice-row[data-condition-id="${conditionID}"]`);
+        const rateExtended = row(901).locator('.bp-estimation-rate');
         assert.equal(await settings.locator('.bp-version-choice-row').count(), 3);
+        assert.equal(await settings.locator('.bp-version-choice-share').count(), 3);
+        assert.equal(await settings.locator('.bp-estimation-rate, button[data-vote]').count(), 0);
         assert.equal(await page.locator('#fallback-picker').count(), 0);
         assert.equal(await settings.locator('.bp-fallback-picker-embedded, [aria-expanded], #inline-fallback-settings').count(), 0);
-        assert.equal(await opposeExtended.textContent(), '2');
+        const versionSave = await saveAfter(page, () => scoreDefault.click());
+        assert.equal(versionSave.entries.find(entry => entry.conditionID === 1).followCommunityVersion, undefined);
+        assert.equal(await scoreDefault.getAttribute('aria-pressed'), 'true');
+        assert.equal(await row(1).locator('.bp-estimation-rate, button[data-vote]').count(), 0);
+        assert.equal(await row(900).locator('.bp-estimation-rate').textContent(), 'No votes · Eligible by default');
+        assert.equal(await rateExtended.textContent(), '71.43%');
+        assert.equal(await opposeExtendedForDefault.textContent(), '2');
         const geometry = await settings.evaluate(node => {
-            const row = node.querySelector('.bp-version-choice-row');
+            const row = node.querySelector('.bp-version-choice-row[data-condition-id="901"]');
             const actions = [...row.querySelectorAll('button')].map(button => button.getBoundingClientRect().toJSON());
             return { overflow: node.scrollWidth - node.clientWidth, actions,
                 right: node.getBoundingClientRect().right };
@@ -79,56 +96,83 @@ for (const [engine, width, height] of [[chromium, 1440, 900], [chromium, 320, 56
         assert.ok(geometry.actions.every((action, index) => (width > 760 || action.height >= 44 && action.width >= 44)
             && (!index || action.left >= geometry.actions[index - 1].right) && action.right <= geometry.right + 1), JSON.stringify(geometry));
 
-        const versionSave = await saveAfter(page, () => scoreDefault.click());
-        assert.equal(versionSave.entries.find(entry => entry.conditionID === 1).followCommunityVersion, undefined);
-        const supportSave = await saveAfter(page, () => width < 760 ? supportDefault.tap() : supportDefault.click());
-        assert.deepEqual(supportSave.estimationVotes, [{ conditionID: 1, vote: 'support' }]);
-        assert.equal(await supportDefault.getAttribute('aria-pressed'), 'true');
-        assert.equal(await scoreDefault.getAttribute('aria-pressed'), 'true');
-        const opposeSave = await saveAfter(page, () => opposeExtended.click());
-        assert.deepEqual(opposeSave.estimationVotes, [{ conditionID: 1, vote: 'support' }, { conditionID: 901, vote: 'oppose' }]);
+        const defaultVote = { targetConditionID: 1, sourceConditionID: 901, vote: 'oppose' };
+        const experimentalVote = { targetConditionID: 900, sourceConditionID: 901, vote: 'support' };
+        const opposeSave = await saveAfter(page, async () => {
+            if (width < 760) await opposeExtendedForDefault.tap();
+            else await opposeExtendedForDefault.click();
+            assert.equal(await opposeExtendedForDefault.getAttribute('aria-pressed'), 'true');
+            assert.equal(await rateExtended.textContent(), '71.43%');
+        });
+        assert.deepEqual(opposeSave.estimationVotes, [defaultVote]);
         assert.deepEqual(opposeSave.fallbackRules, []);
         await page.waitForFunction(() => document.querySelector('#benchmark-settings [data-condition-id="901"] [data-vote="oppose"]')?.textContent === '3');
-        const change = await saveAfter(page, () => scoreExtended.click());
-        assert.deepEqual(change.estimationVotes, opposeSave.estimationVotes);
-        assert.equal(await scoreExtended.getAttribute('aria-pressed'), 'true');
-        const clear = await saveAfter(page, () => scoreExtended.click());
+        assert.equal(await rateExtended.textContent(), '62.5%');
+        const change = await saveAfter(page, () => scoreExperimental.click());
+        assert.deepEqual(change.estimationVotes, [defaultVote]);
+        assert.equal(await scoreExperimental.getAttribute('aria-pressed'), 'true');
+        assert.equal(await supportExtendedForExperimental.getAttribute('aria-pressed'), 'false');
+        assert.equal(await rateExtended.textContent(), '25%');
+        const supportSave = await saveAfter(page, () => supportExtendedForExperimental.click());
+        assert.deepEqual(supportSave.estimationVotes, [defaultVote, experimentalVote]);
+        assert.equal(await rateExtended.textContent(), '40%');
+        const clear = await saveAfter(page, () => scoreExperimental.click());
         assert.deepEqual(clear.entries.find(entry => entry.conditionID === 1),
             { conditionID: 1, weightBasisPoints: 6000, followCommunityVersion: true });
-        assert.deepEqual(clear.estimationVotes, opposeSave.estimationVotes);
+        assert.deepEqual(clear.estimationVotes, supportSave.estimationVotes);
         assert.equal(await settings.locator('.bp-version-choice[aria-pressed="true"]').count(), 0);
+        assert.equal(await settings.locator('.bp-estimation-rate, button[data-vote]').count(), 0);
 
-        const clearedVote = await saveAfter(page, () => opposeExtended.click());
-        assert.deepEqual(clearedVote.estimationVotes, [{ conditionID: 1, vote: 'support' }]);
+        const reselect = await saveAfter(page, () => scoreDefault.click());
+        assert.deepEqual(reselect.estimationVotes, supportSave.estimationVotes);
+        assert.equal(await opposeExtendedForDefault.getAttribute('aria-pressed'), 'true');
+        assert.equal(await rateExtended.textContent(), '62.5%');
+        const clearedVote = await saveAfter(page, () => opposeExtendedForDefault.click());
+        assert.deepEqual(clearedVote.estimationVotes, [experimentalVote]);
         const undo = await saveAfter(page, () => page.locator('#workspace-undo').click());
-        assert.deepEqual(undo.estimationVotes, opposeSave.estimationVotes);
-        assert.equal(await opposeExtended.getAttribute('aria-pressed'), 'true');
+        assert.deepEqual(undo.estimationVotes, supportSave.estimationVotes);
+        assert.equal(await opposeExtendedForDefault.getAttribute('aria-pressed'), 'true');
         const redo = await saveAfter(page, () => page.locator('#workspace-redo').click());
         assert.deepEqual(redo.estimationVotes, clearedVote.estimationVotes);
-        assert.equal(await opposeExtended.getAttribute('aria-pressed'), 'false');
+        assert.equal(await opposeExtendedForDefault.getAttribute('aria-pressed'), 'false');
         assert.deepEqual(fixture.state.personalEstimationVotes, clearedVote.estimationVotes);
 
+        await saveAfter(page, () => scoreExperimental.click());
         await page.locator('#weight-pie [data-object-id="2"]').click();
         assert.equal(await toggle.getAttribute('aria-expanded'), 'true');
-        assert.equal(await supportDefault.getAttribute('aria-pressed'), 'false');
-        await page.locator('#weight-pie [data-object-id="1"]').click();
-        assert.equal(await supportDefault.getAttribute('aria-pressed'), 'true');
+        assert.equal(await settings.locator('button[data-vote]').count(), 0);
+        await page.locator('#weight-pie [data-object-id="900"]').click();
+        assert.equal(await supportExtendedForExperimental.getAttribute('aria-pressed'), 'true');
         await page.reload();
-        await page.locator('#weight-pie [data-object-id="1"]').click();
+        await page.locator('#weight-pie [data-object-id="900"]').click();
         assert.equal(await toggle.getAttribute('aria-expanded'), 'true');
-        assert.equal(await supportDefault.getAttribute('aria-pressed'), 'true');
-        await supportDefault.scrollIntoViewIfNeeded();
+        assert.equal(await supportExtendedForExperimental.getAttribute('aria-pressed'), 'true');
+        await supportExtendedForExperimental.scrollIntoViewIfNeeded();
         await page.mouse.move(1, 1);
         await page.screenshot({ path: `${output}/${engine.name()}-${width}-${height}-${built ? 'built' : 'source'}.png` });
 
         await page.locator('#pie-mode-public').click();
         await page.locator('#weight-pie [data-object-id="1"]').click();
-        assert.equal(await page.locator('#public-fallback-toggle').getAttribute('aria-expanded'), 'true');
-        assert.equal(await settings.getByRole('status').textContent(), 'Read-only');
-        assert.equal(await settings.locator('[aria-pressed], [aria-current]').count(), 0);
-        assert.equal(await settings.getByRole('img', { name: '1 vote supporting Default evaluation for score estimation', exact: true }).textContent(), '1');
-        assert.equal(await settings.getByRole('img', { name: '5 votes supporting Extended for score estimation', exact: true }).textContent(), '5');
-        assert.equal(await settings.getByRole('img', { name: '2 votes opposing Extended for score estimation', exact: true }).textContent(), '2');
+        const publicToggle = page.locator('#public-fallback-toggle');
+        assert.equal(await publicToggle.getAttribute('aria-expanded'), 'true');
+        assert.equal(await settings.locator('.bp-version-choice-share').count(), 3);
+        assert.equal(await settings.locator('.bp-estimation-rate, [aria-pressed="true"]').count(), 0);
+        const saves = fixture.state.requests.filter(request => request.path === '/api/save_personal_pie').length;
+        const inspectDefault = settings.getByRole('button', { name: 'Inspect estimation sources for Default evaluation', exact: true });
+        const inspectExperimental = settings.getByRole('button', { name: 'Inspect estimation sources for Experimental', exact: true });
+        if (width < 760) await inspectDefault.tap();
+        else await inspectDefault.press('Space');
+        assert.equal(await row(1).locator('.bp-estimation-rate').count(), 0);
+        assert.equal(await rateExtended.textContent(), '71.43%');
+        await inspectExperimental.click();
+        assert.equal(await rateExtended.textContent(), '40%');
+        assert.equal(await settings.locator('button[data-vote]').count(), 0);
+        await page.screenshot({ path: `${output}/${engine.name()}-${width}-${height}-${built ? 'built' : 'source'}-public.png` });
+        await publicToggle.click();
+        await publicToggle.click();
+        assert.equal(await settings.locator('.bp-estimation-rate, [aria-pressed="true"]').count(), 0);
+        assert.equal(fixture.state.requests.filter(request => request.path === '/api/save_personal_pie').length, saves);
+        assert.ok(fixture.state.personalEntries.some(entry => entry.conditionID === 900));
     });
 }
 
@@ -139,9 +183,13 @@ test(`guest can edit and restore personal estimation votes ${built ? 'built' : '
     await page.locator('#weight-pie [data-object-id="1"]').click();
     await page.locator('#inline-fallback-toggle').click();
     const settings = page.locator('#benchmark-settings');
-    const support = settings.getByRole('button', { name: 'Support Extended for score estimation', exact: true });
+    const support = settings.getByRole('button', { name: 'Support Extended as an estimation source for Default evaluation', exact: true });
+    const scoreDefault = settings.getByRole('button', { name: 'Use Default evaluation for scoring', exact: true });
+    assert.equal(await support.count(), 0);
+    await scoreDefault.click();
     const preview = page.waitForResponse(response => response.url().endsWith('/api/get_weighted_workspace')
-        && response.request().postDataJSON().previewPersonalPie?.estimationVotes?.some(item => item.conditionID === 901));
+        && response.request().postDataJSON().previewPersonalPie?.estimationVotes?.some(item => item.targetConditionID === 1
+            && item.sourceConditionID === 901 && item.vote === 'support'));
     await support.click();
     await preview;
     assert.equal(await support.getAttribute('aria-pressed'), 'true');
@@ -152,17 +200,20 @@ test(`guest can edit and restore personal estimation votes ${built ? 'built' : '
     assert.equal(await support.getAttribute('aria-pressed'), 'true');
 });
 
-test(`removing a benchmark clears its source votes and undo restores them ${built ? 'built' : 'source'}`, async t => {
-    const initialVotes = [{ conditionID: 1, vote: 'support' }, { conditionID: 2, vote: 'support' },
-        { conditionID: 901, vote: 'oppose' }];
+test(`removing a benchmark clears its directional votes and undo restores them ${built ? 'built' : 'source'}`, async t => {
+    const otherVote = { targetConditionID: 2, sourceConditionID: 902, vote: 'support' };
+    const initialVotes = [{ targetConditionID: 1, sourceConditionID: 901, vote: 'support' }, otherVote,
+        { targetConditionID: 901, sourceConditionID: 1, vote: 'oppose' }];
     const { page } = await setup(t, chromium, 1440, 900, {
         personalEntries: weightedEntries([{ conditionID: 901, weightBasisPoints: 6000 }, { conditionID: 2, weightBasisPoints: 4000 }]),
-        personalEstimationVotes: initialVotes
+        personalEstimationVotes: initialVotes,
+        additionalBenchmarkVersions: [{ ...benchmarks[1], ID: 902, conditionID: 902, isDefaultCondition: false,
+            isPrimaryCondition: false, conditionKey: 'variant', conditionName: 'Variant' }]
     });
     await page.locator('#pie-mode-personal').click();
     const remove = page.locator('#benchmark-rows [data-condition-id="901"] [data-benchmark-control="remove"]');
     const removed = await saveAfter(page, () => remove.click());
-    assert.deepEqual(removed.estimationVotes, [{ conditionID: 2, vote: 'support' }]);
+    assert.deepEqual(removed.estimationVotes, [otherVote]);
     const restored = await saveAfter(page, () => page.locator('#workspace-undo').click());
     assert.deepEqual(restored.estimationVotes, initialVotes);
     assert.deepEqual((await saveAfter(page, () => remove.click())).estimationVotes, removed.estimationVotes);

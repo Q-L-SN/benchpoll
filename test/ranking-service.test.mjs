@@ -120,7 +120,8 @@ test('read-only personal previews reject invalid weights and duplicate votes bef
     }), error => error.body?.error === 'pie_total_must_equal_100_percent');
     await assert.rejects(getRankingWorkspace(db, {
         ...base, previewPersonalPie: { ...base.previewPersonalPie, estimationVotes: [
-            { conditionID: 2, vote: 'support' }, { conditionID: 2, vote: 'oppose' }
+            { targetConditionID: 1, sourceConditionID: 2, vote: 'support' },
+            { targetConditionID: 1, sourceConditionID: 2, vote: 'oppose' }
         ] }
     }), error => error.body?.error === 'invalid_estimation_votes');
     await assert.rejects(getRankingWorkspace(db, {
@@ -994,17 +995,18 @@ test('an empty stored personal pie remains editable but is not treated as a vali
     assert.deepEqual(pie.estimationVotes, []);
 });
 
-test('stored personal estimation votes are sorted without altering weighted entries', async () => {
-    const votes = [{ conditionID: 23, vote: 'oppose' }, { conditionID: 22, vote: 'support' }];
+test('stored directed votes are sorted and legacy undirected votes are skipped without altering weights', async () => {
+    const votes = [{ targetConditionID: 22, sourceConditionID: 23, vote: 'oppose' },
+        { conditionID: 22, vote: 'oppose' }, { targetConditionID: 21, sourceConditionID: 23, vote: 'support' }];
     const connection = { async execute(sql) {
         if (sql.includes('FROM personal_pies')) return [[{ ID: 7, revision: 3, estimation_votes: JSON.stringify(votes) }], []];
         if (sql.includes('FROM personal_pie_weights')) return [[{ benchmark_condition_ID: 21, weight_basis_points: 10000 }], []];
         throw new Error('Unexpected SQL: ' + sql);
     } };
     const pie = await loadPersonalPie(connection, 10, 99);
-    assert.deepEqual(pie.estimationVotes, [...votes].reverse());
+    assert.deepEqual(pie.estimationVotes, [votes[2], votes[0]]);
     assert.deepEqual(pie.entries, [{ conditionID: 21, weightBasisPoints: 10000 }]);
-    votes.push({ conditionID: 22, vote: 'oppose' });
+    votes.push({ ...votes[2], vote: 'oppose' });
     await assert.rejects(loadPersonalPie(connection, 10, 99), error => error.body?.error === 'stored_estimation_votes_invalid');
 });
 
@@ -1142,9 +1144,12 @@ test('malformed estimation votes fail before accessing the database', async () =
     const base = { userID: 1, categoryID: 1, expectedRevision: 0, entries: [
         { conditionID: 21, weightBasisPoints: 5000 }, { conditionID: 22, weightBasisPoints: 5000 }
     ] };
-    for (const estimationVotes of [null, [{ conditionID: 23, vote: 'neutral' }], [{ conditionID: 23 }],
-        [{ conditionID: 23, vote: 'support' }, { conditionID: 23, vote: 'oppose' }],
-        [{ conditionID: -2, vote: 'support' }], Array(1)]) {
+    const validVote = { targetConditionID: 21, sourceConditionID: 23, vote: 'support' };
+    for (const estimationVotes of [null, [{ ...validVote, vote: 'neutral' }], [{ targetConditionID: 21, vote: 'support' }],
+        [validVote, { ...validVote, vote: 'oppose' }], [{ ...validVote, sourceConditionID: -2 }],
+        [{ ...validVote, targetConditionID: 0 }], [{ ...validVote, sourceConditionID: 21 }],
+        [{ ...validVote, sourceConditionID: '23' }], [{ ...validVote, conditionID: 23 }],
+        [{ conditionID: 23, vote: 'support' }], Array(1)]) {
         await assert.rejects(savePersonalPie(db, { ...base, estimationVotes }),
             error => error.status === 400 && error.body?.error === 'invalid_estimation_votes');
     }

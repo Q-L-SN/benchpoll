@@ -66,17 +66,19 @@ test('one new calculation restores independent model, version group and fallback
 });
 
 test('resuming both ranking lists returns the newly calculated personal ballot and public counts only in the workspace', () => {
+    const reverseVote = { targetConditionID: 901, sourceConditionID: 1, vote: 'support' };
     const fixture = createFixtureState({ userID: '7', rankingStress: true, communityVersions: true, secondaryBenchmark: true,
-        personalEstimationVotes: [{ conditionID: 901, vote: 'oppose' }] });
+        personalEstimationVotes: [{ targetConditionID: 1, sourceConditionID: 901, vote: 'oppose' }, reverseVote] });
     const pager = createRankingPager();
     const first = pager.create(workspace(fixture, {}, { paginate: false }), { userID: '7' });
     const resume = captureRankingResume(first.rankingPagination, { requests: [{ list: 'personal', offset: 0 }, { list: 'public', offset: 25 }] });
-    fixture.personalEstimationVotes = [{ conditionID: 901, vote: 'support' }];
+    fixture.personalEstimationVotes = [{ targetConditionID: 1, sourceConditionID: 901, vote: 'support' }, reverseVote];
     const restored = pager.create(workspace(fixture, {}, { paginate: false }), { userID: '7', resume });
     validateWorkspacePayload(restored, { resume });
     assert.notEqual(restored.rankingPagination.snapshotID, first.rankingPagination.snapshotID);
     assert.deepEqual(restored.personalPie.estimationVotes, fixture.personalEstimationVotes);
-    assert.deepEqual(restored.communityEstimationVotes, [{ conditionID: 901, supportCount: 1, opposeCount: 0 }]);
+    assert.deepEqual(restored.communityEstimationVotes, [{ targetConditionID: 1, sourceConditionID: 901, supportCount: 1, opposeCount: 0 },
+        { targetConditionID: 901, sourceConditionID: 1, supportCount: 1, opposeCount: 0 }]);
     for (const list of ['personal', 'public']) {
         const after = pager.getPage({ snapshotID: restored.rankingPagination.snapshotID, userID: '7', list,
             offset: restored.rankingPagination[list].nextOffset });

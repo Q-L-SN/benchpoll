@@ -136,7 +136,8 @@ test('tampered request scope, precision, UUID, revision and generation are rejec
 
 test('recovery compares ballots as a set without changing the pending write body', () => {
     const owner = harness();
-    const votes = [{ conditionID: 901, vote: 'oppose' }, { conditionID: 1, vote: 'support' }];
+    const votes = [{ targetConditionID: 901, sourceConditionID: 900, vote: 'oppose' },
+        { targetConditionID: 1, sourceConditionID: 900, vote: 'support' }];
     const request = owner.request();
     request.body.estimationVotes = votes;
     owner.state.personalSaveRequest = request;

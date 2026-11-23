@@ -32,15 +32,39 @@ test('unavailable browser storage is reported rather than silently promising per
     assert.deepEqual(store.get('context'), { entries: [], fallbackRules: [] });
 });
 
-test('guest drafts preserve independent version votes and reject ambiguous ballots', () => {
+test('guest drafts preserve votes sharing an endpoint and reject a duplicate pair', () => {
     const storage = memoryStorage();
     const store = createGuestDraftStore(() => storage);
     const draft = { entries: [{ conditionID: 1, weightBasisPoints: 10000 }], fallbackRules: [],
-        estimationVotes: [{ conditionID: 901, vote: 'oppose' }] };
+        estimationVotes: [{ targetConditionID: 1, sourceConditionID: 901, vote: 'oppose' },
+            { targetConditionID: 900, sourceConditionID: 901, vote: 'support' }] };
     assert.equal(store.set('scene', draft), true);
     assert.throws(() => store.set('scene', { ...draft, estimationVotes: [...draft.estimationVotes,
-        { conditionID: 901, vote: 'support' }] }), /Invalid guest draft/);
+        { ...draft.estimationVotes[0], vote: 'support' }] }), /Invalid guest draft/);
+    assert.throws(() => store.set('scene', { ...draft, estimationVotes: [{ conditionID: 901, vote: 'support' }] }), /Invalid guest draft/);
     assert.deepEqual(createGuestDraftStore(() => storage).get('scene'), draft);
+});
+
+test('stored source-only ballots are removed while draft weights and directed votes are recovered', () => {
+    const storage = memoryStorage();
+    const store = createGuestDraftStore(() => storage);
+    const draft = { entries: [{ conditionID: 1, weightBasisPoints: 10000 }], fallbackRules: [],
+        estimationVotes: [{ targetConditionID: 1, sourceConditionID: 901, vote: 'oppose' }] };
+    store.set('scene', draft);
+    const slot = 'benchpoll:guest-pie:v3:scene';
+    const record = JSON.parse(storage.getItem(slot));
+    const retiredVote = { conditionID: 900, vote: 'oppose' };
+    record.value.estimationVotes.push(retiredVote);
+    storage.setItem(slot, JSON.stringify(record));
+    const restored = createGuestDraftStore(() => storage);
+    assert.deepEqual(restored.get('scene'), draft);
+    assert.equal(restored.token('scene'), record.token);
+
+    storage.setItem('benchpoll-guest-weights-v2-ordered', JSON.stringify([['scene', { ...draft, estimationVotes: [retiredVote] }]]));
+    const legacy = restored.getLegacy('scene');
+    assert.deepEqual(legacy, { ...draft, estimationVotes: [] });
+    assert.equal(restored.discardLegacy('scene', legacy), true);
+    assert.equal(restored.getLegacy('scene'), null);
 });
 
 test('every successfully saved guest context survives reloading beyond fifty drafts', () => {

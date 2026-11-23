@@ -179,9 +179,9 @@ test('all stale read versions and matched comparisons calculate original-weight 
             assert.ok(rows.every(row => row.availableInference.weightPolicy === 'original'));
         }
     }
-    assert.equal(AVAILABLE_INFERENCE_VERSION, 9);
-    assert.equal(rankingReadBody('/api/get_weighted_workspace', {}).availableInferenceVersion, 9);
-    for (const version of [1, 2, 3, 4, 5, 6, 7, 8]) assert.equal(rankingReadBody('/api/get_weighted_workspace', { availableInferenceVersion: version }).availableInferenceVersion, 9);
+    assert.equal(AVAILABLE_INFERENCE_VERSION, 10);
+    assert.equal(rankingReadBody('/api/get_weighted_workspace', {}).availableInferenceVersion, 10);
+    for (const version of [1, 2, 3, 4, 5, 6, 7, 8, 9]) assert.equal(rankingReadBody('/api/get_weighted_workspace', { availableInferenceVersion: version }).availableInferenceVersion, 10);
 });
 
 test('rounding preserves finite extreme totals instead of overflowing them while forming a ranking', () => {

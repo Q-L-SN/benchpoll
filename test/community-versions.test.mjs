@@ -13,6 +13,7 @@ const conditions = [
 const entry = (conditionID, weightBasisPoints = 10000, follows = false) => ({ conditionID, weightBasisPoints,
     ...(follows ? { followCommunityVersion: true } : {}) });
 const pie = (...entries) => ({ entries });
+const estimationVote = (targetConditionID, sourceConditionID, vote) => ({ targetConditionID, sourceConditionID, vote });
 
 test('new pies require one scoring version per benchmark while stored explicit mixes remain readable', () => {
     const catalogue = new Map(conditions.map(condition => [condition.conditionID, condition]));
@@ -69,7 +70,7 @@ test('an explicit zero score is retained when mixing versions', () => {
 
 test('estimation votes may coexist with following community scoring versions', () => {
     const entries = [entry(1, 10000, true)];
-    const estimationVotes = [{ conditionID: 2, vote: 'support' }];
+    const estimationVotes = [estimationVote(1, 2, 'support')];
     assert.deepEqual(normalizePreviewPersonalPie({ entries, estimationVotes }), { entries, estimationVotes });
     assert.deepEqual(normalizePreviewPersonalPie({ entries, estimationVotes: [] }), { entries, estimationVotes: [] });
     assert.deepEqual(normalizePreviewPersonalPie({ entries, fallbackRules: [{ primaryConditionID: 1, mode: 'ordered', entries: [] }] }), { entries });
@@ -94,10 +95,10 @@ const row = (pieID, contextID, conditionID, weight, follows = false) => ({ pie_I
 
 test('scoring version preferences and estimation votes are independent and scoped to the selected scene', async () => {
     const weights = [
-        { ...row(1, 10, 1, 10000), estimation_votes: [{ conditionID: 2, vote: 'support' }] },
+        { ...row(1, 10, 1, 10000), estimation_votes: [estimationVote(1, 2, 'support')] },
         row(2, 10, 2, 10000),
-        { ...row(3, 10, 1, 10000, true), estimation_votes: [{ conditionID: 2, vote: 'oppose' }] },
-        { ...row(4, 11, 2, 10000), estimation_votes: [{ conditionID: 2, vote: 'support' }] }
+        { ...row(3, 10, 1, 10000, true), estimation_votes: [estimationVote(1, 2, 'oppose')] },
+        { ...row(4, 11, 2, 10000), estimation_votes: [estimationVote(2, 1, 'support')] }
     ];
     const db = database(weights);
     const byID = new Map(conditions.map(condition => [condition.conditionID, condition]));
@@ -105,23 +106,23 @@ test('scoring version preferences and estimation votes are independent and scope
     assert.equal(first.participantCount, 3);
     assert.deepEqual(first.entries, [entry(1, 10000, true)]);
     assert.deepEqual(first.versionComposition[0].versions.map(version => [version.conditionID, version.selectionBasisPoints]), [[2, 5000], [1, 5000]]);
-    assert.deepEqual(first.estimationVotes, [{ conditionID: 2, supportCount: 1, opposeCount: 1 }]);
+    assert.deepEqual(first.estimationVotes, [{ targetConditionID: 1, sourceConditionID: 2, supportCount: 1, opposeCount: 1 }]);
     assert.equal(first.scoringEntries.reduce((sum, item) => sum + item.weightBasisPoints, 0), 30000);
     const second = await loadPublicPie(db, { ID: 11, categoryID: 1, sceneID: 11 }, byID);
     assert.deepEqual(second.versionComposition[0].versions.map(version => [version.conditionID, version.selectionBasisPoints]), [[2, 10000], [1, 0]]);
-    assert.deepEqual(second.estimationVotes, [{ conditionID: 2, supportCount: 1, opposeCount: 0 }]);
+    assert.deepEqual(second.estimationVotes, [{ targetConditionID: 2, sourceConditionID: 1, supportCount: 1, opposeCount: 0 }]);
 });
 
 test('an older scoring choice and source vote leave together when ten recent configurations abstain', async () => {
     const weights = [row(1, 10, 1, 10000, true), { ...row(2, 10, 2, 10000), is_recent: 0,
-        estimation_votes: [{ conditionID: 1, vote: 'oppose' }] }];
+        estimation_votes: [estimationVote(2, 1, 'oppose')] }];
     const catalogue = new Map(conditions.map(item => [item.conditionID, item]));
     const read = () => loadPublicPie(database(weights), { ID: 10, categoryID: 1, sceneID: 10 }, catalogue);
     const sparse = await read();
     assert.equal(sparse.participantCount, 2);
     assert.equal(sparse.versionComposition[0].configuredPieCount, 1);
     assert.deepEqual(sparse.scoringEntries, [{ contextID: 10, conditionID: 2, weightBasisPoints: 20000 }]);
-    assert.deepEqual(sparse.estimationVotes, [{ conditionID: 1, supportCount: 0, opposeCount: 1 }]);
+    assert.deepEqual(sparse.estimationVotes, [{ targetConditionID: 2, sourceConditionID: 1, supportCount: 0, opposeCount: 1 }]);
 
     for (let ID = 3; ID <= 11; ID++) weights.push(row(ID, 10, 1, 10000, true));
     const active = await read();

@@ -220,10 +220,12 @@ shares and estimation votes. Each explicit scoring choice carries that person's 
 Personal rankings use a chosen scoring version or follow community shares. With no version
 choices, the primary version is used.
 
-Estimation votes belong to a specific scene and source version. Each sampled person who assigns
-weight directly to the benchmark can cast one support or oppose vote per version. Sources with
-at least as much support as opposition are eligible, including versions with zero votes. In personal rankings a user's own vote
-takes priority. Sign in to save votes and contribute to the community tally.
+Choose a scoring version to see how much support each other version has as a source for that target.
+Each sampled person who gives the benchmark a positive weight can support or oppose each source–target
+pair once per scene. Switching the scoring version or returning to community shares preserves those
+votes. Select the same target again to edit them. A source is eligible with no votes, a tie, or a
+majority in support. A personal vote takes priority for that direction in the person's own ranking.
+Sign in to save votes and contribute to the community tally.
 Topic references share a topic icon and parent/scene separator across treemaps, selectors,
 and benchmark search. A parent-only search keeps its scenes collapsed. The weight-chart heading
 shows its selected block; scene tabs omit the Default badge. Successful refreshes briefly show
@@ -244,9 +246,11 @@ Model paging controls appear at the sides of each preview when available.
 The AI Index offers **Version-based estimation**. Direct scores take priority.
 For a missing score, BenchPoll automatically considers measured results from eligible versions
 of the same benchmark. Each candidate is calibrated from paired model measurements with
-matching run settings. The most reliable candidate is chosen by validation error and, on a tie,
-paired model count. Direct scores and reliable estimates keep their original weights. Unresolved
-results count as zero at full weight. Only direct scores contribute measured coverage. Score
+matching run settings. All reliable estimates are converted to the target's scale and averaged.
+A source's relative weight is `(n / (n + 5)) / (1 + e²)`, where `n` is the local paired model count
+and `e` is the mean absolute held-out error in target points. Direct scores (including zero) and
+estimates retain the target version's original scoring share. A version with no eligible, reliable
+measurement contributes zero. Coverage has no additional penalty. Only direct scores contribute measured coverage. Score
 range assigns 0 at the lower end and 100 at the upper end for missing measurements. See
 [How BenchPoll works](https://benchpoll.com/how-it-works#rankings).
 
@@ -541,9 +545,10 @@ https://benchpoll.com:1337
 版本计分率和估分来源投票使用同一批入选配置。每个明确选择的计分版本按该用户分给基准的权重计入。
 个人排行使用自己选定的版本，或者跟随社区版本比例。无人选择时使用主版本。
 
-估分来源投票对应具体场景及来源版本。入选配置中直接给该基准分配了正权重的用户，
-每个版本可投一票支持或反对。支持票不少于反对票即有资格作为来源，零票同样
-有资格。个人排行优先应用自己的投票。登录后可保存投票并计入社区票数。
+选定计分版本后，可以看到用其他版本为它估分的支持率。入选配置中直接给该基准分配了正权重的用户，
+可在该场景对每一对“来源版本 → 计分版本”投一票支持或反对。切换计分版本或恢复跟随社区时，
+以前的投票继续计入原来的方向，切回对应计分版本即可修改。无人投票、平票或赞成票占多数时，
+该来源可以参与估分。个人排行优先采用本人对这一方向的投票。登录后可保存投票并计入社区票数。
 树图、选择器和基准搜索中的主题引用统一使用主题图标及一级主题/场景分隔图标。
 只匹配一级主题时，其场景默认折叠。权重图标题显示当前选中分区；场景标签不再显示 Default。
 刷新成功后短暂显示“已更新”，随后隐藏，不再常驻时间戳。
@@ -560,8 +565,10 @@ https://benchpoll.com:1337
 
 AI Index 提供 **Version-based estimation**。计分优先使用所选版本的实测成绩。
 缺少成绩时，系统自动考虑同一基准中有资格的其他版本，使用运行设置相同的模型配对实测
-结果校准。多项来源均通过校验时，选验证误差最低的来源，误差相同则优先采用配对模型更多
-的来源。实测和可靠估计均使用原权重。无法可靠估计的部分按原权重计 0 分。实测覆盖率仅
+结果校准。所有通过校验的来源先换算到计分版本的尺度，再加权平均。每个来源的相对权重是
+`(n / (n + 5)) / (1 + e²)`，其中 `n` 是附近分数段的配对模型数，`e` 是留出验证的平均绝对误差，
+单位为计分版本的分数。实测成绩（包括 0 分）和可靠估分均使用该版本原来的计分占比。
+无法可靠估计的部分按原权重计 0 分，覆盖率不额外扣分。实测覆盖率仅
 计入所选版本的直接成绩。Score range 对缺少实测的部分，下限计 0 分，上限计 100 分。
 详见 [How BenchPoll works](https://benchpoll.com/how-it-works#rankings)。
 

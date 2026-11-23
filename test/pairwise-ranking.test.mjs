@@ -113,8 +113,8 @@ test('workspace rejects invented fallback measurements or malformed calibration 
 });
 
 test('current and stale requests select the calibrated formula, and invalid requests are rejected', () => {
-    for (const version of [undefined, 1, 7, 8, 9]) assert.equal(rankingReadBody('/api/get_weighted_workspace', { availableInferenceVersion: version }).availableInferenceVersion, 9);
-    assert.throws(() => scoreModels([], weights, 10000, { availableInferenceVersion: 10 }), e => e.status === 400);
+    for (const version of [undefined, 1, 7, 8, 9]) assert.equal(rankingReadBody('/api/get_weighted_workspace', { availableInferenceVersion: version }).availableInferenceVersion, 10);
+    assert.throws(() => scoreModels([], weights, 10000, { availableInferenceVersion: 11 }), e => e.status === 400);
     const body = { value: 1 };
     assert.equal(rankingReadBody('/api/save_personal_pie', body), body);
 });

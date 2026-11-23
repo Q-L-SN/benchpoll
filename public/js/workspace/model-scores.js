@@ -446,6 +446,64 @@ export function createModelScoresView({ state, modelScoresDialog, modelScoresTit
                 .find(item => Number(item.conditionID) === Number(conditionID));
     }
 
+    function estimateVersionLink(conditionID) {
+        const benchmark = benchmarkDetails(conditionID);
+        if (!benchmark) return document.createTextNode(`Benchmark version #${conditionID}`);
+        return informationLink({ benchmarkID: benchmark.benchmarkID, conditionID, name: benchmark.name,
+            conditionName: benchmark.isDefaultCondition ? 'Default benchmark version' : benchmark.conditionName });
+    }
+
+    function renderVersionEstimate(row, score) {
+        const summary = document.createElement('div');
+        summary.className = 'bp-model-estimate-summary';
+        const identity = document.createElement('div');
+        identity.className = 'bp-model-score-detail-identity';
+        const weight = document.createElement('small');
+        weight.textContent = `${score.originalWeight.toFixed(2)}% of total weight`;
+        identity.append(estimateVersionLink(score.conditionID), weight);
+        const aggregate = document.createElement('div');
+        aggregate.className = 'bp-model-score-aggregate';
+        const label = document.createElement('small');
+        label.textContent = 'Estimated score';
+        const value = document.createElement('strong');
+        value.className = 'bp-model-score-detail-value';
+        value.textContent = score.normalizedScore.toFixed(2);
+        const contribution = document.createElement('span');
+        contribution.textContent = `${score.contribution.toFixed(2)} points added to total`;
+        aggregate.append(label, value, contribution);
+        summary.append(identity, aggregate);
+
+        const sources = document.createElement('ul');
+        sources.className = 'bp-model-estimate-sources';
+        sources.setAttribute('role', 'list');
+        sources.setAttribute('aria-label', 'Versions used for this estimate');
+        for (const source of score.sources) {
+            const item = document.createElement('li');
+            const version = document.createElement('div');
+            version.className = 'bp-model-estimate-version';
+            const details = document.createElement('small');
+            details.textContent = `At least ${source.referenceCount} paired models. Validation error ${source.validationError.toFixed(2)} points.`;
+            version.append(estimateVersionLink(source.sourceConditionID), details);
+            const metrics = document.createElement('dl');
+            for (const [name, text] of [
+                ['Measured score', source.sourceScore.toFixed(2)],
+                ['Estimate on target scale', source.normalizedScore.toFixed(2)],
+                ['Share of estimate', `${(100 * source.weightFraction).toFixed(2)}%`]
+            ]) {
+                const metric = document.createElement('div');
+                const term = document.createElement('dt');
+                const reading = document.createElement('dd');
+                term.textContent = name;
+                reading.textContent = text;
+                metric.append(term, reading);
+                metrics.append(metric);
+            }
+            item.append(version, metrics);
+            sources.append(item);
+        }
+        row.append(summary, sources);
+    }
+
     function renderCoverageResults(model) {
         if (coveragePreview) {
             const figure = document.createElement('figure');
@@ -637,8 +695,14 @@ export function createModelScoresView({ state, modelScoresDialog, modelScoresTit
             const section = document.createElement('h3'); section.className = 'bp-model-inferred-heading';
             section.textContent = 'Estimated benchmark scores'; modelScoresList.append(section);
             for (const score of model.inferredScores) {
-                const benchmark = benchmarkDetails(score.conditionID);
                 const row = document.createElement('div'); row.className = 'bp-model-score-detail-row bp-model-inferred-row';
+                row.dataset.conditionId = String(score.conditionID);
+                modelScoresList.append(row);
+                if (score.selection === 'automatic' && Array.isArray(score.sources)) {
+                    renderVersionEstimate(row, score);
+                    continue;
+                }
+                const benchmark = benchmarkDetails(score.conditionID);
                 const title = benchmark ? informationLink(benchmark) : document.createElement('strong');
                 if (!benchmark) title.textContent = `Benchmark #${score.conditionID}`;
                 const description = document.createElement('small');
@@ -652,7 +716,7 @@ export function createModelScoresView({ state, modelScoresDialog, modelScoresTit
                 const value = document.createElement('strong'); value.textContent = score.normalizedScore.toFixed(2);
                 const contribution = document.createElement('span');
                 contribution.textContent = `${score.contribution.toFixed(2)} points ${originalWeights ? 'added to total' : 'before adjustment'}`;
-                row.append(title, value, description, contribution); modelScoresList.append(row);
+                row.append(title, value, description, contribution);
             }
         }
         if (!scores.length && !model.inferredScores?.length) {

@@ -12,7 +12,7 @@ const scenes = [{ ID: 101, name: 'General', sceneNumber: 1, isDefault: true },
 
 async function setup(t, engine, width, sceneFixture = false) {
     const app = await startPreview({ communityVersions: true, secondaryBenchmark: true, rankingStress: true,
-        communityEstimationVotes: [{ conditionID: 1, supportCount: 4, opposeCount: 2 }] });
+        communityEstimationVotes: [{ targetConditionID: 1, sourceConditionID: 901, supportCount: 4, opposeCount: 2 }] });
     const browser = await engine.launch({ headless: true });
     const page = await browser.newPage({ viewport: { width, height: 900 }, hasTouch: width < 760,
         isMobile: width < 760, reducedMotion: 'reduce' });
@@ -35,7 +35,7 @@ async function setup(t, engine, width, sceneFixture = false) {
                 contextValues: { scene: String(sceneID) } });
             if (sceneID === 102) {
                 data.versionComposition.forEach(group => { group.name += ' in Research'; });
-                data.communityEstimationVotes = [{ conditionID: 1, supportCount: 1, opposeCount: 5 }];
+                data.communityEstimationVotes = [{ targetConditionID: 1, sourceConditionID: 901, supportCount: 1, opposeCount: 5 }];
             }
             await route.fulfill({ json: data });
         });
@@ -62,9 +62,16 @@ for (const [engine, width] of [[chromium, 1440], [chromium, 320], [webkit, 390]]
         await panel.waitFor();
         assert.equal(await panel.evaluate(node => node.localName), 'section');
         assert.equal(await page.locator('.bp-workspace').evaluate(node => node.inert), false);
+        const rate = panel.locator('.bp-version-choice-row[data-condition-id="901"] .bp-estimation-rate');
+        assert.equal(await rate.count(), 0);
+        await panel.getByRole('button', { name: 'Inspect estimation sources for Default evaluation', exact: true }).click();
+        assert.equal(await rate.textContent(), '66.67%');
         await select(2);
         assert.equal(await page.locator('#public-fallback-toggle').getAttribute('aria-expanded'), 'true');
         assert.match(await panel.locator('.bp-benchmark-settings-title').textContent(), /Advanced reasoning/);
+        await select(1);
+        assert.equal(await rate.count(), 0);
+        await select(2);
         await page.locator('#pie-mode-personal').click();
         await page.locator('#pie-mode-personal[aria-selected="true"][aria-busy="false"]').waitFor();
         await panel.waitFor();
@@ -85,7 +92,7 @@ for (const [engine, width] of [[chromium, 1440], [chromium, 320], [webkit, 390]]
                 if (expanded) {
                     const title = await panel.locator('.bp-benchmark-settings-title').textContent();
                     assert.equal(title.includes('in Research'), scene === 102);
-                    assert.equal(await panel.locator('.bp-version-choice-row[data-condition-id="1"] [data-vote="support"]').textContent(),
+                    assert.equal(await panel.locator('.bp-version-choice-row[data-condition-id="901"] [data-vote="support"]').textContent(),
                         scene === 102 ? '1' : '4');
                 }
                 await select(2);

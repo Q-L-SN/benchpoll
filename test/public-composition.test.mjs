@@ -10,10 +10,11 @@ const contextRow = (ID, category = 1, values = '{}', extra = {}) => ({
 });
 const weight = (pie, context, condition = 1, amount = 10000) => ({
     pie_ID: pie, context_ID: context, benchmark_condition_ID: condition, weight_basis_points: amount,
-    estimation_votes: condition > 0 ? [{ conditionID: condition, vote: 'support' }] : null,
+    estimation_votes: condition > 0 ? [{ targetConditionID: condition, sourceConditionID: condition + 10, vote: 'support' }] : null,
     is_recent: 1
 });
-const tally = (conditionID, supportCount, opposeCount = 0) => ({ conditionID, supportCount, opposeCount });
+const tally = (targetConditionID, supportCount, opposeCount = 0) => ({ targetConditionID, sourceConditionID: targetConditionID + 10,
+    supportCount, opposeCount });
 function database(contexts, weights) {
     return { async execute(sql, params) {
         assert.doesNotMatch(sql, /\bIN\s*\(\s*\)/i, 'Empty electorates must not generate invalid SQL');
@@ -37,7 +38,9 @@ function database(contexts, weights) {
         throw Error('Unexpected SQL: ' + sql);
     } };
 }
-const conditions = new Map([1, 2].map(ID => [ID, { conditionID: ID, benchmarkID: ID, isPrimaryCondition: true, scoreCount: 1 }]));
+const conditions = new Map([1, 2].flatMap(benchmarkID => [benchmarkID, benchmarkID + 10].map(conditionID => [conditionID, {
+    conditionID, benchmarkID, isPrimaryCondition: conditionID === benchmarkID, scoreCount: 1
+}])));
 const topic = { categoryID: 1, dimensions: [], contextValues: {} };
 const filteredTopic = { categoryID: 1, contextValues: { tools: 'any' },
     dimensions: [{ key: 'tools', options: [{ key: 'any', isNeutral: true }, { key: 'allowed' }, { key: 'blocked' }] }] };
