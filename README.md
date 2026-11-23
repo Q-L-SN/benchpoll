@@ -210,28 +210,26 @@ the Privacy Policy version remains `2026-10-30`.
 
 ## Public Weight Calculation
 
-Each concrete topic/scene averages non-empty personal pies changed in the
-past 72 hours. If fewer than 10 qualify, use its latest up-to-10 non-empty pies
-without an age cutoff, including when none changed within 72 hours. This is 10
-pies total, not 10 additional pies; if fewer exist, use all of them. If 10 or more
-qualify within 72 hours, use all qualifying pies. Selected pies contribute equally,
-and the participant count is the number selected. Public weights and reference
-availability do not expire after 14 days. A topic with scenes opens its default scene.
-Advanced settings lists each benchmark's versions. Explicit scoring-version choices within
-14 days are weighted by benchmark allocation in the scene. Personal rankings use a chosen
-scoring version or follow community shares. With no version choices, the primary version is used.
+Each topic or scene uses every valid nonempty personal configuration updated in the past
+72 hours. If fewer than 10 qualify, it takes the 10 most recently updated valid configurations,
+or all of them if fewer exist. Each selected configuration contributes equally to public weights.
+The participant count is the sample size. Older configurations in the sample can keep referenced
+topics available. A topic with scenes opens its default scene.
+Advanced settings lists each benchmark's versions. The same sample supplies scoring version
+shares and estimation votes. Each explicit scoring choice carries that person's benchmark weight.
+Personal rankings use a chosen scoring version or follow community shares. With no version
+choices, the primary version is used.
 
-Estimation votes belong to a specific scene and source version. Among personal pies active
-within 14 days that assign weight directly to the benchmark, each person contributes one
-support or oppose vote per version. Sources with at least as much support as opposition
-are eligible, including versions with zero votes. In personal rankings a user's own vote
+Estimation votes belong to a specific scene and source version. Each sampled person who assigns
+weight directly to the benchmark can cast one support or oppose vote per version. Sources with
+at least as much support as opposition are eligible, including versions with zero votes. In personal rankings a user's own vote
 takes priority. Sign in to save votes and contribute to the community tally.
 Topic references share a topic icon and parent/scene separator across treemaps, selectors,
 and benchmark search. A parent-only search keeps its scenes collapsed. The weight-chart heading
 shows its selected block; scene tabs omit the Default badge. Successful refreshes briefly show
 Updated, then hide it instead of leaving a timestamp.
-There is no parent/descendant aggregation or Public composition endpoint. Login alone does
-not refresh either window. Topic 54 is featured by ID. Other topics use recent
+There is no parent/descendant aggregation or Public composition endpoint. Saving a configuration
+updates its sampling timestamp. Topic 54 is featured by ID. Other topics use recent
 distinct-contributor activity, with at most one eligible new-topic discovery slot
 per six ordinary positions, including new topics with no saved pies. Home and the
 sidebar offer Popular, device-local Recent, Mine and Search. Mine includes the
@@ -536,22 +534,20 @@ https://benchpoll.com:1337
 
 ## 公众权重计算
 
-每个具体主题/场景先平均最近 72 小时内创建或修改的非空个人 Pie。
-不足 10 个时，使用该场景最新的至多 10 个非空 Pie 补足，不限制样本时间，
-即使最近 72 小时内没有更新也照常取样。这里是合计补足至 10 个，不是再补 10 个；
-全部记录不足 10 个时使用全部。达到或超过 10 个时，平均全部符合 72 小时窗口的 Pie。
-选中样本等权参与，参与数量为实际选入的 Pie 数量。公众权重及其引用可用性不再因
-超过 14 天而失效。有场景的主题默认打开其默认场景。高级设置列出基准的各个版本。
-计分版本按场景汇总最近 14 天内的明确选择，票的权重取决于个人对该基准的分配。
+每个主题或场景使用最近 72 小时内更新的全部有效非空个人配置。不足 10 份时，
+按更新时间取最新的 10 份有效配置。如果总共不足 10 份，则全部计入。
+每份入选配置等权计入公众权重，参与人数等于入选配置数。较早的配置入选后也能使被引用的主题保持可用。
+有场景的主题默认打开其默认场景。高级设置列出基准的各个版本。
+版本计分率和估分来源投票使用同一批入选配置。每个明确选择的计分版本按该用户分给基准的权重计入。
 个人排行使用自己选定的版本，或者跟随社区版本比例。无人选择时使用主版本。
 
-估计来源投票对应具体场景及来源版本。最近 14 天活跃且直接对该基准分配正权重的
-用户，每个版本可投一票支持或反对。支持票不少于反对票即有资格作为来源，零票同样
+估分来源投票对应具体场景及来源版本。入选配置中直接给该基准分配了正权重的用户，
+每个版本可投一票支持或反对。支持票不少于反对票即有资格作为来源，零票同样
 有资格。个人排行优先应用自己的投票。登录后可保存投票并计入社区票数。
 树图、选择器和基准搜索中的主题引用统一使用主题图标及一级主题/场景分隔图标。
 只匹配一级主题时，其场景默认折叠。权重图标题显示当前选中分区；场景标签不再显示 Default。
 刷新成功后短暂显示“已更新”，随后隐藏，不再常驻时间戳。
-不再聚合父子分类，也不再提供公众构成接口。仅登录不会刷新这两个时间窗口。编号为 54 的主题
+不再聚合父子分类，也不再提供公众构成接口。保存个人配置会更新其取样时间。编号为 54 的主题
 固定突出显示，其余按近期不同参与者的有效配置活动排序，每六个普通位置最多
 安排一个合格的新主题探索位，包括尚无已保存 Pie 的新主题。首页和侧栏提供热门、
 本机最近浏览、我的及搜索。“我的”包含创建私有主题入口；公开主题通过提案大厅提出。

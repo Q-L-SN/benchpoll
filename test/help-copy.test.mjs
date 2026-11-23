@@ -93,13 +93,15 @@ test('guide details remain concise and the first read stays light', () => {
     const main = guide.match(/<article[^>]*>([\s\S]*?)<\/article>/)?.[1];
     assert.ok(main, 'Count the real article, not a slice ending at a removed section');
     assert.ok(words(plain(main)) <= 1150, String(words(plain(main))));
-    assert.ok(words(plain(main.replace(/<details[\s\S]*?<\/details>/g, ''))) <= 400);
+    const introduction = main.replace(/<details[\s\S]*?<\/details>/g, '');
+    assert.ok(words(plain(introduction)) <= 400);
+    assert.doesNotMatch(introduction, /72 hours/);
     assert.match(main, /Create a private topic, then choose <strong>Make public<\/strong>/);
     assert.match(main, /Creation and publication are immediate and do not require review\. You can have up to three public topics at a time\./);
     assert.doesNotMatch(main, /Collection lasts 14 days|Proposal Hall|proposal hall/);
-    assert.doesNotMatch(main, /72 hours|Public weight =|48 to 88/);
+    assert.doesNotMatch(main, /Public weight =|48 to 88/);
     assert.doesNotMatch(main, /<ol\b|<table\b|Full calculation rules|Expand all/);
-    assert.match(guide, /<p id="calculation-details">[\s\S]*?saved personal weight configurations in this topic/);
+    assert.match(guide, /<p id="calculation-details">[^<]*past 72 hours/);
     assert.match(main, /automatically considers other versions of the same benchmark/);
     assert.doesNotMatch(guide, /id="fallback-versions"|All Other Versions|No fallback/);
     for (const [, paragraph] of main.matchAll(/<p(?:\s[^>]*)?>([\s\S]*?)<\/p>/g)) assert.ok(words(plain(paragraph)) <= 55);

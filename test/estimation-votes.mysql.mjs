@@ -131,8 +131,16 @@ test('SQL workspaces keep source ballots separate from scoring versions, scenes,
 
     const rankingCache = createRankingReadCache();
     const read = options => getRankingWorkspace(db, { ...scope, comparison, rankingCache, jsonMemberMetadata: true, ...options });
+    const sparse = await read();
+    assert.equal(sparse.publicPie.participantCount, 4);
+    assert.deepEqual(sparse.communityEstimationVotes, [{ conditionID: preciseSource, supportCount: 2, opposeCount: 2 }]);
+    assert.equal(sparse.versionComposition.find(group => group.benchmarkID === 1).configuredPieCount, 3);
+    checkEstimate(modelOne(sparse.modelLeaderboards.public), preciseSource, 58, 48, .6);
+
+    for (let userID = 1004; userID <= 1010; userID++) await save(db, scope, String(userID), followerEntries);
     const initial = await read({ userID: '42' });
     assert.equal(initial.scoreMode, 'available');
+    assert.equal(initial.publicPie.participantCount, 10);
     const initialVotes = [{ conditionID: preciseSource, supportCount: 1, opposeCount: 2 }];
     assert.deepEqual(initial.communityEstimationVotes, initialVotes);
     assert.deepEqual(initial.personalPie.estimationVotes, [support(preciseSource)]);
@@ -143,6 +151,8 @@ test('SQL workspaces keep source ballots separate from scoring versions, scenes,
     const publicRow = modelOne(initial.modelLeaderboards.public);
     checkEstimate(personal, preciseSource, 58, 48, .6);
     checkEstimate(publicRow, alternateSource, 42, 52, .6);
+    const olderOwner = await read({ userID: '1002' });
+    checkEstimate(modelOne(olderOwner.modelLeaderboards.personal), preciseSource, 58, 48, .6);
     assert.deepEqual([personal.lower, personal.upper, personal.coverage], [39.8, 39.8, 20]);
     assert.deepEqual([publicRow.lower, publicRow.upper, publicRow.coverage], [42.2, 42.2, 20]);
     near(personal.availableInference.observedContribution, 11);

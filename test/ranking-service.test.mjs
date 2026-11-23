@@ -641,7 +641,7 @@ test('benchmark condition invariants reject custom rows without both normalizati
     );
 });
 
-const recentRows = rows => rows.map(row => ({ ...row, is_recent: 1, is_fallback_recent: 1 }));
+const recentRows = rows => rows.map(row => ({ ...row, is_recent: 1 }));
 
 function topicContextRows(sql, params, rows) {
     assert.match(sql, /WHERE rc.category_ID = \? AND c.is_active = 1 AND c.owner_user_ID IS NULL/);
@@ -874,7 +874,6 @@ test('public pie queries only the active public topic and counts each recent pie
             }
             if (sql.includes('FROM personal_pies')) {
                 assert.match(sql, /updated_at >= NOW\(\) - INTERVAL 72 HOUR/);
-                assert.match(sql, /updated_at >= NOW\(\) - INTERVAL 14 DAY/);
                 return [recentRows([{
                     pie_ID: 1,
                     context_ID: 10,

@@ -35,7 +35,6 @@ export const MAX_PIE_ITEMS = PIE_TOTAL_BASIS_POINTS / PIE_MIN_ITEM_BASIS_POINTS;
 export { FALLBACK_RULE_MODE };
 export const MIN_COMPARABLE_MODELS = 3;
 export const PUBLIC_PIE_SAMPLE_HOURS = 72;
-export const PUBLIC_CONFIGURATION_ACTIVITY_DAYS = 14;
 export const PUBLIC_PIE_MIN_SAMPLES = 10;
 export const RANKING_READ_TIMEOUT_MS = 45000;
 
@@ -516,7 +515,6 @@ export async function loadPublicPie(connection, context, conditionsByID) {
     const [rows] = await connection.execute(`
         SELECT personal_pies.ID AS pie_ID, personal_pies.context_ID,
                personal_pies.updated_at >= NOW() - INTERVAL ${PUBLIC_PIE_SAMPLE_HOURS} HOUR AS is_recent,
-               personal_pies.updated_at >= NOW() - INTERVAL ${PUBLIC_CONFIGURATION_ACTIVITY_DAYS} DAY AS is_fallback_recent,
                personal_pies.estimation_votes,
                personal_pie_weights.benchmark_condition_ID,
                personal_pie_weights.follow_community_version,
@@ -537,16 +535,13 @@ export async function loadPublicPie(connection, context, conditionsByID) {
     for (const row of rows) {
         const pieID = Number(row.pie_ID);
         const recent = Number(row.is_recent);
-        const configurationRecent = Number(row.is_fallback_recent);
-        if ((recent !== 0 && recent !== 1) || (configurationRecent !== 0 && configurationRecent !== 1)
-            || (recent === 1 && configurationRecent !== 1)) {
+        if (recent !== 0 && recent !== 1) {
             throw requestError(409, 'personal_pie_recency_invalid', { pieID });
         }
         if (!pies.has(pieID)) {
             pies.set(pieID, {
                 contextID: Number(row.context_ID),
                 isRecent: recent === 1,
-                isConfigurationRecent: configurationRecent === 1,
                 estimationVotes: row.estimation_votes,
                 entries: [],
                 conditionIDs: new Set(),
@@ -617,9 +612,7 @@ export async function loadPublicPie(connection, context, conditionsByID) {
         }
     }
     const participantCount = selectedPies.size;
-    // Recent choices count independently of the public weight sample.
-    const configuringPies = new Map([...validPies].filter(([, pie]) => pie.isConfigurationRecent));
-    const versionComposition = communityVersionComposition(configuringPies, conditionsByID.values());
+    const versionComposition = communityVersionComposition(selectedPies, conditionsByID.values());
     const primaryByVersion = new Map(versionComposition.flatMap(group => group.versions.map(version => [version.conditionID, group.primaryConditionID])));
     const aggregateWeights = new Map();
     const scoringWeights = new Map();
@@ -644,7 +637,7 @@ export async function loadPublicPie(connection, context, conditionsByID) {
         familyComposition: [],
         communityComposition: [],
         versionComposition,
-        estimationVotes: aggregateEstimationVotes(configuringPies, conditionsByID),
+        estimationVotes: aggregateEstimationVotes(selectedPies, conditionsByID),
         entries: normalizeWeights(Array.from(aggregateWeights, ([conditionID, rawWeight]) => ({
             conditionID,
             rawWeight

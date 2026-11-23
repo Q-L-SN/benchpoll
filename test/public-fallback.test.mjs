@@ -7,7 +7,7 @@ const catalogue = (entries = [[1, 10], [2, 10], [3, 20]]) => new Map(entries.map
     [conditionID, { conditionID, benchmarkID, excludedFromRanking, isPrimaryCondition: conditionID !== 2, scoreCount: 1 }]));
 const rowsForPie = (pieID, entries, votes = null) => (entries.length ? entries : [[null, null]]).map(([conditionID, points]) => ({
     pie_ID: pieID, context_ID: 10, benchmark_condition_ID: conditionID, weight_basis_points: points,
-    is_recent: 1, is_fallback_recent: 1, estimation_votes: votes
+    is_recent: 1, estimation_votes: votes
 }));
 const database = rows => ({ async execute(sql, params) {
     assert.match(sql, /FROM personal_pies/);

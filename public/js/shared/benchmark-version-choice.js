@@ -10,8 +10,6 @@ function primaryVersion(versions) {
             || left.conditionID - right.conditionID)[0];
 }
 
-// Version votes and benchmark weights have separate electorates. An absent flag
-// preserves a saved, explicit version choice; new benchmark additions opt out.
 export function versionChoiceOrder(left, right) {
     return (right.selectionBasisPoints ?? 0) - (left.selectionBasisPoints ?? 0)
         || (right.scoreCount ?? 0) - (left.scoreCount ?? 0)

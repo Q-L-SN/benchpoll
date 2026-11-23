@@ -84,7 +84,7 @@ test('invalid abstention flags and topic-version choices fail before database ac
 function database(weights) {
     return { async execute(sql, params) {
         if (sql.includes('FROM personal_pies')) {
-            return [weights.filter(row => params.includes(row.context_ID)).map(row => ({ is_recent: 1, is_fallback_recent: 1, ...row }))];
+            return [weights.filter(row => params.includes(row.context_ID)).map(row => ({ is_recent: 1, ...row }))];
         }
         throw new Error('Unexpected fixture query');
     } };
@@ -112,11 +112,23 @@ test('scoring version preferences and estimation votes are independent and scope
     assert.deepEqual(second.estimationVotes, [{ conditionID: 2, supportCount: 1, opposeCount: 0 }]);
 });
 
-test('sparse public weights still top up to ten while old version choices expire independently', async () => {
-    const weights = [row(1, 10, 1, 10000, true), { ...row(2, 10, 2, 10000), is_recent: 0, is_fallback_recent: 0 }];
-    const result = await loadPublicPie(database(weights), { ID: 10, categoryID: 1, sceneID: 10 }, new Map(conditions.map(item => [item.conditionID, item])));
-    assert.equal(result.participantCount, 2); assert.equal(result.versionComposition[0].configuredPieCount, 0);
-    assert.equal(result.scoringEntries.length, 1); assert.equal(result.scoringEntries[0].conditionID, 1);
+test('an older scoring choice and source vote leave together when ten recent configurations abstain', async () => {
+    const weights = [row(1, 10, 1, 10000, true), { ...row(2, 10, 2, 10000), is_recent: 0,
+        estimation_votes: [{ conditionID: 1, vote: 'oppose' }] }];
+    const catalogue = new Map(conditions.map(item => [item.conditionID, item]));
+    const read = () => loadPublicPie(database(weights), { ID: 10, categoryID: 1, sceneID: 10 }, catalogue);
+    const sparse = await read();
+    assert.equal(sparse.participantCount, 2);
+    assert.equal(sparse.versionComposition[0].configuredPieCount, 1);
+    assert.deepEqual(sparse.scoringEntries, [{ contextID: 10, conditionID: 2, weightBasisPoints: 20000 }]);
+    assert.deepEqual(sparse.estimationVotes, [{ conditionID: 1, supportCount: 0, opposeCount: 1 }]);
+
+    for (let ID = 3; ID <= 11; ID++) weights.push(row(ID, 10, 1, 10000, true));
+    const active = await read();
+    assert.equal(active.participantCount, 10);
+    assert.equal(active.versionComposition[0].configuredPieCount, 0);
+    assert.deepEqual(active.scoringEntries, [{ contextID: 10, conditionID: 1, weightBasisPoints: 100000 }]);
+    assert.deepEqual(active.estimationVotes, []);
 });
 
 test('grouped benchmark search retains full benchmark weights and pagination counts', () => {

@@ -40,10 +40,12 @@ test('guide keeps the first read short with optional calculation details', () =>
     assert.equal([...guide.matchAll(/<h1>/g)].length, 1);
     const article = guide.match(/<article[\s\S]*?<\/article>/)[0];
     assert.ok(words(article) <= 1150, `Guide has ${words(article)} words`);
-    assert.ok(words(article.replace(/<details[\s\S]*?<\/details>/g, '')) <= 400);
+    const introduction = article.replace(/<details[\s\S]*?<\/details>/g, '');
+    assert.ok(words(introduction) <= 400);
+    assert.doesNotMatch(introduction, /72 hours/);
     assert.doesNotMatch(article, /<ol\b|<table\b|Expand all|Full calculation rules|&radic;|Public weight =/);
     assert.doesNotMatch(plain(article), /\b(?:overview|showcase|subcategories|descendants|import|themes)\b|View composition/i);
-    assert.doesNotMatch(article, /72 hours|percentile|denominator|basis points|pairwise-anchored/);
+    assert.doesNotMatch(article, /percentile|denominator|basis points|pairwise-anchored/);
     for (const [, paragraph] of article.matchAll(/<p(?:\s[^>]*)?>([\s\S]*?)<\/p>/g)) {
         assert.ok(words(paragraph) <= 55, plain(paragraph));
     }
@@ -69,8 +71,8 @@ test('Personal and Public copy keeps saving, independent topics and privacy dist
     assert.match(section('personal'), /Try it without signing in/);
     assert.match(section('personal'), /Sign in to save your weights/);
     assert.match(section('personal'), /Unsaved changes are marked/);
-    assert.match(section('public'), /saved personal weight configurations in this topic/);
-    assert.match(section('public'), /shaped by recent activity/);
+    assert.match(section('public'), /all nonempty configurations updated in this topic or scene in the past 72 hours/);
+    assert.match(section('public'), /If fewer than 10 qualify, we use the latest 10 or as many as exist/);
     assert.match(section('public'), /Each person contributes one configuration, updated with their edits/);
     assert.match(section('public'), /Another topic contributes only through an explicit reference/);
     assert.match(section('public'), /Private topics and their weights never contribute to Public Weights/);
@@ -120,9 +122,10 @@ test('estimation source copy specifies eligibility, votes, and calibration from 
     assert.match(fallback, /under <strong>Estimation<\/strong> to support or oppose a version as a source/);
     assert.match(fallback, /automatically considers other versions of the same benchmark/);
     assert.match(fallback, /support equals or exceeds opposition, even with zero votes/);
-    assert.match(fallback, /recent voter with weight on that benchmark counts once per version in the scene/);
+    assert.match(fallback, /Each sampled user with weight on this benchmark gets one vote per version/);
     assert.match(fallback, /Your own vote takes priority for your personal ranking/);
-    assert.match(fallback, /Scoring version choices in the past 14 days are weighted by benchmark allocation within each scene/);
+    assert.match(fallback, /Scoring versions and estimation votes use the same configurations as Public Weights/);
+    assert.match(fallback, /Each scoring choice carries that person’s benchmark weight/);
     assert.match(fallback, /five other models measured on both versions with matching run settings/);
     assert.match(fallback, /source scores must bracket the model’s score within 10 points/);
     assert.match(fallback, /Held-out predictions must average at most five points of error/);
