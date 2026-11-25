@@ -24,11 +24,25 @@ export function createVersionEstimationPlanner(conditions) {
             if (vote === 'oppose') blocked.add(pair);
             else if (vote === 'support') blocked.delete(pair);
         }
-        const sources = new Map();
+        const blockedByBenchmark = new Map();
+        for (const key of [...blocked].sort()) {
+            const [target, source] = key.split(':').map(Number);
+            const versions = siblingsByID.get(target);
+            if (!versions || versions !== siblingsByID.get(source)) continue;
+            if (!blockedByBenchmark.has(versions)) blockedByBenchmark.set(versions, []);
+            blockedByBenchmark.get(versions).push({ key, target, source });
+        }
+        const policies = new Map();
         return entries.map(({ conditionID, weightBasisPoints }) => {
-            if (!sources.has(conditionID)) sources.set(conditionID, (siblingsByID.get(conditionID) ?? [])
-                .filter(ID => ID !== conditionID && !blocked.has(estimationVotePairKey(conditionID, ID))));
-            return { conditionID, weightBasisPoints, estimationSourceIDs: sources.get(conditionID) };
+            if (!policies.has(conditionID)) {
+                const versions = siblingsByID.get(conditionID) ?? [];
+                const estimationSourceIDs = versions.filter(ID => ID !== conditionID && !blocked.has(estimationVotePairKey(conditionID, ID)));
+                const eligible = new Set(estimationSourceIDs);
+                const blockedEstimationPairs = (blockedByBenchmark.get(versions) ?? [])
+                    .filter(pair => eligible.has(pair.source) && eligible.has(pair.target)).map(pair => pair.key);
+                policies.set(conditionID, { estimationSourceIDs, ...(blockedEstimationPairs.length ? { blockedEstimationPairs } : {}) });
+            }
+            return { conditionID, weightBasisPoints, ...policies.get(conditionID) };
         });
     };
 }

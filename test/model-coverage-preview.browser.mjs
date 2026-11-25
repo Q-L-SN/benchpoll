@@ -78,10 +78,10 @@ async function setup(t, width = 1360) {
             ({ conditionID, weightBasisPoints, coveredWeightBasisPoints, normalizedScore, coverage: coveredWeightBasisPoints / weightBasisPoints * 100 });
         const modelA = { ID: 1, name: 'Model A', lower: 39.4, upper: 39.4, coverage: 55, missingWeight: 45,
             availableInference: { method: 'calibrated-fallback', weightPolicy: 'original', inferredFraction: .3, unresolvedFraction: .15 },
-            inferredScores: [{ conditionID: 21, selection: 'automatic', familyID: null, normalizedScore: 74.25,
+            inferredScores: [{ conditionID: 21, selection: 'automatic', estimationMethod: 'joint-versions', familyID: null, normalizedScore: 74.25,
                 originalWeight: 30, effectiveWeight: 30, weightBasisPoints: 3000, contribution: 22.275,
-                sources: [{ sourceConditionID: 85, sourceScore: 86, normalizedScore: 85, validationError: 0, referenceCount: 5, weightFraction: .5 },
-                    { sourceConditionID: 86, sourceScore: 73.5, normalizedScore: 63.5, validationError: 0, referenceCount: 5, weightFraction: .5 }] }],
+                sources: [{ sourceConditionID: 85, sourceScore: 86, referenceCount: 5 },
+                    { sourceConditionID: 86, sourceScore: 73.5, referenceCount: 5 }] }],
             calculationScores: [{ conditionID: 11, fallbackFor: null, normalizedScore: 68.5,
                 effectiveWeight: 25, contribution: 17.125, matchedCount: null, memberIDs: [1], memberWeights: [{ ID: 1, weight: 1 }],
                 memberEvidence: [{ ID: 1, hash: 'a'.repeat(64) }] }],
@@ -194,7 +194,7 @@ test('desktop tooltips distinguish unresolved zeros from measured and estimated 
     await unresolved.hover();
     const tooltip = page.getByRole('tooltip');
     await tooltip.waitFor({ state: 'visible' });
-    assert.equal(await tooltip.textContent(), 'No reliable estimate. Counts as 0 in this ranking.');
+    assert.equal(await tooltip.textContent(), 'No measurement or estimate. Counts as 0 in this ranking.');
     await page.mouse.move(1200, 800);
     await page.waitForSelector('.bp-model-coverage-overlay', { state: 'detached' });
     await page.locator('#weight-pie [data-object-id="31"]').click();
@@ -305,7 +305,7 @@ test('mobile Used in this ranking shows the same treemap in a fullscreen dialog 
     await unresolved.tap();
     const tooltip = page.getByRole('tooltip');
     await tooltip.waitFor({ state: 'visible' });
-    assert.equal(await tooltip.textContent(), 'No reliable estimate. Counts as 0 in this ranking.');
+    assert.equal(await tooltip.textContent(), 'No measurement or estimate. Counts as 0 in this ranking.');
     await page.locator('.bp-model-configuration-link').click();
     await page.waitForFunction(() => window.coverageQA.requests.length === 2);
     await page.evaluate(() => { window.coverageQA.state.loadSequence++; });
@@ -322,13 +322,13 @@ test('320px evidence retains every source and both contributions when a target i
             const sourceConditionID = 85 + index;
             if (!state.benchmarkDetailsByID.has(sourceConditionID)) state.benchmarkDetailsByID.set(sourceConditionID,
                 { conditionID: sourceConditionID, benchmarkID: 2, name: 'Beta test', conditionName: `Release ${index + 1} with long-form instructions` });
-            return { ...estimate.sources[0], sourceConditionID, sourceScore: normalizedScore + 10, normalizedScore, weightFraction: 1 / 6 };
+            return { ...estimate.sources[0], sourceConditionID, sourceScore: normalizedScore + 10 };
         });
         state.benchmarkDetailsByID.set(98, { conditionID: 98, benchmarkID: 2, name: 'Beta test', conditionName: 'Short-answer release' });
         modelA.inferredScores = [
             { ...estimate, normalizedScore: 60, weightBasisPoints: 1000, originalWeight: 10, effectiveWeight: 10, contribution: 6, sources },
             { ...estimate, normalizedScore: 80, weightBasisPoints: 2000, originalWeight: 20, effectiveWeight: 20, contribution: 16,
-                sources: [{ ...sources[0], sourceConditionID: 98, sourceScore: 78, normalizedScore: 80, weightFraction: 1 }] }
+                sources: [{ ...sources[0], sourceConditionID: 98, sourceScore: 78 }] }
         ];
         view.openApprovedModelResults(modelA);
     });
@@ -345,7 +345,7 @@ test('320px evidence retains every source and both contributions when a target i
     assert.equal(await first.getByText('6.00 points added to total', { exact: true }).count(), 1);
     assert.equal(await second.getByRole('listitem').count(), 1);
     assert.match(await second.innerText(), /20\.00% of total weight/);
-    assert.match(await second.innerText(), /100\.00%/);
+    assert.equal(await second.getByText('78.00', { exact: true }).count(), 1);
     assert.equal(await second.getByText('16.00 points added to total', { exact: true }).count(), 1);
     await second.scrollIntoViewIfNeeded();
     assert.equal(await rows.last().evaluate(node => node.parentElement.scrollTop > 0 && node.parentElement.scrollWidth <= node.parentElement.clientWidth), true);

@@ -1,4 +1,4 @@
-import { combineVersionEstimates, FALLBACK_INFERENCE_METHOD, storedFallbackInference, MIN_PAIRED_MODELS, MAX_HELD_OUT_ERROR } from '../shared/fallback-inference.js';
+import { FALLBACK_INFERENCE_METHOD, JOINT_VERSION_METHOD, storedFallbackInference } from '../shared/fallback-inference.js';
 import { FALLBACK_RULE_MODE } from './constants.js';
 import { expandCommunityVersions } from '../shared/benchmark-version-choice.js';
 import { familyKey, resolvedFamilyConditionIDs } from '../shared/benchmark-families.js';
@@ -180,38 +180,57 @@ function requireFamilyEntry(entry, path) {
     return requireWorkspaceConditionIdentity(entry, path);
 }
 
-function validCombinedEstimate(score) {
-    const { sources } = score;
-    if (score.familyID !== null || !Array.isArray(sources) || !sources.length) return false;
-    const IDs = new Set();
-    let totalWeight = 0;
-    for (const source of sources) {
-        if (!source || !Number.isSafeInteger(source.sourceConditionID) || source.sourceConditionID <= 0
-            || source.sourceConditionID === score.conditionID || IDs.has(source.sourceConditionID)
-            || !Number.isFinite(source.sourceScore) || !Number.isFinite(source.normalizedScore)
-            || !Number.isSafeInteger(source.referenceCount) || source.referenceCount < MIN_PAIRED_MODELS
-            || !Number.isFinite(source.validationError) || source.validationError < 0 || source.validationError > MAX_HELD_OUT_ERROR
-            || !Number.isFinite(source.weightFraction) || source.weightFraction <= 0 || source.weightFraction > 1) return false;
-        IDs.add(source.sourceConditionID);
-        totalWeight += source.weightFraction;
+function validCalibrationPaths(source, target) {
+    const paths = source.calibrationPaths;
+    if (!Array.isArray(paths) || !paths.length) return false;
+    let weakest = Infinity, hasBridge = false;
+    const distinct = new Set();
+    for (const path of paths) {
+        if (!Array.isArray(path) || !path.length || path.at(-1)?.targetConditionID !== target) return false;
+        hasBridge ||= path.length > 1;
+        const visited = new Set([source.sourceConditionID]);
+        for (const step of path) {
+            if (!step || !Number.isSafeInteger(step.targetConditionID) || step.targetConditionID < 1 || visited.has(step.targetConditionID)
+                || !Number.isSafeInteger(step.referenceCount) || step.referenceCount < 1
+                || Object.keys(step).some(key => key !== 'targetConditionID' && key !== 'referenceCount')) return false;
+            visited.add(step.targetConditionID);
+            weakest = Math.min(weakest, step.referenceCount);
+        }
+        const key = [...visited].join(',');
+        if (distinct.has(key)) return false;
+        distinct.add(key);
     }
-    const expected = combineVersionEstimates(sources);
-    return Math.abs(totalWeight - 1) < 1e-9
-        && Math.abs(score.normalizedScore - expected.normalizedScore) <= 1e-9 * Math.max(1, Math.abs(expected.normalizedScore))
-        && sources.every((source, index) => Math.abs(source.weightFraction - expected.sources[index].weightFraction) < 1e-9);
+    return hasBridge && weakest === source.referenceCount;
+}
+
+function validJointEstimate(score) {
+    if (score.estimationMethod !== JOINT_VERSION_METHOD || !Array.isArray(score.sources) || !score.sources.length) return false;
+    const IDs = new Set();
+    for (const source of score.sources) {
+        if (!source || !Number.isSafeInteger(source.sourceConditionID) || source.sourceConditionID < 1
+            || source.sourceConditionID === score.conditionID || IDs.has(source.sourceConditionID)
+            || !Number.isFinite(source.sourceScore) || !Number.isSafeInteger(source.referenceCount) || source.referenceCount < 1
+            || Object.keys(source).some(key => !['sourceConditionID', 'sourceScore', 'referenceCount', 'calibrationPaths'].includes(key))
+            || Object.hasOwn(source, 'calibrationPaths') && (score.sources.length !== 1 || !validCalibrationPaths(source, score.conditionID))) return false;
+        IDs.add(source.sourceConditionID);
+    }
+    if (score.selection === 'automatic') return score.familyID === null;
+    const [source] = score.sources;
+    return score.selection === undefined && score.sources.length === 1
+        && score.sourceConditionID === source.sourceConditionID && score.sourceScore === source.sourceScore
+        && score.referenceCount === source.referenceCount && Array.isArray(score.familyConditionIDs)
+        && score.familyConditionIDs[0] === score.conditionID && score.familyConditionIDs.indexOf(score.sourceConditionID) > 0;
 }
 
 function validPredictionSource(score, inference, chain, pairwise) {
-    if (score.selection === 'automatic') {
-        return chain && inference.weightPolicy === ORIGINAL_WEIGHT_POLICY && validCombinedEstimate(score);
-    }
+    if (chain && inference.weightPolicy === ORIGINAL_WEIGHT_POLICY) return validJointEstimate(score);
     if (score.selection !== undefined || !Number.isSafeInteger(score.referenceCount)
-        || score.referenceCount < (chain ? MIN_PAIRED_MODELS : pairwise ? 2 : 1)) return false;
+        || score.referenceCount < (chain ? 5 : pairwise ? 2 : 1)) return false;
     if (chain) {
         const path = score.familyConditionIDs;
         return Number.isSafeInteger(score.sourceConditionID) && score.sourceConditionID > 0
             && Number.isFinite(score.sourceScore) && Number.isFinite(score.validationError)
-            && score.validationError >= 0 && score.validationError <= MAX_HELD_OUT_ERROR
+            && score.validationError >= 0 && score.validationError <= 5
             && Array.isArray(path) && path[0] === score.conditionID && path.indexOf(score.sourceConditionID) > 0;
     }
     if (!pairwise) return score.percentile === inference.percentile;

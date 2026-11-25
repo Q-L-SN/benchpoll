@@ -3,10 +3,9 @@ import assert from 'node:assert/strict';
 import { calibrationModel as model, pairedModels } from './helpers/fallback-pairs.mjs';
 import { availableResultInference, storedAvailableResultInference } from '../public/js/shared/available-score.js';
 import { ESTIMATION_ALGORITHMS, normalizeEstimationAlgorithm } from '../public/js/shared/estimation-algorithms.js';
-import { combineVersionEstimates } from '../public/js/shared/fallback-inference.js';
 import { readEstimationPreference, writeEstimationPreference } from '../public/js/workspace/preferences.js';
 import { scoreModels, scoreComparison, getRankingWorkspace } from '../ranking-service.js';
-import { comparisonOptions } from '../model-comparison.js';
+import { comparisonOptions, groupComparisonModels } from '../model-comparison.js';
 import { createFixtureState, weightedEntries, workspace } from '../scripts/frontend/fixtures.mjs';
 import { createRankingPager } from '../ranking-pagination.js';
 import { validateWorkspacePayload, validateRankingPagePayload } from '../public/js/workspace/contracts.js';
@@ -35,47 +34,98 @@ test('paired-test estimates and measured points retain their original weights', 
 
 const close = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-9, `${actual} != ${expected}`);
 
-test('each eligible measured source is converted to the target scale and blended using its own paired evidence', () => {
+test('a joint fit uses partially observed reference rows and retains the target weight', () => {
     const subject = model(1, { 2: 80, 3: 70, 4: 90, 9: -20 });
-    // B reads 15 points higher than A. C reads 5 lower, with a held-out error of 1.
+    // These two sets of peers overlap on the target but never measured both sources.
     const peersB = [76, 78, 79, 81, 82, 84].map((value, i) => model(10 + i, { 1: value - 15, 2: value }));
     const peersC = [3, 5, 5, 5, 8].map((offset, i) => model(20 + i, { 1: 68 + i + offset, 3: 68 + i }));
-    const blended = (65 * 24 + 75 * 11) / 35;
+    const joint = 69.30700591100324; // Independent NumPy reference, seven EM steps.
     for (const IDs of [[2, 4, 3], [3, 2, 4]]) {
         const [row] = compare([subject, ...peersB, ...peersC], [weight(1, 4000, IDs), weight(9, 4000), weight(12, 2000)]);
         assert.equal(row.inferredScores.length, 1);
         const [estimate] = row.inferredScores;
-        assert.deepEqual([row.lower, row.coverage, row.fallbackCoverage], [19.26, 40, 40]);
+        assert.deepEqual([row.lower, row.coverage, row.fallbackCoverage], [19.72, 40, 40]);
         assert.equal(estimate.selection, 'automatic');
-        assert.deepEqual(estimate.sources.map(s => [s.sourceConditionID, s.sourceScore, s.normalizedScore, s.referenceCount]), [
-            [2, 80, 65, 6], [3, 70, 75, 5]
+        assert.equal(estimate.estimationMethod, 'joint-versions');
+        assert.deepEqual(estimate.sources, [
+            { sourceConditionID: 2, sourceScore: 80, referenceCount: 6 },
+            { sourceConditionID: 3, sourceScore: 70, referenceCount: 5 }
         ]);
-        close(estimate.sources[0].validationError, 0);
-        close(estimate.sources[1].validationError, 1);
-        close(estimate.sources[0].weightFraction, 24 / 35);
-        close(estimate.sources[1].weightFraction, 11 / 35);
-        close(estimate.normalizedScore, blended);
+        close(estimate.normalizedScore, joint);
         assert.equal(estimate.originalWeight, 40);
         assert.equal(estimate.effectiveWeight, 40);
-        close(estimate.contribution, blended * .4);
+        close(estimate.contribution, joint * .4);
         assert.equal(row.calculationScores[0].contribution, -8);
         close(row.availableInference.unresolvedFraction, .2);
         assert.equal(row.availableInference.unresolvedContribution, 0);
     }
 });
 
-test('more paired models increase reliability with diminishing returns, and perfect sources have finite weights', () => {
-    const source = (normalizedScore, referenceCount) => ({ normalizedScore, referenceCount, validationError: 0 });
-    const inputs = [source(-10, 5), source(30, 10)];
-    const combined = combineVersionEstimates(inputs);
-    close(combined.sources[0].weightFraction, 3 / 7);
-    close(combined.sources[1].weightFraction, 4 / 7);
-    close(combined.normalizedScore, 90 / 7);
-    assert.equal(combineVersionEstimates([inputs[0]]).normalizedScore, -10);
-    assert.equal(combineVersionEstimates([]), null);
-    const extreme = source(Number.MAX_VALUE, 5);
-    assert.equal(combineVersionEstimates([extreme, extreme]).normalizedScore, Number.MAX_VALUE);
-    assert.equal(combineVersionEstimates([extreme, source(-Number.MAX_VALUE, 5)]).normalizedScore, 0);
+test('multiple measured versions enter one conditional prediction on the target scale', () => {
+    const subject = model(1, { 2: 30, 3: 8 });
+    const peers = [[29, 10, 2], [49, 30, 2], [11, 10, 8], [31, 30, 8]]
+        .map(([a, b, c], i) => model(10 + i, { 1: a, 2: b, 3: c }));
+    const predict = ids => compare([subject, ...peers], [weight(1, 10000, ids)])[0].inferredScores[0].normalizedScore;
+    close(predict([2]), 39.80376623789036);
+    close(predict([3]), 27.210506061909342);
+    close(predict([2, 3]), 35.689694477030926);
+});
+
+test('small samples and out-of-range inputs use the same smooth point estimator', () => {
+    const subject = model(1, { 2: 5.5 });
+    for (const [count, expected] of [[1, 5.226949122423698], [4, 7.831230672599654], [5, 8.129347457120016]]) {
+        const peers = Array.from({ length: count }, (_, i) => model(10 + i, { 1: i + 3, 2: i }));
+        const [row] = compare([subject, ...peers], [weight(1, 10000, [2])]);
+        close(row.inferredScores[0].normalizedScore, expected);
+        assert.equal(row.inferredScores[0].sources[0].referenceCount, count);
+    }
+});
+
+test('all sixteen recorded eligible versions affect a fit with incomplete reference rows', () => {
+    const ids = Array.from({ length: 16 }, (_, j) => j + 2);
+    const subject = model(1, Object.fromEntries(ids.map((id, j) => [id, 57 + 2 * j])));
+    const peers = Array.from({ length: 20 }, (_, m) => model(10 + m, {
+        1: 40 + 2 * m, ...Object.fromEntries(ids.flatMap((id, j) =>
+            (m + j) % 6 ? [[id, 50 + j + (m % 5) * (j + 1) + m / 3]] : []))
+    }));
+    const [full] = compare([subject, ...peers], [weight(1, 10000, ids)]);
+    assert.equal(full.inferredScores[0].sources.length, 16);
+    close(full.inferredScores[0].normalizedScore, 74.81356814769251);
+    const [reduced] = compare([subject, ...peers], [weight(1, 10000, ids.slice(0, -1))]);
+    close(reduced.inferredScores[0].normalizedScore, 74.77667524642226);
+});
+
+test('estimated target points stay signed and may exceed 100', () => {
+    for (const points of [-40, 0, 140]) {
+        const models = [model(1, { 2: 10 }), model(2, { 1: points, 2: 10 })];
+        const [row] = compare(models, [weight(1, 10000, [2])]);
+        assert.equal(row.inferredScores[0].normalizedScore, points);
+        assert.equal(row.lower, points);
+        assert.equal(row.coverage, 0);
+        assert.equal(row.comparable, true);
+    }
+});
+
+test('best performance fits each measured run before choosing a target estimate', () => {
+    const x = { harness: 'X' }, y = { harness: 'Y' };
+    const subjects = [model(1, { 2: 30, 3: 8 }, x), model(2, { 2: 50 }, y, { modelID: 1 })];
+    const peers = [[29, 10, 2], [49, 30, 2], [11, 10, 8], [31, 30, 8]].map(([a, b, c], i) =>
+        model(10 + i, { 1: a, 2: b, 3: c }, x));
+    peers.push(model(99, { 1: 20, 2: 50 }, y));
+    const [best] = compare([...subjects, ...peers], [weight(1, 10000, [2, 3])]);
+    close(best.inferredScores[0].normalizedScore, 35.689694477030926);
+    assert.deepEqual(best.inferredScores[0].sources.map(s => s.sourceScore), [30, 8]);
+});
+
+test('a projection without its raw measurements supplies no reference evidence', () => {
+    const entries = [weight(1, 10000, [2])];
+    const raw = [model(1, { 2: 75 }), ...pairedModels(1, 2, 75, -10)];
+    for (const mode of ['best', 'matched']) {
+        const groups = groupComparisonModels(raw, comparisonOptions(raw, { mode, keys: ['model'] }), entries, { includeReferenceVersions: true });
+        const [row] = scoreModels(groups, entries, 10000, { scoreMode: 'available' });
+        assert.deepEqual(row.inferredScores, []);
+        assert.equal(row.availableInference.unresolvedFraction, 1);
+    }
 });
 
 test('each contribution to a repeated version keeps the eligible sources of its scene', () => {
@@ -87,7 +137,8 @@ test('each contribution to a repeated version keeps the eligible sources of its 
     assert.deepEqual(row.coverageEntries.map(item => [item.conditionID, item.weightBasisPoints, item.coveredWeightBasisPoints]),
         [[1, 5000, 0], [9, 3000, 3000], [-3, 2000, 0]]);
     assert.deepEqual(row.calculationScores.map(item => [item.conditionID, item.effectiveWeight, item.contribution]), [[9, 30, 24]]);
-    assert.deepEqual(row.inferredScores.map(item => [item.sources[0].sourceConditionID, item.effectiveWeight, item.contribution]), [[2, 25, 15]]);
+    assert.deepEqual(row.inferredScores.map(item => [item.sources[0].sourceConditionID, item.effectiveWeight]), [[2, 25]]);
+    close(row.inferredScores[0].contribution, 15);
     const [range] = compare(models, entries, 'range');
     assert.deepEqual([range.lower, range.upper, range.coverage], [24, 94, 30]);
     assert.deepEqual(range.inferredScores, []);
@@ -148,9 +199,9 @@ test('ranking pages validate original contributions, estimates and fully unresol
     corrupt.modelLeaderboards.public.find(row => row.ID === 2).availableInference.unresolvedContribution = 50;
     assert.throws(() => validateWorkspacePayload(corrupt), /missing-score estimate/);
     for (const mutate of [score => { score.sources = []; }, score => { score.sources[0].weightFraction = .5; },
-        score => { score.sources[0].sourceConditionID = score.conditionID; }, score => { score.sources[0].referenceCount = 4; },
+        score => { score.sources[0].sourceConditionID = score.conditionID; }, score => { score.sources[0].referenceCount = 0; },
         score => { score.sources[0].validationError = 6; }, score => { score.sources[0].sourceScore = null; },
-        score => { score.normalizedScore += 1; }, score => { score.sources.push({ ...score.sources[0] }); },
+        score => { score.estimationMethod = 'other'; }, score => { score.normalizedScore += 1; }, score => { score.sources.push({ ...score.sources[0] }); },
         score => {
             score.sources[0].weightFraction = .6;
             score.sources.push({ ...score.sources[0], sourceConditionID: 902, weightFraction: .4 });

@@ -67,9 +67,9 @@ export async function lockTopicReferences(db) {
 // Display weights are rounded to 1bp. Graph scoring retains unrounded electorate shares.
 export function publicReferenceWeights(pie) {
     if (!pie.participantCount) return [];
-    return pie.scoringEntries.map(({ conditionID, weightBasisPoints, estimationSourceIDs }) => ({ conditionID,
+    return pie.scoringEntries.map(({ conditionID, weightBasisPoints, estimationSourceIDs, blockedEstimationPairs }) => ({ conditionID,
         weightBasisPoints: weightBasisPoints / pie.participantCount,
-        ...(estimationSourceIDs ? { estimationSourceIDs } : {}) }));
+        ...(estimationSourceIDs ? { estimationSourceIDs } : {}), ...(blockedEstimationPairs ? { blockedEstimationPairs } : {}) }));
 }
 
 export async function validateTopicReferences(db, source, entries, userID) {
@@ -112,8 +112,10 @@ export async function expandTopicReferences(root, { loadTarget, maxNodes = MAX_R
             if (entry.conditionID > 0) {
                 // Distinct scenes can vote differently about sources for the same scoring version.
                 const estimationSourceIDs = [...new Set(entry.estimationSourceIDs ?? [])].sort((a, b) => a - b);
-                const key = `benchmark:${entry.conditionID}:${estimationSourceIDs.join(',')}`;
-                if (!outcomes.has(key)) outcomes.set(key, { conditionID: entry.conditionID, estimationSourceIDs });
+                const blocked = [...new Set(entry.blockedEstimationPairs ?? [])].sort();
+                const key = `benchmark:${entry.conditionID}:${estimationSourceIDs.join(',')}${blocked.length ? '|' + blocked.join(',') : ''}`;
+                if (!outcomes.has(key)) outcomes.set(key, { conditionID: entry.conditionID, estimationSourceIDs,
+                    ...(blocked.length ? { blockedEstimationPairs: blocked } : {}) });
                 add(row.absorbed, key, entry.weightBasisPoints);
                 continue;
             }
@@ -141,7 +143,8 @@ export async function expandTopicReferences(root, { loadTarget, maxNodes = MAX_R
             add(weights, outcome.conditionID, weight);
             if (outcome.issue) issues.push(outcome.issue);
             scoringEntries.push({ conditionID: outcome.conditionID, weightBasisPoints: weight,
-                estimationSourceIDs: outcome.estimationSourceIDs ?? [] });
+                estimationSourceIDs: outcome.estimationSourceIDs ?? [],
+                ...(outcome.blockedEstimationPairs ? { blockedEstimationPairs: outcome.blockedEstimationPairs } : {}) });
         }
         return {
             entries: [...weights].sort(([a], [b]) => a - b).map(([conditionID, weightBasisPoints]) => ({ conditionID, weightBasisPoints })),

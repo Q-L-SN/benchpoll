@@ -79,7 +79,7 @@
                             <a href="#details">Benchmark versions</a>
                             <ul role="list">
                                 <li><a href="#fallback">Estimation votes</a></li>
-                                <li><a href="#calibration">Calibration and blending</a></li>
+                                <li><a href="#calibration">How versions predict a missing score</a></li>
                             </ul>
                         </li>
                         <li>
@@ -123,7 +123,7 @@
                 <p>BenchPoll uses the best qualifying score per test by default. Turn on effort or harness to rank settings separately. Missing settings stay in an unknown group. Matched comparisons calibrate each qualifying run separately.</p>
 
                 <h3 id="estimated-score" tabindex="-1">Estimated score</h3>
-                <p><strong>Estimated score</strong> combines direct scores and calibrated estimates at their full weights. Results with neither a measurement nor a reliable estimate count as 0 at their full weight. A direct score or a reliable estimate qualifies a model to rank.</p>
+                <p><strong>Estimated score</strong> combines direct scores and calibrated estimates at their full weights. Results with no measurement or estimate count as 0 at their full weight. A direct score or an estimate qualifies a model to rank.</p>
                 <p>The AI Index uses <strong>Version-based estimation</strong>. For a benchmark with index weight <var>W</var>, each scoring version <var>a</var> has a share <var>p<sub>a</sub></var> and score <var>s<sub>a</sub></var>. The benchmark contributes <span class="hi-formula"><var>W</var> × Σ(<var>p<sub>a</sub></var> <var>s<sub>a</sub></var>)</span> to the index score. The version shares add up to 100%.</p>
 
                 <h3 id="score-range" tabindex="-1">Score range</h3>
@@ -141,11 +141,10 @@
                 <p>Saved pair votes still count in the public sample while you use a different scoring version or follow the community. Choose A again to see your saved votes for estimating A.</p>
                 <p>Each sampled person who weights the benchmark gets one vote per source and target pair. A pair is eligible by default, including with no votes or a tie. A community majority against a pair excludes that pair. Your own vote takes priority for your personal ranking.</p>
 
-                <h3 id="calibration" tabindex="-1">Calibration and blending</h3>
-                <p>To estimate a missing score, BenchPoll checks eligible measured versions of the same benchmark. Each source needs at least five other models measured on both versions with matching run settings. Their source scores must bracket the model’s source score within 10 points on either side.</p>
-                <p>BenchPoll adds the median target-minus-source difference from those paired models to the measured source score. It checks predictions on held-out data and accepts a source when the mean absolute error is at most five points. It holds out whole vendors when possible. Evidence from one known vendor applies to that vendor’s models.</p>
-                <p>If paired models score 15 points higher on B than on A, an 80 on B estimates 65 on A.</p>
-                <p>BenchPoll blends all accepted estimates. Each source gets a reliability weight of <span class="hi-formula">(<var>n</var> / (<var>n</var> + 5)) / (1 + <var>e</var><sup>2</sup>)</span>, where <var>n</var> is the number of paired models and <var>e</var> is the held-out mean absolute error in points. The source weights are normalized to sum to 100%.</p>
+                <h3 id="calibration" tabindex="-1">How versions predict a missing score</h3>
+                <p>BenchPoll fits eligible measured versions of the same benchmark together. Each link needs paired scores from at least one other model under the same run settings. A model measured on A and B can contribute without C. Sparse samples favor a shared starting correlation. Extreme scores have less influence outside the observed source range.</p>
+                <p>When direct pairing is unavailable, C can predict A through B. Each link follows directional votes. Every version must be eligible for A. BenchPoll chooses the shortest path and breaks ties by the number of paired models on the weakest link. Score details show each link.</p>
+                <p>Best performance uses the highest qualifying run prediction. Matched comparisons average predictions within each matched control setting and give settings equal weight. Without a connected measurement, A contributes 0 at its full weight.</p>
 
                 <h2 id="publishing" tabindex="-1">Publishing and contributions</h2>
 

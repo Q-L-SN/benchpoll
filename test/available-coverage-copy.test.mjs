@@ -38,7 +38,7 @@ function factorInference(raw, coverage, inferredFraction = 0) {
 
 test('brief help distinguishes calibrated estimates from measured weighted coverage', () => {
     assert.match(rankingGuide, /Estimated score[\s\S]*calibrated estimates at their full weights/);
-    assert.match(rankingGuide, /neither a measurement nor a reliable estimate count as 0 at their full weight/);
+    assert.match(rankingGuide, /no measurement or estimate count as 0 at their full weight/);
     assert.match(rankingGuide, /Coverage is the share of weight with measured results/);
     assert.match(rankingGuide, /on selected versions/);
     assert.match(rankingGuide, /Version-based estimation/);
@@ -52,10 +52,11 @@ test('short score help preserves range endpoints, unresolved gaps and direct-fir
     assert.match(rankingGuide, /uses 0 at the lower end and 100 at the upper end for missing measurements/);
     assert.match(rankingGuide, /Both ends use the measured scores where available\. Models rank by the lower end/);
     assert.match(rankingGuide, /count as 0 at their full weight/);
-    assert.match(rankingGuide, /direct score or a reliable estimate qualifies a model to rank/);
+    assert.match(rankingGuide, /direct score or an estimate qualifies a model to rank/);
     assert.match(estimationGuide, /A pair is eligible by default, including with no votes or a tie/);
     assert.match(estimationGuide, /eligible measured versions of the same benchmark/);
-    assert.match(estimationGuide, /BenchPoll blends all accepted estimates/);
+    assert.match(estimationGuide, /fits eligible measured versions of the same benchmark together/);
+    assert.match(estimationGuide, /When direct pairing is unavailable, C can predict A through B/);
 });
 
 test('model details display archived before and after scores', () => {
@@ -76,13 +77,13 @@ test('version-based details report estimates separately from coverage and zero-f
         unresolvedFraction: .25, unpenalizedScore: 53, totalScore: 53 };
     const text = summary(inference);
     assert.match(text, /measured results cover 50% of the weight/);
-    assert.match(text, /25\.00% of the weight uses estimates calibrated with paired model results/);
-    assert.match(text, /25\.00% of the weight has no reliable estimate and counts as 0 at its full weight/);
+    assert.match(text, /25\.00% of the weight uses estimates from measured versions of the same benchmark/);
+    assert.match(text, /25\.00% of the weight has no measurement or estimate and counts as 0 at its full weight/);
     assert.match(text, /How it works/);
     assert.doesNotMatch(text, /adjustment|fallback chains|left out|starts at 50/);
     const zero = summary({ ...inference, inferredFraction: 0, totalScore: 0, unresolvedFraction: 1 }, 0, false);
     assert.match(zero, /No qualifying ranking evidence/);
-    assert.match(zero, /100\.00% of the weight has no reliable estimate and counts as 0/);
+    assert.match(zero, /100\.00% of the weight has no measurement or estimate and counts as 0/);
 });
 
 test('negative scores retain their before and after values without algorithm details', () => {

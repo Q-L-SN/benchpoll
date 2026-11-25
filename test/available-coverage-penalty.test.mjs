@@ -143,9 +143,9 @@ test('fresh legacy-version requests no longer select archived deduction algorith
             assert.ok(rows.every(row => !Object.hasOwn(row.availableInference, 'coveragePenalty')));
         }
     }
-    assert.equal(AVAILABLE_INFERENCE_VERSION, 10);
-    assert.equal(rankingReadBody('/api/get_weighted_workspace', {}).availableInferenceVersion, 10);
-    for (const version of [1, 2, 5, 6, 8]) assert.equal(rankingReadBody('/api/get_weighted_workspace', { availableInferenceVersion: version }).availableInferenceVersion, 10);
+    assert.equal(AVAILABLE_INFERENCE_VERSION, 12);
+    assert.equal(rankingReadBody('/api/get_weighted_workspace', {}).availableInferenceVersion, 12);
+    for (const version of [1, 2, 5, 6, 8]) assert.equal(rankingReadBody('/api/get_weighted_workspace', { availableInferenceVersion: version }).availableInferenceVersion, 12);
 });
 
 test('workspace validation requires an accurate separate deduction and pre-deduction contribution trace', () => {
@@ -167,7 +167,7 @@ test('workspace validation requires an accurate separate deduction and pre-deduc
 
 test('current help explains version-based estimates and full-weight gaps', () => {
     const read = path => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
-    assert.match(read('private/home.html'), /reliable estimates from eligible versions of the same benchmark/);
+    assert.match(read('private/home.html'), /joint estimates from eligible versions of the same benchmark/);
     const guide = read('private/how-it-works.html');
     assert.match(guide, /Version-based estimation/);
     assert.match(guide, /calibrated estimates at their full weights/);
@@ -175,5 +175,5 @@ test('current help explains version-based estimates and full-weight gaps', () =>
     assert.match(guide, /uses 0 at the lower end and 100 at the upper end for missing measurements/);
     assert.doesNotMatch(guide, /coverage factor|coverage penalty|excluded from the average/i);
     const details = read('public/js/workspace/model-scores.js');
-    assert.match(details, /no reliable estimate and counts as 0 at its full weight/);
+    assert.match(details, /no measurement or estimate and counts as 0 at its full weight/);
 });

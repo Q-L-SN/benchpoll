@@ -127,7 +127,7 @@ test('terms cover community ranking limits, necessary content rights and proport
         assert.match(terms, new RegExp(`href="#${id}"`));
     }
     assert.match(terms, /currently free[^.]*no payment or subscription/i);
-    assert.match(terms, /neither a measurement nor a reliable estimate count as 0 at their full weight/i);
+    assert.match(terms, /no measurement or estimate count as 0 at their full weight/i);
     assert.match(terms, /Personal pies define your evaluation choices and weights/i);
     assert.match(terms, /saved pies in public categories contribute to aggregate Public Weights/i);
     assert.match(terms, /exclude manipulated activity/i);

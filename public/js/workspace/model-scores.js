@@ -481,23 +481,29 @@ export function createModelScoresView({ state, modelScoresDialog, modelScoresTit
             const item = document.createElement('li');
             const version = document.createElement('div');
             version.className = 'bp-model-estimate-version';
-            const details = document.createElement('small');
-            details.textContent = `At least ${source.referenceCount} paired models. Validation error ${source.validationError.toFixed(2)} points.`;
-            version.append(estimateVersionLink(source.sourceConditionID), details);
-            const metrics = document.createElement('dl');
-            for (const [name, text] of [
-                ['Measured score', source.sourceScore.toFixed(2)],
-                ['Estimate on target scale', source.normalizedScore.toFixed(2)],
-                ['Share of estimate', `${(100 * source.weightFraction).toFixed(2)}%`]
-            ]) {
-                const metric = document.createElement('div');
-                const term = document.createElement('dt');
-                const reading = document.createElement('dd');
-                term.textContent = name;
-                reading.textContent = text;
-                metric.append(term, reading);
-                metrics.append(metric);
+            version.append(estimateVersionLink(source.sourceConditionID));
+            if (source.calibrationPaths) {
+                for (const path of source.calibrationPaths) {
+                    const details = document.createElement('small');
+                    for (const step of path) {
+                        details.append(' → ', estimateVersionLink(step.targetConditionID),
+                            ` (${step.referenceCount} paired ${step.referenceCount === 1 ? 'model' : 'models'})`);
+                    }
+                    version.append(details);
+                }
+            } else {
+                const details = document.createElement('small');
+                details.textContent = `At least ${source.referenceCount} paired ${source.referenceCount === 1 ? 'model' : 'models'} per run setting`;
+                version.append(details);
             }
+            const metrics = document.createElement('dl');
+            const metric = document.createElement('div');
+            const term = document.createElement('dt');
+            const reading = document.createElement('dd');
+            term.textContent = 'Measured score';
+            reading.textContent = source.sourceScore.toFixed(2);
+            metric.append(term, reading);
+            metrics.append(metric);
             item.append(version, metrics);
             sources.append(item);
         }
@@ -539,8 +545,8 @@ export function createModelScoresView({ state, modelScoresDialog, modelScoresTit
             inference.unpenalizedScore].every(Number.isFinite);
         if (originalWeights) {
             const sentences = [];
-            if (inference.inferredFraction > 0) sentences.push(`${(inference.inferredFraction * 100).toFixed(2)}% of the weight uses estimates calibrated with paired model results.`);
-            if (inference.unresolvedFraction > 0) sentences.push(`${(inference.unresolvedFraction * 100).toFixed(2)}% of the weight has no reliable estimate and counts as 0 at its full weight.`);
+            if (inference.inferredFraction > 0) sentences.push(`${(inference.inferredFraction * 100).toFixed(2)}% of the weight uses estimates from measured versions of the same benchmark.`);
+            if (inference.unresolvedFraction > 0) sentences.push(`${(inference.unresolvedFraction * 100).toFixed(2)}% of the weight has no measurement or estimate and counts as 0 at its full weight.`);
             if (sentences.length) {
                 const detail = document.createElement('p');
                 detail.className = 'bp-model-inference-summary';
@@ -698,7 +704,7 @@ export function createModelScoresView({ state, modelScoresDialog, modelScoresTit
                 const row = document.createElement('div'); row.className = 'bp-model-score-detail-row bp-model-inferred-row';
                 row.dataset.conditionId = String(score.conditionID);
                 modelScoresList.append(row);
-                if (score.selection === 'automatic' && Array.isArray(score.sources)) {
+                if (Array.isArray(score.sources)) {
                     renderVersionEstimate(row, score);
                     continue;
                 }

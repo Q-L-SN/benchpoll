@@ -244,14 +244,16 @@ Home uses a fixed light, hatched treemap and neutral outlined topic surfaces.
 Model paging controls appear at the sides of each preview when available.
 
 The AI Index offers **Version-based estimation**. Direct scores take priority.
-For a missing score, BenchPoll automatically considers measured results from eligible versions
-of the same benchmark. Each candidate is calibrated from paired model measurements with
-matching run settings. All reliable estimates are converted to the target's scale and averaged.
-A source's relative weight is `(n / (n + 5)) / (1 + e²)`, where `n` is the local paired model count
-and `e` is the mean absolute held-out error in target points. Direct scores (including zero) and
-estimates retain the target version's original scoring share. A version with no eligible, reliable
-measurement contributes zero. Coverage has no additional penalty. Only direct scores contribute measured coverage. Score
-range assigns 0 at the lower end and 100 at the upper end for missing measurements. See
+For a missing version A, directly paired sibling versions jointly predict A on its own scale. A pair needs
+at least one other model measured on both versions under identical run settings. A regularized covariance
+fit learns the relationships between versions from the available paired data and softens extrapolation
+beyond the observed source range. The fit uses seven expectation-maximization updates, a two-observation
+prior with correlation 0.70, and a 0.5-point scale floor. When direct calibration is unavailable, a measured
+sibling can reach A through intermediate versions of that benchmark. Each link uses measured peers with
+the same settings and respects directional votes. All versions on the path must be eligible for A.
+Shorter paths take priority, then the number of paired models on the weakest link. Direct scores (including zero) and estimates keep the target version’s
+original weight. An unresolved score contributes zero. Only measurements add coverage. Score range assigns
+0 at the lower end and 100 at the upper end for missing measurements. See
 [How BenchPoll works](https://benchpoll.com/how-it-works#rankings).
 
 Shared tooltips use `data-tooltip` (hover, keyboard focus or touch long-press);
@@ -563,13 +565,12 @@ https://benchpoll.com:1337
 首页使用固定的浅色手绘线条矩形树图和中性描边主题外观；可以翻页时，模型翻页
 按钮显示在预览区域两侧。
 
-AI Index 提供 **Version-based estimation**。计分优先使用所选版本的实测成绩。
-缺少成绩时，系统自动考虑同一基准中有资格的其他版本，使用运行设置相同的模型配对实测
-结果校准。所有通过校验的来源先换算到计分版本的尺度，再加权平均。每个来源的相对权重是
-`(n / (n + 5)) / (1 + e²)`，其中 `n` 是附近分数段的配对模型数，`e` 是留出验证的平均绝对误差，
-单位为计分版本的分数。实测成绩（包括 0 分）和可靠估分均使用该版本原来的计分占比。
-无法可靠估计的部分按原权重计 0 分，覆盖率不额外扣分。实测覆盖率仅
-计入所选版本的直接成绩。Score range 对缺少实测的部分，下限计 0 分，上限计 100 分。
+AI Index 提供 **Version-based estimation**。缺少版本 A 的分数时，算法用同一基准下获准来源版本的实测分联合预测 A。
+直接配对要求至少一个其他模型在相同运行设置下同时测过来源版本和 A。算法从配对记录中估计版本间的协方差，样本少时对相关性做收缩，
+超出已观测范围时平滑减弱外推。拟合使用七轮期望最大化更新，先验相当于两个观测，相关系数为 0.70，尺度下限为 0.5 分。
+缺少直接配对时，模型的实测分可以经过同一基准的中间版本逐段换算到 A。每一段都需要相同运行设置下其他模型的配对实测，并遵守该方向的投票。路径上的版本也都须获准为 A 估分。优先采用最短路径，路径等长时选择最薄弱一段配对模型更多的路径。
+实测分（含零分）优先。估分沿用 A 的原权重，无法估分时该项贡献为零。覆盖率只计算实测结果。
+在分数区间模式下，缺分项的下限计 0 分，上限计 100 分。
 详见 [How BenchPoll works](https://benchpoll.com/how-it-works#rankings)。
 
 全站共用 `data-tooltip` 提示（悬浮、键盘聚焦或触屏长按）；纯说明按钮使用

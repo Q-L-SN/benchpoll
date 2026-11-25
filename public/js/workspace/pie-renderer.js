@@ -15,7 +15,7 @@ function coverageScore(tile, range) {
     const status = measured ? estimated ? 'mixed' : 'measured' : estimated ? 'estimated' : 'unresolved';
     if (status === 'unresolved') {
         const tooltip = range ? 'No measurement. Counts as 0 at the lower end and 100 at the upper end.'
-            : 'No reliable estimate. Counts as 0 in this ranking.';
+            : 'No measurement or estimate. Counts as 0 in this ranking.';
         return { measured, status, value, tooltip, description: `Score ${value} / 100. ${tooltip}` };
     }
     if (!gap && status !== 'mixed') {
@@ -26,7 +26,7 @@ function coverageScore(tile, range) {
     if (measured) parts.push(`Measured score ${previewNumber(tile.adoptedNormalizedScore)} on ${share(tile.coveredWeightBasisPoints)} of the weight.`);
     if (estimated) parts.push(`Estimated score ${previewNumber(tile.estimatedNormalizedScore)} on ${share(tile.estimatedWeightBasisPoints)} of the weight.`);
     if (gap) parts.push(range ? `The remaining ${share(tile.unresolvedWeightBasisPoints)} is unmeasured and spans 0 to 100.`
-        : `The remaining ${share(tile.unresolvedWeightBasisPoints)} has no reliable estimate and counts as 0.`);
+        : `The remaining ${share(tile.unresolvedWeightBasisPoints)} has no measurement or estimate and counts as 0.`);
     const tooltip = parts.join(' ');
     return { measured, status, value, tooltip, description: `${range ? 'Lower-end' : 'Weighted'} score ${value} / 100. ${tooltip}` };
 }

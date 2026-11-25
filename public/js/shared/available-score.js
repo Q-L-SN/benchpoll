@@ -14,7 +14,7 @@ export const PAIRWISE_RATIONAL_COVERAGE_FACTOR_METHOD = 'pairwise-anchored-ratio
 export const PAIRWISE_ORIGINAL_WEIGHT_METHOD = 'pairwise-anchored-original-weight';
 export const AVAILABLE_COVERAGE_EXPONENT = .35;
 export const AVAILABLE_COVERAGE_PENALTY_POINTS = 20;
-export const AVAILABLE_INFERENCE_VERSION = 10;
+export const AVAILABLE_INFERENCE_VERSION = 12;
 
 export function normalizeAvailableInferenceVersion(version = AVAILABLE_INFERENCE_VERSION) {
     if (!Number.isSafeInteger(version) || version < 1 || version > AVAILABLE_INFERENCE_VERSION) throw new TypeError('Invalid available inference version');

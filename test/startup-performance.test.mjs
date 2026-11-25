@@ -14,7 +14,7 @@ const links = [...html.matchAll(/<link\s+rel="([^"]+)"\s+href="([^"]+)"[^>]*>/g)
 test('missing-score help explains eligible versions, unresolved weight, and measured ranges', () => {
     const help = html.match(/<button class="bp-scoring-help[^>]*data-help-text="([^"]+)"/)?.[1];
     assert.ok(help);
-    assert.match(help, /Estimated score uses measured results and reliable estimates from eligible versions of the same benchmark/);
+    assert.match(help, /Estimated score uses measured results and joint estimates from eligible versions of the same benchmark/);
     assert.match(help, /Unresolved results count as 0 at (?:their )?full weight/);
     assert.match(help, /Score range uses 0 and 100 for missing measurements/);
 });

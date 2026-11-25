@@ -141,7 +141,7 @@ export function discoveryText(topics, origin) {
 
 BenchPoll is a community-weighted AI model ranking platform. Participants choose benchmark and topic weights to define what matters in an AI index. Explore public rankings by topic and scene, inspect the evidence, or build a personal index.
 
-Public or personal weights determine the contribution of each benchmark. Estimated scores use direct measurements and reliable estimates from eligible versions of the same benchmark. Paired model measurements calibrate those estimates. Unresolved results contribute 0 at full weight. Coverage counts direct measurements on the weighted versions. Score range uses 0 and 100 for missing measurements and holds measured scores fixed. Topic references expand into benchmark weights before scores are calculated. Scores depend on the selected topic, scene, weights and comparison settings.
+Public or personal weights determine the contribution of each benchmark. Estimated scores use direct measurements and joint estimates from eligible versions of the same benchmark. Paired model measurements calibrate those estimates. Unresolved results contribute 0 at full weight. Coverage counts direct measurements on the weighted versions. Score range uses 0 and 100 for missing measurements and holds measured scores fixed. Topic references expand into benchmark weights before scores are calculated. Scores depend on the selected topic, scene, weights and comparison settings.
 
 ## Methodology and evidence
 - ${link('How BenchPoll works', '/how-it-works')}

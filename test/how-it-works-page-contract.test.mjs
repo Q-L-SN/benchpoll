@@ -111,14 +111,14 @@ test('score copy explains version shares, zero-filled gaps, score range and meas
     assert.match(scores, /same qualifying measurements, converted using each test’s score range and direction/);
     assert.match(scores, /A direct score on a scoring version takes priority, including zero and negative scores/);
     assert.match(scores, /Estimated score[\s\S]*calibrated estimates at their full weights/);
-    assert.match(scores, /neither a measurement nor a reliable estimate count as 0 at their full weight/);
+    assert.match(scores, /no measurement or estimate count as 0 at their full weight/);
     assert.match(scores, /<var>W<\/var> × Σ\(<var>p<sub>a<\/sub><\/var> <var>s<sub>a<\/sub><\/var>\)/);
     assert.match(scores, /The version shares add up to 100%/);
     assert.match(scores, /uses 0 at the lower end and 100 at the upper end for missing measurements/);
     assert.match(scores, /Both ends use the measured scores where available\. Models rank by the lower end/);
     assert.match(scores, /Coverage is the share of weight with measured results<\/strong> on selected versions/);
     assert.match(scores, /A faded tile in the score preview marks a missing measurement/);
-    assert.match(scores, /direct score or a reliable estimate qualifies a model to rank/);
+    assert.match(scores, /direct score or an estimate qualifies a model to rank/);
     assert.match(scores, /effort or harness to rank settings separately/);
     assert.match(scores, /best qualifying score per test/);
     assert.match(scores, /Missing settings stay in an unknown group/);
@@ -140,18 +140,19 @@ test('estimation votes cover the explicit target, directional pairs, saved votes
     assert.match(fallback, /Your own vote takes priority for your personal ranking/);
 });
 
-test('version estimation copy explains the evidence, error limit and normalized blend', () => {
+test('version estimation explains joint evidence, shrinkage, extrapolation and run settings', () => {
     const calibration = section('calibration');
-    assert.match(calibration, /eligible measured versions of the same benchmark/);
-    assert.match(calibration, /at least five other models measured on both versions with matching run settings/);
-    assert.match(calibration, /source scores must bracket the model’s source score within 10 points/);
-    assert.match(calibration, /adds the median target-minus-source difference/);
-    assert.match(calibration, /15 points higher on B than on A, an 80 on B estimates 65 on A/);
-    assert.match(calibration, /held-out data and accepts a source when the mean absolute error is at most five points/);
-    assert.match(calibration, /blends all accepted estimates/);
-    assert.match(calibration, /\(<var>n<\/var> \/ \(<var>n<\/var> \+ 5\)\) \/ \(1 \+ <var>e<\/var><sup>2<\/sup>\)/);
-    assert.match(calibration, /number of paired models and <var>e<\/var> is the held-out mean absolute error in points/);
-    assert.match(calibration, /source weights are normalized to sum to 100%/);
+    assert.match(calibration, /eligible measured versions of the same benchmark together/);
+    assert.match(calibration, /at least one other model under the same run settings/);
+    assert.match(calibration, /model measured on A and B can contribute without C/);
+    assert.match(calibration, /Sparse samples favor a shared starting correlation/);
+    assert.match(calibration, /less influence outside the observed source range/);
+    assert.match(calibration, /C can predict A through B/);
+    assert.match(calibration, /Each link follows directional votes/);
+    assert.match(calibration, /the shortest path/);
+    assert.match(calibration, /Best performance uses the highest qualifying run prediction/);
+    assert.match(calibration, /Matched comparisons average predictions within each matched control setting/);
+    assert.match(calibration, /A contributes 0 at its full weight/);
 });
 
 test('publication and evidence copy includes settings, visibility and score contributions', () => {

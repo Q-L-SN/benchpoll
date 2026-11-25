@@ -173,15 +173,15 @@ test('ranking uses the weighted total including actual negative results and zero
 test('all stale read versions and matched comparisons calculate original-weight totals', () => {
     const models = [model(1, { 1: 80 }), model(2, { 1: 60 })];
     for (const mode of ['best', 'matched']) {
-        for (const version of [1, 2, 3, 4, 5, 6, 7, 8, 9]) {
+        for (const version of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) {
             const rows = score(models, weights, { availableInferenceVersion: version }, mode);
             assert.deepEqual(rows.map(row => row.lower), [40, 30]);
             assert.ok(rows.every(row => row.availableInference.weightPolicy === 'original'));
         }
     }
-    assert.equal(AVAILABLE_INFERENCE_VERSION, 10);
-    assert.equal(rankingReadBody('/api/get_weighted_workspace', {}).availableInferenceVersion, 10);
-    for (const version of [1, 2, 3, 4, 5, 6, 7, 8, 9]) assert.equal(rankingReadBody('/api/get_weighted_workspace', { availableInferenceVersion: version }).availableInferenceVersion, 10);
+    assert.equal(AVAILABLE_INFERENCE_VERSION, 12);
+    assert.equal(rankingReadBody('/api/get_weighted_workspace', {}).availableInferenceVersion, 12);
+    for (const version of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]) assert.equal(rankingReadBody('/api/get_weighted_workspace', { availableInferenceVersion: version }).availableInferenceVersion, 12);
 });
 
 test('rounding preserves finite extreme totals instead of overflowing them while forming a ranking', () => {

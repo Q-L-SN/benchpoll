@@ -80,8 +80,9 @@ test('ordered family evidence is identical between score modes for both personal
         const { range, available } = bothModes(models, entries, undefined, rules);
         assert.equal(range[0].fallbackUsageCount, 0, 'A direct zero must beat fallback');
         assert.deepEqual([range[1].lower, range[1].upper], [0, 100]);
-        assert.equal(available[1].lower, 56);
-        assert.deepEqual(available[1].inferredScores.map(row => [row.conditionID, row.normalizedScore]), [[10, 70]]);
+        assert.equal(available[1].lower, 55.06);
+        assert.deepEqual(available[1].inferredScores.map(row => row.conditionID), [10]);
+        assert.ok(Math.abs(available[1].inferredScores[0].normalizedScore - 68.82647494604078) < 1e-9);
         assert.deepEqual(range[1].calculationScores, []);
     }
 });

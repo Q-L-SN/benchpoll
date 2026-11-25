@@ -17,7 +17,7 @@ import {
 import { normalizeAvailableInferenceVersion,
     AVAILABLE_INFERENCE_VERSION } from './public/js/shared/available-score.js';
 import { createFallbackCalibration } from './fallback-calibration.js';
-import { combineVersionEstimates, fallbackInference } from './public/js/shared/fallback-inference.js';
+import { fallbackInference } from './public/js/shared/fallback-inference.js';
 import { DEFAULT_ESTIMATION_ALGORITHM, normalizeEstimationAlgorithm } from './public/js/shared/estimation-algorithms.js';
 import { benchmarkVersionTieOrder, benchmarkEvaluationOrder } from './public/js/shared/benchmark-version-order.js';
 import { communityVersionComposition, expandCommunityVersions } from './public/js/shared/benchmark-version-choice.js';
@@ -981,19 +981,7 @@ function eligibleEstimationSources(entry, excludedConditionIDs) {
         : sources.filter(ID => !excludedConditionIDs.has(ID)).sort((left, right) => left - right);
 }
 
-function estimateFromVersions(model, sources, predict) {
-    const estimates = [];
-    for (const sourceID of sources) {
-        const sourceScore = model.results.get(resultKey(sourceID))?.normalizedScore;
-        if (sourceScore == null) continue;
-        if (!Number.isFinite(sourceScore)) throw new TypeError('Invalid estimation source score');
-        const estimate = predict(sourceID, sourceScore);
-        if (estimate) estimates.push(estimate);
-    }
-    return combineVersionEstimates(estimates);
-}
-
-export function scoreModels(models, weightedEntries, totalBasisPoints, { fallbackRules = [], familyComposition = [], fallbackScope = 'personal', scoreMode = 'range', availableInferenceVersion = AVAILABLE_INFERENCE_VERSION, estimationAlgorithm = DEFAULT_ESTIMATION_ALGORITHM, fallbackCalibration = null, comparisonScoreIndexes = null, deferMetadata = false, excludedConditionIDs = new Set() } = {}) {
+export function scoreModels(models, weightedEntries, totalBasisPoints, { fallbackRules = [], familyComposition = [], fallbackScope = 'personal', scoreMode = 'range', availableInferenceVersion = AVAILABLE_INFERENCE_VERSION, estimationAlgorithm = DEFAULT_ESTIMATION_ALGORITHM, fallbackCalibration = null, comparisonKeys = [], comparisonScoreIndexes = null, deferMetadata = false, excludedConditionIDs = new Set() } = {}) {
     currentInferenceVersion(availableInferenceVersion);
     currentEstimationAlgorithm(estimationAlgorithm);
     if (!['range', 'available'].includes(scoreMode)) {
@@ -1011,6 +999,7 @@ export function scoreModels(models, weightedEntries, totalBasisPoints, { fallbac
         const sources = eligibleEstimationSources(entry, excludedConditionIDs);
         const enabled = entry.conditionID > 0 && !excludedConditionIDs.has(entry.conditionID);
         if (sources !== null) return { entry, sources,
+            linkPolicy: sources.length > 1 ? { versions: sources, blocked: new Set(entry.blockedEstimationPairs) } : null,
             families: [{ family: { familyID: null, entries: [] }, fraction: 1, chain: enabled ? [entry.conditionID] : [] }] };
         const rule = fallbackRulesByPrimary.get(entry.conditionID);
         const families = fallbackScope === 'public' || !rule ? publicFamilies.get(entry.conditionID) : null;
@@ -1052,19 +1041,22 @@ export function scoreModels(models, weightedEntries, totalBasisPoints, { fallbac
             calculationScores.push(score);
             if (automatic) measuredByCondition.set(conditionID, score);
         };
-        for (const { entry, families, sources } of plans) {
+        for (const { entry, families, sources, linkPolicy } of plans) {
             const entryFraction = entry.weightBasisPoints / totalBasisPoints;
             const automatic = sources !== null;
             let measuredScore = null;
-            const predict = (sourceID, sourceScore) => {
+            const predictVersions = ids => {
+                if (!ids.length) return null;
                 calibration ??= createFallbackCalibration(models);
-                const comparison = comparisonScores.get(sourceID);
-                return calibration.predict(model, entry.conditionID, sourceID, sourceScore, comparison?.memberIDs,
-                    comparison?.matchedCount > 0 ? comparison.memberWeights : null);
+                return calibration.predictVersions(model, entry.conditionID, ids, comparisonScores, comparisonKeys, linkPolicy);
+            };
+            const predictChainSource = sourceID => {
+                const prediction = predictVersions([sourceID]);
+                return prediction && { ...prediction, ...prediction.sources[0] };
             };
             for (const { family, fraction, chain } of families) {
                 const weight = entry.weightBasisPoints * fraction;
-                const resolved = resolveFallbackChain(model, chain, predict);
+                const resolved = resolveFallbackChain(model, chain, predictChainSource);
                 const direct = resolved.normalizedScore;
                 if (direct !== null) {
                     lower += entryFraction * fraction * direct;
@@ -1076,7 +1068,7 @@ export function scoreModels(models, weightedEntries, totalBasisPoints, { fallbac
                     continue;
                 }
                 upper += entryFraction * fraction * 100;
-                const prediction = automatic && scoreMode === 'available' ? estimateFromVersions(model, sources, predict) : resolved.prediction;
+                const prediction = automatic && scoreMode === 'available' ? predictVersions(sources) : resolved.prediction;
                 if (prediction) {
                     if (automatic) {
                         for (const source of prediction.sources) resultKeys.add(resultKey(source.sourceConditionID));
@@ -1162,7 +1154,7 @@ export function scoreComparison(models, entries, total, rules, options, prepared
     const scores = scoreModels(grouped, entries, total, { ...(options.mode === 'matched' ? { scoreMode } : rules), fallbackCalibration,
         availableInferenceVersion, estimationAlgorithm: rules.estimationAlgorithm,
         excludedConditionIDs,
-        comparisonScoreIndexes: rules.comparisonScoreIndexes, deferMetadata: rules.jsonMemberMetadata === true });
+        comparisonKeys: options.keys, comparisonScoreIndexes: rules.comparisonScoreIndexes, deferMetadata: rules.jsonMemberMetadata === true });
     return scores.map(score => {
         const group = groupsByID.get(score.ID);
         const comparisonMetadata = () => {
@@ -1618,7 +1610,7 @@ async function buildRankingWorkspace(db, {
     const comparisonScoreIndexes = preparedGroups
         ? await cachedRankingRead(db, 'data', `score-indexes:${comparisonKey}`, () => new WeakMap(preparedGroups.map(group => [group,
             new Map(group.comparisonScores.map(score => [Number(score.conditionID), score]))]))) : null;
-    // Scope the lazily built pair tables to this workspace read. Both pies may reuse a pair.
+    // Both pies share joint fits for identical target, settings and eligible measured sources.
     const fallbackCalibration = createFallbackCalibration(models);
     const scoringOptions = { scoreMode, availableInferenceVersion, estimationAlgorithm, fallbackCalibration,
         comparisonScoreIndexes, jsonMemberMetadata, excludedConditionIDs };
