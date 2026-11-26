@@ -111,7 +111,7 @@ test('graph resource bounds retain unresolved share and do not load unbounded ta
     assert.equal(result.entries[0].weightBasisPoints, 10000);
 });
 
-test('an unavailable reference affects range and coverage without being estimated as a benchmark', () => {
+test('an unavailable reference can use a treemap estimate and stays unmeasured', () => {
     const model = { ID: 1, modelID: 1, name: 'Model', condition: {},
         results: new Map([['10', { normalizedScore: 80 }]]) };
     const weights = [entry(10, 5000), entry(-20, 5000)];
@@ -125,7 +125,9 @@ test('an unavailable reference affects range and coverage without being estimate
             predict() { predictions++; throw new Error('Do not infer a topic as a benchmark'); } } });
     assert.equal(predictions, 0);
     assert.equal(estimated.coverage, 50);
-    assert.equal(estimated.lower, 40);
+    assert.equal(estimated.lower, 80);
+    assert.deepEqual(estimated.inferredScores.map(row => [row.conditionID, row.estimationMethod, row.normalizedScore]),
+        [[-20, 'treemap-weighted', 80]]);
 });
 
 test('public references preserve sub-basis-point shares and rounded zero references cannot create NaN', async () => {
@@ -229,10 +231,11 @@ test('cyclic paths merge repeated benchmarks for display and score each scene’
     assert.ok(Math.abs(second.weightBasisPoints - 10000 / 3) < 1e-9);
     const [score] = scoreModels([{ ID: 1, name: 'A', results: new Map([['12', { normalizedScore: 60 }]]) },
         ...pairedModels(10, 12, 60, -5, null)], result.scoringEntries, 10000, { scoreMode: 'available' });
-    assert.equal(score.lower, 36.67);
+    assert.equal(score.lower, 55);
     assert.equal(score.lower, score.upper);
     assert.equal(score.coverage, 0);
     assert.equal(score.fallbackCoverage, 66.67);
+    assert.equal(score.inferredScores[1].estimationMethod, 'treemap-weighted');
     assert.equal(score.coverageEntries.length, 1);
 });
 

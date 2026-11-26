@@ -50,7 +50,7 @@ test('public discovery excludes private records and emits only canonical scene a
     assert.doesNotMatch(robots, /Disallow: \/(?:js|css|assets)/);
     const methods = discoveryText([topic], origin);
     assert.match(methods, /direct measurements and joint estimates from eligible versions of the same benchmark/);
-    assert.match(methods, /Unresolved results contribute 0 at full weight/);
+    assert.match(methods, /Remaining gaps use the weighted average of the model’s scores in the treemap/);
     assert.match(methods, /Scoring versions and estimation sources/);
 });
 

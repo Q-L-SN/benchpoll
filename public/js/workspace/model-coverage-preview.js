@@ -1,6 +1,7 @@
 import { SVG_NS } from './constants.js';
 import { mergeBenchmarkWeights } from './expanded-weights.js';
 import { createPieRenderer } from './pie-renderer.js';
+import { TREEMAP_ESTIMATION_METHOD } from '../shared/fallback-inference.js';
 
 const blockKey = entry => entry.conditionID < 0 ? 'unresolved' : `benchmark:${entry.benchmarkID ?? entry.conditionID}`;
 
@@ -26,18 +27,19 @@ export function buildModelCoverageEntries(entries, coverageEntries, versions = [
         if (!coverageByID.has(id) || !Number.isFinite(score.normalizedScore)) continue;
         const weight = score.weightBasisPoints ?? score.originalWeight / 100 * totalWeight;
         if (!Number.isFinite(weight) || weight <= 0) continue;
-        const estimate = estimatedByID.get(id) ?? { weight: 0, contribution: 0 };
+        const estimate = estimatedByID.get(id) ?? { weight: 0, contribution: 0, treemapWeight: 0 };
         estimate.weight += weight;
         estimate.contribution += weight * score.normalizedScore;
+        if (score.estimationMethod === TREEMAP_ESTIMATION_METHOD) estimate.treemapWeight += weight;
         estimatedByID.set(id, estimate);
     }
     const totals = new Map();
     for (const entry of entries) {
         if (!(entry.weightBasisPoints > 0)) continue;
-        const key = blockKey(entry), total = totals.get(key) ?? { covered: 0, contribution: 0, estimated: 0, estimatedContribution: 0 };
-        const adopted = entry.conditionID > 0 ? coverageByID.get(entry.conditionID) : null;
+        const key = blockKey(entry), total = totals.get(key) ?? { covered: 0, contribution: 0, estimated: 0, estimatedContribution: 0, treemapWeight: 0 };
+        const adopted = coverageByID.get(entry.conditionID);
         // Repeated references to the same condition retain their proportional share.
-        const covered = adopted ? entry.weightBasisPoints * adopted.coveredWeightBasisPoints / adopted.weightBasisPoints : 0;
+        const covered = adopted && entry.conditionID > 0 ? entry.weightBasisPoints * adopted.coveredWeightBasisPoints / adopted.weightBasisPoints : 0;
         total.covered += covered;
         if (covered > 0) total.contribution += covered * adopted.normalizedScore;
         const estimate = estimatedByID.get(entry.conditionID);
@@ -45,6 +47,7 @@ export function buildModelCoverageEntries(entries, coverageEntries, versions = [
             const share = entry.weightBasisPoints / adopted.weightBasisPoints;
             total.estimated += share * estimate.weight;
             total.estimatedContribution += share * estimate.contribution;
+            total.treemapWeight += share * estimate.treemapWeight;
         }
         totals.set(key, total);
     }
@@ -54,6 +57,7 @@ export function buildModelCoverageEntries(entries, coverageEntries, versions = [
         const estimatedWeightBasisPoints = total?.estimated ?? 0;
         const unresolvedWeightBasisPoints = Math.max(0, entry.weightBasisPoints - coveredWeightBasisPoints - estimatedWeightBasisPoints);
         return { ...entry, coveredWeightBasisPoints, estimatedWeightBasisPoints, unresolvedWeightBasisPoints,
+            treemapEstimatedWeightBasisPoints: total?.treemapWeight ?? 0,
             coverage: Math.min(100, coveredWeightBasisPoints / entry.weightBasisPoints * 100),
             adoptedNormalizedScore: coveredWeightBasisPoints > 0 ? total.contribution / coveredWeightBasisPoints : null,
             estimatedNormalizedScore: estimatedWeightBasisPoints > 0 ? total.estimatedContribution / estimatedWeightBasisPoints : null,

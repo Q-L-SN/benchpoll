@@ -53,12 +53,13 @@ test('historical results cannot affect medians, coverage, version estimates or t
     assert.equal(bounded.upper, 60);
     assert.equal(bounded.coverage, 50);
     const [available] = scoreComparison(models, weights, 10000, { scoreMode: 'available' }, comparisonOptions(models));
-    assert.equal(available.lower, 10);
-    assert.equal(available.upper, 10);
+    assert.equal(available.lower, 20);
+    assert.equal(available.upper, 20);
     assert.equal(available.availableInference.unresolvedContribution, 0);
     assert.equal(available.availableInference.observedScore, 20);
-    assert.equal(available.availableInference.inferredFraction, 0);
-    assert.deepEqual(available.inferredScores, []);
+    assert.equal(available.availableInference.inferredFraction, .5);
+    assert.deepEqual(available.inferredScores.map(row => [row.conditionID, row.estimationMethod, row.normalizedScore]),
+        [[22, 'treemap-weighted', 20]]);
     const [missing] = scoreComparison(models, [{ conditionID: 23, weightBasisPoints: 10000, estimationSourceIDs: [22] }],
         10000, { scoreMode: 'available' }, comparisonOptions(models));
     assert.equal(missing.lower, null);

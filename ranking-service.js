@@ -18,7 +18,7 @@ import {
 import { normalizeAvailableInferenceVersion,
     AVAILABLE_INFERENCE_VERSION } from './public/js/shared/available-score.js';
 import { createFallbackCalibration } from './fallback-calibration.js';
-import { fallbackInference } from './public/js/shared/fallback-inference.js';
+import { fallbackInference, TREEMAP_ESTIMATION_METHOD } from './public/js/shared/fallback-inference.js';
 import { DEFAULT_ESTIMATION_ALGORITHM, normalizeEstimationAlgorithm } from './public/js/shared/estimation-algorithms.js';
 import { benchmarkVersionTieOrder, benchmarkEvaluationOrder } from './public/js/shared/benchmark-version-order.js';
 import { communityVersionComposition, expandCommunityVersions } from './public/js/shared/benchmark-version-choice.js';
@@ -979,6 +979,7 @@ export function scoreModels(models, weightedEntries, totalBasisPoints, { fallbac
         const coverageByCondition = new Map();
         const measuredByCondition = new Map();
         const inferredScores = [];
+        const missingWeights = scoreMode === 'available' ? new Map() : null;
         const comparisonScores = comparisonScoreIndexes?.get(model)
             ?? new Map((model.comparisonScores ?? []).map(score => [Number(score.conditionID), score]));
         const recordScore = (conditionID, normalizedScore, weightBasisPoints, familyID, chain, automatic) => {
@@ -1039,6 +1040,8 @@ export function scoreModels(models, weightedEntries, totalBasisPoints, { fallbac
                             ...(automatic ? { selection: 'automatic' } : { familyConditionIDs: chain }), ...prediction,
                             weightBasisPoints: weight, originalWeight: weight / totalBasisPoints * 100 });
                     }
+                } else if (missingWeights && !excludedConditionIDs.has(entry.conditionID)) {
+                    missingWeights.set(entry.conditionID, (missingWeights.get(entry.conditionID) ?? 0) + weight);
                 }
                 if (family.entries.length) fallbackResolutions.push({ primaryConditionID: entry.conditionID,
                     familyID: family.familyID ?? null, conditionID: prediction?.sourceConditionID ?? null,
@@ -1052,11 +1055,26 @@ export function scoreModels(models, weightedEntries, totalBasisPoints, { fallbac
             coverageByCondition.set(entry.conditionID, coverage);
         }
         const observedFraction = measuredFraction(coveredBasisPoints, totalBasisPoints);
-        const availableInference = scoreMode === 'available' ? fallbackInference(
-            calculationScores.reduce((sum, score) => sum + score.normalizedScore * (score.weightBasisPoints / coveredBasisPoints), 0),
-            observedFraction, inferredScores.map(score => ({ normalizedScore: score.normalizedScore,
-                weightFraction: score.weightBasisPoints / totalBasisPoints })), estimationAlgorithm) : null;
-        const availableScore = availableInference ? roundTo(availableInference.totalScore) : null;
+        let availableInference = null;
+        if (missingWeights) {
+            const observedScore = calculationScores.reduce((sum, score) =>
+                sum + score.normalizedScore * (score.weightBasisPoints / coveredBasisPoints), 0);
+            const estimates = inferredScores.map(score => ({ normalizedScore: score.normalizedScore,
+                weightFraction: score.weightBasisPoints / totalBasisPoints }));
+            availableInference = fallbackInference(observedScore, observedFraction, estimates, estimationAlgorithm);
+            if (missingWeights.size && availableInference.supportedFraction > 0) {
+                // Use the scores already adopted in this treemap as evidence, before filling any gaps.
+                const normalizedScore = availableInference.unpenalizedScore / availableInference.supportedFraction;
+                for (const [conditionID, weightBasisPoints] of missingWeights) {
+                    const weightFraction = weightBasisPoints / totalBasisPoints;
+                    inferredScores.push({ conditionID, normalizedScore, weightBasisPoints, originalWeight: weightFraction * 100,
+                        familyID: null, estimationMethod: TREEMAP_ESTIMATION_METHOD });
+                    estimates.push({ normalizedScore, weightFraction });
+                }
+                availableInference = fallbackInference(observedScore, observedFraction, estimates, estimationAlgorithm);
+            }
+        }
+        const availableScore = availableInference?.supportedFraction > 0 ? roundTo(availableInference.totalScore) : null;
         const weightedScore = score => ({ ...score, effectiveWeight: score.weightBasisPoints / totalBasisPoints * 100,
             contribution: score.normalizedScore * (score.weightBasisPoints / totalBasisPoints) });
         const response = {

@@ -43,7 +43,8 @@ test('only in-chain sources are considered, in order, and each one estimates the
     peers.forEach((p, i) => p.results.set('2', { normalizedScore: 91 + (i - 2) * 2 }));
     subject.results.set('2', { normalizedScore: 91 });
     assert.equal(rank(subject, peers).inferredScores[0].sourceConditionID, 2);
-    assert.deepEqual(rank(subject, peers, { fallbackRules: [] }).inferredScores, []);
+    assert.deepEqual(rank(subject, peers, { fallbackRules: [] }).inferredScores.map(score => [score.estimationMethod, score.normalizedScore]),
+        [['treemap-weighted', 80]]);
     const outside = rank(model(1, { 999: 120 }), peers);
     assert.equal(outside.comparable, false);
     assert.deepEqual(outside.inferredScores, []);
@@ -94,10 +95,12 @@ test('selection share applies only to that chain, with the same paired models ac
         { primaryConditionID: 1, familyID: null, entries: [], weightBasisPoints: 4000 }] }];
     for (const fallbackScope of ['personal', 'public']) {
         const row = rank(subject, peers, { fallbackScope, familyComposition: composition, fallbackRules: [] });
-        assert.deepEqual(row.inferredScores.map(s => [s.normalizedScore, s.originalWeight]), [[75, 12]]);
+        assert.deepEqual(row.inferredScores.map(s => [s.estimationMethod, s.originalWeight]), [['joint-versions', 12], ['treemap-weighted', 8]]);
+        assert.equal(row.inferredScores[0].normalizedScore, 75);
+        assert.ok(Math.abs(row.inferredScores[1].normalizedScore - 73 / .92) < 1e-9);
         assert.equal(row.coverage, 80);
         assert.equal(row.fallbackCoverage, 12);
-        assert.ok(Math.abs(row.availableInference.unresolvedFraction - .08) < 1e-12);
+        assert.equal(row.availableInference.unresolvedFraction, 0);
     }
 });
 

@@ -228,7 +228,7 @@ test('model scoring exposes an uncertainty interval for missing results', () => 
     assert.equal(scored[0].resultCount, 1);
 });
 
-test('available-results mode keeps original contributions for signed and unresolved scores', () => {
+test('available-results mode normalizes signed evidence for treemap estimates and keeps original contributions', () => {
     const model = { ID: 7, modelID: 3, name: 'Partial evidence', results: new Map([
         ['21', { normalizedScore: 120 }], ['22', { normalizedScore: -20 }]
     ]) };
@@ -238,13 +238,15 @@ test('available-results mode keeps original contributions for signed and unresol
         { conditionID: 23, weightBasisPoints: 3000 }
     ];
     const [scored] = scoreModels([model], entries, 10000, { scoreMode: 'available' });
-    assert.equal(scored.lower, 42);
-    assert.equal(scored.upper, 42);
-    assert.equal(scored.availableInference.unpenalizedScore, 42);
+    assert.equal(scored.lower, 60);
+    assert.equal(scored.upper, 60);
+    assert.equal(scored.availableInference.unpenalizedScore, 60);
     assert.equal(scored.availableInference.unresolvedContribution, 0);
     assert.equal(scored.availableInference.observedScore, 60);
-    assert.equal(scored.availableInference.inferredFraction, 0);
-    assert.deepEqual(scored.inferredScores, []);
+    assert.equal(scored.availableInference.inferredFraction, .3);
+    assert.deepEqual(scored.inferredScores.map(score => [score.conditionID, score.estimationMethod, score.contribution]),
+        [[23, 'treemap-weighted', 18]]);
+    assert.ok(Math.abs(scored.inferredScores[0].normalizedScore - 60) < 1e-9);
     assert.equal(scored.coverage, 70);
     assert.equal(scored.resultCount, 2);
     assert.deepEqual(scoreModels([model], entries, 10000)[0].lower, 42);
@@ -260,10 +262,10 @@ test('available-results mode retains original 20% and 40% weights when other res
     ]) };
     const [score] = scoreModels([model], entries, 10000, { scoreMode: 'available' });
     assert.equal(score.coverage, 60);
-    assert.equal(score.lower, 48);
-    assert.equal(score.upper, 48);
+    assert.equal(score.lower, 80);
+    assert.equal(score.upper, 80);
     assert.equal(score.availableInference.observedScore, 80);
-    assert.deepEqual(score.inferredScores, []);
+    assert.deepEqual(score.inferredScores.map(row => [row.conditionID, row.normalizedScore, row.originalWeight]), [[1, 80, 10], [3, 80, 30]]);
     assert.deepEqual(score.calculationScores.map(row => row.effectiveWeight), [20, 40]);
 });
 
@@ -276,7 +278,7 @@ test('ordered fallback resolves the whole entrance and leaves exhausted chains m
     ];
     models.push(...pairedModels(21, 22, 80, -5, null));
     const available = scoreModels(models, entries, 10000, { fallbackRules, scoreMode: 'available' });
-    assert.deepEqual(available.slice(0, 2).map(row => [row.lower, row.upper, row.coverage]), [[75, 75, 0], [0, 0, 0]]);
+    assert.deepEqual(available.slice(0, 2).map(row => [row.lower, row.upper, row.coverage]), [[75, 75, 0], [null, null, 0]]);
     const range = scoreModels(models, entries, 10000, { fallbackRules });
     assert.deepEqual(range.slice(0, 2).map(row => [row.lower, row.upper, row.coverage]), [[0, 100, 0], [0, 100, 0]]);
     assert.equal(range[0].fallbackUsageCount, 1);

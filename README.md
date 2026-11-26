@@ -245,7 +245,10 @@ prior with correlation 0.70, and a 0.5-point scale floor. When direct calibratio
 sibling can reach A through intermediate versions of that benchmark. Each link uses measured peers with
 the same settings and respects the sitewide pair vote. All versions on the path must be eligible for A.
 Shorter paths take priority, then the number of paired models on the weakest link. Direct scores (including zero) and estimates keep the target version’s
-original weight. An unresolved score contributes zero. Only measurements add coverage. Score range assigns
+original weight. Gaps left after version-based estimation use the weighted average of the model’s measured
+and version-estimated scores in the treemap. The average normalizes the weights of the available scores,
+and its results are marked as treemap estimates. Models with no evidence in the treemap stay unranked.
+Only measurements add coverage. Score range assigns
 0 at the lower end and 100 at the upper end for missing measurements. See
 [How BenchPoll works](https://benchpoll.com/how-it-works#rankings).
 
@@ -559,7 +562,7 @@ AI Index 提供 **Version-based estimation**。缺少版本 A 的分数时，算
 直接配对要求至少一个其他模型在相同运行设置下同时测过来源版本和 A。算法从配对记录中估计版本间的协方差，样本少时对相关性做收缩，
 超出已观测范围时平滑减弱外推。拟合使用七轮期望最大化更新，先验相当于两个观测，相关系数为 0.70，尺度下限为 0.5 分。
 缺少直接配对时，模型的实测分可以经过同一基准的中间版本逐段换算到 A。每一段都需要相同运行设置下其他模型的配对实测，并遵守全站版本对投票。路径上的版本也都须获准为 A 估分。优先采用最短路径，路径等长时选择最薄弱一段配对模型更多的路径。
-实测分（含零分）优先。估分沿用 A 的原权重，无法估分时该项贡献为零。覆盖率只计算实测结果。
+实测分（含零分）优先。版本估分仍缺失时，采用该模型在全树图上的实测分和已有版本估分，将这些分区的权重归一化后取加权平均，按缺分项的原权重计入，并标记为树图估分。全树图无可用证据的模型不参与排名。覆盖率只计算实测结果。
 在分数区间模式下，缺分项的下限计 0 分，上限计 100 分。
 详见 [How BenchPoll works](https://benchpoll.com/how-it-works#rankings)。
 

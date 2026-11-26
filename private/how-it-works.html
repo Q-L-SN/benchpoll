@@ -123,14 +123,15 @@
                 <p>BenchPoll uses the best qualifying score per test by default. Turn on effort or harness to rank settings separately. Missing settings stay in an unknown group. Matched comparisons calibrate each qualifying run separately.</p>
 
                 <h3 id="estimated-score" tabindex="-1">Estimated score</h3>
-                <p><strong>Estimated score</strong> combines direct scores and calibrated estimates at their full weights. Results with no measurement or estimate count as 0 at their full weight. A direct score or an estimate qualifies a model to rank.</p>
+                <p><strong>Estimated score</strong> combines direct scores, version estimates and treemap estimates at their full weights.</p>
                 <p>The AI Index uses <strong>Version-based estimation</strong>. For a benchmark with index weight <var>W</var>, each scoring version <var>a</var> has a share <var>p<sub>a</sub></var> and score <var>s<sub>a</sub></var>. The benchmark contributes <span class="hi-formula"><var>W</var> × Σ(<var>p<sub>a</sub></var> <var>s<sub>a</sub></var>)</span> to the index score. The version shares add up to 100%.</p>
+                <p>A <strong>treemap estimate</strong> fills gaps left by version-based estimation. BenchPoll averages the model’s measured and version-estimated scores in the treemap using their weights scaled to sum to 100%. Each gap gets that average at its original weight. Models with no evidence in the treemap stay unranked.</p>
 
                 <h3 id="score-range" tabindex="-1">Score range</h3>
                 <p><strong>Score range</strong> uses 0 at the lower end and 100 at the upper end for missing measurements. Both ends use the measured scores where available. Models rank by the lower end.</p>
 
                 <h3 id="measured-coverage" tabindex="-1">Measured coverage</h3>
-                <p><strong>Coverage is the share of weight with measured results</strong> on selected versions. A faded tile in the score preview marks a missing measurement. That slot contributes its estimate or 0 in Estimated score.</p>
+                <p><strong>Coverage is the share of weight with measured results</strong> on selected versions. A faded tile in the score preview marks a missing measurement. Dashed outlines mark treemap estimates.</p>
 
                 <h2 id="details" tabindex="-1">Benchmark versions</h2>
                 <p>Each community scoring choice carries that person’s benchmark weight. BenchPoll splits the benchmark’s weight among versions in proportion to those choices. If nobody chose a version, the primary version gets the full weight.</p>
@@ -143,8 +144,8 @@
                 <h3 id="calibration" tabindex="-1">How versions predict a missing score</h3>
                 <p>BenchPoll fits eligible measured versions of the same benchmark together. Each link needs paired scores from at least one other model under the same run settings. A model measured on A and B can contribute without C. Sparse samples favor a shared starting correlation. Extreme scores have less influence outside the observed source range.</p>
                 <p>When direct pairing is unavailable, C can predict A through B. Each link follows the pair vote. Every version must be eligible for A. BenchPoll chooses the shortest path and breaks ties by the number of paired models on the weakest link. Score details show each link.</p>
-                <p>External sources come last. Public predictions must beat the training median on held-out models in both mean absolute and root mean squared error for that direction. Personal rankings can use one paired model.</p>
-                <p>Best performance uses the highest qualifying run prediction. Matched comparisons average predictions within each matched control setting and give settings equal weight. Without a connected measurement, A contributes 0 at its full weight.</p>
+                <p>When same-benchmark versions cannot fill the gap, BenchPoll tries nominated external versions. Public predictions must beat the training median on held-out models in both mean absolute and root mean squared error for that direction. Personal rankings can use one paired model.</p>
+                <p>Best performance uses the highest qualifying run prediction. Matched comparisons average predictions within each matched control setting and give settings equal weight.</p>
 
                 <h2 id="publishing" tabindex="-1">Publishing and contributions</h2>
 

@@ -27,16 +27,17 @@ const recordedModel = (ID, scores) => ({ ID, modelID: ID, modelName: `M${ID}`, n
     condition: { parameters: { harness: 'same' } },
     results: new Map(Object.entries(scores).map(([key, normalizedScore]) => [key, { normalizedScore }])) });
 
-test('a measured result retains its one-percent contribution when the remainder is unresolved', () => {
+test('a measured result keeps its one-percent contribution when it seeds the treemap estimate', () => {
     const models = [recordedModel(1, { 1: 100 }), recordedModel(2, { 1: 75, 2: 75 })];
     const options = comparisonOptions(models);
     const weights = [{ conditionID: 1, weightBasisPoints: 100 }, { conditionID: 2, weightBasisPoints: 9900 }];
     const scores = scoreComparison(models, weights, 10000, { scoreMode: 'available' }, options);
-    assert.equal(scores[0].lower, 1);
+    assert.equal(scores[0].lower, 100);
     assert.equal(scores[0].availableInference.observedContribution, 1);
     assert.equal(scores[0].availableInference.unresolvedContribution, 0);
-    assert.equal(scores[0].availableInference.unresolvedFraction, .99);
-    assert.deepEqual(scores[0].inferredScores, []);
+    assert.equal(scores[0].availableInference.unresolvedFraction, 0);
+    assert.deepEqual(scores[0].inferredScores.map(row => [row.conditionID, row.estimationMethod, row.originalWeight, row.contribution]),
+        [[2, 'treemap-weighted', 99, 99]]);
     assert.equal(scores[1].lower, 75);
     assert.equal(scores[0].calculationScores[0].normalizedScore, 100);
 });

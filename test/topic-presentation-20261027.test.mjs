@@ -45,7 +45,7 @@ test('version-based estimation uses calibrated scores and keeps retired coverage
     for (const html of [home, configuration]) assert.doesNotMatch(html, /coverage-experiment|coverage-penalty|Power 0\.35/);
     assert.doesNotMatch(read('public/css/ui/topic-identity.css'), /coverage-experiment/);
     assert.match(configuration, /Nominated external versions can supply an estimate/);
-    assert.match(read('private/how-it-works.html'), /Results with no measurement or estimate count as 0 at their full weight/);
+    assert.match(read('private/how-it-works.html'), /<strong>treemap estimate<\/strong> fills gaps left by version-based estimation/);
 });
 
 test('creation offers private and public visibility while edits use the separate visibility action', () => {

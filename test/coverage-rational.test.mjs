@@ -38,7 +38,7 @@ test('the fixed rational multiplier keeps negative and tiny-coverage totals fini
     close(infer(80, .3).totalScore, 80 * 1.5 / 2.2);
 });
 
-test('the live score trace includes the full unresolved weight and leaves ranges unchanged', () => {
+test('the live score trace fills missing weight when there is evidence and leaves ranges unchanged', () => {
     const models = [
         { ID: 1, name: 'Measured', results: new Map([['1', { normalizedScore: 80, memberIDs: [1] }]]) },
         { ID: 2, name: 'No score', results: new Map() }
@@ -46,8 +46,8 @@ test('the live score trace includes the full unresolved weight and leaves ranges
     const weights = [{ conditionID: 1, weightBasisPoints: 3000 }, { conditionID: 2, weightBasisPoints: 7000 }];
     const estimated = scoreModels(models, weights, 10000, { scoreMode: 'available' });
     assert.equal(estimated[0].availableInference.method, 'calibrated-fallback');
-    close(estimated[0].availableInference.totalScore, 24);
-    assert.equal(estimated[1].lower, 0);
+    close(estimated[0].availableInference.totalScore, 80);
+    assert.equal(estimated[1].lower, null);
     assert.equal(estimated[1].availableInference.unresolvedFraction, 1);
     assert.deepEqual(scoreModels(models, weights, 10000, { scoreMode: 'range', availableInferenceVersion: 5 }),
         scoreModels(models, weights, 10000, { scoreMode: 'range', availableInferenceVersion: 4 }));

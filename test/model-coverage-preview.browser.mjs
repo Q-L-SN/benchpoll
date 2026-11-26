@@ -175,7 +175,7 @@ test('desktop row hover expands and merges coverage, preserves label typography,
     }), [-10, 'original', 'focus', false, true, true, null]);
 });
 
-test('desktop tooltips distinguish unresolved zeros from measured and estimated zeros', async t => {
+test('desktop tooltips distinguish unscored tiles from measured and estimated zeros', async t => {
     const page = await setup(t);
     await page.evaluate(() => {
         const qa = window.coverageQA;
@@ -189,12 +189,12 @@ test('desktop tooltips distinguish unresolved zeros from measured and estimated 
     assert.equal(await page.getByRole('img', { name: 'Gamma test. Measured score 0 / 100.', exact: true }).count(), 1);
     await page.locator('#row-b').hover();
     const unresolved = page.locator('.bp-model-coverage-overlay [data-object-id="31"][data-score-status="unresolved"]');
-    assert.equal(await unresolved.locator('[data-unresolved-score]').textContent(), '0');
+    assert.equal(await unresolved.locator('[data-unresolved-score]').textContent(), '—');
     assert.ok(await unresolved.evaluate(node => Number(getComputedStyle(node.querySelector('.bp-weight-tile')).opacity) < 1));
     await unresolved.hover();
     const tooltip = page.getByRole('tooltip');
     await tooltip.waitFor({ state: 'visible' });
-    assert.equal(await tooltip.textContent(), 'No measurement or estimate. Counts as 0 in this ranking.');
+    assert.equal(await tooltip.textContent(), 'No score available for this part of the treemap.');
     await page.mouse.move(1200, 800);
     await page.waitForSelector('.bp-model-coverage-overlay', { state: 'detached' });
     await page.locator('#weight-pie [data-object-id="31"]').click();
@@ -221,7 +221,7 @@ test('out of order coverage requests, pointer leave and context changes cannot p
     await page.evaluate(() => window.coverageQA.requests[1].resolve(window.coverageQA.modelB));
     await page.waitForSelector('.bp-model-coverage-overlay:not([hidden])');
     assert.equal(await page.locator('.bp-model-coverage-overlay [data-object-id="21"] [data-adopted-score]').textContent(), '80');
-    assert.equal(await page.locator('.bp-model-coverage-overlay [data-object-id="31"] [data-unresolved-score]').textContent(), '0');
+    assert.equal(await page.locator('.bp-model-coverage-overlay [data-object-id="31"] [data-unresolved-score]').textContent(), '—');
     await page.evaluate(() => { const qa = window.coverageQA; qa.slow.clear(); void qa.slow.show(qa.modelA); qa.state.categoryID = 2; qa.requests[2].resolve(qa.modelA); });
     await page.waitForSelector('.bp-model-coverage-overlay', { state: 'detached' });
     assert.equal(await page.locator('#weight-pie').evaluate(svg => getComputedStyle(svg).visibility), 'visible');
@@ -300,12 +300,12 @@ test('mobile Used in this ranking shows the same treemap in a fullscreen dialog 
     await page.waitForTimeout(50);
     assert.match(await page.locator('#model-scores-title').textContent(), /Model B/);
     const unresolved = page.locator('.bp-model-coverage-figure [data-object-id="31"][data-score-status="unresolved"]');
-    assert.equal(await unresolved.locator('[data-unresolved-score]').textContent(), '0');
+    assert.equal(await unresolved.locator('[data-unresolved-score]').textContent(), '—');
     assert.equal(await unresolved.getAttribute('tabindex'), '0');
     await unresolved.tap();
     const tooltip = page.getByRole('tooltip');
     await tooltip.waitFor({ state: 'visible' });
-    assert.equal(await tooltip.textContent(), 'No measurement or estimate. Counts as 0 in this ranking.');
+    assert.equal(await tooltip.textContent(), 'No score available for this part of the treemap.');
     await page.locator('.bp-model-configuration-link').click();
     await page.waitForFunction(() => window.coverageQA.requests.length === 2);
     await page.evaluate(() => { window.coverageQA.state.loadSequence++; });

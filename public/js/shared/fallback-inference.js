@@ -4,6 +4,7 @@ import { archivedMissingAdjustment, DEFAULT_ESTIMATION_ALGORITHM, isMissingInfer
 
 export const FALLBACK_INFERENCE_METHOD = 'calibrated-fallback';
 export const JOINT_VERSION_METHOD = 'joint-versions';
+export const TREEMAP_ESTIMATION_METHOD = 'treemap-weighted';
 
 export function fallbackInference(observedScore, coverageFraction, estimates, algorithm = DEFAULT_ESTIMATION_ALGORITHM) {
     const contributions = originalWeightContributions(observedScore, coverageFraction, estimates);

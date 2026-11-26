@@ -76,15 +76,16 @@ test('long-chain storage batches SQL parameters and preserves the global positio
     assert.deepEqual(parseFamilyRows(stored)[0].entries, entries);
 });
 
-test('both modes preserve the missing primary, and only the supported backup supplies a point estimate', () => {
+test('a supported backup supplies a calibrated score before the treemap estimate fills the remaining weight', () => {
     const entries = [{ conditionID: 1, weightBasisPoints: 7000 }, { conditionID: 4, weightBasisPoints: 3000 }];
     const models = [model([[2, 80], [3, 99]]), ...pairedModels(1, 2, 80, -5, null)];
     const rules = { fallbackRules: [rule(1, [2, 3])] };
     const [range] = scoreModels(models, entries, 10000, rules);
     const [available] = scoreModels(models, entries, 10000, { ...rules, scoreMode: 'available' });
     assert.deepEqual([range.lower, range.upper, range.coverage], [0, 100, 0]);
-    assert.equal(available.lower, 52.5);
-    assert.deepEqual(available.inferredScores.map(row => [row.conditionID, row.sourceConditionID, row.originalWeight]), [[1, 2, 70]]);
+    assert.equal(available.lower, 75);
+    assert.deepEqual(available.inferredScores.map(row => [row.conditionID, row.sourceConditionID, row.originalWeight]),
+        [[1, 2, 70], [4, undefined, 30]]);
     assert.deepEqual(available.calculationScores, []);
 });
 
@@ -95,8 +96,9 @@ test('public chains and no-fallback holders retain independent fractions', () =>
         { scoreMode: 'available', fallbackScope: 'public', familyComposition: [{ primaryConditionID: 1, families }] });
     assert.equal(result.coverage, 0);
     assert.equal(result.fallbackCoverage, 80);
-    assert.deepEqual(result.inferredScores.map(s => [s.sourceConditionID, s.originalWeight]), [[2, 60], [2, 20]]);
-    assert.ok(Math.abs(result.availableInference.unresolvedFraction - .2) < 1e-9);
+    assert.deepEqual(result.inferredScores.map(s => [s.sourceConditionID, s.originalWeight]), [[2, 60], [2, 20], [undefined, 20]]);
+    assert.equal(result.inferredScores.at(-1).estimationMethod, 'treemap-weighted');
+    assert.equal(result.availableInference.unresolvedFraction, 0);
 });
 
 test('public direct score occupies the entrance once, not once plus its family weight', () => {

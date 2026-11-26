@@ -59,11 +59,12 @@ for (const [engine, width] of engines) {
 
         assert.equal(data.estimationAlgorithm, 'current');
         const estimated = data.modelLeaderboards.public.find(row => row.modelID === 1);
-        assert.equal(estimated.lower, 64.93);
+        assert.equal(estimated.lower, 81.16);
         assert.equal(estimated.coverage, 40);
-        assert.ok(Math.abs(estimated.availableInference.unresolvedFraction - .2) < 1e-9);
-        assert.equal(estimated.inferredScores.length, 1);
-        const [estimate] = estimated.inferredScores;
+        assert.equal(estimated.availableInference.unresolvedFraction, 0);
+        assert.equal(estimated.inferredScores.length, 2);
+        const [estimate, treemap] = estimated.inferredScores;
+        assert.deepEqual([treemap.conditionID, treemap.estimationMethod, treemap.originalWeight], [3, 'treemap-weighted', 20]);
         assert.deepEqual([estimate.conditionID, estimate.selection, estimate.originalWeight, estimate.effectiveWeight], [1, 'automatic', 40, 40]);
         assert.equal(Object.hasOwn(estimate, 'sourceConditionID'), false);
         assert.equal(Object.hasOwn(estimate, 'referenceCount'), false);
@@ -77,13 +78,17 @@ for (const [engine, width] of engines) {
             await row.hover();
             const tile = page.locator('.bp-model-coverage-overlay [data-object-id="1"] [data-estimated-score]');
             assert.equal(await tile.textContent(), '62.32');
+            const treemapTile = page.locator('.bp-model-coverage-overlay [data-object-id="3"].is-treemap-estimate');
+            assert.equal(await treemapTile.locator('[data-estimated-score]').textContent(), '81.16');
+            assert.match(await treemapTile.getAttribute('data-tooltip'), /Treemap estimate on 100% of the weight/);
         }
         await row.click();
         await page.waitForSelector('#model-scores-dialog:not([hidden])');
         const summary = await page.locator('#model-scores-summary').innerText();
-        const evidence = page.locator('#model-scores-list .bp-model-inferred-row');
+        const evidence = page.locator('#model-scores-list .bp-model-inferred-row:not([data-estimation-method])');
+        const treemapEvidence = page.locator('#model-scores-list .bp-model-inferred-row[data-estimation-method="treemap-weighted"]');
         assert.match(summary, /measured results cover 40%/);
-        assert.match(summary, /20\.00% of the weight has no measurement or estimate and counts as 0 at its full weight/);
+        assert.match(summary, /20\.00% uses this model’s weighted average of measured and version-estimated scores in the treemap/);
         assert.doesNotMatch(summary, /adjustment|penalty|fallback chain/);
         assert.equal(await evidence.count(), 1);
         assert.equal(await evidence.getByRole('link', { name: /General knowledge, Default benchmark version/ }).count(), 1);
@@ -91,6 +96,9 @@ for (const [engine, width] of engines) {
         assert.match(await evidence.innerText(), /40\.00% of total weight/);
         assert.equal(await evidence.getByText('24.93 points added to total', { exact: true }).count(), 1);
         assert.equal(await evidence.getByText(/points added to total/).count(), 1);
+        assert.equal(await treemapEvidence.getByText('Treemap estimate', { exact: true }).count(), 1);
+        assert.equal(await treemapEvidence.locator('.bp-model-score-detail-value').textContent(), '81.16');
+        assert.equal(await treemapEvidence.getByText('16.23 points added to total', { exact: true }).count(), 1);
         const sources = evidence.getByRole('list', { name: 'Versions used for this estimate' }).getByRole('listitem');
         assert.equal(await sources.count(), 2);
         const [extended, challenge] = [sources.nth(0), sources.nth(1)];
@@ -106,6 +114,9 @@ for (const [engine, width] of engines) {
             [['85.00'], ['50.00']]);
         if (width < 760) {
             assert.equal(await page.locator('.bp-model-coverage-figure [data-object-id="1"] [data-estimated-score]').textContent(), '62.32');
+            const tile = page.locator('.bp-model-coverage-figure [data-object-id="3"].is-treemap-estimate');
+            assert.equal(await tile.locator('[data-estimated-score]').textContent(), '81.16');
+            assert.match(await page.locator('.bp-model-coverage-figure figcaption').textContent(), /Dashed outlines mark treemap estimates/);
         }
         assert.equal(await evidence.evaluate(node => [node.parentElement, node, ...node.querySelectorAll('li, dl')]
             .every(item => item.scrollWidth <= item.clientWidth)), true);

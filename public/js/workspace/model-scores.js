@@ -1,4 +1,4 @@
-import { FALLBACK_INFERENCE_METHOD } from '../shared/fallback-inference.js';
+import { FALLBACK_INFERENCE_METHOD, TREEMAP_ESTIMATION_METHOD } from '../shared/fallback-inference.js';
 import { setLoading } from '../shared/loading.js';
 import { postJSON } from '../shared/http.js';
 import { isMissingInferenceMethod } from '../shared/estimation-algorithms.js';
@@ -453,18 +453,20 @@ export function createModelScoresView({ state, modelScoresDialog, modelScoresTit
             conditionName: benchmark.isDefaultCondition ? 'Default benchmark version' : benchmark.conditionName });
     }
 
-    function renderVersionEstimate(row, score) {
+    function renderEstimate(row, score) {
+        const treemap = score.estimationMethod === TREEMAP_ESTIMATION_METHOD;
+        if (treemap) row.dataset.estimationMethod = TREEMAP_ESTIMATION_METHOD;
         const summary = document.createElement('div');
         summary.className = 'bp-model-estimate-summary';
         const identity = document.createElement('div');
         identity.className = 'bp-model-score-detail-identity';
         const weight = document.createElement('small');
         weight.textContent = `${score.originalWeight.toFixed(2)}% of total weight`;
-        identity.append(estimateVersionLink(score.conditionID), weight);
+        identity.append(score.conditionID < 0 ? 'Unresolved topic weight' : estimateVersionLink(score.conditionID), weight);
         const aggregate = document.createElement('div');
         aggregate.className = 'bp-model-score-aggregate';
         const label = document.createElement('small');
-        label.textContent = 'Estimated score';
+        label.textContent = treemap ? 'Treemap estimate' : 'Estimated score';
         const value = document.createElement('strong');
         value.className = 'bp-model-score-detail-value';
         value.textContent = score.normalizedScore.toFixed(2);
@@ -472,6 +474,8 @@ export function createModelScoresView({ state, modelScoresDialog, modelScoresTit
         contribution.textContent = `${score.contribution.toFixed(2)} points added to total`;
         aggregate.append(label, value, contribution);
         summary.append(identity, aggregate);
+        row.append(summary);
+        if (treemap) return;
 
         const sources = document.createElement('ul');
         sources.className = 'bp-model-estimate-sources';
@@ -507,7 +511,7 @@ export function createModelScoresView({ state, modelScoresDialog, modelScoresTit
             item.append(version, metrics);
             sources.append(item);
         }
-        row.append(summary, sources);
+        row.append(sources);
     }
 
     function renderCoverageResults(model) {
@@ -517,9 +521,11 @@ export function createModelScoresView({ state, modelScoresDialog, modelScoresTit
             figure.setAttribute('aria-label', 'Benchmark scores used in this ranking');
             const stage = document.createElement('div');
             const caption = document.createElement('figcaption');
+            const hasTreemapEstimate = model.inferredScores?.some(score => score.estimationMethod === TREEMAP_ESTIMATION_METHOD);
             caption.textContent = state.scoreMode === 'range'
                 ? 'Scores are out of 100 and show the lower end of the range. Faded zeros mark unmeasured results.'
-                : 'Scores are out of 100. Faded tiles show estimates or zeros for gaps in the evidence.';
+                : 'Scores are out of 100. Faded tiles mark missing measurements.';
+            if (hasTreemapEstimate) caption.textContent += ' Dashed outlines mark treemap estimates.';
             figure.append(stage, caption);
             modelScoresList.append(figure);
             coverageView = coveragePreview.renderInto(stage, model);
@@ -527,7 +533,7 @@ export function createModelScoresView({ state, modelScoresDialog, modelScoresTit
     }
 
     function renderCalculationResults(model) {
-        const scores = model.calculationScores;
+        const { calculationScores: scores, inferredScores = [] } = model;
         const range = !model.availableInference && Number.isFinite(model.upper) && model.upper !== model.lower;
         modelScoresSummary.textContent = model.comparable === false ? 'No qualifying ranking evidence for these weights and settings.'
             : `${range ? `Score range ${rankingNumber(model.lower)} to ${rankingNumber(model.upper)}` : `Index score ${rankingNumber(model.lower)}`}; measured results cover ${rankingNumber(model.coverage)}% of the weight.`;
@@ -545,8 +551,12 @@ export function createModelScoresView({ state, modelScoresDialog, modelScoresTit
             inference.unpenalizedScore].every(Number.isFinite);
         if (originalWeights) {
             const sentences = [];
-            if (inference.inferredFraction > 0) sentences.push(`${(inference.inferredFraction * 100).toFixed(2)}% of the weight uses estimates from related benchmark versions.`);
-            if (inference.unresolvedFraction > 0) sentences.push(`${(inference.unresolvedFraction * 100).toFixed(2)}% of the weight has no measurement or estimate and counts as 0 at its full weight.`);
+            const treemapWeight = inferredScores.reduce((sum, score) =>
+                sum + (score.estimationMethod === TREEMAP_ESTIMATION_METHOD ? score.originalWeight : 0), 0);
+            const versionWeight = inference.inferredFraction * 100 - treemapWeight;
+            if (versionWeight > 1e-6) sentences.push(`${versionWeight.toFixed(2)}% of the weight uses estimates from related benchmark versions.`);
+            if (treemapWeight > 0) sentences.push(`${treemapWeight.toFixed(2)}% uses this model’s weighted average of measured and version-estimated scores in the treemap.`);
+            if (inference.unresolvedFraction > 0 && model.comparable !== false) sentences.push(`${(inference.unresolvedFraction * 100).toFixed(2)}% of the weight has no score.`);
             if (sentences.length) {
                 const detail = document.createElement('p');
                 detail.className = 'bp-model-inference-summary';
@@ -697,15 +707,15 @@ export function createModelScoresView({ state, modelScoresDialog, modelScoresTit
             }
             modelScoresList.append(row);
         }
-        if (model.inferredScores?.length) {
+        if (inferredScores.length) {
             const section = document.createElement('h3'); section.className = 'bp-model-inferred-heading';
             section.textContent = 'Estimated benchmark scores'; modelScoresList.append(section);
-            for (const score of model.inferredScores) {
+            for (const score of inferredScores) {
                 const row = document.createElement('div'); row.className = 'bp-model-score-detail-row bp-model-inferred-row';
                 row.dataset.conditionId = String(score.conditionID);
                 modelScoresList.append(row);
-                if (Array.isArray(score.sources)) {
-                    renderVersionEstimate(row, score);
+                if (Array.isArray(score.sources) || score.estimationMethod === TREEMAP_ESTIMATION_METHOD) {
+                    renderEstimate(row, score);
                     continue;
                 }
                 const benchmark = benchmarkDetails(score.conditionID);
@@ -725,7 +735,7 @@ export function createModelScoresView({ state, modelScoresDialog, modelScoresTit
                 row.append(title, value, description, contribution);
             }
         }
-        if (!scores.length && !model.inferredScores?.length) {
+        if (!scores.length && !inferredScores.length) {
             const empty = document.createElement('p');
             empty.textContent = 'No recorded scores contributed to this ranking.';
             modelScoresList.append(empty);

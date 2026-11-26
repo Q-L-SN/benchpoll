@@ -1,4 +1,4 @@
-import { FALLBACK_INFERENCE_METHOD, JOINT_VERSION_METHOD, storedFallbackInference } from '../shared/fallback-inference.js';
+import { FALLBACK_INFERENCE_METHOD, JOINT_VERSION_METHOD, TREEMAP_ESTIMATION_METHOD, fallbackInference, storedFallbackInference } from '../shared/fallback-inference.js';
 import { FALLBACK_RULE_MODE } from './constants.js';
 import { expandCommunityVersions } from '../shared/benchmark-version-choice.js';
 import { familyKey, resolvedFamilyConditionIDs } from '../shared/benchmark-families.js';
@@ -223,7 +223,11 @@ function validJointEstimate(score) {
 }
 
 function validPredictionSource(score, inference, chain, pairwise) {
-    if (chain && inference.weightPolicy === ORIGINAL_WEIGHT_POLICY) return validJointEstimate(score);
+    if (chain && inference.weightPolicy === ORIGINAL_WEIGHT_POLICY) {
+        if (score.estimationMethod !== TREEMAP_ESTIMATION_METHOD) return validJointEstimate(score);
+        return score.familyID === null && Object.keys(score).every(key => ['conditionID', 'normalizedScore', 'familyID',
+            'estimationMethod', 'weightBasisPoints', 'originalWeight', 'effectiveWeight', 'contribution'].includes(key));
+    }
     if (score.selection !== undefined || !Number.isSafeInteger(score.referenceCount)
         || score.referenceCount < (chain ? 5 : pairwise ? 2 : 1)) return false;
     if (chain) {
@@ -284,7 +288,8 @@ function requireRankedModel(value, path, scoreMode) {
         const pairwise = missingOnly || [PAIRWISE_INFERENCE_METHOD, PAIRWISE_COVERAGE_METHOD, PAIRWISE_COVERAGE_FACTOR_METHOD,
             PAIRWISE_RATIONAL_COVERAGE_FACTOR_METHOD, PAIRWISE_ORIGINAL_WEIGHT_METHOD].includes(inference.method);
         inferredScores.forEach((score, index) => {
-            if (!Number.isSafeInteger(score.conditionID) || score.conditionID < 1
+            if (!Number.isSafeInteger(score.conditionID) || (score.estimationMethod === TREEMAP_ESTIMATION_METHOD
+                ? score.conditionID === 0 : score.conditionID < 1)
                 || !Number.isFinite(score.normalizedScore)
                 || !validPredictionSource(score, inference, chain, pairwise)
                 || !Number.isFinite(score.originalWeight) || score.originalWeight <= 0 || score.originalWeight > 100 + 1e-6
@@ -306,6 +311,15 @@ function requireRankedModel(value, path, scoreMode) {
             if (typeof expected[key] === 'number' ? !Number.isFinite(inference[key]) || Math.abs(inference[key] - expected[key]) > 0.000001
                 : inference[key] !== expected[key]) {
                 throw invalidWorkspaceResponse(`${path}.availableInference.${key}`, 'must match the missing-score estimate');
+            }
+        }
+        const treemapEstimates = inferredScores.filter(score => score.estimationMethod === TREEMAP_ESTIMATION_METHOD);
+        if (treemapEstimates.length) {
+            const evidence = fallbackInference(inference.observedScore, inference.coverageFraction,
+                estimates.filter((_, index) => inferredScores[index].estimationMethod !== TREEMAP_ESTIMATION_METHOD), inference.algorithm);
+            const weightedAverage = evidence.unpenalizedScore / evidence.supportedFraction;
+            if (!Number.isFinite(weightedAverage) || treemapEstimates.some(score => Math.abs(score.normalizedScore - weightedAverage) > .000001)) {
+                throw invalidWorkspaceResponse(`${path}.inferredScores`, 'must match the weighted treemap evidence');
             }
         }
         const denominator = originalWeights ? 1 : chain ? inference.supportedFraction

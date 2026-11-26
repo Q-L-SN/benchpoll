@@ -27,19 +27,22 @@ test('percentile ties use midranks, endpoints and interpolation are deterministi
     close(percentileScore(scoreDistribution([-1e308, 1e308]), .5), 0);
 });
 
-test('changing off-chain scores cannot affect a missing benchmark with no fallback', () => {
+test('changing scores outside the treemap cannot affect the estimate for a missing benchmark', () => {
     const models = [model(1, { 1: 80, 3: 10, 4: 10 }), model(2, { 1: 40, 2: 20, 3: 20, 4: 20 }),
         model(3, { 1: 60, 2: 40, 3: 30, 4: 30 }), model(4, { 1: 70, 2: 80, 3: 40, 4: 40 })];
     const actual = score(models)[0];
     const archived = createPercentileReference(models);
     close(archived.estimate(models[0]).percentile, 1 / 3);
     close(percentileScore(archived.distributions.get('2'), 1 / 3), 100 / 3);
-    assert.equal(actual.lower, 40);
+    assert.equal(actual.lower, 80);
     assert.equal(actual.coverage, 50);
     assert.equal(actual.resultCount, 1);
-    assert.deepEqual(actual.inferredScores, []);
+    assert.deepEqual(actual.inferredScores.map(row => [row.conditionID, row.estimationMethod, row.normalizedScore]),
+        [[2, 'treemap-weighted', 80]]);
     const onlyWeighted = models.map(item => ({ ...item, results: new Map([...item.results].filter(([key]) => ['1', '2'].includes(key))) }));
-    assert.deepEqual(score(onlyWeighted)[0].availableInference, actual.availableInference);
+    const [scoped] = score(onlyWeighted);
+    assert.deepEqual(scoped.availableInference, actual.availableInference);
+    assert.deepEqual(scoped.inferredScores, actual.inferredScores);
 });
 
 test('displaying one model preserves eligible paired measurements under the selected harness', () => {

@@ -157,7 +157,8 @@ export async function cachedRankingCalculation(connection, key, load) {
     if (!calculationCaches.has(snapshot.cache)) calculationCaches.set(snapshot.cache,
         createRankingReadCache({ maxEntries: 4, maxCells: 800000, maxAgeMs: 60000 }));
     const rows = await calculationCaches.get(snapshot.cache).read(`${snapshot.data}:${key}`, load,
-        value => value.reduce((sum, row) => sum + 32 + row.resultCount * 12 + row.fallbackUsageCount * 16, 0));
+        value => value.reduce((sum, row) => sum + 32 + row.resultCount * 12
+            + Math.max(row.fallbackUsageCount, row.inferredScores?.length ?? 0) * 16, 0));
     snapshot.assertActive();
     return copyDeferredRankingRows(rows);
 }

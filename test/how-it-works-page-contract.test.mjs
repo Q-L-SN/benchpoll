@@ -105,19 +105,19 @@ test('topic references follow specific scenes and retain missing shares', () => 
     assert.match(references, /Empty or unavailable targets and loops with no path to benchmarks keep their missing weight/);
 });
 
-test('score copy explains version shares, zero-filled gaps, score range and measured coverage', () => {
+test('score copy explains version shares, treemap estimates, score range and measured coverage', () => {
     const scores = section('rankings');
     assert.match(scores, /same qualifying measurements, converted using each test’s score range and direction/);
     assert.match(scores, /A direct score on a scoring version takes priority, including zero and negative scores/);
-    assert.match(scores, /Estimated score[\s\S]*calibrated estimates at their full weights/);
-    assert.match(scores, /no measurement or estimate count as 0 at their full weight/);
+    assert.match(scores, /Estimated score[\s\S]*version estimates and treemap estimates at their full weights/);
+    assert.match(scores, /their weights scaled to sum to 100%/);
     assert.match(scores, /<var>W<\/var> × Σ\(<var>p<sub>a<\/sub><\/var> <var>s<sub>a<\/sub><\/var>\)/);
     assert.match(scores, /The version shares add up to 100%/);
     assert.match(scores, /uses 0 at the lower end and 100 at the upper end for missing measurements/);
     assert.match(scores, /Both ends use the measured scores where available\. Models rank by the lower end/);
     assert.match(scores, /Coverage is the share of weight with measured results<\/strong> on selected versions/);
     assert.match(scores, /A faded tile in the score preview marks a missing measurement/);
-    assert.match(scores, /direct score or an estimate qualifies a model to rank/);
+    assert.match(scores, /Models with no evidence in the treemap stay unranked/);
     assert.match(scores, /effort or harness to rank settings separately/);
     assert.match(scores, /best qualifying score per test/);
     assert.match(scores, /Missing settings stay in an unknown group/);
@@ -145,7 +145,7 @@ test('version estimation explains joint evidence, shrinkage, extrapolation and r
     assert.match(calibration, /the shortest path/);
     assert.match(calibration, /Best performance uses the highest qualifying run prediction/);
     assert.match(calibration, /Matched comparisons average predictions within each matched control setting/);
-    assert.match(calibration, /A contributes 0 at its full weight/);
+    assert.match(calibration, /When same-benchmark versions cannot fill the gap, BenchPoll tries nominated external versions/);
 });
 
 test('publication and evidence copy includes settings, visibility and score contributions', () => {
@@ -194,29 +194,31 @@ test('short score explanation agrees with current conversion and range endpoints
     assert.equal(row.inferredScores.length, 0);
 });
 
-test('unrelated tests cannot estimate missing weight', () => {
+test('the treemap estimate uses this model’s available scores without increasing measured coverage', () => {
     const models = [model(1, { 1: 80 }), model(2, { 1: 60, 2: 50 }), model(3, { 1: 100, 2: 90 }),
         model(4, { 1: 70, 2: 65 }), model(5, { 1: 90, 2: 80 })];
     const [range] = scoreModels(models, weights, 10000, { scoreMode: 'range' });
     const [available] = scoreModels(models, weights, 10000, { scoreMode: 'available' });
     assert.equal(available.availableInference.method, 'calibrated-fallback');
-    assert.equal(available.inferredScores.length, 0);
+    assert.deepEqual(available.inferredScores.map(item => [item.conditionID, item.estimationMethod, item.contribution]),
+        [[2, 'treemap-weighted', 32]]);
     assert.equal(available.coverage, 60, 'The estimate must not increase measured coverage');
     assert.deepEqual(available.calculationScores.map(score => [score.conditionID, score.normalizedScore]),
         range.calculationScores.map(score => [score.conditionID, score.normalizedScore]));
-    assert.equal(available.availableInference.unresolvedFraction, .4);
+    assert.equal(available.availableInference.unresolvedFraction, 0);
     assert.equal(available.availableInference.unresolvedContribution, 0);
-    assert.equal(available.lower, 48);
+    assert.equal(available.lower, 80);
 });
 
-test('unresolved gaps retain full weight and do not count as measurements', () => {
+test('treemap estimates retain the missing weight and can use a negative measured score', () => {
     const entries = [{ conditionID: 1, weightBasisPoints: 2500 }, { conditionID: 2, weightBasisPoints: 7500 }];
     const [row] = scoreModels([model(1, { 1: -20 })], entries, 10000, { scoreMode: 'available' });
     assert.equal(row.coverage, 25);
-    assert.equal(row.inferredScores.length, 0);
-    assert.equal(row.availableInference.unresolvedFraction, .75);
-    assert.equal(row.availableInference.unpenalizedScore, -5);
-    assert.equal(row.lower, -5);
+    assert.deepEqual(row.inferredScores.map(item => [item.estimationMethod, item.normalizedScore, item.originalWeight]),
+        [['treemap-weighted', -20, 75]]);
+    assert.equal(row.availableInference.unresolvedFraction, 0);
+    assert.equal(row.availableInference.unpenalizedScore, -20);
+    assert.equal(row.lower, -20);
     const missing = [model(2, { 3: 100 })];
     const [unranked] = scoreComparison(missing, entries, 10000, { scoreMode: 'available' },
         comparisonOptions(missing, { mode: 'best', keys: ['model'] }));
@@ -224,15 +226,16 @@ test('unresolved gaps retain full weight and do not count as measurements', () =
     assert.equal(unranked.lower, null);
 });
 
-test('uncalibrated source scores including zero and negative leave the target unresolved', () => {
+test('uncalibrated scores outside the treemap do not supply evidence for a treemap estimate', () => {
     const plannedWeights = weights.map(entry => ({ ...entry, estimationSourceIDs: entry.conditionID === 2 ? [3, 4] : [] }));
     for (const value of [0, -20]) {
         for (const scoreMode of ['range', 'available']) {
             const [row] = scoreModels([model(1, { 1: 80, 3: value, 4: 90 })], plannedWeights, 10000, { scoreMode });
             assert.equal(row.coverage, 60);
-            assert.deepEqual([row.lower, row.upper], scoreMode === 'range' ? [48, 88] : [48, 48]);
+            assert.deepEqual([row.lower, row.upper], scoreMode === 'range' ? [48, 88] : [80, 80]);
             assert.deepEqual(row.calculationScores.map(score => score.conditionID), [1]);
-            assert.equal(row.inferredScores.length, 0);
+            assert.deepEqual(row.inferredScores.map(item => [item.estimationMethod, item.normalizedScore]),
+                scoreMode === 'range' ? [] : [['treemap-weighted', 80]]);
         }
     }
 });

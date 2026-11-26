@@ -131,8 +131,9 @@ function near(actual, expected) {
 }
 
 function checkEstimate(row, conditionID, sources, prediction, originalWeight) {
-    assert.equal(row.inferredScores.length, 1);
-    checkInferenceLine(row.inferredScores[0], conditionID, sources, prediction, originalWeight);
+    const versionEstimates = row.inferredScores.filter(estimate => estimate.estimationMethod === 'joint-versions');
+    assert.equal(versionEstimates.length, 1);
+    checkInferenceLine(versionEstimates[0], conditionID, sources, prediction, originalWeight);
 }
 
 function checkInferenceLine(estimate, conditionID, sources, prediction, originalWeight) {
@@ -206,13 +207,16 @@ test('SQL workspaces sample sitewide ballots per pair and jointly fit eligible m
     const olderOwner = await read({ userID: '1002' });
     checkEstimate(modelOne(olderOwner.modelLeaderboards.personal), target, sources, jointScore, .6);
     assert.deepEqual(olderOwner.personalPie.estimationVotes, [support(target, preciseSource)]);
-    assert.deepEqual([personal.lower, personal.upper, personal.coverage], [40.38, 40.38, 20]);
-    assert.deepEqual([publicRow.lower, publicRow.upper, publicRow.coverage], [40.94, 40.94, 20]);
+    assert.deepEqual([personal.lower, personal.upper, personal.coverage], [50.47, 50.47, 20]);
+    assert.deepEqual([publicRow.lower, publicRow.upper, publicRow.coverage], [51.18, 51.18, 20]);
     assert.deepEqual([personal.fallbackUsageCount, personal.fallbackCoverage], [1, 60]);
     near(personal.availableInference.observedContribution, 11);
-    near(personal.availableInference.inferredContribution, jointScore * .6);
-    near(personal.availableInference.inferredFraction, .6);
-    near(personal.availableInference.unresolvedFraction, .2);
+    const treemap = personal.inferredScores.find(estimate => estimate.estimationMethod === 'treemap-weighted');
+    assert.equal(treemap.conditionID, unresolved);
+    near(treemap.normalizedScore, (11 + jointScore * .6) / .8);
+    near(personal.availableInference.inferredContribution, jointScore * .6 + treemap.normalizedScore * .2);
+    near(personal.availableInference.inferredFraction, .8);
+    near(personal.availableInference.unresolvedFraction, 0);
     assert.equal(personal.availableInference.unresolvedContribution, 0);
     assert.deepEqual(personal.calculationScores.map(score => score.conditionID), [independent]);
     const missingCoverage = personal.coverageEntries.find(item => item.conditionID === target);
@@ -525,7 +529,9 @@ test('HTTP external nominations appear and score in both directions until their 
             if (available) {
                 checkEstimate(row, conditionID, [{ sourceConditionID: sourceID, sourceScore, referenceCount: 6 }], prediction, .8);
             } else {
-                assert.deepEqual([row.lower, row.coverage, row.inferredScores], [4.2, 20, []]);
+                assert.deepEqual([row.lower, row.coverage], [21, 20]);
+                assert.deepEqual(row.inferredScores.map(score => [score.conditionID, score.estimationMethod, score.normalizedScore]),
+                    [[conditionID, 'treemap-weighted', 21]]);
             }
         }
     };
@@ -613,7 +619,9 @@ test('HTTP external nominations appear and score in both directions until their 
     await expectPair(0, 10, false);
     const expiredPersonal = await read(forward, 'personal');
     assert.deepEqual(expiredPersonal.personalPie.estimationVotes, []);
-    assert.deepEqual(expiredPersonal.modelLeaderboards.personal.find(model => model.modelID === forwardSubject).inferredScores, []);
+    const expiredRow = expiredPersonal.modelLeaderboards.personal.find(model => model.modelID === forwardSubject);
+    assert.deepEqual(expiredRow.inferredScores.map(score => [score.conditionID, score.estimationMethod, score.normalizedScore]),
+        [[target, 'treemap-weighted', 21]]);
     await write('1010', { ...reversePair, vote: null });
     await expectPair(1, 9, false);
     await write('1010', { vote: 'oppose' });

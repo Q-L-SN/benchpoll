@@ -31,8 +31,10 @@ test('actual workspace reads offer one estimation method and preserve the saved 
         const page = createRankingPager().create(result, { userID: '42', initialMode: 'personal' });
         validateWorkspacePayload(JSON.parse(JSON.stringify(page)));
         const row = subject(result);
-        assert.deepEqual([row.lower, row.upper, row.coverage, row.inferredScores], [40, 40, 50, []]);
-        assert.deepEqual([row.availableInference.observedContribution, row.availableInference.unresolvedFraction], [40, .5]);
+        assert.deepEqual([row.lower, row.upper, row.coverage], [80, 80, 50]);
+        assert.deepEqual(row.inferredScores.map(score => [score.conditionID, score.estimationMethod, score.normalizedScore, score.contribution]),
+            [[2, 'treemap-weighted', 80, 40]]);
+        assert.deepEqual([row.availableInference.observedContribution, row.availableInference.unresolvedFraction], [40, 0]);
     }
     await assert.rejects(read({ estimationAlgorithm: 'missing-rational' }), error => error.body?.error === 'invalid_estimation_algorithm');
     assert.ok(rankingCache.stats.entries > 0);
@@ -104,8 +106,10 @@ test('SQL external estimates need one paired peer in personal rankings and must 
             assert.deepEqual([sourceConditionID, referenceCount], [ID, peerScores.length], name);
             assert.ok(Math.abs(sourceScore - subjectScore) < 1e-10, name);
             const publicRow = subject(modelLeaderboards.public);
-            assert.deepEqual([publicRow.lower, publicRow.coverage, publicRow.inferredScores], [10, 20, []], name);
-            assert.equal(publicRow.availableInference.unresolvedFraction, .8, name);
+            assert.deepEqual([publicRow.lower, publicRow.coverage], [50, 20], name);
+            assert.deepEqual(publicRow.inferredScores.map(score => [score.conditionID, score.estimationMethod, score.normalizedScore]),
+                [[1, 'treemap-weighted', 50]], name);
+            assert.equal(publicRow.availableInference.unresolvedFraction, 0, name);
         }
         await saveEstimationVote(pool, '42', randomUUID(), { ...pair, vote: null });
     }

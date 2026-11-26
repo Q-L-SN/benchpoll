@@ -7,6 +7,7 @@ import { scoreModels, scoreComparison } from '../ranking-service.js';
 import { rankModels } from '../ranking-pagination.js';
 import { comparisonOptions } from '../model-comparison.js';
 import { validateWorkspacePayload } from '../public/js/workspace/contracts.js';
+import { TREEMAP_ESTIMATION_METHOD } from '../public/js/shared/fallback-inference.js';
 import { createFixtureState, weightedEntries, workspace } from '../scripts/frontend/fixtures.mjs';
 
 const close = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-8, `${actual} != ${expected}`);
@@ -20,14 +21,16 @@ function retiredTrace(row, method = PAIRWISE_COVERAGE_METHOD) {
     if (!row.availableInference) return row;
     const trace = row.availableInference;
     if (!trace.coverageFraction) return { ...row, availableInference: null };
+    const inferredScores = row.inferredScores.filter(score => score.estimationMethod !== TREEMAP_ESTIMATION_METHOD);
+    const supportedFraction = trace.coverageFraction + inferredScores.reduce((sum, score) => sum + score.originalWeight / 100, 0);
     const availableInference = availableResultInference(trace.observedScore, trace.coverageFraction,
-        row.inferredScores.map(score => ({ normalizedScore: score.normalizedScore, weightFraction: score.originalWeight / 100 })),
+        inferredScores.map(score => ({ normalizedScore: score.normalizedScore, weightFraction: score.originalWeight / 100 })),
         trace.percentile, trace.sourceCount, { method });
     const total = Math.round(availableInference.totalScore * 100) / 100;
-    const archivedWeight = score => ({ ...score, effectiveWeight: score.effectiveWeight / trace.supportedFraction,
-        contribution: score.contribution / trace.supportedFraction });
+    const archivedWeight = score => ({ ...score, effectiveWeight: score.effectiveWeight / supportedFraction,
+        contribution: score.contribution / supportedFraction });
     return { ...row, availableInference, calculationScores: row.calculationScores.map(archivedWeight),
-        inferredScores: row.inferredScores.map(archivedWeight), lower: row.lower === null ? null : total, upper: row.upper === null ? null : total };
+        inferredScores: inferredScores.map(archivedWeight), lower: row.lower === null ? null : total, upper: row.upper === null ? null : total };
 }
 const score = (models, entries = weights, rules = {}, comparison = {}) => scoreComparison(models, entries, 10000,
     { scoreMode: 'available', ...rules }, comparisonOptions(models, { mode: 'best', keys: ['model'], ...comparison }))
@@ -139,7 +142,7 @@ test('fresh legacy-version requests no longer select archived deduction algorith
         for (const availableInferenceVersion of [1, 2, 3, 4, 5, 6, 7, 8]) {
             const rows = scoreComparison(models, weights, 10000, { scoreMode: 'available', availableInferenceVersion },
                 comparisonOptions(models, { mode, keys: ['model'] }));
-            assert.deepEqual(rows.map(row => row.lower), [40, 30]);
+            assert.deepEqual(rows.map(row => row.lower), [80, 60]);
             assert.ok(rows.every(row => !Object.hasOwn(row.availableInference, 'coveragePenalty')));
         }
     }
@@ -170,10 +173,10 @@ test('current help explains version-based estimates and full-weight gaps', () =>
     assert.match(read('private/home.html'), /Nominated external versions can supply an estimate/);
     const guide = read('private/how-it-works.html');
     assert.match(guide, /Version-based estimation/);
-    assert.match(guide, /calibrated estimates at their full weights/);
-    assert.match(guide, /count as 0 at their full weight/);
+    assert.match(guide, /version estimates and treemap estimates at their full weights/);
+    assert.match(guide, /their weights scaled to sum to 100%/);
     assert.match(guide, /uses 0 at the lower end and 100 at the upper end for missing measurements/);
     assert.doesNotMatch(guide, /coverage factor|coverage penalty|excluded from the average/i);
     const details = read('public/js/workspace/model-scores.js');
-    assert.match(details, /no measurement or estimate and counts as 0 at its full weight/);
+    assert.match(details, /weighted average of measured and version-estimated scores in the treemap/);
 });
