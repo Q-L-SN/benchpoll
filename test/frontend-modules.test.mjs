@@ -42,20 +42,23 @@ test('undo snapshots and separate workspace instances do not share mutable data'
     assert.equal(second.pieOrderByObjectID.size, 0);
 });
 
-test('workspace ballots keep directed pairs independent and require both versions to be eligible siblings', () => {
-    const estimationVotes = [{ targetConditionID: 1, sourceConditionID: 901, vote: 'support' },
+test('workspace ballots accept eligible sibling and nominated pairs independently of personal weights', () => {
+    const estimationVotes = [{ targetConditionID: 901, sourceConditionID: 1, vote: 'support' },
         { targetConditionID: 900, sourceConditionID: 901, vote: 'oppose' },
-        { targetConditionID: 901, sourceConditionID: 1, vote: 'support' }];
+        { targetConditionID: 9912, sourceConditionID: 8, vote: 'support' }];
     const otherCommunityVotes = { targetConditionID: 9912, sourceConditionID: 9913, supportCount: 2, opposeCount: 1 };
     const valid = workspace(createFixtureState({ secondaryBenchmark: true, sparseBenchmark: true, mixedAABenchmarks: true,
         personalEstimationVotes: estimationVotes, communityEstimationVotes: [otherCommunityVotes] }), {});
     assert.equal(validateWorkspacePayload(valid), valid);
-    assert.deepEqual(valid.personalPie.estimationVotes, estimationVotes);
+    assert.deepEqual(valid.personalPie.estimationVotes, [
+        { targetConditionID: 1, sourceConditionID: 901, vote: 'support' },
+        { targetConditionID: 8, sourceConditionID: 9912, vote: 'support' }, estimationVotes[1]]);
     assert.deepEqual(valid.communityEstimationVotes, [
         { targetConditionID: 1, sourceConditionID: 901, supportCount: 1, opposeCount: 0 },
-        { targetConditionID: 900, sourceConditionID: 901, supportCount: 0, opposeCount: 1 },
-        { targetConditionID: 901, sourceConditionID: 1, supportCount: 1, opposeCount: 0 }, otherCommunityVotes]);
-    assert.ok(valid.personalPie.entries.every(entry => entry.conditionID !== 901));
+        { targetConditionID: 8, sourceConditionID: 9912, supportCount: 1, opposeCount: 0 },
+        { targetConditionID: 900, sourceConditionID: 901, supportCount: 0, opposeCount: 1 }, otherCommunityVotes]);
+    assert.deepEqual(valid.externalEstimationPairs, [{ targetConditionID: 8, sourceConditionID: 9912 }]);
+    assert.ok(valid.personalPie.entries.every(entry => ![8, 901, 9912].includes(entry.conditionID)));
 
     const malformed = [
         payload => { delete payload.communityEstimationVotes; },
@@ -65,14 +68,20 @@ test('workspace ballots keep directed pairs independent and require both version
         payload => { payload.personalPie.estimationVotes[0].targetConditionID = 8; },
         payload => { payload.personalPie.estimationVotes[0].sourceConditionID = 9999; },
         payload => { payload.personalPie.estimationVotes[0].sourceConditionID = 1; },
-        payload => { payload.personalPie.estimationVotes[0] = { targetConditionID: 9912, sourceConditionID: 9913, vote: 'support' }; },
+        payload => { payload.personalPie.estimationVotes[0] = { targetConditionID: 9912, sourceConditionID: 7, vote: 'support' }; },
         payload => { payload.personalPie.estimationVotes[0].vote = 'abstain'; },
         payload => { payload.communityEstimationVotes[0].supportCount = -1; },
         payload => { payload.communityEstimationVotes[0].sourceConditionID = '901'; },
         payload => { payload.communityEstimationVotes[0].sourceConditionID = 9913; },
         payload => { payload.communityEstimationVotes[3].targetConditionID = 9911; },
         payload => { payload.communityEstimationVotes[0].accountID = '7'; },
-        payload => { payload.communityEstimationVotes.push(payload.communityEstimationVotes[0]); }
+        payload => { payload.communityEstimationVotes.push({ targetConditionID: 901, sourceConditionID: 1,
+            supportCount: 1, opposeCount: 0 }); },
+        payload => { payload.externalEstimationPairs.push({ targetConditionID: 9912, sourceConditionID: 8 }); },
+        payload => { payload.externalEstimationPairs.push({ targetConditionID: 1, sourceConditionID: 901 }); },
+        payload => { payload.externalEstimationPairs.push({ targetConditionID: 1, sourceConditionID: 9912 }); },
+        payload => { payload.communityEstimationVotes[1].supportCount = 0; },
+        payload => { payload.externalEstimationPairs = []; }
     ];
     for (const mutate of malformed) {
         const payload = structuredClone(valid); mutate(payload);

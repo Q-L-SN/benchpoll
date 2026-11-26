@@ -1,3 +1,4 @@
+import { estimationPair, withEstimationVote } from '../../public/js/shared/estimation-votes.js';
 import { entryFromContext } from '../../public/js/navigation/model.js';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
@@ -5,7 +6,7 @@ import { resolve, sep, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { categories, createFixtureState, weightedEntries, familyEntries, workspace, rankingPage, rankingModelLocation, rankingModelSearch,
-    catalog, approvedResults, fixtureBenchmarkRows, fixtureEstimationVotes } from './fixtures.mjs';
+    catalog, approvedResults, fixtureBenchmarkRows, fixtureEstimationVotes, fixtureBallots } from './fixtures.mjs';
 import { discussionFixture } from './discussions.mjs';
 import { categoryPathParts } from '../../public/js/shared/category-route.js';
 import { familyKey } from '../../public/js/shared/benchmark-families.js';
@@ -176,6 +177,17 @@ export async function startPreview({ port = 0, ...options } = {}) {
                     return send(200, { totalCoverageIndex: data[`${mode}Pie`].coverageIndex });
                 }
                 case '/api/get_ranking_page': return send(200, rankingPage(state, body));
+                case '/api/save_estimation_vote': {
+                    if (!state.authenticated) return send(401, { error: 'unauthorized' });
+                    const { targetConditionID: a, sourceConditionID: b, vote, nominate } = body;
+                    const pair = estimationPair(a, b), conditions = fixtureBenchmarkRows(state);
+                    if (![null, 'support', 'oppose'].includes(vote) || (nominate && vote !== 'support'))
+                        return send(400, { error: 'invalid_estimation_vote' });
+                    const eligiblePairs = nominate || vote === null ? [pair] : fixtureBallots(state, conditions).externalPairs;
+                    fixtureEstimationVotes([{ ...pair, vote: vote ?? 'support' }], conditions, eligiblePairs, true);
+                    state.personalEstimationVotes = withEstimationVote(state.personalEstimationVotes ?? [], a,b,vote);
+                    return send(200, { saved: true, userID: state.userID, requestKey: request.headers['idempotency-key'], ...pair, vote, nominate });
+                }
                 case '/api/save_personal_pie': {
                     const key = readWriteIdentity(request);
                     const intent = JSON.stringify(body);
@@ -191,9 +203,10 @@ export async function startPreview({ port = 0, ...options } = {}) {
                     const conditions = fixtureBenchmarkRows(state);
                     const explicitBallot = Object.hasOwn(body, 'estimationVotes');
                     const votes = explicitBallot || Object.hasOwn(state, 'personalEstimationVotes')
-                        ? fixtureEstimationVotes(explicitBallot ? body.estimationVotes : state.personalEstimationVotes, body.entries, conditions, explicitBallot)
+                        ? fixtureEstimationVotes(explicitBallot ? body.estimationVotes : [], conditions, fixtureBallots(state, conditions).externalPairs, explicitBallot)
                         : undefined;
-                    if (votes !== undefined) state.personalEstimationVotes = votes;
+                    if (explicitBallot) for (const row of votes) state.personalEstimationVotes = withEstimationVote(
+                        state.personalEstimationVotes ?? [], row.targetConditionID, row.sourceConditionID, row.vote);
                     state.revision = body.entries.length ? state.revision + 1 : 0;
                     state.personalEntries = weightedEntries(body.entries, conditions);
                     state.fallbackRules = body.fallbackRules.map(rule => {
@@ -210,7 +223,7 @@ export async function startPreview({ port = 0, ...options } = {}) {
                     const receipt = { saved: true, requestKey: key, userID: state.userID,
                         categoryID: body.categoryID, contextValues: body.contextValues,
                         personalPie: { revision: state.revision, entries: body.entries, fallbackRules: body.fallbackRules,
-                            ...(Object.hasOwn(state, 'personalEstimationVotes') ? { estimationVotes: state.personalEstimationVotes } : {}) } };
+                            ...(Object.hasOwn(state, 'personalEstimationVotes') ? { estimationVotes: votes ?? [] } : {}) } };
                     pieReceipts.set(`${state.userID}:${key}`, { intent, receipt });
                     return send(200, receipt);
                 }

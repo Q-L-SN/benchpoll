@@ -10,11 +10,8 @@ const contextRow = (ID, category = 1, values = '{}', extra = {}) => ({
 });
 const weight = (pie, context, condition = 1, amount = 10000) => ({
     pie_ID: pie, context_ID: context, benchmark_condition_ID: condition, weight_basis_points: amount,
-    estimation_votes: condition > 0 ? [{ targetConditionID: condition, sourceConditionID: condition + 10, vote: 'support' }] : null,
     is_recent: 1
 });
-const tally = (targetConditionID, supportCount, opposeCount = 0) => ({ targetConditionID, sourceConditionID: targetConditionID + 10,
-    supportCount, opposeCount });
 function database(contexts, weights) {
     return { async execute(sql, params) {
         assert.doesNotMatch(sql, /\bIN\s*\(\s*\)/i, 'Empty electorates must not generate invalid SQL');
@@ -26,6 +23,7 @@ function database(contexts, weights) {
             return [contexts.filter(row => row.category_ID === params[0] && row.is_active === 1 && row.owner_user_ID == null), []];
         }
         if (sql.includes('FROM personal_pies')) {
+            assert.doesNotMatch(sql, /estimation_votes|estimation_pair_votes/);
             assert.match(sql, /personal_pies.context_ID IN/);
             assert.match(sql, /users.deleted_at IS NULL/);
             assert.match(sql, /users.banned_at IS NULL/);
@@ -60,13 +58,14 @@ test('each public topic uses its own Pies, never legacy descendants, private top
     assert.equal(first.participantCount, 1);
     assert.deepEqual(first.entries, [{ conditionID: 1, weightBasisPoints: 6000, followCommunityVersion: true }, { conditionID: 2, weightBasisPoints: 4000, followCommunityVersion: true }]);
     assert.deepEqual(first.contextIDs, [10]);
-    assert.deepEqual(first.estimationVotes, [tally(1, 1)]);
     const second = await loadPublicPie(db, { ...topic, categoryID: 2 }, conditions);
     assert.equal(second.participantCount, 1);
     assert.deepEqual(second.entries, [{ conditionID: 1, weightBasisPoints: 10000, followCommunityVersion: true }]);
     assert.deepEqual(second.contextIDs, [20]);
-    assert.deepEqual(second.estimationVotes, [tally(1, 1)]);
-    for (const pie of [first, second]) assert.equal(Object.hasOwn(pie, 'composition'), false);
+    for (const pie of [first, second]) {
+        assert.equal(Object.hasOwn(pie, 'composition'), false);
+        assert.equal(Object.hasOwn(pie, 'estimationVotes'), false);
+    }
 });
 
 test('topic-local options filter matching configurations without matching another topic with the same option', async () => {
@@ -91,7 +90,7 @@ test('no contexts, only empty Pies, and only another topic produce no public wei
         const pie = await loadPublicPie(database(contexts, rows), topic, conditions);
         assert.equal(pie.participantCount, 0);
         assert.deepEqual(pie.entries, []);
-        assert.deepEqual(pie.estimationVotes, []);
+        assert.equal(Object.hasOwn(pie, 'estimationVotes'), false);
         assert.deepEqual(pie.familyComposition, []);
         assert.deepEqual(pie.scoringEntries, []);
         assert.deepEqual(pie.contextIDs, contextIDs);
@@ -112,16 +111,14 @@ test('sparse matching contexts count their selected Pies equally regardless of a
     assert.equal(pie.participantCount, 9);
     assert.deepEqual(pie.entries, [{ conditionID: 1, weightBasisPoints: 3333, followCommunityVersion: true }, { conditionID: 2, weightBasisPoints: 6667, followCommunityVersion: true }]);
     assert.deepEqual(pie.scoringEntries.map(({ contextID, conditionID }) => [contextID, conditionID]), [[10, 1], [10, 2], [20, 2], [30, 1]]);
-    assert.deepEqual(pie.estimationVotes, [tally(1, 3), tally(2, 6)]);
     assert.equal(Object.hasOwn(pie, 'composition'), false);
 });
 
-test('the only valid pie supplies public weights and its estimation vote at any age', async () => {
+test('the only valid pie supplies public weights at any age', async () => {
     const db = database([contextRow(10)], [{ ...weight(1, 10), is_recent: 0 }]);
     const pie = await loadPublicPie(db, topic, conditions);
     assert.equal(pie.participantCount, 1);
     assert.deepEqual(pie.entries, [{ conditionID: 1, weightBasisPoints: 10000, followCommunityVersion: true }]);
-    assert.deepEqual(pie.estimationVotes, [tally(1, 1)]);
 });
 
 test('zero to nine 72-hour Pies top up to ten total, not ten additional Pies', async () => {
@@ -137,7 +134,6 @@ test('zero to nine 72-hour Pies top up to ten total, not ten additional Pies', a
         const expected = (recentCount + 1) / 11 * 10000;
         assert.equal(pie.entries.find(entry => entry.conditionID === 1).weightBasisPoints, Math.round(expected));
         assert.equal(pie.entries.reduce((sum, entry) => sum + entry.weightBasisPoints, 0), 10000);
-        assert.deepEqual(pie.estimationVotes, [tally(1, recentCount + 1), tally(2, 10 - recentCount)]);
     }
 });
 
@@ -150,12 +146,11 @@ test('at least ten recent Pies uses every 72-hour Pie without adding older Pies'
         const db = database([contextRow(10)], rows);
         const pie = await loadPublicPie(db, topic, conditions);
         assert.equal(pie.participantCount, recentCount);
-        assert.deepEqual(pie.estimationVotes, [tally(1, recentCount)]);
         assert.deepEqual(pie.entries, [{ conditionID: 1, weightBasisPoints: 10000, followCommunityVersion: true }]);
     }
 });
 
-test('each matching context supplies estimation votes from its own public weight sample', async () => {
+test('each matching context supplies scoring entries from its own public weight sample', async () => {
     const rows = Array.from({ length: 12 }, (_, index) => ({
         ...weight(12 - index, 10, index === 0 ? 1 : 2),
         is_recent: Number(index === 0)
@@ -170,7 +165,6 @@ test('each matching context supplies estimation votes from its own public weight
         { contextID: 20, conditionID: 1, weightBasisPoints: 40000 }
     ]);
     assert.deepEqual(pie.entries, [{ conditionID: 1, weightBasisPoints: 3571, followCommunityVersion: true }, { conditionID: 2, weightBasisPoints: 6429, followCommunityVersion: true }]);
-    assert.deepEqual(pie.estimationVotes, [tally(1, 5), tally(2, 9)]);
 });
 
 test('fewer than ten available Pies all contribute even with no 72-hour activity', async () => {
@@ -182,7 +176,6 @@ test('fewer than ten available Pies all contribute even with no 72-hour activity
     const db = database([contextRow(10)], rows);
     const pie = await loadPublicPie(db, topic, conditions);
     assert.equal(pie.participantCount, 3);
-    assert.deepEqual(pie.estimationVotes, [tally(1, 1), tally(2, 2)]);
     assert.deepEqual(pie.entries, [{ conditionID: 1, weightBasisPoints: 3333, followCommunityVersion: true }, { conditionID: 2, weightBasisPoints: 6667, followCommunityVersion: true }]);
 });
 

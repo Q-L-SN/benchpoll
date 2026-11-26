@@ -37,7 +37,16 @@ for (const [engine, width] of [[chromium, 1440], [webkit, 390]]) {
             await page.waitForFunction(() => document.querySelector('#workspace-update-indicator')?.dataset.phase !== 'pending');
         };
         assert.deepEqual(await order(), [1, 901, 900]);
-        await choose(() => support.click());
+        await choose(async () => {
+            const saved = page.waitForResponse(response => response.url().endsWith('/api/save_estimation_vote'));
+            await support.click();
+            const ballot = await saved;
+            assert.equal(ballot.status(), 200, await ballot.text());
+            assert.deepEqual(ballot.request().postDataJSON(), {
+                targetConditionID: 1, sourceConditionID: 900, vote: 'support', nominate: false, expectedUserID: app.state.userID
+            });
+        });
+        await support.filter({ hasText: /^1$/ }).waitFor();
         assert.equal(await support.textContent(), '1');
         assert.deepEqual(await order(), [1, 901, 900]);
         await choose(() => version(900).click());

@@ -1,3 +1,4 @@
+import { saveEstimationVote } from './estimation-ballots.js';
 import * as S from './public/js/shared.js';
 import { canonicalAccountID, requireAccountWriteOwner } from './public/js/shared/account-identity.js';
 import { readWriteIdentity, claimWriteIntent, completeWriteIntent } from './write-idempotency.js';
@@ -917,7 +918,15 @@ API.post('/save_personal_pie', requireAuthForAPI, requireAccountWriteOwner, requ
         fallbackRules: req.body.fallbackRules,
         estimationVotes: req.body.estimationVotes
     });
-    topicHome.invalidate(req.body.categoryID);
+    topicHome.invalidate(req.body.estimationVotes?.length ? undefined : req.body.categoryID);
+    searchPresentation.invalidate();
+    res.set('Cache-Control', 'private, no-store');
+    res.json(receipt);
+});
+
+API.post('/save_estimation_vote', requireAuthForAPI, requireAccountWriteOwner, requireCurrentTermsForAPI, async (req, res) => {
+    const receipt = await saveEstimationVote(db, req.session.userID, readWriteIdentity(req), req.body);
+    topicHome.invalidate();
     searchPresentation.invalidate();
     res.set('Cache-Control', 'private, no-store');
     res.json(receipt);
@@ -2500,8 +2509,8 @@ async function assertBenchmarkConditionSetCanChange(connection, targetID, before
     assertBenchmarkConditionNameLengths(after.conditions, before.conditions);
     assertUniqueChangeConditionNames(after.conditions, 'duplicate_benchmark_condition', before.conditions);
     for (const condition of changes.removed) {
-        const { resultCount, pieCount } = await conditionImpact(connection, 'benchmark', targetID, condition.ID);
-        if (resultCount || pieCount) {
+        const { resultCount, pieCount, estimationPairCount } = await conditionImpact(connection, 'benchmark', targetID, condition.ID);
+        if (resultCount || pieCount || estimationPairCount) {
             throw {
                 status: 409,
                 body: { error: 'benchmark_condition_in_use', ID: condition.ID }

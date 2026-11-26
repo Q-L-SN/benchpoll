@@ -108,7 +108,7 @@ npm run migrate:reviewer-accounts -- --senior-user-id=<github-user-id>
 npm run migrate:literal-default-conditions
 ```
 
-Version-based score estimation requires the `personal_pies.estimation_votes` column. Set
+Version-based score estimation requires the `estimation_pair_votes` table. Set
 `BENCHPOLL_MIGRATION_DATABASE` to the target database and run `node scripts/migrate-estimation-votes.mjs --apply` before starting the updated server.
 
 For proposal name reservations, first stop application writes and create a
@@ -215,17 +215,11 @@ Each topic or scene uses every valid nonempty personal configuration updated in 
 or all of them if fewer exist. Each selected configuration contributes equally to public weights.
 The participant count is the sample size. Older configurations in the sample can keep referenced
 topics available. A topic with scenes opens its default scene.
-Advanced settings lists each benchmark's versions. The same sample supplies scoring version
-shares and estimation votes. Each explicit scoring choice carries that person's benchmark weight.
-Personal rankings use a chosen scoring version or follow community shares. With no version
-choices, the primary version is used.
+Advanced settings lists each benchmark's versions. Each scoring choice carries that person's benchmark weight in the current scene. Personal rankings can follow community shares. With no explicit choices, the primary version is used.
 
-Choose a scoring version to see how much support each other version has as a source for that target.
-Each sampled person who gives the benchmark a positive weight can support or oppose each source–target
-pair once per scene. Switching the scoring version or returning to community shares preserves those
-votes. Select the same target again to edit them. A source is eligible with no votes, a tie, or a
-majority in support. A personal vote takes priority for that direction in the person's own ranking.
-Sign in to save votes and contribute to the community tally.
+Choose a scoring version to inspect its estimation pairs. Each signed-in account has one sitewide vote per unordered pair. Voting from either version or any topic edits the same ballot. Per pair, count every vote updated in the last 72 hours, or the latest 10 votes if fewer are recent. A majority against excludes the pair. Same-benchmark versions are eligible with no votes or a tie. Your own vote takes priority in your personal rankings.
+
+With a scoring version selected, click **Nominate a version from another benchmark**. Pick a version in **Evaluation items** to cast a support vote, then click the same toggle to exit. Both versions list the external pair while it has support in the current sample. Withdrawing the last support removes it from both lists. External measurements are used after same-benchmark evidence. Public estimates test each external direction on held-out models with matching settings. Both its MAE and RMSE must beat predicting the median training target. Personal rankings can try a nominated source with one paired model. The scoring version's weight and measured coverage keep their original meanings.
 Topic references share a topic icon and parent/scene separator across treemaps, selectors,
 and benchmark search. A parent-only search keeps its scenes collapsed. The weight-chart heading
 shows its selected block; scene tabs omit the Default badge. Successful refreshes briefly show
@@ -250,7 +244,7 @@ fit learns the relationships between versions from the available paired data and
 beyond the observed source range. The fit uses seven expectation-maximization updates, a two-observation
 prior with correlation 0.70, and a 0.5-point scale floor. When direct calibration is unavailable, a measured
 sibling can reach A through intermediate versions of that benchmark. Each link uses measured peers with
-the same settings and respects directional votes. All versions on the path must be eligible for A.
+the same settings and respects the sitewide pair vote. All versions on the path must be eligible for A.
 Shorter paths take priority, then the number of paired models on the weakest link. Direct scores (including zero) and estimates keep the target version’s
 original weight. An unresolved score contributes zero. Only measurements add coverage. Score range assigns
 0 at the lower end and 100 at the upper end for missing measurements. See
@@ -439,7 +433,7 @@ npm run migrate:reviewer-accounts -- --senior-user-id=<github-user-id>
 npm run migrate:literal-default-conditions
 ```
 
-版本估分需要 `personal_pies.estimation_votes` 列。将 `BENCHPOLL_MIGRATION_DATABASE` 设为目标数据库，
+版本估分需要 `estimation_pair_votes` 表。将 `BENCHPOLL_MIGRATION_DATABASE` 设为目标数据库，
 启动新版服务前执行 `node scripts/migrate-estimation-votes.mjs --apply`。
 
 迁移提案名称占用前，应先停止应用写入并创建新的、已验证的完整数据库备份，然后执行
@@ -544,13 +538,11 @@ https://benchpoll.com:1337
 按更新时间取最新的 10 份有效配置。如果总共不足 10 份，则全部计入。
 每份入选配置等权计入公众权重，参与人数等于入选配置数。较早的配置入选后也能使被引用的主题保持可用。
 有场景的主题默认打开其默认场景。高级设置列出基准的各个版本。
-版本计分率和估分来源投票使用同一批入选配置。每个明确选择的计分版本按该用户分给基准的权重计入。
-个人排行使用自己选定的版本，或者跟随社区版本比例。无人选择时使用主版本。
+计分版本的占比按当前场景的个人配置计算，个人排行可跟随社区比例。无人选择时使用主版本。
 
-选定计分版本后，可以看到用其他版本为它估分的支持率。入选配置中直接给该基准分配了正权重的用户，
-可在该场景对每一对“来源版本 → 计分版本”投一票支持或反对。切换计分版本或恢复跟随社区时，
-以前的投票继续计入原来的方向，切回对应计分版本即可修改。无人投票、平票或赞成票占多数时，
-该来源可以参与估分。个人排行优先采用本人对这一方向的投票。登录后可保存投票并计入社区票数。
+选定计分版本后，每个账号对每对版本在全站拥有一票。从任一版本、主题或场景进入，都在修改同一票。每对版本纳入过去 72 小时的全部有效票；若不足 10 票，取最近的 10 票或现有全部票。同基准版本在无人投票或平票时可参与，反对占多数时排除。个人排行优先采用本人的选择。
+
+选定计分版本后，点击 **Nominate a version from another benchmark**，再从评估项列表中选一个版本，即可投一张赞成票。再次点击提名按钮可退出。近期样本中有赞成票时，两个版本都显示这项提名。最后一张赞成票撤回或退出样本后，两端都移除提名。同基准证据优先。公共排行采用外部来源前，按预测方向和运行设置留出模型实测做验证，平均绝对误差和均方根误差均须优于训练集目标分数中位数。个人排行有一个配对模型就可尝试。估分使用计分版本的权重，只有实测计入覆盖率。
 树图、选择器和基准搜索中的主题引用统一使用主题图标及一级主题/场景分隔图标。
 只匹配一级主题时，其场景默认折叠。权重图标题显示当前选中分区；场景标签不再显示 Default。
 刷新成功后短暂显示“已更新”，随后隐藏，不再常驻时间戳。
@@ -568,7 +560,7 @@ https://benchpoll.com:1337
 AI Index 提供 **Version-based estimation**。缺少版本 A 的分数时，算法用同一基准下获准来源版本的实测分联合预测 A。
 直接配对要求至少一个其他模型在相同运行设置下同时测过来源版本和 A。算法从配对记录中估计版本间的协方差，样本少时对相关性做收缩，
 超出已观测范围时平滑减弱外推。拟合使用七轮期望最大化更新，先验相当于两个观测，相关系数为 0.70，尺度下限为 0.5 分。
-缺少直接配对时，模型的实测分可以经过同一基准的中间版本逐段换算到 A。每一段都需要相同运行设置下其他模型的配对实测，并遵守该方向的投票。路径上的版本也都须获准为 A 估分。优先采用最短路径，路径等长时选择最薄弱一段配对模型更多的路径。
+缺少直接配对时，模型的实测分可以经过同一基准的中间版本逐段换算到 A。每一段都需要相同运行设置下其他模型的配对实测，并遵守全站版本对投票。路径上的版本也都须获准为 A 估分。优先采用最短路径，路径等长时选择最薄弱一段配对模型更多的路径。
 实测分（含零分）优先。估分沿用 A 的原权重，无法估分时该项贡献为零。覆盖率只计算实测结果。
 在分数区间模式下，缺分项的下限计 0 分，上限计 100 分。
 详见 [How BenchPoll works](https://benchpoll.com/how-it-works#rankings)。

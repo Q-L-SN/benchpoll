@@ -12,6 +12,7 @@ before(async () => {
         .map(name => readFile(new URL(`../public/css/ui/${name}.css`, import.meta.url), 'utf8')))).join('\n');
     const result = await build({ stdin: { resolveDir: root, contents: `
         import { createBenchmarkSettings } from './public/js/workspace/benchmark-settings.js';
+        import { withEstimationVote } from './public/js/shared/estimation-votes.js';
         globalThis.mountSettings = readOnly => {
             const versions = Array.from({ length: 42 }, (_, i) => ({
                 conditionID: i + 1, benchmarkID: 101, conditionName: 'Evaluation ' + (i + 1),
@@ -38,9 +39,7 @@ before(async () => {
                 onVote(group, targetConditionID, sourceConditionID, vote) {
                     const pair = { targetConditionID, sourceConditionID, vote };
                     state.calls.push(pair);
-                    state.personalEstimationVotes = state.personalEstimationVotes.filter(item => item.targetConditionID !== targetConditionID
-                        || item.sourceConditionID !== sourceConditionID);
-                    if (vote) state.personalEstimationVotes.push(pair);
+                    state.personalEstimationVotes = withEstimationVote(state.personalEstimationVotes, targetConditionID, sourceConditionID, vote);
                     return true;
                 }
             });
@@ -75,7 +74,7 @@ for (const [engine, width] of [[chromium, 1440], [chromium, 320], [webkit, 390]]
         const settings = page.locator('#settings');
         const score = conditionID => settings.getByRole('button', { name: `Use Evaluation ${conditionID} for scoring`, exact: true });
         const vote = (action, source, target) => settings.getByRole('button', {
-            name: `${action} Evaluation ${source} as an estimation source for Evaluation ${target}`, exact: true
+            name: `${action} mutual estimation between Evaluation ${target} and Evaluation ${source}`, exact: true
         });
         const row = conditionID => settings.locator(`.bp-version-choice-row[data-condition-id="${conditionID}"]`);
         const rates = settings.locator('.bp-estimation-rate');
@@ -101,6 +100,9 @@ for (const [engine, width] of [[chromium, 1440], [chromium, 320], [webkit, 390]]
         assert.equal(await support.getAttribute('aria-pressed'), 'true');
         assert.equal(await support.evaluate(button => button.matches(':focus')), true);
 
+        await score(2).click();
+        assert.equal(await rate(1).textContent(), '66.67%');
+        assert.equal(await vote('Support', 1, 2).getAttribute('aria-pressed'), 'true');
         await score(3).click();
         assert.equal(await score(1).getAttribute('aria-pressed'), 'false');
         assert.equal(await score(3).getAttribute('aria-pressed'), 'true');
@@ -122,13 +124,13 @@ for (const [engine, width] of [[chromium, 1440], [chromium, 320], [webkit, 390]]
         assert.equal(await settings.evaluate(node => node.scrollWidth <= node.clientWidth + 1), true);
         assert.deepEqual(await page.evaluate(() => settingsFixture.state.calls), [
             { scoringVersion: 1 }, { targetConditionID: 1, sourceConditionID: 2, vote: 'support' },
-            { scoringVersion: 3 }, { targetConditionID: 3, sourceConditionID: 2, vote: 'oppose' },
+            { scoringVersion: 2 }, { scoringVersion: 3 }, { targetConditionID: 3, sourceConditionID: 2, vote: 'oppose' },
             { scoringVersion: null }, { scoringVersion: 1 }, { targetConditionID: 1, sourceConditionID: 2, vote: null },
             { targetConditionID: 1, sourceConditionID: 42, vote: 'support' }
         ]);
     });
 
-    test(`${engine.name()} ${width}: public settings inspect directional community rates without editing`, async t => {
+    test(`${engine.name()} ${width}: public settings inspect mutual community rates without editing`, async t => {
         const page = await pageFor(t, engine, width);
         await page.evaluate(() => mountSettings(true));
         const settings = page.locator('#settings');
@@ -147,6 +149,8 @@ for (const [engine, width] of [[chromium, 1440], [chromium, 320], [webkit, 390]]
         assert.match(await rate(2).getAttribute('aria-label'), /4 in support, 2 opposed/);
         assert.equal(await rate(3).textContent(), 'No votes · Eligible by default');
         assert.equal(await settings.locator('.bp-estimation-vote').count(), 0);
+        await inspect(2).click();
+        assert.equal(await rate(1).textContent(), '66.67%');
         await inspect(3).click();
         assert.equal(await inspect(1).getAttribute('aria-pressed'), 'false');
         assert.equal(await rate(2).textContent(), '25%');

@@ -136,14 +136,14 @@
                 <p>Each community scoring choice carries that person’s benchmark weight. BenchPoll splits the benchmark’s weight among versions in proportion to those choices. If nobody chose a version, the primary version gets the full weight.</p>
 
                 <h3 id="fallback" tabindex="-1">Estimation votes</h3>
-                <p>In <strong>Personal Weights</strong>, open <strong>Advanced settings</strong> for a benchmark. Under <strong>Scoring version</strong>, choose an explicit target version to see <strong>Estimation support</strong> for each other version and vote for or against its use as a source. Select the same thumb again to clear your vote.</p>
-                <p>A vote for using version B to estimate A applies only to B → A. B → C has its own votes and support rate. Select the scoring version again to follow the community’s scoring shares.</p>
-                <p>Saved pair votes still count in the public sample while you use a different scoring version or follow the community. Choose A again to see your saved votes for estimating A.</p>
-                <p>Each sampled person who weights the benchmark gets one vote per source and target pair. A pair is eligible by default, including with no votes or a tie. A community majority against a pair excludes that pair. Your own vote takes priority for your personal ranking.</p>
+                <p>In <strong>Personal Weights</strong>, choose a <strong>Scoring version</strong> in <strong>Advanced settings</strong>. Under <strong>Estimation support</strong>, vote on whether two versions may estimate each other. Either version opens the same sitewide vote. Tap the same thumb to clear it.</p>
+                <p>Each pair counts votes from the last 72 hours, including older votes to reach ten when available. Versions of the same benchmark are eligible by default, including with no votes or a tie. A majority against excludes it. Your own vote takes priority for your personal ranking.</p>
+                <p>Choose <strong>Nominate a version from another benchmark</strong>, then pick a version in <strong>Evaluation items</strong>. This adds one support vote. Both versions list the pair while its sample has at least one supporter. Select the nomination button again to leave the picker.</p>
 
                 <h3 id="calibration" tabindex="-1">How versions predict a missing score</h3>
                 <p>BenchPoll fits eligible measured versions of the same benchmark together. Each link needs paired scores from at least one other model under the same run settings. A model measured on A and B can contribute without C. Sparse samples favor a shared starting correlation. Extreme scores have less influence outside the observed source range.</p>
-                <p>When direct pairing is unavailable, C can predict A through B. Each link follows directional votes. Every version must be eligible for A. BenchPoll chooses the shortest path and breaks ties by the number of paired models on the weakest link. Score details show each link.</p>
+                <p>When direct pairing is unavailable, C can predict A through B. Each link follows the pair vote. Every version must be eligible for A. BenchPoll chooses the shortest path and breaks ties by the number of paired models on the weakest link. Score details show each link.</p>
+                <p>External sources come last. Public predictions must beat the training median on held-out models in both mean absolute and root mean squared error for that direction. Personal rankings can use one paired model.</p>
                 <p>Best performance uses the highest qualifying run prediction. Matched comparisons average predictions within each matched control setting and give settings equal weight. Without a connected measurement, A contributes 0 at its full weight.</p>
 
                 <h2 id="publishing" tabindex="-1">Publishing and contributions</h2>

@@ -55,13 +55,15 @@ for (const [engine, width, height] of built ? [[chromium, 1440, 900], [chromium,
             && geometry.longChoiceOverflow <= 1 && geometry.fits, JSON.stringify(geometry));
         for (const value of await settings.locator('.bp-evidence-count-value').allTextContents()) assert.match(value, /^\d+$/);
         const last = rows.last().locator('button[data-vote="support"]');
-        const saved = page.waitForResponse(response => response.url().endsWith('/api/save_personal_pie') && response.ok());
+        const saved = page.waitForResponse(response => response.url().endsWith('/api/save_estimation_vote'));
         await last.click();
-        const { estimationVotes, fallbackRules } = (await saved).request().postDataJSON();
-        assert.deepEqual(estimationVotes, [{
-            targetConditionID: 1, sourceConditionID: Number(await rows.last().getAttribute('data-condition-id')), vote: 'support'
-        }]);
-        assert.deepEqual(fallbackRules, []);
+        const ballot = await saved;
+        assert.equal(ballot.status(), 200, await ballot.text());
+        assert.deepEqual(ballot.request().postDataJSON(), {
+            targetConditionID: 1, sourceConditionID: Number(await rows.last().getAttribute('data-condition-id')),
+            vote: 'support', nominate: false, expectedUserID: fixture.state.userID
+        });
+        await last.filter({ hasText: /^1$/ }).waitFor();
         assert.equal(await last.getAttribute('aria-pressed'), 'true');
         assert.equal(await score.getAttribute('aria-pressed'), 'true');
         const longChoice = settings.locator('.bp-version-choice[data-condition-id="105"]');

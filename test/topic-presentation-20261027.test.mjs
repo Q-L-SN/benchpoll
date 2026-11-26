@@ -36,7 +36,7 @@ test('sidebar defaults to collapsed without writing or replacing any saved boole
 });
 
 test('version-based estimation uses calibrated scores and keeps retired coverage controls hidden', () => {
-    assert.equal(AVAILABLE_INFERENCE_VERSION, 12);
+    assert.equal(AVAILABLE_INFERENCE_VERSION, 13);
     for (const source of [topics, workspace]) {
         assert.match(source, /import \{ AVAILABLE_INFERENCE_VERSION \} from '\.\/shared\/available-score\.js'/);
         assert.match(source, /availableInferenceVersion\s*[:=]\s*AVAILABLE_INFERENCE_VERSION/);
@@ -44,7 +44,7 @@ test('version-based estimation uses calibrated scores and keeps retired coverage
     }
     for (const html of [home, configuration]) assert.doesNotMatch(html, /coverage-experiment|coverage-penalty|Power 0\.35/);
     assert.doesNotMatch(read('public/css/ui/topic-identity.css'), /coverage-experiment/);
-    assert.match(configuration, /joint estimates from eligible versions of the same benchmark/);
+    assert.match(configuration, /Nominated external versions can supply an estimate/);
     assert.match(read('private/how-it-works.html'), /Results with no measurement or estimate count as 0 at their full weight/);
 });
 

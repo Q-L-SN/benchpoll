@@ -545,7 +545,7 @@ export function createModelScoresView({ state, modelScoresDialog, modelScoresTit
             inference.unpenalizedScore].every(Number.isFinite);
         if (originalWeights) {
             const sentences = [];
-            if (inference.inferredFraction > 0) sentences.push(`${(inference.inferredFraction * 100).toFixed(2)}% of the weight uses estimates from measured versions of the same benchmark.`);
+            if (inference.inferredFraction > 0) sentences.push(`${(inference.inferredFraction * 100).toFixed(2)}% of the weight uses estimates from related benchmark versions.`);
             if (inference.unresolvedFraction > 0) sentences.push(`${(inference.unresolvedFraction * 100).toFixed(2)}% of the weight has no measurement or estimate and counts as 0 at its full weight.`);
             if (sentences.length) {
                 const detail = document.createElement('p');

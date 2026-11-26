@@ -30,7 +30,7 @@ for (const selectionSource of ['custom', 'selected']) for (const backups of [[],
         assert.deepEqual(receipt.personalPie.estimationVotes, []);
         assert.deepEqual(await savePersonalPie(db, body), receipt);
         const pie = await loadPersonalPie(db, 10, '7');
-        assert.deepEqual(pie.estimationVotes, []);
+        assert.equal(Object.hasOwn(pie, 'estimationVotes'), false);
         assert.deepEqual(pie.entries, entries);
     });
 }

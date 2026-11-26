@@ -1,68 +1,99 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { loadPublicPie, getRankingWorkspace } from '../ranking-service.js';
+import { DatabaseSync } from 'node:sqlite';
+import { loadEstimationBallots } from '../estimation-ballots.js';
+import { getRankingWorkspace } from '../ranking-service.js';
 
-const scene = { ID: 10, categoryID: 1, sceneID: 10 };
-const catalogue = (entries = [[1, 10], [2, 10], [3, 20], [4, 10]]) => new Map(entries.map(([conditionID, benchmarkID, excludedFromRanking]) =>
-    [conditionID, { conditionID, benchmarkID, excludedFromRanking, isPrimaryCondition: [1, 3].includes(conditionID), scoreCount: 1 }]));
-const rowsForPie = (pieID, entries, votes = null) => (entries.length ? entries : [[null, null]]).map(([conditionID, points]) => ({
-    pie_ID: pieID, context_ID: 10, benchmark_condition_ID: conditionID, weight_basis_points: points,
-    is_recent: 1, estimation_votes: votes
-}));
-const database = rows => ({ async execute(sql, params) {
-    assert.match(sql, /FROM personal_pies/);
-    assert.match(sql, /personal_pies\.estimation_votes/);
-    assert.match(sql, /users.deleted_at IS NULL/);
-    assert.match(sql, /users.banned_at IS NULL/);
-    assert.deepEqual(params, [10]);
-    return [rows];
-} });
-const vote = (targetConditionID, sourceConditionID, option) => ({ targetConditionID, sourceConditionID, vote: option });
+const catalogue = (entries = [[1, 10], [2, 10], [3, 20], [4, 10], [5, 10, true]]) => new Map(
+    entries.map(([conditionID, benchmarkID, excludedFromRanking]) =>
+        [conditionID, { conditionID, benchmarkID, excludedFromRanking }]));
+const pair = (targetConditionID, sourceConditionID) => ({ targetConditionID, sourceConditionID });
+const tally = (targetConditionID, sourceConditionID, supportCount, opposeCount) =>
+    ({ ...pair(targetConditionID, sourceConditionID), supportCount, opposeCount });
 
-test('an eligible pie counts once per ordered pair, regardless of weight or current scoring version', async () => {
-    const rows = [
-        ...rowsForPie(1, [[1, 100], [3, 9900]], JSON.stringify([vote(1, 2, 'support')])),
-        ...rowsForPie(2, [[4, 10000]], [vote(1, 2, 'oppose'), vote(4, 2, 'support')]),
-        ...rowsForPie(3, [[1, 6000], [2, 4000]], [vote(2, 1, 'support'), vote(1, 2, 'support')]),
-        ...rowsForPie(4, [[1, 10000]])
-    ];
-    const pie = await loadPublicPie(database(rows), scene, catalogue());
-    assert.equal(pie.participantCount, 4);
-    assert.deepEqual(pie.estimationVotes, [
-        { targetConditionID: 1, sourceConditionID: 2, supportCount: 2, opposeCount: 1 },
-        { targetConditionID: 2, sourceConditionID: 1, supportCount: 1, opposeCount: 0 },
-        { targetConditionID: 4, sourceConditionID: 2, supportCount: 1, opposeCount: 0 }
-    ]);
-    assert.deepEqual(pie.familyComposition, []);
+function ballotDatabase(t) {
+    const sql = new DatabaseSync(':memory:');
+    t.after(() => sql.close());
+    sql.exec(`
+        CREATE TABLE users (ID INTEGER PRIMARY KEY, deleted_at INTEGER, banned_at INTEGER, banned_until INTEGER);
+        CREATE TABLE estimation_pair_votes (user_ID INTEGER NOT NULL REFERENCES users (ID),
+            first_ID INTEGER NOT NULL, second_ID INTEGER NOT NULL, vote TEXT NOT NULL, updated_at INTEGER NOT NULL,
+            CHECK (first_ID < second_ID), CHECK (vote IN ('support', 'oppose')), PRIMARY KEY (user_ID, first_ID, second_ID));
+    `);
+    const now = 1000;
+    sql.function('NOW', () => now);
+    return {
+        add(user, first, second, vote, hoursAgo, { deleted = null, banned = null, until = null } = {}) {
+            sql.prepare('INSERT OR IGNORE INTO users VALUES (?, ?, ?, ?)').run(user, deleted, banned, until);
+            sql.prepare('INSERT INTO estimation_pair_votes VALUES (?, ?, ?, ?, ?)').run(user, first, second, vote, now - hoursAgo);
+        },
+        remove(user, first, second) {
+            sql.prepare('DELETE FROM estimation_pair_votes WHERE user_ID = ? AND first_ID = ? AND second_ID = ?').run(user, first, second);
+        },
+        async execute(query, params) {
+            // Store timestamps as hours and adapt MySQL interval syntax for the same SQL tally.
+            return [sql.prepare(query.replace(/NOW\(\)\s*-\s*INTERVAL\s*\? HOUR/i, 'NOW() - ?')).all(...params)];
+        }
+    };
+}
+
+test('the sitewide sample includes every ballot in 72 hours and tops up each pair independently to ten', async t => {
+    const db = ballotDatabase(t);
+    db.add(1, 1, 2, 'support', 72);
+    for (let user = 2; user <= 12; user++) db.add(user, 1, 2, 'oppose', user);
+    db.add(99, 1, 2, 'support', 73);
+    db.add(1, 2, 4, 'support', 12);
+    db.add(2, 2, 4, 'support', 24);
+    for (let user = 3; user <= 12; user++) db.add(user, 2, 4, 'oppose', user + 72);
+    db.add(13, 2, 4, 'support', 0, { deleted: 999 });
+    db.add(14, 2, 4, 'support', 0, { banned: 999, until: 1001 });
+    db.add(15, 2, 4, 'support', 80, { banned: 900, until: 1000 });
+    db.add(16, 2, 4, 'support', 0, { banned: 999 });
+
+    const result = await loadEstimationBallots(db, 99, catalogue(), 72, 10);
+    assert.deepEqual(result, { externalPairs: [], personal: [{ ...pair(1, 2), vote: 'support' }],
+        community: [tally(1, 2, 1, 11), tally(2, 4, 3, 7)] });
 });
 
-test('community counts omit out-of-scope pairs and older undirected votes', async () => {
-    const rows = [
-        ...rowsForPie(1, [[1, 10000]], [vote(1, 2, 'support'), vote(1, 4, 'oppose'), vote(4, 2, 'oppose'),
-            vote(99, 1, 'support'), vote(1, 99, 'support'), vote(1, 3, 'support'), { conditionID: 2, vote: 'oppose' }]),
-        ...rowsForPie(2, [[3, 10000]], [vote(1, 2, 'oppose')]),
-        ...rowsForPie(3, [[-20, 10000]], [vote(1, 2, 'oppose')]),
-        ...rowsForPie(4, [], [vote(1, 2, 'oppose')]),
-        ...rowsForPie(5, [[1, 10000]], [{ conditionID: 2, vote: 'oppose' }])
-    ];
-    const pie = await loadPublicPie(database(rows), scene, catalogue([[1, 10], [2, 10], [3, 20], [4, 10, true]]));
-    assert.equal(pie.participantCount, 4);
-    assert.deepEqual(pie.estimationVotes, [{ targetConditionID: 1, sourceConditionID: 2, supportCount: 1, opposeCount: 0 }]);
+test('external nominations appear exactly while the pair sample includes support', async t => {
+    const db = ballotDatabase(t);
+    for (let user = 1; user <= 10; user++) db.add(user, 1, 3, 'oppose', user);
+    db.add(99, 1, 3, 'support', 80);
+    db.add(99, 2, 5, 'support', 0);
+    db.add(99, 2, 9, 'support', 0);
+    db.add(99, 3, 4, 'oppose', 0);
+    db.add(99, 1, 2, 'oppose', 80);
+    const read = () => loadEstimationBallots(db, 99, catalogue(), 72, 10);
+    const base = { externalPairs: [], community: [tally(1, 2, 0, 1)],
+        personal: [{ ...pair(1, 2), vote: 'oppose' }] };
+    assert.deepEqual(await read(), base);
+
+    db.add(100, 1, 3, 'support', 0);
+    assert.deepEqual(await read(), { externalPairs: [pair(1, 3)],
+        community: [tally(1, 2, 0, 1), tally(1, 3, 1, 10)],
+        personal: [...base.personal, { ...pair(1, 3), vote: 'support' }] });
+
+    db.remove(100, 1, 3);
+    assert.deepEqual(await read(), base);
 });
 
-test('community counts preserve every voted sibling version and use a stable condition order', async () => {
+test('community and personal ballots preserve all eligible pairs in ascending version order', async t => {
+    const db = ballotDatabase(t);
     const siblingIDs = Array.from({ length: 130 }, (_, index) => index + 2);
     const conditions = catalogue([1, ...siblingIDs].map(ID => [ID, 10]));
-    const ballots = siblingIDs.slice().reverse().map(ID => vote(1, ID, 'support'));
-    const pie = await loadPublicPie(database(rowsForPie(1, [[1, 10000]], ballots)), scene, conditions);
-    assert.deepEqual(pie.estimationVotes, siblingIDs.map(sourceConditionID => ({ targetConditionID: 1, sourceConditionID, supportCount: 1, opposeCount: 0 })));
+    for (const id of [...siblingIDs].reverse()) db.add(99, 1, id, 'support', id);
+    const { community, personal, externalPairs } = await loadEstimationBallots(db, 99, conditions, 72, 10);
+    assert.deepEqual(community, siblingIDs.map(id => tally(1, id, 1, 0)));
+    assert.deepEqual(personal, siblingIDs.map(id => ({ ...pair(1, id), vote: 'support' })));
+    assert.deepEqual(externalPairs, []);
 });
 
-test('malformed stored ballots fail the invariant without inflating counts', async () => {
-    for (const votes of ['bad JSON', [vote(1, 2, 'support'), vote(1, 2, 'oppose')], [vote(1, 2, 'neutral')]]) {
-        await assert.rejects(loadPublicPie(database(rowsForPie(1, [[1, 10000]], votes)), scene, catalogue()),
-            error => error.status === 409 && error.body?.error === 'stored_estimation_votes_invalid' && error.body.pieID === 1);
-    }
+test('the cutoff for equally old ballots uses account ID to complete the sample', async t => {
+    const db = ballotDatabase(t);
+    for (let user = 11; user >= 1; user--) db.add(user, 1, 2, user === 11 ? 'oppose' : 'support', 80);
+    const { community, personal } = await loadEstimationBallots(db, 11, catalogue(), 72, 10);
+    assert.deepEqual(community, [tally(1, 2, 10, 0)]);
+    assert.deepEqual(personal, [{ ...pair(1, 2), vote: 'oppose' }]);
 });
 
 test('workspace snapshot errors roll back and release the pooled connection', async () => {

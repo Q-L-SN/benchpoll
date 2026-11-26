@@ -1,20 +1,16 @@
 import { createDraftRecordStore } from './draft-records.js';
 import { FALLBACK_CONFIGURATION_VERSION } from '../shared/benchmark-families.js';
-import { normalizeEstimationVotes, normalizePersistedEstimationVotes } from '../shared/estimation-votes.js';
 
 const LEGACY_KEY = 'benchpoll-guest-weights-v2-ordered';
-function validatedDraft(value, normalizeVotes) {
-    if (!Array.isArray(value?.entries) || !Array.isArray(value?.fallbackRules)) return null;
-    if (!Object.hasOwn(value, 'estimationVotes')) return value;
-    try {
-        const estimationVotes = normalizeVotes(value.estimationVotes);
-        return estimationVotes.length === value.estimationVotes.length ? value : { ...value, estimationVotes };
-    } catch { return null; }
-}
+const isWeightDraft = value => Array.isArray(value?.entries) && Array.isArray(value?.fallbackRules);
 const withoutLegacyChoices = value => ({ ...value, fallbackRules: [] });
+function withoutLegacyVotes(value) {
+    const draft = { ...value };
+    delete draft.estimationVotes;
+    return draft;
+}
 function legacyDraft(value) {
-    const draft = validatedDraft(value, normalizePersistedEstimationVotes);
-    return draft && withoutLegacyChoices(draft);
+    return isWeightDraft(value) ? withoutLegacyChoices(withoutLegacyVotes(value)) : null;
 }
 
 export function createGuestDraftStore(getStorage = () => globalThis.sessionStorage) {
@@ -29,8 +25,8 @@ export function createGuestDraftStore(getStorage = () => globalThis.sessionStora
     return {
         get(key) {
             const record = records.read(key);
-            let value = validatedDraft(record?.value, normalizePersistedEstimationVotes);
-            if (!value) return null;
+            if (!isWeightDraft(record?.value)) return null;
+            let value = withoutLegacyVotes(record.value);
             if (value.fallbackConfigurationVersion === undefined) {
                 value = { ...withoutLegacyChoices(value), fallbackConfigurationVersion: FALLBACK_CONFIGURATION_VERSION };
                 const replaced = records.replace(key, record.token, value);
@@ -43,7 +39,7 @@ export function createGuestDraftStore(getStorage = () => globalThis.sessionStora
         },
         token(key) { return records.read(key)?.token ?? null; },
         set(key, value) {
-            if (!validatedDraft(value, normalizeEstimationVotes)) throw new TypeError('Invalid guest draft');
+            if (!isWeightDraft(value) || Object.hasOwn(value, 'estimationVotes')) throw new TypeError('Invalid guest draft');
             return records.replace(key, records.read(key)?.token ?? null,
                 { ...value, fallbackConfigurationVersion: FALLBACK_CONFIGURATION_VERSION }).durable;
         },

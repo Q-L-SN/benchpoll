@@ -923,11 +923,12 @@ async function confirmConditionMutation(condition, action, previousName, nextNam
         body: JSON.stringify({ targetKind: draft.change.targetKind, targetID: draft.change.targetID, conditionID: condition.ID }) });
     if (!response.ok) throw Error('Could not check linked scores and weights. Please try again.');
     const impact = await response.json();
-    if (![impact.resultCount, impact.pieCount].every(value => Number.isSafeInteger(value) && value >= 0)) {
+    if (![impact.resultCount, impact.pieCount, impact.estimationPairCount ?? 0].every(value => Number.isSafeInteger(value) && value >= 0)) {
         throw Error('The dependency check returned invalid counts.');
     }
-    const summary = `“${previousName}” is linked to ${impact.resultCount} score${impact.resultCount === 1 ? '' : 's'} and ${impact.pieCount} personal weight mix${impact.pieCount === 1 ? '' : 'es'}.`;
-    if (action === 'delete' && (impact.resultCount || impact.pieCount)) {
+    const summary = `“${previousName}” is linked to ${impact.resultCount} score${impact.resultCount === 1 ? '' : 's'} and ${impact.pieCount} personal weight mix${impact.pieCount === 1 ? '' : 'es'}.`
+        + (impact.estimationPairCount ? ` Estimation pairs: ${impact.estimationPairCount}.` : '');
+    if (action === 'delete' && (impact.resultCount || impact.pieCount || impact.estimationPairCount)) {
         await G.showAlert(`${summary} It cannot be deleted while these references exist. Keep this version or merge the duplicate object instead.`, { title: 'This version is in use' });
         return false;
     }

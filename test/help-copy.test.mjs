@@ -55,13 +55,13 @@ test('static JavaScript question hints remain short and use ordinary language', 
 
 test('short explanations name current navigation and preserve practical scoring and privacy choices', () => {
     const fallback = guide.slice(guide.indexOf('<h3 id="fallback"'), guide.indexOf('<h3 id="calibration"'));
-    assert.match(fallback, /A pair is eligible by default, including with no votes or a tie/);
+    assert.match(fallback, /Versions of the same benchmark are eligible by default, including with no votes or a tie/);
     assert.match(fallback, /Your own vote takes priority for your personal ranking/);
-    assert.match(fallback, /Select the same thumb again to clear your vote/);
+    assert.match(fallback, /Tap the same thumb to clear it/);
     assert.doesNotMatch(guide, /grouping button|optional grouping|fair-comparison control|configuration-share denominator/);
     assert.match(guide, /topic menu to find favorites, topics you configured or created, recent visits, or search/);
     assert.match(home, /id="sidebar-topic-collection" aria-label="Topic collection"/);
-    assert.match(guide, /Under <strong>Scoring version<\/strong>, choose an explicit target version/);
+    assert.match(guide, /choose a <strong>Scoring version<\/strong>/);
     assert.match(guide, /Another public topic contributes only through an explicit reference/);
     assert.match(guide, /Public topics can reference public topics and scenes/);
     assert.match(guide, /effort or harness to rank settings separately/);

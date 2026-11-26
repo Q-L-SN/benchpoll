@@ -292,7 +292,7 @@
 .bp-fallback-add-actions > button > i { flex-shrink: 0; }
 .bp-fallback-add-actions > button > span { min-width: 0; overflow-wrap: anywhere; }
 .bp-fallback-add-actions > button[hidden] { display: none; }
-.bp-fallback-add-actions > button:hover:not(:disabled), #inline-fallback-add-benchmark[aria-pressed="true"]:not(:disabled) { background: #166575; color: white; }
+.bp-fallback-add-actions > button:hover:not(:disabled), .bp-fallback-add-actions > button[aria-pressed="true"]:not(:disabled) { background: #166575; color: white; }
 .bp-fallback-add-actions > button:focus-visible { outline: 2px solid #166575; outline-offset: -3px; }
 .bp-fallback-add-actions > button:disabled { opacity: .5; cursor: not-allowed; }
 .bp-fallback-picker-card-add[aria-disabled="true"] { opacity: .5; cursor: not-allowed; }

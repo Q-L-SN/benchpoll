@@ -1,44 +1,37 @@
-const positiveConditionID = value => Number.isSafeInteger(value) && value > 0;
+const positiveID = value => Number.isSafeInteger(value) && value > 0;
 
-export function estimationVotePairKey(targetConditionID, sourceConditionID) {
-    return `${targetConditionID}:${sourceConditionID}`;
+// The wire names also identify the currently inspected/scoring version on writes.
+// Persisted ballots always place the smaller ID first, independent of that view.
+export function estimationPair(first, second) {
+    if (!positiveID(first) || !positiveID(second) || first === second) throw new TypeError('Invalid estimation pair');
+    return first < second ? { targetConditionID: first, sourceConditionID: second }
+        : { targetConditionID: second, sourceConditionID: first };
+}
+
+export function estimationVotePairKey(a, b) {
+    return a < b ? `${a}:${b}` : `${b}:${a}`;
 }
 
 export function compareEstimationVotePairs(left, right) {
     return left.targetConditionID - right.targetConditionID || left.sourceConditionID - right.sourceConditionID;
 }
 
-function normalizeVotes(votes, allowLegacy) {
-    if (!Array.isArray(votes)) throw new TypeError('Estimation votes must be an array');
-    const pairs = new Set();
-    const normalized = [];
-    for (const entry of votes) {
-        if (!entry || typeof entry !== 'object' || Array.isArray(entry) || !Object.hasOwn(entry, 'vote')
-            || (entry.vote !== 'support' && entry.vote !== 'oppose')) {
-            throw new TypeError('Invalid estimation vote');
-        }
-        const fieldCount = Object.keys(entry).length;
-        if (allowLegacy && fieldCount === 2 && Object.hasOwn(entry, 'conditionID') && positiveConditionID(entry.conditionID)) continue;
-
-        const { targetConditionID, sourceConditionID, vote } = entry;
-        if (fieldCount !== 3 || !Object.hasOwn(entry, 'targetConditionID') || !Object.hasOwn(entry, 'sourceConditionID')
-            || !positiveConditionID(targetConditionID) || !positiveConditionID(sourceConditionID)
-            || targetConditionID === sourceConditionID) {
-            throw new TypeError('Invalid estimation vote');
-        }
-        const key = estimationVotePairKey(targetConditionID, sourceConditionID);
-        if (pairs.has(key)) throw new TypeError('Invalid estimation vote');
-        pairs.add(key);
-        normalized.push({ targetConditionID, sourceConditionID, vote });
-    }
-    return normalized.sort(compareEstimationVotePairs);
-}
-
 export function normalizeEstimationVotes(votes) {
-    return normalizeVotes(votes, false);
+    if (!Array.isArray(votes)) throw new TypeError('Estimation votes must be an array');
+    const seen = new Set();
+    return Array.from(votes, entry => {
+        if (!entry || Object.keys(entry).length !== 3 || !['support', 'oppose'].includes(entry.vote)) throw new TypeError('Invalid estimation vote');
+        const pair = estimationPair(entry.targetConditionID, entry.sourceConditionID);
+        const key = estimationVotePairKey(pair.targetConditionID, pair.sourceConditionID);
+        if (seen.has(key)) throw new TypeError('Duplicate estimation vote');
+        seen.add(key);
+        return { ...pair, vote: entry.vote };
+    }).sort(compareEstimationVotePairs);
 }
 
-export function normalizePersistedEstimationVotes(votes) {
-    // Legacy ballots identify the source alone, so their direction cannot be recovered.
-    return normalizeVotes(votes, true);
+export function withEstimationVote(votes, a, b, vote) {
+    const key = estimationVotePairKey(a, b);
+    const next = votes.filter(row => estimationVotePairKey(row.targetConditionID, row.sourceConditionID) !== key);
+    if (vote !== null) next.push({ ...estimationPair(a, b), vote });
+    return next.sort(compareEstimationVotePairs);
 }

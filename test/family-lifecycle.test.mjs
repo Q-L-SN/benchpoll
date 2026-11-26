@@ -73,7 +73,8 @@ test('live saves, public catalogue and pagination do not consult archived fallba
     const ranking = await readFile(new URL('../ranking-service.js', import.meta.url), 'utf8');
     const server = await readFile(new URL('../server.js', import.meta.url), 'utf8');
     const save = ranking.slice(ranking.indexOf('export async function savePersonalPie'));
-    assert.match(save, /estimation_votes = \?[\s\S]*?completeWriteIntent\(connection, intent,[\s\S]*?await commitTransactionConnection\(connection, 'SAVE PERSONAL PIE'\)/);
+    assert.match(save, /for \(const ballot of savedEstimationVotes\) await writePairVote\(connection, normalizedUserID, ballot\);[\s\S]*?completeWriteIntent\(connection, intent,[\s\S]*?await commitTransactionConnection\(connection, 'SAVE PERSONAL PIE'\)/);
+    assert.doesNotMatch(save, /\bestimation_votes\b/);
     assert.doesNotMatch(ranking, /personal_pie_score_rules|loadBenchmarkFamilies|pruneUnusedBenchmarkFamilies/);
     const pageRoute = server.slice(server.indexOf("API.post('/get_ranking_page'"), server.indexOf("API.post('/locate_ranking_model'"));
     assert.doesNotMatch(pageRoute, /retainReferencedFamilies|loadReferencedBenchmarkFamilyIDs/);

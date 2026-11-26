@@ -1,5 +1,6 @@
+import { loadEstimationBallots, writePairVote, PUBLIC_PIE_SAMPLE_HOURS, PUBLIC_PIE_MIN_SAMPLES } from './estimation-ballots.js';
 import { comparisonOptions, groupComparisonModels, comparisonGroupIsComparable } from './model-comparison.js';
-import { selectableBenchmarkConditionSQL, conditionCoverage } from './benchmark-condition-visibility.js';
+import { selectableBenchmarkConditionSQL, conditionCoverage, catalogueCandidateSQL, MIN_COMPARABLE_MODELS } from './benchmark-condition-visibility.js';
 import { fieldKey, fieldDisplayValue, normalizeScoreFields } from './public/js/shared/score-fields.js';
 import { loadScoreFieldCatalog } from './score-field-service.js';
 import crypto from 'node:crypto';
@@ -12,7 +13,7 @@ import { currentScoreSQL } from './score-aggregation.js';
 import { scoreEvidenceHash } from './score-evidence.js';
 import { FALLBACK_RULE_MODE, familyKey, resolvedFamilyConditionIDs, resolveFallbackChain } from './public/js/shared/benchmark-families.js';
 import {
-    compareEstimationVotePairs, estimationVotePairKey, normalizeEstimationVotes, normalizePersistedEstimationVotes
+    estimationVotePairKey, normalizeEstimationVotes
 } from './public/js/shared/estimation-votes.js';
 import { normalizeAvailableInferenceVersion,
     AVAILABLE_INFERENCE_VERSION } from './public/js/shared/available-score.js';
@@ -35,9 +36,8 @@ export const PIE_TOTAL_BASIS_POINTS = 10000;
 export const PIE_MIN_ITEM_BASIS_POINTS = 100;
 export const MAX_PIE_ITEMS = PIE_TOTAL_BASIS_POINTS / PIE_MIN_ITEM_BASIS_POINTS;
 export { FALLBACK_RULE_MODE };
-export const MIN_COMPARABLE_MODELS = 3;
-export const PUBLIC_PIE_SAMPLE_HOURS = 72;
-export const PUBLIC_PIE_MIN_SAMPLES = 10;
+export { MIN_COMPARABLE_MODELS };
+export { PUBLIC_PIE_SAMPLE_HOURS, PUBLIC_PIE_MIN_SAMPLES };
 export const RANKING_READ_TIMEOUT_MS = 45000;
 
 function requestError(status, error, details = {}) {
@@ -325,14 +325,7 @@ export async function loadBenchmarkConditions(connection, { includeConditionIDs 
             LEFT JOIN model_coverage candidate_coverage
                 ON candidate_coverage.benchmark_condition_ID = candidate_conditions.ID
             WHERE ${selectableBenchmarkConditionSQL('candidate_conditions')}
-              AND (
-                  candidate_coverage.scored_model_count >= ?
-                  OR EXISTS (
-                      SELECT 1 FROM personal_pie_weights
-                      WHERE personal_pie_weights.benchmark_condition_ID = candidate_conditions.ID
-                  )
-                  ${previewClause}
-              )
+              AND ${catalogueCandidateSQL('candidate_coverage.scored_model_count', previewClause)}
         )
         SELECT benchmark_conditions.ID AS condition_ID,
                benchmark_conditions.benchmark_ID,
@@ -467,53 +460,21 @@ async function loadMatchingContexts(connection, context) {
     })).filter(candidate => contextMatchesSelection(candidate.contextValues, context));
 }
 
-function readStoredEstimationVotes(value, pieID) {
-    if (value == null) return [];
-    try {
-        return normalizePersistedEstimationVotes(typeof value === 'string' ? JSON.parse(value) : value);
-    } catch {
-        throw requestError(409, 'stored_estimation_votes_invalid', { pieID });
-    }
-}
-
-function scopeEstimationVotes(votes, entries, conditionsByID, { strict = false, lockedConditionIDs } = {}) {
-    if (!votes.length) return votes;
-    const weightedBenchmarks = new Set();
-    for (const entry of entries) {
-        const condition = entry.conditionID > 0 ? conditionsByID.get(entry.conditionID) : null;
-        if (condition && !condition.excludedFromRanking) weightedBenchmarks.add(condition.benchmarkID);
-    }
-    // A ballot stays with its benchmark after a switch to a different version.
+function eligibleBallots(votes, catalogue, externalPairs, strict) {
+    const nominated = new Set(externalPairs.map(p => estimationVotePairKey(p.targetConditionID, p.sourceConditionID)));
     return votes.filter(({ targetConditionID, sourceConditionID }) => {
-        const target = conditionsByID.get(targetConditionID);
-        const source = conditionsByID.get(sourceConditionID);
-        const endpointsLocked = lockedConditionIDs === undefined
-            || (lockedConditionIDs.has(targetConditionID) && lockedConditionIDs.has(sourceConditionID));
-        if (target && source && !target.excludedFromRanking && !source.excludedFromRanking
-            && target.benchmarkID === source.benchmarkID && weightedBenchmarks.has(target.benchmarkID) && endpointsLocked) return true;
-        if (strict) throw requestError(400, 'estimation_vote_condition_unavailable', { targetConditionID, sourceConditionID });
+        const a = catalogue.get(targetConditionID), b = catalogue.get(sourceConditionID);
+        if (a && b && !a.excludedFromRanking && !b.excludedFromRanking && (a.benchmarkID === b.benchmarkID
+            || nominated.has(estimationVotePairKey(targetConditionID, sourceConditionID)))) return true;
+        // A saved guest preview may refer to an external nomination whose last supporter has withdrawn.
+        if (strict && (!a || !b || a.excludedFromRanking || b.excludedFromRanking)) throw requestError(400, 'estimation_vote_condition_unavailable', { targetConditionID, sourceConditionID });
         return false;
     });
 }
 
-function aggregateEstimationVotes(pies, conditionsByID) {
-    const counts = new Map();
-    for (const [pieID, pie] of pies) {
-        const votes = scopeEstimationVotes(readStoredEstimationVotes(pie.estimationVotes, pieID), pie.entries, conditionsByID);
-        for (const { targetConditionID, sourceConditionID, vote } of votes) {
-            const key = estimationVotePairKey(targetConditionID, sourceConditionID);
-            const tally = counts.get(key) ?? { targetConditionID, sourceConditionID, supportCount: 0, opposeCount: 0 };
-            if (vote === 'support') tally.supportCount++;
-            else tally.opposeCount++;
-            counts.set(key, tally);
-        }
-    }
-    return [...counts.values()].sort(compareEstimationVotePairs);
-}
-
 export async function loadPublicPie(connection, context, conditionsByID) {
     const emptyPie = (contextIDs = []) => ({ entries: [], familyComposition: [], communityComposition: [],
-        versionComposition: communityVersionComposition([], conditionsByID.values()), estimationVotes: [],
+        versionComposition: communityVersionComposition([], conditionsByID.values()),
         participantCount: 0, isFallback: false, scoringEntries: [], contextIDs });
     if (context.isPrivate) return emptyPie();
     const matchingContexts = await loadMatchingContexts(connection, context);
@@ -522,7 +483,6 @@ export async function loadPublicPie(connection, context, conditionsByID) {
     const [rows] = await connection.execute(`
         SELECT personal_pies.ID AS pie_ID, personal_pies.context_ID,
                personal_pies.updated_at >= NOW() - INTERVAL ${PUBLIC_PIE_SAMPLE_HOURS} HOUR AS is_recent,
-               personal_pies.estimation_votes,
                personal_pie_weights.benchmark_condition_ID,
                personal_pie_weights.follow_community_version,
                personal_pie_weights.weight_basis_points
@@ -549,7 +509,6 @@ export async function loadPublicPie(connection, context, conditionsByID) {
             pies.set(pieID, {
                 contextID: Number(row.context_ID),
                 isRecent: recent === 1,
-                estimationVotes: row.estimation_votes,
                 entries: [],
                 conditionIDs: new Set(),
                 total: 0
@@ -644,7 +603,6 @@ export async function loadPublicPie(connection, context, conditionsByID) {
         familyComposition: [],
         communityComposition: [],
         versionComposition,
-        estimationVotes: aggregateEstimationVotes(selectedPies, conditionsByID),
         entries: normalizeWeights(Array.from(aggregateWeights, ([conditionID, rawWeight]) => ({
             conditionID,
             rawWeight
@@ -661,7 +619,7 @@ export async function loadPersonalPie(connection, contextID, userID) {
         return null;
     }
     const [pies] = await connection.execute(`
-        SELECT ID, revision, updated_at, estimation_votes
+        SELECT ID, revision, updated_at
         FROM personal_pies
         WHERE user_ID = ? AND context_ID = ?
         LIMIT 1`, [userID, contextID]);
@@ -706,8 +664,7 @@ export async function loadPersonalPie(connection, contextID, userID) {
         ID: Number(pie.ID),
         revision: Number(pie.revision),
         updatedAt: pie.updated_at,
-        entries,
-        estimationVotes: readStoredEstimationVotes(pie.estimation_votes, Number(pie.ID))
+        entries
     };
 }
 
@@ -981,7 +938,7 @@ function eligibleEstimationSources(entry, excludedConditionIDs) {
         : sources.filter(ID => !excludedConditionIDs.has(ID)).sort((left, right) => left - right);
 }
 
-export function scoreModels(models, weightedEntries, totalBasisPoints, { fallbackRules = [], familyComposition = [], fallbackScope = 'personal', scoreMode = 'range', availableInferenceVersion = AVAILABLE_INFERENCE_VERSION, estimationAlgorithm = DEFAULT_ESTIMATION_ALGORITHM, fallbackCalibration = null, comparisonKeys = [], comparisonScoreIndexes = null, deferMetadata = false, excludedConditionIDs = new Set() } = {}) {
+export function scoreModels(models, weightedEntries, totalBasisPoints, { fallbackRules = [], familyComposition = [], fallbackScope = 'personal', scoreMode = 'range', availableInferenceVersion = AVAILABLE_INFERENCE_VERSION, estimationAlgorithm = DEFAULT_ESTIMATION_ALGORITHM, fallbackCalibration = null, validateExternal = fallbackScope === 'public', comparisonKeys = [], comparisonScoreIndexes = null, deferMetadata = false, excludedConditionIDs = new Set() } = {}) {
     currentInferenceVersion(availableInferenceVersion);
     currentEstimationAlgorithm(estimationAlgorithm);
     if (!['range', 'available'].includes(scoreMode)) {
@@ -1045,10 +1002,10 @@ export function scoreModels(models, weightedEntries, totalBasisPoints, { fallbac
             const entryFraction = entry.weightBasisPoints / totalBasisPoints;
             const automatic = sources !== null;
             let measuredScore = null;
-            const predictVersions = ids => {
+            const predictVersions = (ids, policy = linkPolicy, validate = false) => {
                 if (!ids.length) return null;
                 calibration ??= createFallbackCalibration(models);
-                return calibration.predictVersions(model, entry.conditionID, ids, comparisonScores, comparisonKeys, linkPolicy);
+                return calibration.predictVersions(model, entry.conditionID, ids, comparisonScores, comparisonKeys, policy, validate);
             };
             const predictChainSource = sourceID => {
                 const prediction = predictVersions([sourceID]);
@@ -1068,7 +1025,9 @@ export function scoreModels(models, weightedEntries, totalBasisPoints, { fallbac
                     continue;
                 }
                 upper += entryFraction * fraction * 100;
-                const prediction = automatic && scoreMode === 'available' ? predictVersions(sources) : resolved.prediction;
+                const prediction = automatic && scoreMode === 'available'
+                    ? predictVersions(sources) ?? predictVersions((entry.externalSourceIDs ?? []).filter(id => !excludedConditionIDs.has(id)), null, validateExternal)
+                    : resolved.prediction;
                 if (prediction) {
                     if (automatic) {
                         for (const source of prediction.sources) resultKeys.add(resultKey(source.sourceConditionID));
@@ -1142,7 +1101,7 @@ export function scoreComparison(models, entries, total, rules, options, prepared
     const excludedConditionIDs = rules.excludedConditionIDs ?? new Set();
     const matchedEntries = options.mode === 'matched' && scoreMode === 'available'
         ? entries.concat(Array.from(new Set(entries.filter(entry => entry.weightBasisPoints > 0)
-            .flatMap(entry => eligibleEstimationSources(entry, excludedConditionIDs) ?? [])),
+            .flatMap(entry => [...eligibleEstimationSources(entry, excludedConditionIDs) ?? [], ...entry.externalSourceIDs ?? []])),
         conditionID => ({ conditionID, weightBasisPoints: 1 })))
         : entries;
     const grouped = preparedGroups ?? groupComparisonModels(models, options, matchedEntries);
@@ -1154,7 +1113,7 @@ export function scoreComparison(models, entries, total, rules, options, prepared
     const scores = scoreModels(grouped, entries, total, { ...(options.mode === 'matched' ? { scoreMode } : rules), fallbackCalibration,
         availableInferenceVersion, estimationAlgorithm: rules.estimationAlgorithm,
         excludedConditionIDs,
-        comparisonKeys: options.keys, comparisonScoreIndexes: rules.comparisonScoreIndexes, deferMetadata: rules.jsonMemberMetadata === true });
+        validateExternal: rules.validateExternal ?? (rules.fallbackScope === 'public'), comparisonKeys: options.keys, comparisonScoreIndexes: rules.comparisonScoreIndexes, deferMetadata: rules.jsonMemberMetadata === true });
     return scores.map(score => {
         const group = groupsByID.get(score.ID);
         const comparisonMetadata = () => {
@@ -1539,14 +1498,15 @@ async function buildRankingWorkspace(db, {
         : normalizeWeights(eligiblePersonalEntries.map(entry => ({ conditionID: entry.conditionID, rawWeight: entry.weightBasisPoints })))
             .map(entry => ({ ...entry, ...(eligiblePersonalEntries.find(item => item.conditionID === entry.conditionID)?.followCommunityVersion
                 ? { followCommunityVersion: true } : {}) }));
-    const personalEstimationVotes = scopeEstimationVotes(previewPersonalPie?.estimationVotes ?? storedPersonalPie?.estimationVotes ?? [],
-        personalSourceEntries, conditionsByID, { strict: previewPersonalPie?.estimationVotes !== undefined });
+    const ballots = await loadEstimationBallots(db, userID, conditionsByID);
+    const personalEstimationVotes = previewPersonalPie?.estimationVotes === undefined ? ballots.personal
+        : eligibleBallots(previewPersonalPie.estimationVotes, conditionsByID, ballots.externalPairs, true);
     const personalEntries = decoratePieEntries(personalSourceEntries, conditionsByID);
     const publicEntries = decoratePieEntries(publicPie.entries, conditionsByID);
-    const planEstimates = createVersionEstimationPlanner(conditions);
+    const planEstimates = createVersionEstimationPlanner(conditions, ballots.externalPairs);
     const personalVersionEntries = planEstimates(expandCommunityVersions(personalSourceEntries, versionComposition),
-        publicPie.estimationVotes, personalEstimationVotes);
-    const publicVersionEntries = planEstimates(publicPie.scoringEntries, publicPie.estimationVotes);
+        ballots.community, personalEstimationVotes);
+    const publicVersionEntries = planEstimates(publicPie.scoringEntries, ballots.community);
     const publicDisplayWeights = publicReferenceWeights({ participantCount: publicPie.participantCount, scoringEntries: publicVersionEntries });
     const expandedFor = async (mode, entries) => {
         if (!entries.some(entry => entry.conditionID < 0)) return null;
@@ -1567,9 +1527,9 @@ async function buildRankingWorkspace(db, {
                 conditionID: entry.conditionID, rawWeight: entry.weightBasisPoints
             }))).map(entry => ({ ...entry, ...(eligible.find(item => item.conditionID === entry.conditionID)?.followCommunityVersion
                 ? { followCommunityVersion: true } : {}) }));
-            const personalVotes = scopeEstimationVotes(personal?.estimationVotes ?? [], selected, conditionsByID);
+            const personalVotes = mode === 'personal' ? personalEstimationVotes : [];
             return { contextID: targetID, name: target.name,
-                entries: planEstimates(expandCommunityVersions(selected, publicTarget.versionComposition), publicTarget.estimationVotes, personalVotes) };
+                entries: planEstimates(expandCommunityVersions(selected, publicTarget.versionComposition), ballots.community, personalVotes) };
         } });
     };
     const personalExpanded = await expandedFor('personal', personalVersionEntries);
@@ -1582,7 +1542,7 @@ async function buildRankingWorkspace(db, {
     const benchmarkList = buildBenchmarkList(evaluationConditions, publicEntries, personalEntries, [], [], [], globalWeights);
     const fields = await loadScoreFieldCatalog(db);
     const scoringConditionIDs = [...new Set([...personalScoringEntries, ...publicScoringEntries]
-        .flatMap(entry => [entry.conditionID, ...entry.estimationSourceIDs]))]
+        .flatMap(entry => [entry.conditionID, ...entry.estimationSourceIDs, ...entry.externalSourceIDs ?? []]))]
         .filter(ID => ID > 0 && !conditionsByID.get(ID)?.excludedFromRanking).sort((a, b) => a - b);
     const excludedConditionIDs = new Set([...conditionsByID].filter(([, condition]) => condition.excludedFromRanking).map(([ID]) => ID));
     const definitionsFor = IDs => IDs.map(ID => {
@@ -1615,7 +1575,7 @@ async function buildRankingWorkspace(db, {
     const scoringOptions = { scoreMode, availableInferenceVersion, estimationAlgorithm, fallbackCalibration,
         comparisonScoreIndexes, jsonMemberMetadata, excludedConditionIDs };
     const calculate = async (scope, entries, total) => {
-        const build = () => scoreComparison(models, entries, total, scoringOptions, compareOptions, preparedGroups);
+        const build = () => scoreComparison(models, entries, total, { ...scoringOptions, validateExternal: scope === 'public' }, compareOptions, preparedGroups);
         if (!jsonMemberMetadata || !preparedGroups) return build();
         // Source eligibility is carried on each entry, so a ballot edit changes its calculation key.
         const key = JSON.stringify([normalizeUserID(userID), context.categoryID, context.contextValues,
@@ -1640,7 +1600,8 @@ async function buildRankingWorkspace(db, {
         userID: normalizeUserID(userID),
         context,
         versionComposition,
-        communityEstimationVotes: publicPie.estimationVotes,
+        communityEstimationVotes: ballots.community,
+        externalEstimationPairs: ballots.externalPairs,
         personalPie: {
             coverageIndex: aggregateCoverageIndex(personalRanking),
             revision: storedPersonalPie?.revision ?? 0,
@@ -1733,14 +1694,10 @@ export function validateBenchmarkVersionChoices(entries, conditionsByID, status 
     }
 }
 
-function validateEstimationVotes(estimationVotes, entries) {
+function validateEstimationVotes(estimationVotes) {
     let votes;
     try { votes = normalizeEstimationVotes(estimationVotes); }
     catch { throw requestError(400, 'invalid_estimation_votes'); }
-    if (votes.length && !entries.some(entry => entry.conditionID > 0)) {
-        const { targetConditionID, sourceConditionID } = votes[0];
-        throw requestError(400, 'estimation_vote_condition_unavailable', { targetConditionID, sourceConditionID });
-    }
     return votes;
 }
 
@@ -1752,7 +1709,7 @@ export function normalizePreviewPersonalPie(value) {
     }
     const entries = validatePieEntries(value.entries);
     return { entries, ...(Object.hasOwn(value, 'estimationVotes')
-        ? { estimationVotes: validateEstimationVotes(value.estimationVotes, entries) } : {}) };
+        ? { estimationVotes: validateEstimationVotes(value.estimationVotes) } : {}) };
 }
 
 export async function savePersonalPie(db, options) {
@@ -1790,12 +1747,12 @@ async function savePersonalPieAttempt(db, {
         throw requestError(400, 'invalid_personal_pie_request');
     }
     const normalizedEntries = validatePieEntries(entries);
-    const normalizedEstimationVotes = estimationVotes === undefined ? undefined : validateEstimationVotes(estimationVotes, normalizedEntries);
+    const normalizedEstimationVotes = estimationVotes === undefined ? undefined : validateEstimationVotes(estimationVotes);
     const connection = await db.getConnection();
     let resolvedCategoryID;
     let resolvedContextValues;
     let savedRevision = 0;
-    let savedEstimationVotes = [];
+    const savedEstimationVotes = normalizedEstimationVotes ?? [];
     try {
         if (comparison !== null) {
             const metadata = await loadModelMetadata(connection);
@@ -1846,7 +1803,7 @@ async function savePersonalPieAttempt(db, {
             await validateTopicReferences(connection, { ...context, isPrivate: category.isPrivate }, normalizedEntries, normalizedUserID);
 
             const [pies] = await connection.execute(`
-                SELECT ID, revision, estimation_votes
+                SELECT ID, revision
                 FROM personal_pies
                 WHERE user_ID = ? AND context_ID = ?
                 FOR UPDATE`, [normalizedUserID, context.ID]);
@@ -1866,10 +1823,7 @@ async function savePersonalPieAttempt(db, {
                 const benchmarkEntries = normalizedEntries.filter(entry => entry.conditionID > 0);
                 const referenceEntries = normalizedEntries.filter(entry => entry.conditionID < 0);
                 const conditionIDs = benchmarkEntries.map(entry => entry.conditionID);
-                const requestedVotes = normalizedEstimationVotes ?? readStoredEstimationVotes(pies[0]?.estimation_votes, Number(pies[0]?.ID));
-                const voteConditionIDs = requestedVotes.flatMap(({ targetConditionID, sourceConditionID }) =>
-                    [targetConditionID, sourceConditionID]);
-                const requestedConditionIDs = [...new Set([...conditionIDs, ...voteConditionIDs])].sort((left, right) => left - right);
+                const requestedConditionIDs = [...conditionIDs].sort((a, b) => a - b);
                 const [conditions] = requestedConditionIDs.length ? await connection.execute(`
                     SELECT ID
                     FROM benchmark_conditions
@@ -1891,19 +1845,14 @@ async function savePersonalPieAttempt(db, {
                         minimumModelCount: MIN_COMPARABLE_MODELS
                     });
                 }
-                savedEstimationVotes = scopeEstimationVotes(requestedVotes, normalizedEntries, selectable, {
-                    strict: normalizedEstimationVotes !== undefined, lockedConditionIDs
-                });
-                const encodedEstimationVotes = savedEstimationVotes.length ? JSON.stringify(savedEstimationVotes) : null;
-
                 let pieID;
                 if (pies.length === 0) {
                     if (revision !== 0) {
                         throw requestError(409, 'pie_revision_conflict', { currentRevision: 0 });
                     }
                     const [result] = await connection.execute(`
-                        INSERT INTO personal_pies (user_ID, context_ID, revision, estimation_votes)
-                        VALUES (?, ?, 1, ?)`, [normalizedUserID, context.ID, encodedEstimationVotes]);
+                        INSERT INTO personal_pies (user_ID, context_ID, revision)
+                        VALUES (?, ?, 1)`, [normalizedUserID, context.ID]);
                     pieID = Number(result.insertId);
                     savedRevision = 1;
                 } else {
@@ -1915,8 +1864,8 @@ async function savePersonalPieAttempt(db, {
                     savedRevision = currentRevision + 1;
                     await connection.execute(`
                         UPDATE personal_pies
-                        SET revision = revision + 1, updated_at = CURRENT_TIMESTAMP, estimation_votes = ?
-                        WHERE ID = ?`, [encodedEstimationVotes, pieID]);
+                        SET revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+                        WHERE ID = ?`, [pieID]);
                     await connection.execute('DELETE FROM personal_pie_weights WHERE pie_ID = ?', [pieID]);
                     await connection.execute('DELETE FROM personal_pie_topic_weights WHERE pie_ID = ?', [pieID]);
                 }
@@ -1934,6 +1883,9 @@ async function savePersonalPieAttempt(db, {
                 referenceEntries.flatMap(entry => [pieID, -entry.conditionID, entry.weightBasisPoints]));
             }
         }
+        // Explicitly adopting a guest draft imports its votes one pair at a time.
+        // Ordinary weight saves carry no ballot and never clear other global votes.
+        for (const ballot of savedEstimationVotes) await writePairVote(connection, normalizedUserID, ballot);
         const receipt = { saved: true, requestKey: intent.key, userID: normalizedUserID,
             categoryID: resolvedCategoryID, contextValues: resolvedContextValues,
             personalPie: { revision: savedRevision, entries: normalizedEntries, fallbackRules: [], estimationVotes: savedEstimationVotes } };

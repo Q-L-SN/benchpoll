@@ -55,11 +55,11 @@ test('the live score trace includes the full unresolved weight and leaves ranges
 
 test('coverage has no preference API and all supported stale request versions upgrade to the current version', () => {
     assert.deepEqual(Object.keys(coveragePenalty).sort(), ['RATIONAL_COVERAGE_A', 'coverageMultiplier']);
-    assert.equal(AVAILABLE_INFERENCE_VERSION, 12);
-    assert.equal(createWorkspaceState().availableInferenceVersion, 12);
-    assert.equal(normalizeAvailableInferenceVersion(), 12);
-    for (const version of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]) assert.equal(normalizeAvailableInferenceVersion(version), 12);
-    for (const version of [0, 13, '5', null, NaN]) assert.throws(() => normalizeAvailableInferenceVersion(version));
+    assert.equal(AVAILABLE_INFERENCE_VERSION, 13);
+    assert.equal(createWorkspaceState().availableInferenceVersion, 13);
+    assert.equal(normalizeAvailableInferenceVersion(), 13);
+    for (const version of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]) assert.equal(normalizeAvailableInferenceVersion(version), 13);
+    for (const version of [0, 14, '5', null, NaN]) assert.throws(() => normalizeAvailableInferenceVersion(version));
 });
 
 test('the fresh inference API cannot opt back into the retired formula', () => {
@@ -108,5 +108,5 @@ test('fresh and stale Home requests share the current cache and pagination, incl
     assert.equal(fresh.models[0].lower, AVAILABLE_INFERENCE_VERSION);
     const page = await service.preview(null, { categoryID: 54, availableInferenceVersion: 4, snapshotID: fresh.pagination.snapshotID });
     assert.equal(page.pagination.snapshotID, fresh.pagination.snapshotID);
-    for (const value of [0, 13, '5', null]) assert.throws(() => normalizeTopicPreview({ categoryID: 54, availableInferenceVersion: value }));
+    for (const value of [0, 14, '5', null]) assert.throws(() => normalizeTopicPreview({ categoryID: 54, availableInferenceVersion: value }));
 });

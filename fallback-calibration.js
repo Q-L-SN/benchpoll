@@ -70,7 +70,7 @@ export function createFallbackCalibration(configurations) {
             for (const other of runs().values()) {
                 if (!Number.isFinite(readScore(other, target))) continue;
                 const key = setting(other);
-                if (!bySetting.has(key)) bySetting.set(key, { peers: new Map(), counts: new Map(), fits: new Map(), trees: new WeakMap() });
+                if (!bySetting.has(key)) bySetting.set(key, { peers: new Map(), counts: new Map(), fits: new Map(), validation: new Map(), trees: new WeakMap() });
                 // loadModels aggregates repeated measurements within each model and setting.
                 bySetting.get(key).peers.set(modelID(other), other);
             }
@@ -107,7 +107,36 @@ export function createFallbackCalibration(configurations) {
         return predictJointVersion(fit, scores);
     }
 
-    function estimateRun(run, target, ids) {
+    // Validate each external direction in the same run setting. The subject and
+    // every held-out model are absent from both its fit and its median baseline.
+    function validatedSource(group, sourceID, run, target) {
+        if (!group) return false;
+        const subject = modelID(run), self = group.peers.get(subject);
+        const omit = self && Number.isFinite(readScore(self, sourceID)) ? subject : null;
+        const key = JSON.stringify([sourceID, omit]);
+        if (group.validation.has(key)) return group.validation.get(key);
+        const pairs = [...group.peers].filter(([id, peer]) => id !== omit && Number.isFinite(readScore(peer, sourceID)))
+            .sort(([a], [b]) => a - b).map(([, peer]) => [readScore(peer, target), readScore(peer, sourceID)]);
+        const folds = Math.min(5, pairs.length);
+        let mae = 0, squared = 0, baseMAE = 0, baseSquared = 0;
+        for (let fold = 0; folds >= 2 && fold < folds; fold++) {
+            const training = pairs.filter((_, i) => i % folds !== fold);
+            const ordered = training.map(row => row[0]).sort((a,b) => a-b), mid = Math.floor(ordered.length / 2);
+            const median = ordered.length % 2 ? ordered[mid] : ordered[mid-1] / 2 + ordered[mid] / 2;
+            const fit = fitJointVersionModel(training);
+            for (let i = fold; i < pairs.length; i += folds) {
+                const [measured, source] = pairs[i], predicted = predictJointVersion(fit, [source]);
+                const error = predicted === null ? Infinity : Math.abs(predicted - measured);
+                const baseline = Math.abs(median - measured);
+                mae += error; squared += error * error; baseMAE += baseline; baseSquared += baseline * baseline;
+            }
+        }
+        const passes = folds >= 2 && mae < baseMAE && squared < baseSquared;
+        group.validation.set(key, passes);
+        return passes;
+    }
+
+    function estimateRun(run, target, ids, validate = false) {
         const group = referenceGroup(target, run);
         if (!group) return null;
         const self = group.peers.get(modelID(run));
@@ -117,7 +146,7 @@ export function createFallbackCalibration(configurations) {
             if (score == null) continue;
             if (!Number.isFinite(score)) throw new TypeError('Invalid estimation source score');
             const count = pairCount(group, id, self);
-            if (count) sources.push({ sourceConditionID: id, sourceScore: score, referenceCount: count });
+            if (count && (!validate || validatedSource(group, id, run, target))) sources.push({ sourceConditionID: id, sourceScore: score, referenceCount: count });
         }
         if (!sources.length) return null;
         const normalizedScore = predictFromPairs(run, target, group, sources.map(s => s.sourceConditionID), sources.map(s => s.sourceScore));
@@ -165,7 +194,7 @@ export function createFallbackCalibration(configurations) {
                 referenceCount: route.strength, ...(route.distance > 1 ? { calibrationPaths: [route.steps] } : {}) }] };
     }
 
-    function estimateMatched(target, ids, comparisons, groupKeys) {
+    function estimateMatched(target, ids, comparisons, groupKeys, validate) {
         const sources = [], byMember = new Map();
         for (const id of ids) {
             const comparison = comparisons.get(id);
@@ -175,6 +204,7 @@ export function createFallbackCalibration(configurations) {
                 const run = runs().get(member);
                 const group = run && referenceGroup(target, run);
                 count = Math.min(count, pairCount(group, id, group?.peers.get(modelID(run))));
+                if (validate && !validatedSource(group, id, run, target)) count = 0;
                 if (!count) break;
             }
             // Each control cell represented by this projected measurement must have paired evidence.
@@ -257,14 +287,14 @@ export function createFallbackCalibration(configurations) {
 
     return {
         predictVersions(model, target, sourceIDs, comparisons = new Map(), groupKeys = [],
-            policy = sourceIDs.length > 1 ? { versions: sourceIDs, blocked: new Set() } : null) {
+            policy = sourceIDs.length > 1 ? { versions: sourceIDs, blocked: new Set() } : null, validate = false) {
             const ids = sourceIDs.filter(id => id !== target && model.results.has(String(id)));
             if (!ids.length) return null;
             if (model.comparisonMode === 'matched') {
-                return estimateMatched(target, ids, comparisons, groupKeys)
+                return estimateMatched(target, ids, comparisons, groupKeys, validate)
                     ?? (policy && estimateIndirectMatched(target, ids, comparisons, policy));
             }
-            const direct = run => estimateRun(run, target, ids);
+            const direct = run => estimateRun(run, target, ids, validate);
             const indirect = run => estimateIndirect(run, target, ids, policy);
             if (model.comparisonMode === 'best') return bestRunPrediction(model, direct) ?? (policy && bestRunPrediction(model, indirect));
             return direct(model) ?? (policy && indirect(model));

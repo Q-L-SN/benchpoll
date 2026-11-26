@@ -49,7 +49,7 @@ for (const [engine, width] of engines) {
         const option = page.getByRole('option', { name: 'Version-based estimation', exact: true });
         assert.equal(await method.isVisible(), true);
         assert.equal(await page.locator('#estimation-algorithm').inputValue(), 'current');
-        assert.match(await page.getByRole('button', { name: 'About the estimation method' }).getAttribute('data-help-text'), /eligible measured versions of the same benchmark together/);
+        assert.match(await page.getByRole('button', { name: 'About the estimation method' }).getAttribute('data-help-text'), /Nominated external versions can supply an estimate/);
         assert.equal(await method.locator('.bp-ui-select-value').evaluate(node => node.scrollWidth <= node.clientWidth), true);
         await method.click();
         assert.equal(await page.getByRole('option').count(), 1);

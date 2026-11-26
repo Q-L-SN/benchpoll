@@ -15,18 +15,19 @@ const storage = () => {
     return { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value), removeItem: key => values.delete(key) };
 };
 
-test('personal reads return saved source opinions independently of an explicit scoring version', async () => {
-    for (const estimationVotes of [[{ targetConditionID: 1, sourceConditionID: 2, vote: 'oppose' }], []]) {
+test('personal weight reads preserve scoring preferences and ignore legacy ballot JSON', async () => {
+    for (const followCommunity of [0, 1]) {
         const db = { async execute(sql) {
+            assert.doesNotMatch(sql, /estimation_votes|estimation_pair_votes/);
             if (sql.includes('FROM personal_pies')) return [[{ ID: 1, revision: 2,
-                estimation_votes: estimationVotes.length ? JSON.stringify(estimationVotes) : null }]];
+                estimation_votes: 'malformed legacy data' }]];
             if (sql.includes('FROM personal_pie_weights')) return [[{ benchmark_condition_ID: 1,
-                follow_community_version: 1, weight_basis_points: 10000 }]];
+                follow_community_version: followCommunity, weight_basis_points: 10000 }]];
             throw new Error(sql);
         } };
         const pie = await loadPersonalPie(db, 1, '7');
-        assert.deepEqual(pie.estimationVotes, estimationVotes);
-        assert.equal(pie.entries[0].followCommunityVersion, true);
+        assert.equal(Object.hasOwn(pie, 'estimationVotes'), false);
+        assert.deepEqual(pie.entries, entries.map(entry => followCommunity ? { ...entry, followCommunityVersion: true } : entry));
     }
 });
 

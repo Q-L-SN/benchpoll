@@ -24,7 +24,7 @@ function block(start, end) {
 const code = [
     block('function snapshotPersonalPie()', 'function resetPieVisualState()'),
     block('async function flushPendingPersonalPieSave()', 'function adjustSelectedWeight('),
-    block('async function previewGuestPersonalPie()', 'async function persistPersonalPie('),
+    block('async function previewGuestPersonalPie(', 'async function persistPersonalPie('),
     block('async function applyWorkspaceState(', "personalModeButton.addEventListener("),
     'async function persistPersonalPie() { return previewGuestPersonalPie(); }',
     '({ preview: previewGuestPersonalPie, transition: applyWorkspaceState, flush: flushPendingPersonalPieSave })'

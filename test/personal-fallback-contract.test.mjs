@@ -16,21 +16,23 @@ test('ordered families replace weighted component storage and retain entrance-we
     assert.doesNotMatch(ranking, /personal_pie_score_rule_components/);
 });
 
-test('personal previews accept directed source opinions with an explicit scoring version or community versions', () => {
-    const estimationVotes = [{ targetConditionID: 1, sourceConditionID: 2, vote: 'support' },
-        { targetConditionID: 2, sourceConditionID: 1, vote: 'oppose' }];
-    for (const selection of [{}, { followCommunityVersion: true }]) {
-        const entries = [{ conditionID: 1, weightBasisPoints: 10000, ...selection }];
-        assert.deepEqual(normalizePreviewPersonalPie({ entries, estimationVotes }), { entries, estimationVotes });
+test('personal previews accept ballots with explicit, community, or topic-only weights', () => {
+    const estimationVotes = [{ targetConditionID: 3, sourceConditionID: 2, vote: 'support' }];
+    for (const allocation of [{ conditionID: 1 }, { conditionID: 1, followCommunityVersion: true }, { conditionID: -10 }]) {
+        const entries = [{ ...allocation, weightBasisPoints: 10000 }];
+        assert.deepEqual(normalizePreviewPersonalPie({ entries, estimationVotes }), {
+            entries, estimationVotes: [{ targetConditionID: 2, sourceConditionID: 3, vote: 'support' }]
+        });
         assert.deepEqual(normalizePreviewPersonalPie({ entries, estimationVotes: [] }), { entries, estimationVotes: [] });
     }
 });
 
-test('a personal preview rejects contradictory votes and never treats a topic as a version', () => {
+test('a personal preview rejects a second vote on a reversed pair and rejects topic IDs as endpoints', () => {
     const entries = [{ conditionID: 1, weightBasisPoints: 10000 }];
     const vote = { targetConditionID: 1, sourceConditionID: 2, vote: 'support' };
-    assert.throws(() => normalizePreviewPersonalPie({ entries, estimationVotes: [vote, { ...vote, vote: 'oppose' }] }),
+    assert.throws(() => normalizePreviewPersonalPie({ entries, estimationVotes: [vote,
+        { targetConditionID: 2, sourceConditionID: 1, vote: 'oppose' }] }),
         error => error.body.error === 'invalid_estimation_votes');
-    assert.throws(() => normalizePreviewPersonalPie({ entries: [{ conditionID: -10, weightBasisPoints: 10000 }], estimationVotes: [vote] }),
-        error => error.body.error === 'estimation_vote_condition_unavailable');
+    assert.throws(() => normalizePreviewPersonalPie({ entries, estimationVotes: [{ ...vote, sourceConditionID: -10 }] }),
+        error => error.body.error === 'invalid_estimation_votes');
 });

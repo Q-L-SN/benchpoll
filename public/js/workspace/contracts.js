@@ -417,24 +417,28 @@ function validateFamilyComposition(value, pieEntries, compositionPath) {
     }
 }
 
-function validateWorkspaceEstimationVotes(response, personalEntries, versionComposition) {
+function validateWorkspaceEstimationVotes(response, versionComposition) {
     const personalPath = 'personalPie.estimationVotes';
     let personalVotes;
     try { personalVotes = normalizeEstimationVotes(response.personalPie.estimationVotes); }
-    catch { throw invalidWorkspaceResponse(personalPath, 'must contain unique support or oppose votes for directed version pairs'); }
+    catch { throw invalidWorkspaceResponse(personalPath, 'must contain unique support or oppose votes for version pairs'); }
     const communityVotes = requireWorkspaceArray(response.communityEstimationVotes, 'communityEstimationVotes');
-    if (!personalVotes.length && !communityVotes.length) return;
+    const externalPairs = requireWorkspaceArray(Object.hasOwn(response, 'externalEstimationPairs') ? response.externalEstimationPairs : [], 'externalEstimationPairs');
+    if (!personalVotes.length && !communityVotes.length && !externalPairs.length) return;
     const groupsByCondition = new Map((versionComposition ?? []).flatMap(group =>
         group.versions.map(version => [version.conditionID, group.benchmarkID])));
-    const weightedBenchmarks = new Set(personalEntries.filter(entry => entry.weightBasisPoints > 0)
-        .map(entry => groupsByCondition.get(entry.conditionID)));
-    const eligiblePair = ({ targetConditionID, sourceConditionID }) => targetConditionID !== sourceConditionID
-        && groupsByCondition.has(targetConditionID)
-        && groupsByCondition.get(targetConditionID) === groupsByCondition.get(sourceConditionID);
-    if (personalVotes.some(vote => !eligiblePair(vote)
-        || !weightedBenchmarks.has(groupsByCondition.get(vote.targetConditionID)))) {
-        throw invalidWorkspaceResponse(personalPath, 'must vote on eligible version pairs of personally weighted benchmarks');
+    const known = (a,b) => Number.isSafeInteger(a) && Number.isSafeInteger(b) && a > 0 && b > 0 && a !== b
+        && groupsByCondition.has(a) && groupsByCondition.has(b);
+    const external = new Set();
+    for (const item of externalPairs) {
+        const a = item?.targetConditionID, b = item?.sourceConditionID, key = estimationVotePairKey(a,b);
+        if (!known(a,b) || groupsByCondition.get(a) === groupsByCondition.get(b) || external.has(key))
+            throw invalidWorkspaceResponse('externalEstimationPairs', 'must contain unique nominated pairs from different benchmarks');
+        external.add(key);
     }
+    const eligiblePair = ({ targetConditionID: a, sourceConditionID: b }) => known(a,b)
+        && (groupsByCondition.get(a) === groupsByCondition.get(b) || external.has(estimationVotePairKey(a,b)));
+    if (personalVotes.some(vote => !eligiblePair(vote))) throw invalidWorkspaceResponse(personalPath, 'must contain eligible version pairs');
     const seen = new Set();
     communityVotes.forEach((item, index) => {
         const path = `communityEstimationVotes[${index}]`;
@@ -443,10 +447,14 @@ function validateWorkspaceEstimationVotes(response, personalEntries, versionComp
         if (!pair || seen.has(pair) || Object.keys(counts).length !== 4
             || !Number.isSafeInteger(counts.supportCount) || counts.supportCount < 0
             || !Number.isSafeInteger(counts.opposeCount) || counts.opposeCount < 0) {
-            throw invalidWorkspaceResponse(path, 'must contain unique counts for an eligible directed version pair');
+            throw invalidWorkspaceResponse(path, 'must contain unique counts for an eligible version pair');
         }
+        if (external.has(pair) && !counts.supportCount) throw invalidWorkspaceResponse(path, 'an external pair needs recent support');
         seen.add(pair);
     });
+    for (const key of external) {
+        if (!seen.has(key)) throw invalidWorkspaceResponse('externalEstimationPairs', 'a nomination needs a tally with recent support');
+    }
 }
 
 function validateWorkspacePayload(payload, { resume = null, initialMode = 'public' } = {}) {
@@ -506,8 +514,8 @@ function validateWorkspacePayload(payload, { resume = null, initialMode = 'publi
         requireWeightEntry(entry, `publicPie.entries[${index}]`);
     });
     validateReferenceStatus(publicPie, 'publicPie');
-    if (Object.hasOwn(personalPie, 'estimationVotes') || Object.hasOwn(response, 'communityEstimationVotes')) {
-        validateWorkspaceEstimationVotes(response, personalEntries, versionComposition);
+    if (Object.hasOwn(personalPie, 'estimationVotes') || Object.hasOwn(response, 'communityEstimationVotes') || Object.hasOwn(response, 'externalEstimationPairs')) {
+        validateWorkspaceEstimationVotes(response, versionComposition);
         if (requireWorkspaceArray(personalPie.fallbackRules, 'personalPie.fallbackRules').length
             || requireWorkspaceArray(publicPie.familyComposition, 'publicPie.familyComposition').length) {
             throw invalidWorkspaceResponse('response', 'must have empty legacy fallback fields');

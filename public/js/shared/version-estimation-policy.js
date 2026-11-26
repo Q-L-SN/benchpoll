@@ -1,9 +1,7 @@
 import { excludedFromRanking } from './aa-ranking-policy.js';
 import { estimationVotePairKey } from './estimation-votes.js';
 
-// The catalogue is shared across a ranking read. Ballots belong to the scene that
-// supplied the weight, including when that scene is reached through another topic.
-export function createVersionEstimationPlanner(conditions) {
+export function createVersionEstimationPlanner(conditions, externalPairs = []) {
     const versionsByBenchmark = new Map();
     const siblingsByID = new Map();
     for (const condition of conditions) {
@@ -15,6 +13,15 @@ export function createVersionEstimationPlanner(conditions) {
         siblingsByID.set(condition.conditionID, versions);
     }
     for (const versions of versionsByBenchmark.values()) versions.sort((a, b) => a - b);
+
+    const externalByID = new Map();
+    for (const { targetConditionID: a, sourceConditionID: b } of externalPairs) {
+        if (!siblingsByID.has(a) || !siblingsByID.has(b) || siblingsByID.get(a) === siblingsByID.get(b)) continue;
+        for (const [id, other] of [[a,b], [b,a]]) {
+            if (!externalByID.has(id)) externalByID.set(id, new Set());
+            externalByID.get(id).add(other);
+        }
+    }
 
     return (entries, communityVotes = [], personalVotes = []) => {
         const blocked = new Set(communityVotes.filter(row => row.opposeCount > row.supportCount)
@@ -40,7 +47,8 @@ export function createVersionEstimationPlanner(conditions) {
                 const eligible = new Set(estimationSourceIDs);
                 const blockedEstimationPairs = (blockedByBenchmark.get(versions) ?? [])
                     .filter(pair => eligible.has(pair.source) && eligible.has(pair.target)).map(pair => pair.key);
-                policies.set(conditionID, { estimationSourceIDs, ...(blockedEstimationPairs.length ? { blockedEstimationPairs } : {}) });
+                const externalSourceIDs = [...externalByID.get(conditionID) ?? []].filter(id => !blocked.has(estimationVotePairKey(conditionID, id))).sort((a,b) => a-b);
+                policies.set(conditionID, { estimationSourceIDs, ...(externalSourceIDs.length ? { externalSourceIDs } : {}), ...(blockedEstimationPairs.length ? { blockedEstimationPairs } : {}) });
             }
             return { conditionID, weightBasisPoints, ...policies.get(conditionID) };
         });

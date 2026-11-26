@@ -5,7 +5,8 @@ import { createHash, randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 import express from 'express';
-import { loadPersonalPie, savePersonalPie } from '../ranking-service.js';
+import { savePersonalPie } from '../ranking-service.js';
+import { saveEstimationVote } from '../estimation-ballots.js';
 import { readWriteIdentity } from '../write-idempotency.js';
 import { createPieSaveDatabase as createTransactionalPieSaveDatabase } from '../scripts/personal-pie-save-fixture.mjs';
 import { pieConditionRows } from '../scripts/personal-pie-save-fixture.mjs';
@@ -31,6 +32,7 @@ const siblingConditionRows = pieConditionRows.map(row => row.condition_ID === 2 
     ...row, benchmark_ID: 1, name: pieConditionRows[0].name, condition_key: 'extended', condition_name: 'Extended',
     is_default: 0, is_primary: 0
 } : row);
+const thirdVersion = { ...siblingConditionRows[1], condition_ID: 4, condition_key: 'third', condition_name: 'Third' };
 const estimationVote = (targetConditionID, sourceConditionID, vote) => ({ targetConditionID, sourceConditionID, vote });
 
 function createPieSaveDatabase(options) {
@@ -91,44 +93,35 @@ test('an unavailable graph lock schema fails without claiming a write or changin
     assert.deepEqual(db.events, ['begin', 'rollback', 'release']);
 });
 
-test('an estimation vote survives switching scoring versions, following the community, and reopening the original target', async () => {
-    const thirdVersion = { ...siblingConditionRows[1], condition_ID: 4, condition_key: 'third', condition_name: 'Third' };
-    const db = createPieSaveDatabase({ conditionRows: [...siblingConditionRows, thirdVersion] });
-    const entries = [{ conditionID: 1, weightBasisPoints: 10000 }];
-    const estimationVotes = [estimationVote(1, 2, 'oppose')];
-    const body = request({ entries, estimationVotes });
-    const receipt = await savePersonalPie(db, body);
-    assert.deepEqual(receipt.personalPie.estimationVotes, estimationVotes);
-    assert.deepEqual(await savePersonalPie(db, body), receipt);
+test('scoring changes, community following and deleting the Pie preserve global estimation votes', async () => {
+    const db = createPieSaveDatabase({ conditionRows: [...siblingConditionRows, thirdVersion], requireGraphLock: false });
+    const vote = estimationVote(1, 2, 'oppose');
+    const identity = randomUUID();
+    const ballot = await saveEstimationVote(db, '7', identity, estimationVote(2, 1, 'oppose'));
+    assert.deepEqual(ballot, { saved: true, userID: '7', requestKey: identity, ...vote, nominate: false });
+    assert.deepEqual(await saveEstimationVote(db, '7', identity, vote), ballot);
+    assert.equal(db.stored.pie.revision, 1);
 
-    const switchedEntries = [{ conditionID: 4, weightBasisPoints: 10000 }];
-    const switched = await savePersonalPie(db, request({ expectedRevision: 2, entries: switchedEntries, estimationVotes }));
-    assert.deepEqual(switched.personalPie.estimationVotes, estimationVotes);
-    assert.deepEqual(db.stored.weights, switchedEntries);
-    assert.deepEqual(db.statements.findLast(({ sql }) => sql.includes('FROM benchmark_conditions WHERE ID IN')).params, [1, 2, 4]);
+    for (const [expectedRevision, entries] of [
+        [1, [{ conditionID: 4, weightBasisPoints: 10000 }]],
+        [2, [{ conditionID: 2, weightBasisPoints: 10000, followCommunityVersion: true }]],
+        [3, [{ conditionID: 1, weightBasisPoints: 10000 }]],
+        [4, [{ conditionID: 3, weightBasisPoints: 10000 }]],
+        [5, []]
+    ]) {
+        const receipt = await savePersonalPie(db, request({ expectedRevision, entries }));
+        assert.deepEqual(receipt.personalPie.estimationVotes, []);
+        assert.deepEqual(db.stored.weights, entries);
+        assert.deepEqual([...db.stored.ballots], [['7:1:2', vote]]);
+    }
+    assert.equal(db.stored.pie, null);
 
-    const followingEntries = [{ conditionID: 2, weightBasisPoints: 10000, followCommunityVersion: true }];
-    const following = await savePersonalPie(db, request({ expectedRevision: 3, entries: followingEntries }));
-    assert.deepEqual(following.personalPie.estimationVotes, estimationVotes);
-    assert.deepEqual(db.stored.weights, followingEntries);
-    assert.deepEqual((await loadPersonalPie(db, 10, '7')).estimationVotes, estimationVotes);
-
-    const changedVotes = [estimationVote(1, 2, 'support')];
-    const changed = await savePersonalPie(db, request({ expectedRevision: 4, entries, estimationVotes: changedVotes }));
-    assert.deepEqual(changed.personalPie.estimationVotes, changedVotes);
-    const cleared = await savePersonalPie(db, request({ expectedRevision: 5, entries, estimationVotes: [] }));
-    assert.deepEqual(cleared.personalPie.estimationVotes, []);
-    assert.equal(db.stored.pie.estimation_votes, null);
-});
-
-test('a removed benchmark loses its retained estimation votes on an older client save', async () => {
-    const db = createPieSaveDatabase({ conditionRows: siblingConditionRows });
-    await savePersonalPie(db, request({ entries: [{ conditionID: 1, weightBasisPoints: 10000 }],
-        estimationVotes: [estimationVote(1, 2, 'support')] }));
-    const receipt = await savePersonalPie(db, request({ expectedRevision: 2,
-        entries: [{ conditionID: 3, weightBasisPoints: 10000 }] }));
-    assert.deepEqual(receipt.personalPie.estimationVotes, []);
-    assert.equal(db.stored.pie.estimation_votes, null);
+    const updated = estimationVote(1, 2, 'support');
+    await assert.rejects(saveEstimationVote(db, '7', identity, updated), error('write_identity_reused'));
+    await saveEstimationVote(db, '7', randomUUID(), updated);
+    assert.deepEqual([...db.stored.ballots], [['7:1:2', updated]]);
+    await saveEstimationVote(db, '7', randomUUID(), estimationVote(2, 1, null));
+    assert.equal(db.stored.ballots.size, 0);
 });
 
 for (const failures of [1, Infinity]) test(`deadlock retry is bounded and reuses the same request identity (${failures})`, async () => {
@@ -166,17 +159,21 @@ for (const kind of ['scoring version', 'estimation source', 'estimation target']
     assert.equal(db.stored.receipts.size, 0);
 });
 
-test('estimation vote endpoints must be available versions of the same directly weighted benchmark', async () => {
-    const independentSibling = { ...siblingConditionRows[1], condition_ID: 4, benchmark_ID: 3, name: pieConditionRows[2].name };
-    const db = createPieSaveDatabase({ conditionRows: [...siblingConditionRows, independentSibling] });
-    for (const [targetConditionID, sourceConditionID] of [[1, 3], [3, 2], [999, 2], [1, 999], [3, 4]]) {
-        await assert.rejects(savePersonalPie(db, request({ entries: [{ conditionID: 1, weightBasisPoints: 10000 }],
-            estimationVotes: [estimationVote(targetConditionID, sourceConditionID, 'support')] })), value =>
-            value.status === 400 && value.body?.error === 'estimation_vote_condition_unavailable'
-            && value.body.targetConditionID === targetConditionID && value.body.sourceConditionID === sourceConditionID);
+test('guest import accepts available pairs beyond the weighted benchmark and rejects unavailable versions', async () => {
+    const independentSibling = { ...siblingConditionRows[1], condition_ID: 5, benchmark_ID: 3, name: pieConditionRows[2].name };
+    const db = createPieSaveDatabase({ conditionRows: [...siblingConditionRows, thirdVersion, independentSibling] });
+    const entries = [{ conditionID: 1, weightBasisPoints: 10000 }];
+    const votes = [estimationVote(1, 4, 'support'), estimationVote(3, 5, 'oppose')];
+    for (const missing of [estimationVote(999, 2, 'support'), estimationVote(1, 999, 'oppose')]) {
+        await assert.rejects(savePersonalPie(db, request({ entries, estimationVotes: [votes[0], missing] })),
+            error('estimation_vote_condition_unavailable'));
     }
     assert.equal(db.mutations, 0);
     assert.equal(db.stored.receipts.size, 0);
+    assert.equal(db.stored.ballots.size, 0);
+    const receipt = await savePersonalPie(db, request({ entries, estimationVotes: votes }));
+    assert.deepEqual(receipt.personalPie.estimationVotes, votes);
+    assert.deepEqual([...db.stored.ballots.values()], votes);
 });
 
 test('a personal save rejects assigning weight to two scoring versions of one benchmark', async () => {
@@ -194,10 +191,14 @@ test('the actual save route enforces owner and identity then sends a private JSO
     const db = createPieSaveDatabase({ conditionRows: siblingConditionRows }), app = express(), invalidated = [];
     app.use(express.json());
     app.use((req, _res, next) => { req.session = { userID: req.get('Fixture-User') ?? null }; next(); });
+    const assertDurableSave = () => {
+        assert.ok(db.stored.receipts.size > 0);
+        assert.ok([...db.stored.receipts.values()].every(row => row.response_status === 200), 'Cache invalidation follows a durable save');
+    };
     vm.runInNewContext(source.slice(start, source.indexOf('\n});', start) + 4), {
         API: app, db, savePersonalPie, readWriteIdentity, requireAccountWriteOwner,
-        topicHome: { invalidate(ID) { assert.equal(db.stored.receipts.size, 1, 'Only a durable save invalidates topic previews'); invalidated.push(ID); } },
-        searchPresentation: { invalidate() { assert.equal(db.stored.receipts.size, 1); } },
+        topicHome: { invalidate(ID) { assertDurableSave(); invalidated.push(ID); } },
+        searchPresentation: { invalidate: assertDurableSave },
         requireCurrentTermsForAPI(_req, _res, next) { next(); },
         requireAuthForAPI(req, res, next) { if (!req.session.userID) return res.status(401).json({ error: 'authentication_required' }); next(); }
     });
@@ -206,7 +207,7 @@ test('the actual save route enforces owner and identity then sends a private JSO
     await new Promise(resolve => server.once('listening', resolve));
     t.after(() => new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve())));
     const body = { expectedUserID: '7', categoryID: 1, contextValues: {}, expectedRevision: 1,
-        entries: [{ conditionID: 1, weightBasisPoints: 10000 }], estimationVotes: [estimationVote(1, 2, 'support')] };
+        entries: [{ conditionID: 1, weightBasisPoints: 10000 }] };
     const key = randomUUID();
     const send = (extraHeaders = {}, extraBody = {}) => fetch(`http://127.0.0.1:${server.address().port}/save_personal_pie`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', ...extraHeaders }, body: JSON.stringify({ ...body, ...extraBody })
@@ -225,13 +226,23 @@ test('the actual save route enforces owner and identity then sends a private JSO
     const receipt = await first.json();
     assert.equal(first.status, 200, JSON.stringify(receipt)); assert.equal(first.headers.get('cache-control'), 'private, no-store');
     validatePersonalPieSave(receipt, body, key);
-    assert.deepEqual(receipt.personalPie.estimationVotes, body.estimationVotes);
+    assert.deepEqual(receipt.personalPie.estimationVotes, []);
     assert.equal(db.borrows, 1); assert.equal(db.mutations, 1);
     assert.deepEqual(invalidated, [1]);
     const duplicate = await send(headers); assert.deepEqual(await duplicate.json(), receipt);
     assert.equal(db.borrows, 2); assert.equal(db.mutations, 1);
     assert.deepEqual(invalidated, [1, 1]);
     assert.equal(receipt.modelLeaderboards, undefined);
+
+    const importKey = randomUUID();
+    const guestVotes = [estimationVote(2, 1, 'support')];
+    const importBody = { ...body, expectedRevision: 2, estimationVotes: guestVotes };
+    const guestImport = await send({ ...headers, 'Idempotency-Key': importKey }, importBody);
+    const imported = await guestImport.json();
+    assert.equal(guestImport.status, 200, JSON.stringify(imported));
+    validatePersonalPieSave(imported, importBody, importKey);
+    assert.deepEqual([...db.stored.ballots.values()], [estimationVote(1, 2, 'support')]);
+    assert.deepEqual(invalidated, [1, 1, undefined]);
 });
 
 for (let repetition = 1; repetition <= 2; repetition++) {
@@ -276,14 +287,19 @@ for (let repetition = 1; repetition <= 2; repetition++) {
         await assert.rejects(savePersonalPie(db, { ...body, entries: [{ conditionID: 1, weightBasisPoints: 10000 }] }), error('write_identity_reused'));
         assert.equal(db.mutations, 1);
     });
-    test(`estimation votes commit and replay with canonical pair order (${repetition})`, async () => {
-        const db = createPieSaveDatabase({ conditionRows: siblingConditionRows });
+    test(`guest imports commit and replay canonical pairs without replacing other global ballots (${repetition})`, async () => {
+        const db = createPieSaveDatabase({ conditionRows: [...siblingConditionRows, thirdVersion], requireGraphLock: false });
+        const prior = estimationVote(1, 4, 'support');
+        await saveEstimationVote(db, '7', randomUUID(), prior);
+        await saveEstimationVote(db, '7', randomUUID(), estimationVote(1, 2, 'oppose'));
+        const duplicatePair = [estimationVote(1, 2, 'support'), estimationVote(2, 1, 'oppose')];
         const body = request({ entries: [{ conditionID: 1, weightBasisPoints: 10000 }],
-            estimationVotes: [estimationVote(2, 1, 'support'), estimationVote(1, 2, 'oppose')] });
+            estimationVotes: [estimationVote(4, 2, 'oppose'), estimationVote(2, 1, 'support')] });
+        await assert.rejects(savePersonalPie(db, { ...body, estimationVotes: duplicatePair }), error('invalid_estimation_votes'));
         const result = await savePersonalPie(db, body);
-        const canonical = [...body.estimationVotes].reverse();
+        const canonical = [estimationVote(1, 2, 'support'), estimationVote(2, 4, 'oppose')];
         assert.deepEqual(result.personalPie.estimationVotes, canonical);
-        assert.deepEqual(JSON.parse(db.stored.pie.estimation_votes), canonical);
+        assert.deepEqual(db.stored.ballots, new Map([['7:1:4', prior], ['7:1:2', canonical[0]], ['7:2:4', canonical[1]]]));
         assert.deepEqual(await savePersonalPie(db, { ...body, estimationVotes: canonical }), result);
         assert.equal(db.mutations, 1);
     });
@@ -319,10 +335,11 @@ test('a vote-bearing save receipt must confirm every requested ballot independen
             { targetConditionID: 1, sourceConditionID: 900, vote: 'support' }] };
     const receipt = estimationVotes => ({ saved: true, requestKey: 'key', userID: '7', categoryID: 1, contextValues: {},
         personalPie: { revision: 2, entries: body.entries, fallbackRules: [], estimationVotes } });
-    const sorted = [...body.estimationVotes].reverse();
+    const sorted = [estimationVote(1, 900, 'support'), estimationVote(900, 901, 'oppose')];
     assert.deepEqual(validatePersonalPieSave(receipt(sorted), body, 'key').personalPie.estimationVotes, sorted);
+    assert.deepEqual(validatePersonalPieSave(receipt(body.estimationVotes), body, 'key').personalPie.estimationVotes, body.estimationVotes);
     for (const votes of [undefined, null, [], [...sorted, sorted[0]], [{ ...sorted[0], vote: 'oppose' }, sorted[1]],
-        [{ ...sorted[0], targetConditionID: 900, sourceConditionID: 1 }, sorted[1]]]) {
+        [estimationVote(1, 901, 'support'), sorted[1]]]) {
         assert.throws(() => validatePersonalPieSave(receipt(votes), body, 'key'), error => error.code === 'invalid_personal_pie_receipt');
     }
 });

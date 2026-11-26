@@ -14,12 +14,10 @@ export async function conditionImpact(connection, kind, targetID, conditionID) {
     if (conditions.length !== 1) fail('condition_not_found');
     const [[usage]] = await connection.execute(`SELECT
         (SELECT COUNT(*) FROM benchmark_results WHERE benchmark_condition_ID = ?) AS resultCount,
+        (SELECT COUNT(DISTINCT pie_ID) FROM personal_pie_weights WHERE benchmark_condition_ID = ?) AS pieCount,
         (SELECT COUNT(*) FROM (
-            SELECT pie_ID FROM personal_pie_weights WHERE benchmark_condition_ID = ?
-            UNION SELECT ID AS pie_ID FROM personal_pies
-                WHERE JSON_CONTAINS(estimation_votes, JSON_OBJECT('targetConditionID', CAST(? AS UNSIGNED)))
-                   OR JSON_CONTAINS(estimation_votes, JSON_OBJECT('sourceConditionID', CAST(? AS UNSIGNED)))
-        ) AS linked_pies) AS pieCount`, [conditionID, conditionID, conditionID, conditionID]);
+            SELECT DISTINCT first_ID, second_ID FROM estimation_pair_votes WHERE first_ID=? OR second_ID=?
+        ) AS estimation_pairs) AS estimationPairCount`, Array(4).fill(conditionID));
     if (!usage) fail('benchmark_condition_dependency_check_failed', { ID: conditionID });
-    return { resultCount: Number(usage.resultCount), pieCount: Number(usage.pieCount) };
+    return { resultCount: Number(usage.resultCount), pieCount: Number(usage.pieCount), estimationPairCount: Number(usage.estimationPairCount) };
 }

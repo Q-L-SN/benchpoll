@@ -10,10 +10,11 @@ import { createRankingPager } from '../ranking-pagination.js';
 import { validateRankingPagePayload, validateWorkspacePayload } from '../public/js/workspace/contracts.js';
 
 const allocation = (conditionID, weightBasisPoints = 10000) => ({ conditionID, weightBasisPoints });
-const plan = createVersionEstimationPlanner([
+const catalogue = [
     ...[10, 20, 30, 40, 50].map(conditionID => ({ conditionID, benchmarkID: 1 })),
     { conditionID: 60, benchmarkID: 2 }, { conditionID: 70, benchmarkID: 1, excludedFromRanking: true }
-]);
+];
+const plan = createVersionEstimationPlanner(catalogue);
 const weights = (publicVotes = [], ownVotes = []) => plan([allocation(10)], publicVotes, ownVotes);
 const options = { scoreMode: 'available' };
 const subject = model(1, { 50: 70 });
@@ -53,22 +54,24 @@ test('a measured source traverses four independent scale conversions at its orig
     assert.deepEqual(range.inferredScores, []);
 });
 
-test('source, intermediate, and directional hop votes follow the originating scene through topic expansion', async () => {
+test('an unordered hop vote governs direct and topic-reference scoring in either endpoint order', async () => {
     const oppose = (targetConditionID, sourceConditionID) => ({ targetConditionID, sourceConditionID, opposeCount: 1, supportCount: 0 });
     const veto = oppose(30, 40);
-    for (const votes of [[veto], [oppose(10, 40)], [oppose(10, 50)]]) {
+    for (const votes of [[veto], [oppose(40, 30)], [oppose(10, 40)], [oppose(10, 50)]]) {
         const row = rowFor([subject, ...peers], weights(votes));
         assert.deepEqual([row.lower, row.inferredScores, row.availableInference.unresolvedFraction], [null, [], 1]);
     }
-    assert.equal(rowFor([subject, ...peers], weights([oppose(40, 30)])).lower, 100);
-    const restored = weights([veto], [{ targetConditionID: 30, sourceConditionID: 40, vote: 'support' }]);
-    assert.equal(rowFor([subject, ...peers], restored).lower, 100);
-    const publicEntry = publicReferenceWeights({ participantCount: 2, scoringEntries: weights([veto]) })[0];
-    const expanded = await expandTopicReferences({ contextID: 1, entries: [publicEntry, allocation(-2, 5000)] },
-        { loadTarget: async () => ({ contextID: 2, entries: restored }) });
-    assert.equal(expanded.scoringEntries.length, 2);
-    const scored = rowFor([subject, ...peers], expanded.scoringEntries);
-    assert.deepEqual([scored.lower, scored.inferredScores.length, scored.inferredScores[0].originalWeight], [50, 1, 50]);
+    const onlyReversed = [{ targetConditionID: 40, sourceConditionID: 30, vote: 'support' }];
+    for (const [personalVotes, score] of [[[], null], [onlyReversed, 100]]) {
+        const planned = weights([veto], personalVotes);
+        assert.equal(rowFor([subject, ...peers], planned).lower, score);
+        const local = publicReferenceWeights({ participantCount: 2, scoringEntries: planned })[0];
+        const expanded = await expandTopicReferences({ contextID: 1, entries: [local, allocation(-2, 5000)] },
+            { loadTarget: async () => ({ contextID: 2, entries: planned }) });
+        const scored = rowFor([subject, ...peers], expanded.scoringEntries);
+        assert.equal(scored.lower, score);
+        assert.equal(scored.inferredScores.reduce((sum, row) => sum + row.originalWeight, 0), score === null ? 0 : 100);
+    }
 });
 
 test('missing anchors, unrelated versions, excluded nodes, mismatched settings, and disconnected cycles stay unresolved', () => {
@@ -85,6 +88,33 @@ test('missing anchors, unrelated versions, excluded nodes, mismatched settings, 
     }
     const excluded = rowFor([subject, ...peers], weights(), { excludedConditionIDs: new Set([30]) });
     assert.deepEqual(excluded.inferredScores, []);
+});
+
+test('cross-benchmark sources are tried after all viable sibling routes', () => {
+    const nominated = createVersionEstimationPlanner(catalogue, [{ targetConditionID: 10, sourceConditionID: 60 }]);
+    const runs = [model(1, { 50: 70, 60: 30 }), ...peers, model(6, { 10: 77, 60: 30 })];
+    const [scoring] = nominated([allocation(10)]);
+    const sibling = rowFor(runs, [scoring]);
+    assert.equal(sibling.lower, 100);
+    assert.equal(sibling.inferredScores[0].sources[0].sourceConditionID, 50);
+
+    const veto = [{ targetConditionID: 40, sourceConditionID: 30, opposeCount: 2, supportCount: 0 }];
+    const fallback = rowFor(runs, nominated([allocation(10)], veto));
+    assert.equal(fallback.lower, 77);
+    assert.deepEqual(fallback.inferredScores[0].sources, [{ sourceConditionID: 60, sourceScore: 30, referenceCount: 1 }]);
+    assert.equal(rowFor(runs, weights(veto)).lower, null);
+});
+
+test('a nominated source must validate separately for each direction of public scoring', () => {
+    const nominated = createVersionEstimationPlanner(catalogue, [{ targetConditionID: 10, sourceConditionID: 60 }]);
+    const runs = [model(1, { 60: 55 }), model(2, { 10: 55 }), ...[
+        [10, 80], [20, 80], [35, 30], [50, 50], [65, 55], [80, 70], [90, 80]
+    ].map(([target, source], index) => model(index + 3, { 10: target, 60: source }))];
+    const score = (conditionID, modelID, validateExternal) => scoreModels(runs, nominated([allocation(conditionID)]), 10000,
+        { ...options, validateExternal }).find(row => row.modelID === modelID);
+    assert.equal(score(10, 1, false).inferredScores[0].sources[0].sourceConditionID, 60);
+    assert.deepEqual(score(10, 1, true).inferredScores, []);
+    assert.equal(score(60, 2, true).inferredScores[0].sources[0].sourceConditionID, 10);
 });
 
 test('shortest chains win, then the strongest weakest link, then a stable version ID', () => {

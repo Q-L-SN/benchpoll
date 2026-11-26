@@ -28,8 +28,8 @@ export function createPieSaveDatabase({ revision = 1, failCompletion = false, lo
         scenes: new Map(scenes.map((scene, index) => [scene.context_ID, { name: `Scene ${scene.context_ID}`, slug: `scene-${scene.context_ID}`,
             description: 'Compare this scene.', scene_number: index + 1, position: 0, is_default: 0, is_active: 1, ...scene }])),
         pies: new Map(initialPies.map(pie => [pie.ID, { revision: 1, updated_at: new Date(), weights: [],
-            topicWeights: [], rules: [], estimation_votes: null, ...structuredClone(pie), user_ID: String(pie.user_ID) }])),
-        receipts: new Map(), families: new Map(), nextFamilyID: 100,
+            topicWeights: [], rules: [], ...structuredClone(pie), user_ID: String(pie.user_ID) }])),
+        ballots: new Map(), receipts: new Map(), families: new Map(), nextFamilyID: 100,
         nextPieID: Math.max(70, ...initialPies.map(pie => pie.ID)) + 1,
         nextContextID: Math.max(10, ...contexts.map(context => context.ID)) + 1
     };
@@ -110,9 +110,9 @@ export function createPieSaveDatabase({ revision = 1, failCompletion = false, lo
             if (!existing) state.contexts.set(ID, { ID, category_ID, context_values: JSON.parse(values), context_hash });
             return [{ insertId: ID }, []];
         }
-        if (/SELECT ID, revision(?:, updated_at)?, estimation_votes FROM personal_pies/.test(query)) {
+        if (/SELECT ID, revision(?:, updated_at)? FROM personal_pies/.test(query)) {
             const pie = matchingPie(state, params[0], params[1]);
-            return [pie ? [{ ID: pie.ID, revision: pie.revision, updated_at: pie.updated_at, estimation_votes: pie.estimation_votes }] : [], []];
+            return [pie ? [{ ID: pie.ID, revision: pie.revision, updated_at: pie.updated_at }] : [], []];
         }
         if (query.startsWith('SELECT benchmark_condition_ID, weight_basis_points')) {
             const pie = state.pies.get(params[0]);
@@ -138,21 +138,32 @@ export function createPieSaveDatabase({ revision = 1, failCompletion = false, lo
             assert.ok(state.pies.has(params[0])); state.pies.delete(params[0]);
             change(); events.push('delete-pie'); return [{ affectedRows: 1 }, []];
         }
+        if (query.includes('WHERE c.ID IN (?,?)')) return [conditionRows.filter(row => params.includes(row.condition_ID))
+            .map(row => ({ ID: row.condition_ID, benchmarkID: row.benchmark_ID, conditionKey: row.condition_key,
+                conditionName: row.condition_name, scoreSource: row.score_source, name: row.name })), []];
+        if (query.includes('INSERT INTO estimation_pair_votes')) {
+            const [user, a, b, vote] = params;
+            state.ballots.set([user, a, b].join(':'), { targetConditionID: a, sourceConditionID: b, vote });
+            return [{ affectedRows: 1 }, []];
+        }
+        if (query.includes('DELETE FROM estimation_pair_votes')) {
+            return [{ affectedRows: Number(state.ballots.delete(params.join(':'))) }, []];
+        }
         if (/FROM benchmark_conditions WHERE ID IN/.test(query)) return [params
             .filter(ID => conditionRows.some(row => row.condition_ID === ID)).map(ID => ({ ID })), []];
         if (query.includes('SELECT benchmark_conditions.ID AS condition_ID')) return [conditionRows, []];
         if (query.includes('INSERT INTO personal_pies')) {
-            const [userID, contextID, estimation_votes] = params;
+            const [userID, contextID] = params;
             if (!state.users.has(String(userID)) || !state.contexts.has(contextID)) throw foreignKeyError();
             assert.equal(matchingPie(state, userID, contextID), undefined, 'One pie per user and context');
             const pie = { ID: state.nextPieID++, user_ID: String(userID), context_ID: contextID, revision: 1,
-                updated_at: new Date(), weights: [], topicWeights: [], rules: [], estimation_votes };
+                updated_at: new Date(), weights: [], topicWeights: [], rules: [] };
             state.pies.set(pie.ID, pie); change(); return [{ insertId: pie.ID }, []];
         }
         if (query.includes('UPDATE personal_pies')) {
-            const [estimationVotes, pieID] = params;
+            const [pieID] = params;
             const pie = state.pies.get(pieID); assert.ok(pie); pie.revision += 1; pie.updated_at = new Date();
-            pie.estimation_votes = estimationVotes; change();
+            change();
             return [{ affectedRows: 1 }, []];
         }
         if (query.includes('DELETE FROM personal_pie_weights')) {

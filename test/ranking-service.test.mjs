@@ -121,7 +121,7 @@ test('read-only personal previews reject invalid weights and duplicate votes bef
     await assert.rejects(getRankingWorkspace(db, {
         ...base, previewPersonalPie: { ...base.previewPersonalPie, estimationVotes: [
             { targetConditionID: 1, sourceConditionID: 2, vote: 'support' },
-            { targetConditionID: 1, sourceConditionID: 2, vote: 'oppose' }
+            { targetConditionID: 2, sourceConditionID: 1, vote: 'oppose' }
         ] }
     }), error => error.body?.error === 'invalid_estimation_votes');
     await assert.rejects(getRankingWorkspace(db, {
@@ -765,7 +765,7 @@ test('private topics have no public contribution and perform no public aggregati
     const result = await loadPublicPie({ execute() { throw new Error('Private public-aggregation query'); } },
         { categoryID: 8, isPrivate: true, dimensions: [], contextValues: {} }, new Map());
     assert.deepEqual(result, { entries: [], familyComposition: [], communityComposition: [], versionComposition: [],
-        estimationVotes: [], participantCount: 0,
+        participantCount: 0,
         isFallback: false, scoringEntries: [], contextIDs: [] });
 });
 
@@ -992,22 +992,54 @@ test('an empty stored personal pie remains editable but is not treated as a vali
     const pie = await loadPersonalPie(connection, 10, 99);
     assert.equal(pie.revision, 3);
     assert.deepEqual(pie.entries, []);
-    assert.deepEqual(pie.estimationVotes, []);
+    assert.equal(Object.hasOwn(pie, 'estimationVotes'), false);
 });
 
-test('stored directed votes are sorted and legacy undirected votes are skipped without altering weights', async () => {
-    const votes = [{ targetConditionID: 22, sourceConditionID: 23, vote: 'oppose' },
-        { conditionID: 22, vote: 'oppose' }, { targetConditionID: 21, sourceConditionID: 23, vote: 'support' }];
-    const connection = { async execute(sql) {
-        if (sql.includes('FROM personal_pies')) return [[{ ID: 7, revision: 3, estimation_votes: JSON.stringify(votes) }], []];
-        if (sql.includes('FROM personal_pie_weights')) return [[{ benchmark_condition_ID: 21, weight_basis_points: 10000 }], []];
-        throw new Error('Unexpected SQL: ' + sql);
+test('workspace keeps sitewide personal votes, tallies, and nominations across scenes without a saved pie', async () => {
+    const conditions = [[21, 10], [22, 10], [23, 20]].map(([condition_ID, benchmark_ID]) => ({
+        condition_ID, benchmark_ID, condition_key: `version-${condition_ID}`, condition_name: `Version ${condition_ID}`,
+        name: `Benchmark ${benchmark_ID}`, is_default: 0, is_primary: Number(condition_ID !== 22), uses_percentage_scale: 1,
+        score_min: null, score_max: null, score_direction: 'higher', target_value: null, approved_score_count: 9, scored_model_count: 9
+    }));
+    const scenes = [30, 40].map((ID, index) => ({ contextID: ID, category_ID: 2, scene_context_ID: ID, scene_number: index + 1,
+        name: `Scene ${index + 1}`, slug: `scene-${index + 1}`, is_default: Number(index === 0), category_name: 'Coding', public_ID: 2 }));
+    const ballotReads = [], scoreScopes = [];
+    const connection = { async query() {}, async commit() {}, async rollback() {}, release() {}, async execute(sql, params) {
+        if (sql.includes('FROM categories c LEFT JOIN users creator')) return [[{ ID: 2, public_ID: 2, name: 'Coding' }]];
+        if (sql.includes('s.context_ID AS scene_context_ID')) return [scenes];
+        if (sql.includes('SELECT benchmark_conditions.ID AS condition_ID')) return [conditions];
+        if (sql.includes('s.context_ID AS scene_ID')) return [[]];
+        if (sql.includes('personal_pies.context_ID IN')) {
+            assert.doesNotMatch(sql, /estimation_votes|estimation_pair_votes/);
+            return [recentRows([{ pie_ID: params[0], context_ID: params[0], benchmark_condition_ID: params[0] === 30 ? 21 : 22,
+                weight_basis_points: 10000 }])];
+        }
+        if (sql.includes('FROM personal_pies')) {
+            assert.doesNotMatch(sql, /estimation_votes|estimation_pair_votes/);
+            return [[]];
+        }
+        if (sql.includes('FROM estimation_pair_votes')) {
+            ballotReads.push(params);
+            return [[{ first_ID: 21, second_ID: 23, supportCount: 2, opposeCount: 1, personalVote: 'support' }]];
+        }
+        if (sql.includes('SELECT benchmark_results.ID AS result_ID')) scoreScopes.push(params);
+        if (/FROM personal_pie_weights w JOIN|FROM score_field|FROM models JOIN organizations|FROM benchmark_results/.test(sql)) return [[]];
+        throw new Error('Unexpected workspace query: ' + sql);
     } };
-    const pie = await loadPersonalPie(connection, 10, 99);
-    assert.deepEqual(pie.estimationVotes, [votes[2], votes[0]]);
-    assert.deepEqual(pie.entries, [{ conditionID: 21, weightBasisPoints: 10000 }]);
-    votes.push({ ...votes[2], vote: 'oppose' });
-    await assert.rejects(loadPersonalPie(connection, 10, 99), error => error.body?.error === 'stored_estimation_votes_invalid');
+    const db = { async getConnection() { return connection; } };
+    const pair = { targetConditionID: 21, sourceConditionID: 23 };
+    for (const [scene, conditionID] of [['30', 21], ['40', 22]]) {
+        const result = await getRankingWorkspace(db, { categoryID: 2, contextValues: { scene }, userID: '99' });
+        assert.equal(result.context.sceneID, Number(scene));
+        assert.deepEqual(result.personalPie.entries, []);
+        assert.deepEqual(result.personalPie.estimationVotes, [{ ...pair, vote: 'support' }]);
+        assert.deepEqual(result.communityEstimationVotes, [{ ...pair, supportCount: 2, opposeCount: 1 }]);
+        assert.deepEqual(result.externalEstimationPairs, [pair]);
+        assert.equal(Object.hasOwn(result.publicPie, 'estimationVotes'), false);
+        assert.deepEqual(result.publicPie.effectiveEntries.map(entry => entry.conditionID), [conditionID]);
+    }
+    assert.deepEqual(ballotReads, [[10, 72, '99'], [10, 72, '99']]);
+    assert.deepEqual(scoreScopes, [[21, 22, 23], [21, 22]]);
 });
 
 test('public pie rejects stored pies that are neither empty nor exactly 100 percent', async () => {
@@ -1146,7 +1178,7 @@ test('malformed estimation votes fail before accessing the database', async () =
     ] };
     const validVote = { targetConditionID: 21, sourceConditionID: 23, vote: 'support' };
     for (const estimationVotes of [null, [{ ...validVote, vote: 'neutral' }], [{ targetConditionID: 21, vote: 'support' }],
-        [validVote, { ...validVote, vote: 'oppose' }], [{ ...validVote, sourceConditionID: -2 }],
+        [validVote, { targetConditionID: 23, sourceConditionID: 21, vote: 'oppose' }], [{ ...validVote, sourceConditionID: -2 }],
         [{ ...validVote, targetConditionID: 0 }], [{ ...validVote, sourceConditionID: 21 }],
         [{ ...validVote, sourceConditionID: '23' }], [{ ...validVote, conditionID: 23 }],
         [{ conditionID: 23, vote: 'support' }], Array(1)]) {

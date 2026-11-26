@@ -53,7 +53,7 @@ test('short score help preserves range endpoints, unresolved gaps and direct-fir
     assert.match(rankingGuide, /Both ends use the measured scores where available\. Models rank by the lower end/);
     assert.match(rankingGuide, /count as 0 at their full weight/);
     assert.match(rankingGuide, /direct score or an estimate qualifies a model to rank/);
-    assert.match(estimationGuide, /A pair is eligible by default, including with no votes or a tie/);
+    assert.match(estimationGuide, /Versions of the same benchmark are eligible by default, including with no votes or a tie/);
     assert.match(estimationGuide, /eligible measured versions of the same benchmark/);
     assert.match(estimationGuide, /fits eligible measured versions of the same benchmark together/);
     assert.match(estimationGuide, /When direct pairing is unavailable, C can predict A through B/);
@@ -77,7 +77,7 @@ test('version-based details report estimates separately from coverage and zero-f
         unresolvedFraction: .25, unpenalizedScore: 53, totalScore: 53 };
     const text = summary(inference);
     assert.match(text, /measured results cover 50% of the weight/);
-    assert.match(text, /25\.00% of the weight uses estimates from measured versions of the same benchmark/);
+    assert.match(text, /25\.00% of the weight uses estimates from related benchmark versions/);
     assert.match(text, /25\.00% of the weight has no measurement or estimate and counts as 0 at its full weight/);
     assert.match(text, /How it works/);
     assert.doesNotMatch(text, /adjustment|fallback chains|left out|starts at 50/);

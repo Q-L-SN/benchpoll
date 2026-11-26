@@ -125,19 +125,13 @@ test('score copy explains version shares, zero-filled gaps, score range and meas
     assert.match(scores, /Matched comparisons calibrate each qualifying run separately/);
 });
 
-test('estimation votes cover the explicit target, directional pairs, saved votes and precedence', () => {
-    const fallback = section('fallback');
-    assert.match(section('details'), /Each community scoring choice carries that person’s benchmark weight/);
-    assert.match(section('details'), /If nobody chose a version, the primary version gets the full weight/);
-    assert.match(fallback, /open <strong>Advanced settings<\/strong> for a benchmark/);
-    assert.match(fallback, /Under <strong>Scoring version<\/strong>, choose an explicit target version to see <strong>Estimation support<\/strong>/);
-    assert.match(fallback, /B → A\. B → C has its own votes and support rate/);
-    assert.match(fallback, /Saved pair votes still count in the public sample while you use a different scoring version or follow the community/);
-    assert.match(fallback, /Choose A again to see your saved votes for estimating A/);
-    assert.match(fallback, /one vote per source and target pair/);
-    assert.match(fallback, /A pair is eligible by default, including with no votes or a tie/);
-    assert.match(fallback, /A community majority against a pair excludes that pair/);
-    assert.match(fallback, /Your own vote takes priority for your personal ranking/);
+test('the guide explains sitewide pair votes and dynamic cross-benchmark nominations', () => {
+    const sectionText = section('fallback');
+    for (const phrase of ['Scoring version', 'Estimation support', 'Either version opens the same sitewide vote',
+        'last 72 hours', 'reach ten', 'Versions of the same benchmark are eligible by default',
+        'Your own vote takes priority', 'Evaluation items', 'Both versions list the pair while its sample has at least one supporter']) {
+        assert.ok(sectionText.includes(phrase), phrase);
+    }
 });
 
 test('version estimation explains joint evidence, shrinkage, extrapolation and run settings', () => {
@@ -148,7 +142,7 @@ test('version estimation explains joint evidence, shrinkage, extrapolation and r
     assert.match(calibration, /Sparse samples favor a shared starting correlation/);
     assert.match(calibration, /less influence outside the observed source range/);
     assert.match(calibration, /C can predict A through B/);
-    assert.match(calibration, /Each link follows directional votes/);
+    assert.match(calibration, /Each link follows the pair vote/);
     assert.match(calibration, /the shortest path/);
     assert.match(calibration, /Best performance uses the highest qualifying run prediction/);
     assert.match(calibration, /Matched comparisons average predictions within each matched control setting/);

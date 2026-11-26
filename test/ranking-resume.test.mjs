@@ -65,25 +65,27 @@ test('one new calculation restores independent model, version group and fallback
     assert.equal(next.hasMore, false);
 });
 
-test('resuming both ranking lists returns the newly calculated personal ballot and public counts only in the workspace', () => {
-    const reverseVote = { targetConditionID: 901, sourceConditionID: 1, vote: 'support' };
+test('resuming both ranking lists refreshes sitewide ballots, counts, and nominations on the workspace', () => {
+    const nominated = { targetConditionID: 2, sourceConditionID: 901 };
     const fixture = createFixtureState({ userID: '7', rankingStress: true, communityVersions: true, secondaryBenchmark: true,
-        personalEstimationVotes: [{ targetConditionID: 1, sourceConditionID: 901, vote: 'oppose' }, reverseVote] });
+        personalEstimationVotes: [{ targetConditionID: 1, sourceConditionID: 901, vote: 'oppose' }, { ...nominated, vote: 'support' }] });
     const pager = createRankingPager();
     const first = pager.create(workspace(fixture, {}, { paginate: false }), { userID: '7' });
     const resume = captureRankingResume(first.rankingPagination, { requests: [{ list: 'personal', offset: 0 }, { list: 'public', offset: 25 }] });
-    fixture.personalEstimationVotes = [{ targetConditionID: 1, sourceConditionID: 901, vote: 'support' }, reverseVote];
+    assert.deepEqual(first.externalEstimationPairs, [nominated]);
+    fixture.personalEstimationVotes = [{ targetConditionID: 901, sourceConditionID: 1, vote: 'support' }];
     const restored = pager.create(workspace(fixture, {}, { paginate: false }), { userID: '7', resume });
     validateWorkspacePayload(restored, { resume });
     assert.notEqual(restored.rankingPagination.snapshotID, first.rankingPagination.snapshotID);
-    assert.deepEqual(restored.personalPie.estimationVotes, fixture.personalEstimationVotes);
-    assert.deepEqual(restored.communityEstimationVotes, [{ targetConditionID: 1, sourceConditionID: 901, supportCount: 1, opposeCount: 0 },
-        { targetConditionID: 901, sourceConditionID: 1, supportCount: 1, opposeCount: 0 }]);
+    assert.deepEqual(restored.personalPie.estimationVotes, [{ targetConditionID: 1, sourceConditionID: 901, vote: 'support' }]);
+    assert.deepEqual(restored.communityEstimationVotes, [{ targetConditionID: 1, sourceConditionID: 901, supportCount: 1, opposeCount: 0 }]);
+    assert.deepEqual(restored.externalEstimationPairs, []);
     for (const list of ['personal', 'public']) {
         const after = pager.getPage({ snapshotID: restored.rankingPagination.snapshotID, userID: '7', list,
             offset: restored.rankingPagination[list].nextOffset });
         assert.equal(Object.hasOwn(after, 'personalPie'), false);
         assert.equal(Object.hasOwn(after, 'communityEstimationVotes'), false);
+        assert.equal(Object.hasOwn(after, 'externalEstimationPairs'), false);
     }
 });
 
@@ -282,7 +284,8 @@ test('same-scope recovery keeps the benchmark DOM and scroll anchor while the re
         isSceneDiscovery: () => false, benchmarkSearchClear: element,
         document: { activeElement: body, body, createElement }, benchmarkVersionGrouping: element,
         benchmarkCard: element, benchmarkPersonalPin: element, stylePreviews: { setPersonal() {} },
-        isInlineFallbackTargetActive: () => false, selectedInlineFallbackPrimary: () => null, fallbackRuleFor: () => null
+        isInlineFallbackTargetActive: () => false, activeNominationTarget: () => null,
+        selectedInlineFallbackPrimary: () => null, fallbackRuleFor: () => null
     });
     assert.equal(benchmarkRows.scrollTop, 420);
     assert.deepEqual(benchmarkRows.children, originalRows);
@@ -306,7 +309,8 @@ test('same-scope recovery keeps the benchmark DOM and scroll anchor while the re
             pendingBenchmarkFocus: null, benchmarkRowFocus: { captureFocus: () => null },
             document: { activeElement: body, body, createElement }, benchmarkVersionGrouping: element,
             benchmarkCard: element, benchmarkPersonalPin: element, stylePreviews: { setPersonal() {} },
-            isInlineFallbackTargetActive: () => false, selectedInlineFallbackPrimary: () => null, fallbackRuleFor: () => null
+            isInlineFallbackTargetActive: () => false, activeNominationTarget: () => null,
+            selectedInlineFallbackPrimary: () => null, fallbackRuleFor: () => null
         });
         assert.equal(rows.scrollTop, 0, 'Other scopes or completed loads must render normally');
         assert.ok(rows.children.every(row => !originalRows.includes(row)));

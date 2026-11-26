@@ -6,7 +6,7 @@ import { AVAILABLE_INFERENCE_VERSION } from '../../public/js/shared/available-sc
 import { normalizeEstimationAlgorithm } from '../../public/js/shared/estimation-algorithms.js';
 import { familyKey } from '../../public/js/shared/benchmark-families.js';
 import { communityVersionComposition, expandCommunityVersions } from '../../public/js/shared/benchmark-version-choice.js';
-import { compareEstimationVotePairs, estimationVotePairKey, normalizeEstimationVotes } from '../../public/js/shared/estimation-votes.js';
+import { compareEstimationVotePairs, estimationPair, estimationVotePairKey, normalizeEstimationVotes } from '../../public/js/shared/estimation-votes.js';
 import { excludedFromRanking } from '../../public/js/shared/aa-ranking-policy.js';
 import { createVersionEstimationPlanner } from '../../public/js/shared/version-estimation-policy.js';
 // Synthetic records for the isolated frontend harness; never imported by the app.
@@ -74,21 +74,36 @@ export function fixtureBenchmarkRows(state) {
     return [...benchmarks, ...extraBenchmarks, ...secondaryBenchmarks, ...sparseBenchmarks, ...aaBenchmarks,
         ...(state.mixedAABenchmarks ? mixedAABenchmarks : []), ...(state.additionalBenchmarkVersions ?? [])];
 }
-export function fixtureEstimationVotes(votes, entries, conditions, strict = false) {
+export function fixtureEstimationVotes(votes, conditions, externalPairs = [], strict = false) {
     let normalized;
     try { normalized = normalizeEstimationVotes(votes); }
     catch { throw { status: 400, body: { error: 'invalid_estimation_votes' } }; }
     if (!normalized.length) return normalized;
     const groupsByCondition = new Map(conditions.filter(row => row.conditionID > 0 && !excludedFromRanking(row))
         .map(row => [row.conditionID, row.benchmarkID]));
-    const weightedBenchmarks = new Set(entries.filter(entry => entry.weightBasisPoints > 0)
-        .map(entry => groupsByCondition.get(entry.conditionID)));
+    const nominated = new Set(externalPairs.map(p => estimationVotePairKey(p.targetConditionID, p.sourceConditionID)));
     return normalized.filter(({ targetConditionID, sourceConditionID }) => {
-        const benchmarkID = groupsByCondition.get(targetConditionID);
-        if (benchmarkID !== undefined && benchmarkID === groupsByCondition.get(sourceConditionID) && weightedBenchmarks.has(benchmarkID)) return true;
+        const a = groupsByCondition.get(targetConditionID), b = groupsByCondition.get(sourceConditionID);
+        if (a !== undefined && b !== undefined && (a === b || nominated.has(estimationVotePairKey(targetConditionID, sourceConditionID)))) return true;
         if (strict) throw { status: 400, body: { error: 'estimation_vote_condition_unavailable', targetConditionID, sourceConditionID } };
         return false;
     });
+}
+export function fixtureBallots(state, conditions) {
+    const savedVotes = normalizeEstimationVotes(state.personalEstimationVotes ?? []);
+    const communityVotesByPair = new Map((state.communityEstimationVotes ?? [])
+        .map(item => [estimationVotePairKey(item.targetConditionID, item.sourceConditionID), { ...item, ...estimationPair(item.targetConditionID, item.sourceConditionID) }]));
+    for (const { targetConditionID, sourceConditionID, vote } of savedVotes) {
+        const pair = estimationVotePairKey(targetConditionID, sourceConditionID);
+        const count = communityVotesByPair.get(pair) ?? { targetConditionID, sourceConditionID, supportCount: 0, opposeCount: 0 };
+        count[`${vote}Count`]++;
+        communityVotesByPair.set(pair, count);
+    }
+    const groups = new Map(conditions.map(row => [row.conditionID, row.benchmarkID]));
+    const cross = pair => groups.get(pair.targetConditionID) !== groups.get(pair.sourceConditionID);
+    const communityVotes = [...communityVotesByPair.values()].filter(p => !cross(p) || p.supportCount > 0).sort(compareEstimationVotePairs);
+    const externalPairs = communityVotes.filter(cross).map(({ targetConditionID, sourceConditionID }) => ({ targetConditionID, sourceConditionID }));
+    return { savedVotes, communityVotes, externalPairs };
 }
 export function createFixtureState(options = {}) {
     return {
@@ -164,19 +179,10 @@ export function workspace(state, body, { paginate = true } = {}) {
         modelLeaderboards: { public: [], personal: [] },
         scoreScale: { min: 0, max: 100 }, limits: { totalBasisPoints: 10000, maxPieItems: 100 }, serverTime: new Date().toISOString()
     };
-    const savedVotes = state.empty ? [] : fixtureEstimationVotes(state.personalEstimationVotes ?? [], state.personalEntries, data.benchmarks);
-    const communityVotesByPair = new Map((state.isPrivate || state.empty ? [] : state.communityEstimationVotes ?? [])
-        .map(item => [estimationVotePairKey(item.targetConditionID, item.sourceConditionID), { ...item }]));
-    if (!state.isPrivate) for (const { targetConditionID, sourceConditionID, vote } of savedVotes) {
-        const pair = estimationVotePairKey(targetConditionID, sourceConditionID);
-        const count = communityVotesByPair.get(pair) ?? { targetConditionID, sourceConditionID, supportCount: 0, opposeCount: 0 };
-        count[`${vote}Count`]++;
-        communityVotesByPair.set(pair, count);
-    }
-    const communityVotes = [...communityVotesByPair.values()].sort(compareEstimationVotePairs);
+    const { savedVotes, communityVotes, externalPairs } = fixtureBallots(state, data.benchmarks);
     const explicitBallot = preview && Object.hasOwn(preview, 'estimationVotes');
     const personalVotes = fixtureEstimationVotes(explicitBallot ? preview.estimationVotes : state.authenticated ? savedVotes : [],
-        personalEntries, data.benchmarks, explicitBallot);
+        data.benchmarks, externalPairs, explicitBallot);
     if (versionChoices) {
         data.versionComposition = communityVersionComposition(new Map([
             ...(state.versionVoters ?? []),
@@ -193,10 +199,10 @@ export function workspace(state, body, { paginate = true } = {}) {
         return { ...group, families: group.families.map(family => ({ ...family,
             overallWeightBasisPoints: entry.weightBasisPoints * family.weightBasisPoints / 10000 })) };
     });
-    const estimationPlans = estimationVoting ? createVersionEstimationPlanner(data.benchmarks) : null;
+    const estimationPlans = estimationVoting ? createVersionEstimationPlanner(data.benchmarks, externalPairs) : null;
     data.modelLeaderboards = options ? {
         public: scoreComparison(state.comparisonModels, estimationPlans?.(data.publicPie.effectiveEntries, communityVotes) ?? publicWeights, 10000, {
-            scoreMode, estimationAlgorithm, availableInferenceVersion: body.availableInferenceVersion ?? AVAILABLE_INFERENCE_VERSION, fallbackScope: 'public', familyComposition: data.publicPie.familyComposition
+            scoreMode, estimationAlgorithm, availableInferenceVersion: body.availableInferenceVersion ?? AVAILABLE_INFERENCE_VERSION, fallbackScope: 'public', validateExternal: true, familyComposition: data.publicPie.familyComposition
         }, options),
         personal: scoreComparison(state.comparisonModels, estimationPlans?.(data.personalPie.effectiveEntries, communityVotes, personalVotes) ?? personalEntries, 10000, { fallbackRules: personalFallbackRules,
             familyComposition: data.personalPie.communityFallbackComposition, scoreMode, estimationAlgorithm,
@@ -260,6 +266,7 @@ export function workspace(state, body, { paginate = true } = {}) {
     }
     if (estimationVoting) {
         data.communityEstimationVotes = communityVotes;
+        data.externalEstimationPairs = externalPairs;
         data.personalPie.estimationVotes = personalVotes;
         data.publicPie.familyComposition = [];
         delete data.communityFallbackComposition;

@@ -67,9 +67,9 @@ export async function lockTopicReferences(db) {
 // Display weights are rounded to 1bp. Graph scoring retains unrounded electorate shares.
 export function publicReferenceWeights(pie) {
     if (!pie.participantCount) return [];
-    return pie.scoringEntries.map(({ conditionID, weightBasisPoints, estimationSourceIDs, blockedEstimationPairs }) => ({ conditionID,
+    return pie.scoringEntries.map(({ conditionID, weightBasisPoints, estimationSourceIDs, blockedEstimationPairs, externalSourceIDs }) => ({ conditionID,
         weightBasisPoints: weightBasisPoints / pie.participantCount,
-        ...(estimationSourceIDs ? { estimationSourceIDs } : {}), ...(blockedEstimationPairs ? { blockedEstimationPairs } : {}) }));
+        ...(estimationSourceIDs ? { estimationSourceIDs } : {}), ...(externalSourceIDs ? { externalSourceIDs } : {}), ...(blockedEstimationPairs ? { blockedEstimationPairs } : {}) }));
 }
 
 export async function validateTopicReferences(db, source, entries, userID) {
@@ -110,12 +110,12 @@ export async function expandTopicReferences(root, { loadTarget, maxNodes = MAX_R
                 || !Number.isFinite(entry.weightBasisPoints) || entry.weightBasisPoints < 0) throw new TypeError('Invalid topic weight');
             if (entry.weightBasisPoints === 0) continue;
             if (entry.conditionID > 0) {
-                // Distinct scenes can vote differently about sources for the same scoring version.
+                const external = [...new Set(entry.externalSourceIDs ?? [])].sort((a,b) => a-b);
                 const estimationSourceIDs = [...new Set(entry.estimationSourceIDs ?? [])].sort((a, b) => a - b);
                 const blocked = [...new Set(entry.blockedEstimationPairs ?? [])].sort();
-                const key = `benchmark:${entry.conditionID}:${estimationSourceIDs.join(',')}${blocked.length ? '|' + blocked.join(',') : ''}`;
+                const key = `benchmark:${entry.conditionID}:${estimationSourceIDs.join(',')}${blocked.length ? '|' + blocked.join(',') : ''}${external.length ? '|external=' + external.join(',') : ''}`;
                 if (!outcomes.has(key)) outcomes.set(key, { conditionID: entry.conditionID, estimationSourceIDs,
-                    ...(blocked.length ? { blockedEstimationPairs: blocked } : {}) });
+                    ...(external.length ? { externalSourceIDs: external } : {}), ...(blocked.length ? { blockedEstimationPairs: blocked } : {}) });
                 add(row.absorbed, key, entry.weightBasisPoints);
                 continue;
             }
@@ -144,6 +144,7 @@ export async function expandTopicReferences(root, { loadTarget, maxNodes = MAX_R
             if (outcome.issue) issues.push(outcome.issue);
             scoringEntries.push({ conditionID: outcome.conditionID, weightBasisPoints: weight,
                 estimationSourceIDs: outcome.estimationSourceIDs ?? [],
+                ...(outcome.externalSourceIDs ? { externalSourceIDs: outcome.externalSourceIDs } : {}),
                 ...(outcome.blockedEstimationPairs ? { blockedEstimationPairs: outcome.blockedEstimationPairs } : {}) });
         }
         return {

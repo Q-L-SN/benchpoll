@@ -134,21 +134,38 @@ test('tampered request scope, precision, UUID, revision and generation are rejec
     }
 });
 
-test('recovery compares ballots as a set without changing the pending write body', () => {
+test('an explicit guest import retains its exact pending body separately from the weight draft', () => {
     const owner = harness();
     const votes = [{ targetConditionID: 901, sourceConditionID: 900, vote: 'oppose' },
         { targetConditionID: 1, sourceConditionID: 900, vote: 'support' }];
     const request = owner.request();
     request.body.estimationVotes = votes;
     owner.state.personalSaveRequest = request;
-    const recovery = createPersonalPieRecovery({ state: owner.state, guestDrafts: owner.guestDrafts, getStorage: () => owner.store,
-        snapshot: () => ({ ...draft(6000), estimationVotes: [...votes].reverse() }) });
-    recovery.capture(request, randomUUID());
-    const restored = recovery.lookup('7', 1, context, { estimationVoting: true });
+    const identity = randomUUID();
+    owner.recovery.capture(request, identity);
+    const restored = owner.recovery.lookup('7', 1, context, { estimationVoting: true });
     assert.deepEqual(restored.value.pending.body.estimationVotes, votes);
-    assert.deepEqual(restored.value.draft.estimationVotes, [...votes].reverse());
-    recovery.bind(restored);
-    assert.deepEqual(owner.state.personalSaveRequest.snapshot.estimationVotes, votes);
+    assert.deepEqual(restored.value.draft, draft(6000));
+    owner.recovery.bind(restored);
+    assert.equal(owner.state.personalSaveRequest.key, identity);
+    assert.deepEqual(owner.state.personalSaveRequest.snapshot, draft(6000));
+});
+
+test('legacy scene ballots in both directions leave an intact weight draft for fresh review', () => {
+    const h = harness(), request = h.request(), identity = randomUUID();
+    h.state.personalSaveRequest = request; h.recovery.capture(request, identity);
+    const [key, text] = [...h.store.values].find(([key]) => key.startsWith('benchpoll:owned-pie'));
+    const saved = JSON.parse(text);
+    const votes = [{ targetConditionID: 2, sourceConditionID: 1, vote: 'support' },
+        { targetConditionID: 1, sourceConditionID: 2, vote: 'oppose' }];
+    saved.value.draft.estimationVotes = votes;
+    saved.value.pending.body.estimationVotes = votes;
+    h.store.values.set(key, JSON.stringify(saved));
+    const restored = h.recovery.lookup('7', 1, context, { estimationVoting: true, revision: 2 });
+    assert.deepEqual(restored.value.draft, draft(6000));
+    assert.equal(restored.value.pending, null);
+    assert.equal(restored.value.revision, 2);
+    assert.equal(JSON.parse(h.store.values.get(key)).value.pending.key, identity);
 });
 
 test('opening legacy recovery in the ballot workspace drops retired chains and retains the draft weights', () => {

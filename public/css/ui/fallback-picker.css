@@ -161,3 +161,7 @@ button:is(.bp-version-choice, .bp-estimation-vote):focus-visible { outline: 2px 
 @media (prefers-reduced-motion: reduce) {
     .bp-fallback-picker-column, .bp-fallback-picker-entry, .bp-fallback-picker-entry > i { transition: none; }
 }
+
+.bp-external-versions { display: grid; gap: .5rem; }
+.bp-external-versions h4 { margin: .5rem 0 0; font-size: .875rem; }
+.bp-external-versions ul:empty { display: none; }

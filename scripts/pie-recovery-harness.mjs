@@ -26,6 +26,16 @@ export async function createPieRecoveryHarness({ sourceRoot = '.', ownerID = '7'
     const { validateWorkspacePayload } = await module('public/js/workspace/contracts.js');
     const { validatePersonalPieSave } = await module('public/js/workspace/pie-save.js');
     const weights = await module('public/js/workspace/weights.js');
+    const estimationVotes = await module('public/js/shared/estimation-votes.js');
+    const independentBallots = source.includes('/api/save_estimation_vote');
+    const { selectedScoringCondition } = independentBallots ? await module('public/js/workspace/benchmark-settings.js') : {};
+    let guestBallots = {};
+    if (independentBallots) {
+        const guestSource = await readFile(join(root, 'public/js/workspace/guest-estimation-votes.js'), 'utf8');
+        const exported = [...guestSource.matchAll(/^export function (\w+)/gm)].map(([, name]) => name);
+        guestBallots = vm.runInNewContext(`${guestSource.replace(/^import .*\n/gm, '').replace(/^export /gm, '')}\n({ ${exported.join(', ')} })`,
+            { ...estimationVotes, sessionStorage: storage });
+    }
     const { portableFamilyEntry, FALLBACK_CONFIGURATION_VERSION } = await module('public/js/shared/benchmark-families.js');
     const { comparisonProfileKey } = await module('public/js/shared/comparison-profile-key.js');
     const { readRankingContext } = await module('public/js/shared/ranking-url.js');
@@ -47,7 +57,8 @@ export async function createPieRecoveryHarness({ sourceRoot = '.', ownerID = '7'
     const recovery = createPersonalPieRecovery({ state, guestDrafts, getStorage: () => storage, snapshot: () => api.portable() });
     const saveButton = { listeners: {}, addEventListener: (type, callback) => { saveButton.listeners[type] = callback; } };
     const discardButton = { listeners: {}, addEventListener: (type, callback) => { discardButton.listeners[type] = callback; } };
-    const globals = { estimationRequest, normalizeEstimationAlgorithm, state, ...weights, ...identity, portableFamilyEntry, comparisonProfileKey, readRankingContext, chartWeightMode, topicReferenceError,
+    const globals = { estimationRequest, normalizeEstimationAlgorithm, state, ...weights, ...identity, ...estimationVotes, ...guestBallots,
+        portableFamilyEntry, comparisonProfileKey, readRankingContext, chartWeightMode, topicReferenceError, selectedScoringCondition,
         isTopicReference, mergeBenchmarkWeights, recordProfileVisit() {},
         guestDrafts, pieRecovery: recovery, Number, Date, Map, Set, structuredClone, console: { error() {}, warn() {} },
         validateWorkspacePayload, validatePersonalPieSave, FALLBACK_CONFIGURATION_VERSION, FALLBACK_RULE_MODE: 'ordered', SAVE_DEBOUNCE_MS: 100,
@@ -60,10 +71,11 @@ export async function createPieRecoveryHarness({ sourceRoot = '.', ownerID = '7'
         comparisonControls: { render() {} }, navigationChannel: { publish() { applied.push(structuredClone(state.personalEntries)); } },
         invalidSavedComparison: () => false, invalidateRankingPages() {}, rankingRecoveryScope: () => '',
         finishPendingWeightAdjustments: async () => true, waitForGestureToSettle: async () => {},
-        renderAll() {}, renderModels() {}, renderModeState() {}, renderInlineFallback() {}, updateUndoState() {}, updateLastUpdated() {},
+        renderAll() {}, renderModels() {}, renderModeState() {}, renderBenchmarks() {}, renderInlineFallback() {}, updateUndoState() {}, updateLastUpdated() {},
         registerPieEntries() {}, resetPieVisualState() {}, syncContextValuesToURL() {}, updateDiscussionEntry() {},
         renderScoringControls() {}, revealBenchmarkRow() {}, reloadBenchmarkPage() {}, refreshChangedBenchmarkFilters() {},
-        requestLogin() {}, currentBenchmarkFilters: () => ({ benchmarkQuery: '', pinPersonal: false, groupVersions: false }),
+        requestLogin() {}, isExpandedWeightView: () => false,
+        currentBenchmarkFilters: () => ({ benchmarkQuery: '', pinPersonal: false, groupVersions: false }),
         fallbackSignature: rules => JSON.stringify(rules), setStatus(message) { state.statusMessage = message; },
         renderLoadError(error) { errors.push(error); state.loading = false; },
         postJSON: async (route, body) => {
@@ -72,49 +84,63 @@ export async function createPieRecoveryHarness({ sourceRoot = '.', ownerID = '7'
             return withRecoveryScenes(workspace(fixture, body), body.contextValues);
         }
     };
-    globals.postWriteJSON = createRetryableWrite((_route, body, options) => {
-        const item = { body: structuredClone(body), key: options.headers['Idempotency-Key'] };
+    globals.postWriteJSON = createRetryableWrite((route, body, options) => {
+        const item = { route, body: structuredClone(body), key: options.headers['Idempotency-Key'] };
         item.promise = new Promise((resolve, reject) => { item.resolve = resolve; item.reject = reject; });
         writes.push(item); return item.promise;
     }, { storage, digest: async value => createHash('sha256').update(value).digest('hex') });
     const code = [
         ...(source.includes('function loadOverviewFirstPage(') ? [block('function loadOverviewFirstPage(', 'function renderPie(')] : []),
         block('function snapshotPersonalPie()', 'function resetPieVisualState()'),
+        ...(independentBallots ? [block('function chooseBenchmarkEstimationVote(', 'function openInlineFallbackPicker(')] : []),
         block('function sameContextValues(', 'function syncContextValuesToURL()'),
         block('function scheduleSave()', 'function adjustSelectedWeight('),
         block('function applyServerWorkspace(', 'function workspaceLoadErrorMessage('),
         block('async function loadWeightedWorkspace(', 'async function applyWorkspaceState('),
         block("guestDraftSave.addEventListener('click'", 'function isPersonalBenchmarkFocus('),
         '({ load: loadWeightedWorkspace, save: persistPersonalPie, preview: previewGuestPersonalPie, schedule: scheduleSave, ' +
-            'checkpoint: recordPersonalDraft, portable: portablePersonalPie })'].join('\n');
+            'checkpoint: recordPersonalDraft, portable: portablePersonalPie, snapshot: snapshotPersonalPie, restore: restorePersonalPieSnapshot' +
+            (independentBallots ? ', vote: chooseBenchmarkEstimationVote' : '') + ' })'].join('\n');
     api = vm.runInNewContext(code, globals);
     const drain = async () => { for (let step = 0; step < 100; step++) await Promise.resolve(); };
     function track(promise) {
         tasks.add(promise); promise.then(() => tasks.delete(promise), () => tasks.delete(promise)); return promise;
     }
-    const h = { state, fixture, storage, reads, writes, errors, applied, guestDrafts, recovery, receipts, drain,
+    const h = { state, fixture, storage, reads, writes, errors, applied, guestDrafts, guestBallots, recovery, receipts, drain,
         setReadHook(callback) { readHook = callback; },
         load: options => track(api.load(options)), save: options => track(api.save(options)),
         confirm: () => track(saveButton.listeners.click()), discard: () => track(discardButton.listeners.click()),
         checkpoint: api.checkpoint,
+        snapshot: api.snapshot, restore: api.restore,
+        vote: (benchmarkID, a, b, vote) => api.vote({ benchmarkID }, a, b, vote),
         edit(pie) {
             state.personalEntries = weights.cloneEntries(pie.entries); state.personalFallbackRules = weights.cloneFallbackRules(pie.fallbackRules);
-            if (pie.estimationVotes !== undefined) state.personalEstimationVotes = weights.cloneEntries(pie.estimationVotes);
             state.personalEditVersion++; state.personalSavePending = true; state.personalRankingDirty = true; api.schedule();
         },
         commit(index) {
             const item = writes[index];
             if (receipts.has(item.key)) return receipts.get(item.key);
             assert.equal(item.body.expectedUserID, ownerID, 'No wrong-owner mutation is permitted');
+            if (item.route === '/api/save_estimation_vote') {
+                const { targetConditionID, sourceConditionID, vote, nominate } = item.body;
+                const pair = estimationVotes.estimationPair(targetConditionID, sourceConditionID);
+                fixture.personalEstimationVotes = estimationVotes.withEstimationVote(fixture.personalEstimationVotes ?? [],
+                    targetConditionID, sourceConditionID, vote);
+                const receipt = { saved: true, requestKey: item.key, userID: ownerID, ...pair, vote, nominate };
+                receipts.set(item.key, receipt); return receipt;
+            }
             if (item.body.expectedRevision !== fixture.revision) throw Object.assign(Error('pie_revision_conflict'),
                 { status: 409, payload: { error: 'pie_revision_conflict' } });
             fixture.personalEntries = weightedEntries(item.body.entries); fixture.fallbackRules = item.body.fallbackRules;
-            if (item.body.estimationVotes !== undefined) fixture.personalEstimationVotes = structuredClone(item.body.estimationVotes);
+            for (const { targetConditionID, sourceConditionID, vote } of item.body.estimationVotes ?? []) {
+                fixture.personalEstimationVotes = estimationVotes.withEstimationVote(fixture.personalEstimationVotes ?? [],
+                    targetConditionID, sourceConditionID, vote);
+            }
             fixture.revision = item.body.entries.length ? fixture.revision + 1 : 0;
             const receipt = { saved: true, requestKey: item.key, userID: ownerID, categoryID: item.body.categoryID,
                 contextValues: item.body.contextValues, personalPie: { revision: fixture.revision,
                     entries: item.body.entries, fallbackRules: item.body.fallbackRules,
-                    ...(item.body.estimationVotes !== undefined ? { estimationVotes: item.body.estimationVotes } : {}) } };
+                    estimationVotes: item.body.estimationVotes ?? [] } };
             receipts.set(item.key, receipt); return receipt;
         },
         async acknowledge(index) { try { writes[index].resolve(h.commit(index)); } catch (error) { writes[index].reject(error); } await drain(); },

@@ -93,7 +93,7 @@ function database(weights) {
 const row = (pieID, contextID, conditionID, weight, follows = false) => ({ pie_ID: pieID, context_ID: contextID,
     benchmark_condition_ID: conditionID, weight_basis_points: weight, follow_community_version: Number(follows) });
 
-test('scoring version preferences and estimation votes are independent and scoped to the selected scene', async () => {
+test('scoring version preferences use the weights of the selected scene independently of legacy ballots', async () => {
     const weights = [
         { ...row(1, 10, 1, 10000), estimation_votes: [estimationVote(1, 2, 'support')] },
         row(2, 10, 2, 10000),
@@ -106,30 +106,27 @@ test('scoring version preferences and estimation votes are independent and scope
     assert.equal(first.participantCount, 3);
     assert.deepEqual(first.entries, [entry(1, 10000, true)]);
     assert.deepEqual(first.versionComposition[0].versions.map(version => [version.conditionID, version.selectionBasisPoints]), [[2, 5000], [1, 5000]]);
-    assert.deepEqual(first.estimationVotes, [{ targetConditionID: 1, sourceConditionID: 2, supportCount: 1, opposeCount: 1 }]);
+    assert.equal(Object.hasOwn(first, 'estimationVotes'), false);
     assert.equal(first.scoringEntries.reduce((sum, item) => sum + item.weightBasisPoints, 0), 30000);
     const second = await loadPublicPie(db, { ID: 11, categoryID: 1, sceneID: 11 }, byID);
     assert.deepEqual(second.versionComposition[0].versions.map(version => [version.conditionID, version.selectionBasisPoints]), [[2, 10000], [1, 0]]);
-    assert.deepEqual(second.estimationVotes, [{ targetConditionID: 2, sourceConditionID: 1, supportCount: 1, opposeCount: 0 }]);
+    assert.equal(Object.hasOwn(second, 'estimationVotes'), false);
 });
 
-test('an older scoring choice and source vote leave together when ten recent configurations abstain', async () => {
-    const weights = [row(1, 10, 1, 10000, true), { ...row(2, 10, 2, 10000), is_recent: 0,
-        estimation_votes: [estimationVote(2, 1, 'oppose')] }];
+test('an older scoring choice leaves the weight sample when ten recent configurations abstain', async () => {
+    const weights = [row(1, 10, 1, 10000, true), { ...row(2, 10, 2, 10000), is_recent: 0 }];
     const catalogue = new Map(conditions.map(item => [item.conditionID, item]));
     const read = () => loadPublicPie(database(weights), { ID: 10, categoryID: 1, sceneID: 10 }, catalogue);
     const sparse = await read();
     assert.equal(sparse.participantCount, 2);
     assert.equal(sparse.versionComposition[0].configuredPieCount, 1);
     assert.deepEqual(sparse.scoringEntries, [{ contextID: 10, conditionID: 2, weightBasisPoints: 20000 }]);
-    assert.deepEqual(sparse.estimationVotes, [{ targetConditionID: 2, sourceConditionID: 1, supportCount: 0, opposeCount: 1 }]);
 
     for (let ID = 3; ID <= 11; ID++) weights.push(row(ID, 10, 1, 10000, true));
     const active = await read();
     assert.equal(active.participantCount, 10);
     assert.equal(active.versionComposition[0].configuredPieCount, 0);
     assert.deepEqual(active.scoringEntries, [{ contextID: 10, conditionID: 1, weightBasisPoints: 100000 }]);
-    assert.deepEqual(active.estimationVotes, []);
 });
 
 test('grouped benchmark search retains full benchmark weights and pagination counts', () => {

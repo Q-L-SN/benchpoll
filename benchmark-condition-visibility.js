@@ -1,3 +1,12 @@
+export const MIN_COMPARABLE_MODELS = 3;
+
+// Query callers bind the shared coverage threshold and select from candidate_conditions.
+export function catalogueCandidateSQL(scoreCount, preserved = '') {
+    return `(${scoreCount} >= ? OR EXISTS (
+        SELECT 1 FROM personal_pie_weights WHERE personal_pie_weights.benchmark_condition_ID = candidate_conditions.ID
+    ) ${preserved})`;
+}
+
 // Archived scores do not remove their condition from the catalog. Only an
 // explicit user deletion does; the row remains for score and audit history.
 export function selectableBenchmarkConditionSQL(alias = 'benchmark_conditions') {

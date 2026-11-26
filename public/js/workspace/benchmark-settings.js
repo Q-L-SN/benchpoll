@@ -1,3 +1,4 @@
+import { estimationVotePairKey } from '../shared/estimation-votes.js';
 import { createAction } from '../shared/ui-components.js';
 import { versionChoiceOrder } from '../shared/benchmark-version-choice.js';
 import { createEvidenceCount, updateEvidenceCount } from '../shared/evidence-count.js';
@@ -10,12 +11,12 @@ function node(tag, className, text) {
     return element;
 }
 
-const versionName = version => version.conditionName?.toLowerCase() === 'default' ? 'Default evaluation' : version.conditionName;
+export const versionName = version => version.conditionName?.toLowerCase() === 'default' ? 'Default evaluation' : version.conditionName;
 const scoringHelp = 'Scoring shares are weighted by each person’s allocation to this benchmark.';
-const estimationHelp = 'Estimation support is the share of votes in favor of using a source to estimate missing scores for the chosen scoring version. '
-    + 'A source is eligible unless opposition exceeds support. Sources with no votes are eligible by default.';
+const estimationHelp = 'Estimation support is the share of sitewide votes allowing these two versions to help estimate each other. '
+    + 'A source is eligible unless opposition exceeds support. Versions of the same benchmark are eligible by default. External versions appear while the pair has recent support.';
 const personalScoringHelp = 'Choose one scoring version. Select it again to follow the community.';
-const personalEstimationHelp = 'Vote to set whether a source can estimate missing scores for the scoring version you chose. '
+const personalEstimationHelp = 'Your vote applies to this pair in both directions across all topics and scenes. '
     + 'Select the same thumb again to clear your vote.';
 
 function percentage(points = 0) {
@@ -39,8 +40,8 @@ function describe(element, description) {
     element.dataset.tooltip = description;
 }
 
-function supportsEstimation({ estimationVoting, group }) {
-    return estimationVoting === true && group.versions.length > 1;
+function supportsEstimation({ estimationVoting, group, catalogue }) {
+    return estimationVoting === true && (group.versions.length > 1 || catalogue?.length > 1);
 }
 
 function statusText({ readOnly, entries, group }, active, target, estimationAvailable) {
@@ -54,7 +55,7 @@ function statusText({ readOnly, entries, group }, active, target, estimationAvai
     return group.isDefault ? 'Using the default scoring version.' : 'Following community scoring versions.';
 }
 
-export function createBenchmarkSettings({ host, selectedHeader, getScope, getData, onVersion, onVote }) {
+export function createBenchmarkSettings({ host, selectedHeader, getScope, getData, onVersion, onVote, onToggleNomination }) {
     const title = node('h3', 'bp-benchmark-settings-title');
     title.hidden = Boolean(selectedHeader);
     const status = node('p', 'bp-benchmark-settings-status');
@@ -68,7 +69,23 @@ export function createBenchmarkSettings({ host, selectedHeader, getScope, getDat
     const list = node('ul', 'bp-version-choices');
     list.setAttribute('role', 'list');
     list.setAttribute('aria-label', 'Benchmark versions');
-    host.append(title, status, heading, list);
+    const external = node('section', 'bp-external-versions');
+    const externalList = node('ul', 'bp-version-choices');
+    externalList.setAttribute('aria-label', 'Nominated external versions');
+    const actions = node('div', 'bp-fallback-add-actions');
+    const picker = node('button', 'bp-version-nomination');
+    picker.type = 'button';
+    picker.setAttribute('aria-controls', 'benchmark-card');
+    picker.append(icon('fa-solid fa-plus'), node('span', '', 'Nominate a version from another benchmark'));
+    picker.addEventListener('click', () => {
+        const current = data();
+        if (current?.editable && !current.busy) onToggleNomination(current.group, selectedScoringCondition(current.entries));
+    });
+    actions.append(picker);
+    const login = node('a', '', 'Sign in to nominate a version');
+    login.href = '/github_login';
+    external.append(node('h4', '', 'External versions'), externalList, actions, login);
+    host.append(title, status, heading, list, external);
 
     const rows = new Map();
     let intent = null;
@@ -106,8 +123,8 @@ export function createBenchmarkSettings({ host, selectedHeader, getScope, getDat
         if (!current?.editable || current.busy || current.readOnly || !supportsEstimation(current)) return;
         const targetConditionID = selectedScoringCondition(current.entries);
         if (targetConditionID === null || targetConditionID === sourceConditionID) return;
-        const previous = current.personalEstimationVotes.find(item => item.targetConditionID === targetConditionID
-            && item.sourceConditionID === sourceConditionID)?.vote;
+        const key = estimationVotePairKey(targetConditionID, sourceConditionID);
+        const previous = current.personalEstimationVotes.find(item => estimationVotePairKey(item.targetConditionID, item.sourceConditionID) === key)?.vote;
         if (onVote(current.group, targetConditionID, sourceConditionID, previous === vote ? null : vote)) refresh();
     }
 
@@ -208,7 +225,7 @@ export function createBenchmarkSettings({ host, selectedHeader, getScope, getDat
         const { rate, support, oppose } = row.estimation;
         const { supportCount = 0, opposeCount = 0 } = counts ?? {};
         const total = supportCount + opposeCount;
-        const direction = `${versionName(source)} as an estimation source for ${versionName(target)}`;
+        const direction = `mutual estimation between ${versionName(target)} and ${source.externalName ?? versionName(source)}`;
         const share = total ? percentage(supportCount / total * 10000) : null;
         rate.textContent = share ?? 'No votes · Eligible by default';
         describe(rate, share
@@ -257,11 +274,12 @@ export function createBenchmarkSettings({ host, selectedHeader, getScope, getDat
             }
             setHelpText(help, instructions.join(' '));
         }
-        const targetID = target?.conditionID;
-        const personalVotes = new Map(readOnly ? [] : personalEstimationVotes.filter(item => item.targetConditionID === targetID)
-            .map(({ sourceConditionID, vote }) => [sourceConditionID, vote]));
-        const counts = new Map(communityEstimationVotes.filter(item => item.targetConditionID === targetID)
-            .map(item => [item.sourceConditionID, item]));
+        const pairMap = rows => new Map(rows.map(item => [estimationVotePairKey(item.targetConditionID, item.sourceConditionID), item]));
+        const personalVotes = pairMap(readOnly ? [] : personalEstimationVotes), counts = pairMap(communityEstimationVotes);
+        const updatePair = (row, version, disabled) => {
+            const key = target && estimationVotePairKey(target.conditionID, version.conditionID);
+            updateEstimation(row, version, target, personalVotes.get(key)?.vote, counts.get(key), readOnly, disabled);
+        };
         for (const [conditionID, row] of rows) {
             if (!versions.has(conditionID)) { row.row.remove(); rows.delete(conditionID); }
         }
@@ -272,8 +290,28 @@ export function createBenchmarkSettings({ host, selectedHeader, getScope, getDat
             if (!rows.has(conditionID)) rows.set(conditionID, createRow(conditionID, interactive));
             const row = rows.get(conditionID);
             updateChoice(row, version, active === conditionID, readOnly, interactive, disabled);
-            updateEstimation(row, version, target, personalVotes.get(conditionID), counts.get(conditionID), readOnly, disabled);
+            updatePair(row, version, disabled);
         }
+        externalList.replaceChildren();
+        const nominatedIDs = new Set((current.externalPairs ?? []).filter(p => target
+            && [p.targetConditionID, p.sourceConditionID].includes(target.conditionID))
+            .map(p => p.targetConditionID === target.conditionID ? p.sourceConditionID : p.targetConditionID));
+        if (nominatedIDs.size) for (const group of current.catalogue ?? []) {
+            if (group.benchmarkID === current.group.benchmarkID) continue;
+            for (const version of group.versions) if (nominatedIDs.has(version.conditionID)) {
+                const name = group.name + ' · ' + versionName(version);
+                const row = node('li', 'bp-version-choice-row');
+                row.dataset.externalConditionId = String(version.conditionID);
+                row.append(node('span', 'bp-version-choice-name', name));
+                externalList.append(row);
+                updatePair({ row, estimation: null }, { ...version, externalName: name }, disabled);
+            }
+        }
+        external.hidden = !target || !(current.catalogue?.length > 1) || (readOnly && !nominatedIDs.size);
+        actions.hidden = readOnly || !current.authenticated;
+        picker.disabled = disabled;
+        picker.setAttribute('aria-pressed', String(Boolean(current.nominating)));
+        login.hidden = readOnly || current.authenticated;
         host.hidden = false;
     }
 
