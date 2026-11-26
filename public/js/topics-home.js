@@ -1224,13 +1224,15 @@ betaFeedbackLink.addEventListener('click', prepareBetaFeedback);
 
 const privateTopicEditor = createPrivateTopicEditor({
     async beforeOpen() { await profileReady; if (profileReadFailed) await loadProfile(); return true; },
-    async onSaved(topic) {
+    async onSaved(topic, { created = false } = {}) {
         $('#topic-search').value = '';
-        await loadTopics(); resetFilters();
+        await loadTopics();
         const card = cards.get(String(topic.ID))?.card;
+        if (created && card?.hidden) selectDirectoryView('created');
+        resetFilters();
         card?.scrollIntoView({ block: 'center', behavior: 'auto' });
         card?.querySelector('.th-topic-link')?.focus({ preventScroll: true });
-        announcement.textContent = `${topic.name} saved.`;
+        announcement.textContent = `${topic.name} ${created ? topic.isPrivate ? 'created' : 'published' : 'saved'}.`;
     },
     async onDeleted() { await loadTopics(); announcement.textContent = 'Private topic deleted.'; }
 });

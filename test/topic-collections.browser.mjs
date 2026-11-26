@@ -252,7 +252,7 @@ async function checkEmptyCollections(page) {
         await page.waitForFunction(() => JSON.parse(localStorage.getItem('benchpoll-sidebar-recent-v1:user:1') ?? '[]')
             .some(topic => topic.categoryID === 1));
         await checkOptions(page, ['popular', 'recent', 'search']);
-        await page.getByRole('button', { name: 'Create private topic', exact: true }).click();
+        await page.getByRole('button', { name: 'Create topic', exact: true }).click();
         await page.locator('#create-topic-dialog[open]').waitFor();
         await page.getByRole('button', { name: 'Close topic editor' }).click();
     } finally {

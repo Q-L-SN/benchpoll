@@ -41,7 +41,7 @@
         <div class="th-header-inner th-container">
             <a class="th-brand" href="/" aria-label="BenchPoll home"><img src="/assets/benchpoll-logo.svg" alt="BenchPoll" width="330" height="67"></a>
             <span id="topics-label" class="th-topics-wordmark">Topics</span>
-            <button id="new-private-topic" class="th-quiet" type="button" aria-label="Create topic" data-tooltip="Create topic"><i class="fa-solid fa-plus" aria-hidden="true"></i><span>Create topic</span></button>
+            <button id="new-private-topic" class="th-quiet" type="button" aria-label="Create topic" aria-haspopup="dialog" data-tooltip="Create topic"><i class="fa-solid fa-plus" aria-hidden="true"></i><span>Create topic</span></button>
             <nav class="th-header-links" aria-label="About and account"></nav>
         </div>
     </header></div>
@@ -89,15 +89,6 @@
             <button id="topic-scenes-close" class="th-icon" type="button" aria-label="Close scenes" autofocus><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
         </div>
         <div id="topic-scenes-grid" class="th-scene-grid"></div>
-    </dialog>
-    <dialog id="create-topic-dialog" class="th-dialog" aria-labelledby="create-topic-title">
-        <form id="create-topic-form">
-            <div class="th-dialog-heading"><h2 id="create-topic-title">New private topic</h2><button class="th-icon" type="button" data-close-create aria-label="Close new topic" data-tooltip="Close"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button></div>
-            <label class="th-field">Name<input id="new-topic-name" name="name" required maxlength="128" autocomplete="off"></label>
-            <label class="th-field">One-sentence summary<input id="new-topic-description" name="description" required maxlength="180" autocomplete="off"></label>
-            <div id="create-topic-status" class="th-form-status" role="status" hidden></div>
-            <div class="th-dialog-actions"><button class="th-quiet" type="button" data-close-create>Cancel</button><button id="create-topic-submit" class="th-primary" type="submit"><i class="fa-solid fa-plus" aria-hidden="true"></i><span>Create private topic</span></button></div>
-        </form>
     </dialog>
 </body>
 </html>

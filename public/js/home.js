@@ -46,7 +46,7 @@ const sidebarNavigation = createSidebarNavigation({
         return selectTopic(entry);
     },
     onLogin: () => loginButton.click(),
-    onCreatePrivate: trigger => openPrivateTopicEditor(null, trigger),
+    onCreateTopic: trigger => openPrivateTopicEditor(null, trigger),
     onSessionChange: () => { void loadUserProfile().catch(showNavigationError); }
 });
 navigationChannel.subscribe(() => { lastWorkspaceURL = window.location.href; });

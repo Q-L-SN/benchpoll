@@ -362,7 +362,8 @@ function conditionSuggestionGroups(choices, render) {
 }
 
 function benchmarkChoiceLabel(object, condition) {
-    return `<span class="benchmark-suggestion-copy"><span>${escapeHTML(object.name)}${pendingBadge(object)}</span>${normalizedConditionName(condition.name) === 'default' ? '' : `<small>${escapeHTML(condition.name)}</small>`}</span>`;
+    const version = normalizedConditionName(condition.name) === 'default' ? '' : ` <small>${escapeHTML(condition.name)}</small>`;
+    return `<span class="benchmark-suggestion-copy"><span>${escapeHTML(object.name)}${pendingBadge(object)}</span>${version}</span>`;
 }
 
 function renderEvaluationSuggestions(query) {

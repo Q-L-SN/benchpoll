@@ -1,6 +1,6 @@
 # Topic platform and canonical URLs
 
-The prelaunch topic platform replaces Proposal Hall with owner-controlled publication. A signed-in user can publish a private topic immediately and can have at most three active public topics. Making a topic private frees a slot. Official topics are managed by the catalogue and cannot be published, unpublished or edited through owner APIs.
+The prelaunch topic platform replaces Proposal Hall with owner-controlled publication. A signed-in user can create a public or private topic from the topic directory, the workspace sidebar or their own profile. New public topics are published immediately. An account can have at most three active public topics. Making a topic private frees a slot. Official topics are managed by the catalogue and cannot be published, unpublished or edited through owner APIs.
 
 `setTopicVisibility` holds the shared topic graph lock and then the authenticated account row lock before checking the public count. The visibility change, cap check and idempotent write response commit together. Editing, scene changes, reference saves and favorite writes use the same graph lock order. Public publication refuses references to a different private topic; cycles among accessible topics are allowed.
 
@@ -22,6 +22,7 @@ The route resolver and all topic read APIs enforce active status and ownership. 
 
 Business payloads for write APIs are combined with the existing account transport identity, CSRF token and `Idempotency-Key`:
 
+- `POST /api/save_private_topic` accepts `isPrivate: false` on creation to publish the new topic and its scenes in one transaction. Omitting `isPrivate` or providing `true` creates a private topic. For an existing topic, use `set_topic_visibility` to change visibility.
 - `POST /api/set_topic_visibility`: `{categoryID, isPublic, expectedRevision?}`. Returns owner-visible topic metadata and `editRevision`; the cap returns `409 public_topic_limit`.
 - `POST /api/set_topic_favorite`: `{categoryID, isFavorited}`. Returns `{categoryID, favoriteCount, isFavorited}`.
 - `POST /api/get_topic`: `{categoryID}` for internal lookups, or `{publicID|privateID, sceneNumber?}` for route lookup. Route lookups also return `selectedScene` and `canonicalPath`.

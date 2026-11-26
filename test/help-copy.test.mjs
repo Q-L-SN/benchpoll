@@ -87,8 +87,8 @@ test('guide and contribution instructions use concise copy', () => {
     const main = guide.match(/<article[^>]*>([\s\S]*?)<\/article>/)?.[1].replace(/<nav[\s\S]*?<\/nav>/, '');
     assert.ok(main);
     assert.ok(words(plain(main)) <= 1150, String(words(plain(main))));
-    assert.match(main, /Create a private topic, then choose <strong>Make public<\/strong>/);
-    assert.match(main, /Creation and publication are immediate\. You can have up to three public topics at a time\./);
+    assert.match(main, /Choose <strong>Public<\/strong> or <strong>Private<\/strong> when creating a topic/);
+    assert.match(main, /Public topics appear as soon as you publish\. You can have up to three public topics at a time\./);
     assert.doesNotMatch(main, /Collection lasts 14 days|Proposal Hall|proposal hall/);
     assert.match(main, /<h4 id="calculation-details"[^>]*>[^<]+<\/h4>\s*<p>[^<]*past 72 hours/);
     assert.match(main, /eligible measured versions of the same benchmark/);

@@ -32,7 +32,7 @@ body.bp-home #config-sidebar-toggle {
 }
 body.bp-home #config-sidebar-toggle > .bp-sidebar-toggle-direction { flex-basis: 8px; width: 8px; font-size: 11px; }
 .bp-config-sidebar-toggle:disabled { opacity: .55; cursor: default; }
-.bp-config-header-account { display: none; flex: 0 0 36px; margin-left: 12px; }
+.bp-config-header-account { display: flex; flex: none; align-items: center; gap: 2px; margin-left: auto; }
 .bp-home .bp-config-account {
     display: inline-grid;
     place-items: center;
@@ -55,7 +55,6 @@ body.bp-home #config-sidebar-toggle > .bp-sidebar-toggle-direction { flex-basis:
 .bp-config-account [data-has-picture="true"] > i { visibility: hidden; }
 .bp-config-account[hidden] { display: none; }
 .bp-home .bp-context-identity { flex: 1 1 320px; flex-wrap: wrap; gap: 8px 12px; }
-.bp-home .bp-context-identity > .bp-topic-directory-link { flex: 0 0 auto; min-height: 44px; white-space: nowrap; }
 .bp-home .bp-mode-switch[data-ui-component="segmented"] { min-width: 0; width: 100%; }
 .bp-home #pie-card .bp-mode-switch[data-ui-component="segmented"] > button {
     flex: 1 1 50%;
@@ -143,7 +142,6 @@ body.bp-home #config-sidebar-toggle > .bp-sidebar-toggle-direction { flex-basis:
         transition: transform 300ms cubic-bezier(.2, .7, .2, 1);
     }
     .bp-home.config-brand-in-header #workspace-brand-slot .bp-brand { transform: translateY(0); }
-    .bp-home:is(.config-sidebar-collapsed, .discussion-open) .bp-config-header-account { display: block; }
     body.bp-home #config-sidebar-toggle {
         min-width: 0;
         overflow: hidden;
@@ -223,19 +221,22 @@ body.bp-home #config-sidebar-toggle > .bp-sidebar-toggle-direction { flex-basis:
     @supports ((backdrop-filter: blur(20px)) or (-webkit-backdrop-filter: blur(20px))) {
         .bp-home:not(.taxonomy-open) #config-sidebar { background: #ffffffd9; -webkit-backdrop-filter: blur(20px) saturate(1.2); backdrop-filter: blur(20px) saturate(1.2); }
     }
-    .bp-home:not(.taxonomy-open) #config-site-links { display: flex; margin-left: auto; }
+    .bp-home:not(.taxonomy-open) #config-site-links { display: flex; gap: 0; margin-left: auto; }
     .bp-home.taxonomy-open #config-site-links, .bp-home.taxonomy-open #config-sidebar .bp-sidebar-footer { display: none; }
     .bp-home:not(.taxonomy-open) #config-sidebar > .bp-brand { flex: 0 0 auto; }
     .bp-home:not(.taxonomy-open) #config-sidebar > .bp-brand img { width: 130px; transform: translateY(-1px); }
     .bp-home #config-site-links > #taxonomy-toggle span { display: none; }
-    .bp-home .bp-context-identity > .bp-topic-directory-link { display: none; }
     body.bp-home #config-sidebar-toggle { display: none; }
     .bp-home #workspace-brand-slot { display: none; }
     .bp-home .bp-page-heading { align-items: flex-start; min-height: 64px; }
     .bp-home .bp-page-heading h1 { font-size: 22px; line-height: 28px; }
-    .bp-home .bp-config-header-account { display: none; }
+    .bp-home .bp-config-header-account { gap: 0; }
     .bp-home .bp-config-account { width: 44px; height: 44px; }
     .bp-home .bp-sidebar > .bp-brand { max-width: calc(100% - 48px); }
+}
+
+@media (max-width: 350px) {
+    .bp-home:not(.taxonomy-open) #config-sidebar > .bp-brand img { width: 110px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -15,9 +15,10 @@ test('the workspace stacks its brand, topic heading and actual summary without l
     assert.doesNotMatch(heading, /bp-agi|bp-help-trigger|circle-question|data-help-text|data-headline-mode/);
     assert.doesNotMatch(html + source + styles, /workspace-header-layout|data-header-layout|benchpoll:header-layout/);
     assert.match(styles, /\.bp-heading-topic-row \{[^}]*flex-direction: column/);
+    assert.match(heading, /class="bp-config-header-account">\s*<a id="back-to-topics"[^>]*href="\/"[^>]*aria-label="Home"[^>]*><i class="fa-solid fa-house"[^>]*><\/i><\/a>\s*<button id="header-user-profile"/);
     const actions = html.match(/<div class="bp-context-actions">[\s\S]*?<\/div>/)?.[0];
-    assert.match(actions, /id="discussion-entry"[\s\S]*id="back-to-topics"[^>]*href="\/"[^>]*><i class="fa-solid fa-house"[^>]*><\/i><span>Home<\/span>/);
-    assert.doesNotMatch(actions, /workspace-topic-summary/);
+    assert.match(actions, /id="discussion-entry"/);
+    assert.doesNotMatch(actions, /workspace-topic-summary|back-to-topics/);
 });
 
 test('AGI and private topics render their actual description with no name-specific promotion', () => {

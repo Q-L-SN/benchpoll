@@ -15,8 +15,9 @@ export function appendBenchmarkIdentity(element, member, { showVersion = false }
     const version = !showVersion || isTopicReference(member) || member.isBenchmarkGroup ? '' : benchmarkConditionLabel(member);
     if (version) {
         const detail = document.createElement('span');
-        detail.className = 'bp-benchmark-condition'; detail.textContent = version;
-        element.append(detail);
+        detail.className = 'bp-benchmark-condition';
+        detail.textContent = version;
+        element.append(' ', detail);
     }
     return element;
 }

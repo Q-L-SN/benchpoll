@@ -7,10 +7,41 @@
 .bp-home .bp-config-header-account { align-self: start; }
 .bp-home .bp-context-row { justify-content: flex-end; padding-bottom: 4px; margin-bottom: 4px; gap: 6px; }
 .bp-home .bp-context-actions { margin-left: auto; gap: 10px; }
-#config-mobile-home { display: none; }
 
 .bp-pie-focus-bar { position: sticky; top: 0; z-index: 12; padding-block: 10px 4px; background: #fff; border-radius: 10px 10px 0 0; }
 .bp-home .bp-pie-card { padding-top: 0; }
+.bp-home .bp-pie-card.is-benchmark-settings-open {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    padding-bottom: 0;
+    overflow: clip;
+}
+.bp-pie-card.is-benchmark-settings-open > :is(.bp-pie-focus-bar, .bp-guest-draft-notice) { flex: none; }
+.bp-pie-card.is-benchmark-settings-open > .bp-pie-adjustment-hint { display: none; }
+.bp-pie-card.is-benchmark-settings-open > .bp-guest-draft-notice { order: 1; }
+.bp-pie-card.is-benchmark-settings-open > .bp-inline-fallback {
+    display: flex;
+    flex: 1 1 0;
+    flex-direction: column;
+    gap: 4px;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    background: var(--bp-surface, #fff);
+}
+.is-benchmark-settings-open .bp-inline-fallback-toolbar { flex: none; }
+.bp-inline-fallback.is-settings-motion-disabled .bp-ui-disclosure-chevron { transition: none; }
+.is-benchmark-settings-open .bp-benchmark-settings {
+    flex: 1 1 0;
+    min-height: 0;
+    padding: 0 16px 8px;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    scrollbar-width: thin;
+}
+#pie-chart-view[hidden] { display: none; }
 .bp-pie-tools-row { flex-wrap: nowrap; align-items: center; gap: 6px; padding: 6px 12px 0; }
 .bp-pie-tools-row .bp-pie-guidance { display: flex; flex: 1 1 auto; flex-wrap: nowrap; align-items: baseline; justify-content: flex-start; gap: 5px; min-width: 0; padding: 0; }
 .bp-pie-tools-row .bp-pie-guidance[hidden] { display: none; }
@@ -50,8 +81,8 @@
 
 @media (max-width: 760px) {
     .bp-home #workspace-brand-slot { display: none; }
-    #config-mobile-home { display: inline-flex; }
-    .bp-home #back-to-topics { display: none; }
+    .bp-pie-scroll-shell:has(.is-benchmark-settings-open), .bp-pie-home-slot:has(.is-benchmark-settings-open) { height: 100%; }
+    .is-benchmark-settings-open .bp-benchmark-settings { padding-inline: 10px; overscroll-behavior-y: auto; }
     .bp-home .bp-page-heading { margin-bottom: 2px; gap: 8px; }
     .bp-home .bp-page-heading #workspace-topic-summary { font-size: 12px; }
     .bp-home .bp-context-row { padding-bottom: 0; margin-bottom: 3px; }

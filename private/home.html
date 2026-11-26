@@ -157,19 +157,23 @@
             </div>
             <nav class="bp-taxonomy" aria-label="Topics">
                 <div id="sidebar-topic-creation" hidden>
-                    <div class="bp-mine-actions" role="group" aria-label="Create a private topic">
-                        <button class="bp-quiet-action" type="button" data-create-topic="private"><i class="fa-solid fa-lock" aria-hidden="true"></i><span>Create private topic</span><i class="fa-solid fa-plus" aria-hidden="true"></i></button>
+                    <div class="bp-mine-actions">
+                        <button class="bp-quiet-action" type="button" data-create-topic="private"><i class="fa-solid fa-plus" aria-hidden="true"></i><span>Create topic</span></button>
                     </div>
-                    <p id="topic-visibility-notice" class="bp-private-category-notice">Private topics and their weights stay private and do not affect public rankings.</p>
+                    <p id="topic-visibility-notice" class="bp-private-category-notice">Choose who can see your topic.</p>
                     <form id="topic-create-form" class="bp-topic-create-form" aria-describedby="topic-visibility-notice" hidden>
-                        <h3 id="topic-create-title">New private topic</h3>
+                        <h3 id="topic-create-title">New topic</h3>
                         <label for="topic-create-name">Topic name</label>
                         <input id="topic-create-name" name="name" type="text" maxlength="128" autocomplete="off" required>
                         <label for="topic-create-description">One-sentence summary</label>
                         <input id="topic-create-description" name="description" type="text" maxlength="180" autocomplete="off" required>
-                        <input type="hidden" name="visibility" value="private">
+                        <fieldset>
+                            <legend>Visibility</legend>
+                            <label><input type="radio" name="visibility" value="private" checked> Private</label>
+                            <label><input type="radio" name="visibility" value="public"> Public</label>
+                        </fieldset>
                         <p id="topic-create-error" role="alert"></p>
-                        <div><button class="bp-quiet-action" type="button" data-cancel><span>Cancel</span></button><button class="primary-button" type="submit"><i class="fa-solid fa-plus" aria-hidden="true"></i><span>Create</span></button></div>
+                        <div><button class="bp-quiet-action" type="button" data-cancel><span>Cancel</span></button><button class="primary-button" type="submit"><i class="fa-solid fa-plus" aria-hidden="true"></i><span>Create private topic</span></button></div>
                     </form>
                 </div>
                 <div id="tree-content"></div>
@@ -243,6 +247,7 @@
                 </div>
                 </div>
                 <div class="bp-config-header-account">
+                    <a id="back-to-topics" class="bp-config-account bp-quiet-action" href="/" aria-label="Home" data-tooltip="Home"><i class="fa-solid fa-house" aria-hidden="true"></i></a>
                     <button id="header-user-profile" class="bp-config-account bp-quiet-action" type="button" hidden aria-label="Your profile"><span data-account-picture aria-hidden="true"><i class="fa-regular fa-user" aria-hidden="true"></i></span></button>
                     <button id="header-login-button" class="bp-config-account bp-quiet-action" type="button" aria-label="Sign in with GitHub" data-tooltip="Sign in with GitHub"><i class="fa-brands fa-github" aria-hidden="true"></i></button>
                 </div>
@@ -253,7 +258,6 @@
                         <i class="fa-regular fa-comments" aria-hidden="true"></i><span data-discussion-count>Discussions</span>
                     </a>
                     <span id="workspace-topic-creator" class="bp-topic-creator-slot" hidden></span>
-                    <a id="back-to-topics" class="bp-topic-directory-link bp-quiet-action" href="/"><i class="fa-solid fa-house" aria-hidden="true"></i><span>Home</span></a>
                     <button id="workspace-refresh" class="bp-square-button" type="button" aria-label="Refresh data" data-tooltip="Refresh data">
                         <i class="fa-solid fa-rotate" aria-hidden="true"></i>
                     </button>
@@ -319,6 +323,7 @@
                                 <button id="guest-draft-save" type="button"></button>
                                 <button id="guest-draft-discard" class="bp-guest-draft-discard" type="button" hidden>Discard</button>
                             </div>
+                            <div id="pie-chart-view">
                             <div class="bp-pie-stage">
                                 <svg id="weight-pie" viewBox="0 0 360 360" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Public index composition"></svg>
                                 <div id="personal-pie-empty" class="bp-personal-pie-empty" hidden>
@@ -336,7 +341,9 @@
                                     <button id="weight-add-benchmark" class="bp-quiet-action" type="button" aria-controls="benchmark-card"><i class="fa-solid fa-plus" aria-hidden="true"></i><span>Add benchmark or topic</span></button>
                                 </div>
                                 <section id="topic-reference-weights" class="bp-topic-reference-weights" aria-label="Topic references" hidden></section>
-                                <section id="inline-fallback" class="bp-inline-fallback" aria-label="Benchmark settings" hidden>
+                            </div>
+                            </div>
+                            <section id="inline-fallback" class="bp-inline-fallback" aria-label="Benchmark settings" hidden>
                                     <div class="bp-inline-fallback-toolbar">
                                         <div id="inline-fallback-personal-control" class="bp-inline-fallback-personal-control">
                                             <button id="inline-fallback-toggle" class="bp-inline-fallback-toggle" type="button" data-ui-disclosure aria-controls="benchmark-settings" aria-expanded="false">
@@ -371,8 +378,7 @@
                                         <span role="alert">Fallback not saved. Your changes are kept.</span>
                                         <button id="inline-fallback-save-retry" type="button">Retry</button>
                                     </div>
-                                </section>
-                            </div>
+                            </section>
                         </section>
                     </div>
 

@@ -38,9 +38,8 @@ test('homepage How it works control navigates to a page instead of opening a dia
 test('Home navigation belongs to the configuration page rather than the guide', () => {
     assert.doesNotMatch(guide, /Back to topics/i);
     assert.match(home, /id="back-to-topics"[^>]*class="[^"]*bp-quiet-action[^\"]*"[^>]*href="\/"/);
-    assert.match(home, /<a id="back-to-topics"[\s\S]*?fa-house[\s\S]*?<span>Home<\/span><\/a>/);
-    const context = home.match(/<section class="bp-context-row"[\s\S]*?<\/section>/)[0];
-    assert.match(context, /id="back-to-topics"/);
+    const heading = home.match(/<header class="bp-page-heading">[\s\S]*?<\/header>/)[0];
+    assert.match(heading, /<a id="back-to-topics"[^>]*aria-label="Home"[^>]*><i class="fa-solid fa-house"[^>]*><\/i><\/a>\s*<button id="header-user-profile"/);
     assert.match(home, /id="workspace-topic-summary"/);
 });
 
@@ -151,10 +150,11 @@ test('version estimation explains joint evidence, shrinkage, extrapolation and r
 
 test('publication and evidence copy includes settings, visibility and score contributions', () => {
     const account = section('account');
+    assert.match(account, /Choose <strong>Public<\/strong> or <strong>Private<\/strong> when creating a topic/);
     assert.match(account, /<strong>Make public<\/strong> in its editor/);
-    assert.match(account, /Creation and publication are immediate/);
+    assert.match(account, /Public topics appear as soon as you publish/);
     assert.match(account, /up to three public topics at a time/);
-    assert.match(account, /Make a public topic private again before deleting it/);
+    assert.match(account, /Make a public topic private before deleting it/);
     assert.match(account, /href="\/me"/);
     assert.match(account, /href="\/settings"/);
     assert.match(account, /edit your details and privacy choices/);

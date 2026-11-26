@@ -108,7 +108,7 @@ test('topic creation is contained in the authored collection and other navigatio
     assert.match(mine, /for="topic-create-name">Topic name<\/label>/);
     assert.doesNotMatch(html, /private-category-create-toggle/);
     assert.match(html, /id="configured-browse"[^>]*><span class="bp-ui-action-label">Browse topics<\/span>/);
-    assert.match(mine, /class="primary-button" type="submit"><i[^>]+><\/i><span>Create<\/span>/);
+    assert.match(mine, /class="primary-button" type="submit"><i[^>]+><\/i><span>Create private topic<\/span>/);
     assert.doesNotMatch(read('public/css/ui/navigation.css'), /\.bp-configured-actions button\s*\{/);
     assert.doesNotMatch(read('public/css/ui/private-categories.css'), /\.bp-private-category-form button/);
 });

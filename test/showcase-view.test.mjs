@@ -46,8 +46,8 @@ test('Intelligence is featured only in Popular while server popularity and recen
 
 test('fixed-height directory cards leave room above the score bars for weights', async () => {
     const css = await read('public/css/topics-home.css');
-    assert.match(css, /\.th-card\s*\{[^}]*height: 416px;[^}]*border-radius: 8px/);
-    assert.match(css, /\.th-card\.is-featured\s*\{[^}]*grid-column: 1 \/ -1; height: 456px/);
+    assert.match(css, /\.th-card\s*\{[^}]*height: 408px;[^}]*border-radius: 8px/);
+    assert.match(css, /\.th-card\.is-featured\s*\{[^}]*grid-column: 1 \/ -1; height: 448px/);
     for (const height of [141, 181, 185]) {
         const bars = barGeometry({ lower: 100, upper: 100 }, { min: 0, max: 100 }, height);
         assert.equal(bars.known, height * .65);

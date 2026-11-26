@@ -21,6 +21,7 @@ import { normalizeDiscussionReport } from '../../discussion-service.js';
 import { normalizePrivateCategoryRequest } from '../../private-category-service.js';
 import { topicSlug, topicURL, parseTopicPath, scenePath } from '../../public/js/shared/topics.js';
 import { normalizeTopicRequest } from '../../topic-service.js';
+import { normalizePrivateTopicEdit } from '../../private-topic-service.js';
 import { topicPreviewComparison, normalizeHomeComparison } from '../../topic-home-service.js';
 import { AA_DISPLAY_RESTRICTION } from '../../public/js/shared/aa-ranking-policy.js';
 
@@ -114,10 +115,27 @@ export async function startPreview({ port = 0, ...options } = {}) {
                     return send(200, { categoryID: body.categoryID, favoriteCount: count, isFavorited: body.isFavorited === true });
                 }
                 case '/api/get_topic_reference_targets': return send(200, { targets: options.referenceTargets ?? [] });
-                case '/api/create_topic': {
+                case '/api/create_topic':
+                case '/api/save_private_topic': {
                     if (!state.authenticated) return send(401, { error: 'authentication_required' });
-                    const topic = normalizeTopicRequest(body);
-                    const created = { ...topic, ID: 1000 + (state.newTopics?.length ?? 0), isMine: true };
+                    const sharedEditor = url.pathname === '/api/save_private_topic';
+                    const { csrfToken, ...draft } = body;
+                    delete draft.expectedUserID;
+                    if (sharedEditor) {
+                        if (body.expectedUserID !== state.userID) return send(409, { error: 'account_changed' });
+                        if (csrfToken !== 'fixture-csrf') return send(403, { error: 'invalid_csrf_token' });
+                        readWriteIdentity(request);
+                    }
+                    if (sharedEditor && draft.categoryID != null) return send(404, { error: 'private_topic_not_found' });
+                    const topic = sharedEditor ? normalizePrivateTopicEdit(draft) : normalizeTopicRequest(draft);
+                    const isPrivate = topic.isPrivate !== false;
+                    if (!isPrivate && publicTopics().filter(item => item.isMine && !item.isOfficial).length >= 3) {
+                        return send(409, { error: 'public_topic_limit' });
+                    }
+                    const ID = 1000 + (state.newTopics?.length ?? 0);
+                    const scenes = (topic.scenes ?? []).map((scene, index) => ({ ID: ID * 100 + index + 1, name: scene.name,
+                        sceneNumber: index + 1, isDefault: scene.key === topic.defaultSceneKey }));
+                    const created = { ID, name: topic.name, description: topic.description, isPrivate, isMine: true, scenes, editRevision: 'a'.repeat(64) };
                     state.newTopics ??= []; state.newTopics.push(created);
                     if (topic.isPrivate) {
                         state.privateCategories ??= [];

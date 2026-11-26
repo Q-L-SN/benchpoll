@@ -96,7 +96,10 @@ export function createBenchmarkSettings({ host, selectedHeader, getScope, getDat
     }
 
     function close() {
-        if (intent) clearRows();
+        if (intent) {
+            host.scrollTop = 0;
+            clearRows();
+        }
         host.hidden = true;
         intent = null;
     }
@@ -222,15 +225,21 @@ export function createBenchmarkSettings({ host, selectedHeader, getScope, getDat
             row.estimation = createEstimation(source.conditionID, readOnly);
             row.row.append(row.estimation.panel);
         }
-        const { rate, support, oppose } = row.estimation;
+        const { panel, rate, support, oppose } = row.estimation;
         const { supportCount = 0, opposeCount = 0 } = counts ?? {};
         const total = supportCount + opposeCount;
         const direction = `mutual estimation between ${versionName(target)} and ${source.externalName ?? versionName(source)}`;
-        const share = total ? percentage(supportCount / total * 10000) : null;
-        rate.textContent = share ?? 'No votes · Eligible by default';
-        describe(rate, share
-            ? `${share} community support for ${direction}. ${supportCount} in support, ${opposeCount} opposed.`
-            : `No community votes on ${direction}. Eligible by default.`);
+        rate.hidden = total === 0;
+        panel.hidden = readOnly && total === 0;
+        if (total) {
+            const share = percentage(supportCount / total * 10000);
+            rate.textContent = share;
+            describe(rate, `${share} community support for ${direction}. ${supportCount} in support, ${opposeCount} opposed.`);
+        } else {
+            rate.textContent = '';
+            rate.removeAttribute('aria-label');
+            delete rate.dataset.tooltip;
+        }
         if (readOnly) return;
         updateVote(support, 'support', direction, supportCount, vote === 'support', disabled);
         updateVote(oppose, 'oppose', direction, opposeCount, vote === 'oppose', disabled);

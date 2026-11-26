@@ -4,7 +4,7 @@
 
 benchpoll is a Node.js/Express web app for browsing and weighting ranked evaluation items, including benchmarks, arenas, and other evaluation methods. The app serves private HTML pages, public CSS/JS assets, GitHub OAuth login, session-backed user accounts, role-based review access, and ranking pages backed by a MySQL database.
 
-Users can create, edit and delete private topics, including their scenes and default scene. New public-topic proposals publish a frozen snapshot of an existing private topic’s saved configuration. Anyone can preview rankings and try weights; saving a private copy is explicit. Replacing a snapshot resets supports. A public proposal needs 30 other supporters before administrator review, which imports the snapshot as one contribution from its author. Benchmark, model, score and feedback contributions use the standard contribution forms. Reviewers use the same GitHub-backed accounts; authorization comes from `users.role`. A `senior` submission uses the same endpoint and payload as any other submission, but is validated, approved, applied, audited, and queued for an email decision within one server transaction.
+Users can create public or private topics and choose their scenes and default scene when creating them. A public topic appears immediately. Each account can have up to three public topics. Users can create topics from Home, the configuration sidebar, or their own profile. Private topics can also be published later from their editor. Benchmark, model, score and feedback contributions use the standard contribution forms. Reviewers use the same GitHub-backed accounts; authorization comes from `users.role`. A `senior` submission uses the same endpoint and payload as any other submission, but is validated, approved, applied, audited, and queued for an email decision within one server transaction.
 
 Topics optionally contain one level of scenes, with exactly one default shown first. Search includes scenes: a parent-only match keeps its scenes collapsed until expanded, while directly matched scenes appear immediately. References target a concrete scene when present. References expand into benchmark weights before scoring, including repeated paths through loops. Public indices use public target weights, while personal indices prefer the viewer's saved target weights. Private targets stay within private configurations. Loops with no path to benchmarks, empty targets and unavailable targets retain missing weight. See [How BenchPoll works](https://benchpoll.com/how-it-works#references).
 
@@ -228,10 +228,9 @@ There is no parent/descendant aggregation or Public composition endpoint. Saving
 updates its sampling timestamp. Topic 54 is featured by ID. Other topics use recent
 distinct-contributor activity, with at most one eligible new-topic discovery slot
 per six ordinary positions, including new topics with no saved pies. Home and the
-sidebar offer Popular, device-local Recent, Mine and Search. Mine includes the
-private-topic creation action; public proposals have a separate hall. Home and
-the configuration page share one account center. Public topic slugs are
-unique and checked against the shared reserved-route list. Model previews link
+sidebar offer collections and search. The shared topic editor offers visibility
+options when creating a topic. Public topic names must be unique and are
+checked against reserved names. Model previews link
 to the matching comparison in the workspace, including paginated results.
 
 Home uses a fixed light, hatched treemap and neutral outlined topic surfaces.
@@ -330,7 +329,7 @@ commit; run `npm ci` afterward to match the restored lockfile. See
 
 benchpoll 是一个基于 Node.js/Express 的网页应用，用于浏览、设置权重和展示评测项排行；评测项可以是 benchmark、arena 或其他评测方法。项目包含私有 HTML 页面、公开 CSS/JS 静态资源、GitHub OAuth 登录、基于 session 的用户账号、基于角色的审核权限，以及由 MySQL 数据库驱动的排行页面。
 
-用户可以创建、修改和删除私有主题，并设置场景列表及默认场景。新公开主题提案从现有私有主题的已保存配置生成冻结快照；任何人都可以预览排行和试调权重，只有明确保存时才创建私有副本。替换快照会清空支持票。提案达到 30 位其他用户支持后进入管理员审核，通过时按作者的一份贡献导入配置。基准测试、模型、分数和反馈通过统一的贡献表单提交。审核员继续使用普通的 GitHub 账号登录，权限由 `users.role` 决定。`senior` 提交时仍使用与普通用户完全相同的端点和数据结构，但服务器会在同一个事务内完成校验、批准、应用、审计和审核结果邮件入队。
+用户可以在首页、配置页侧栏或自己的个人中心创建公开或私有主题，并同时设置场景和默认场景。公开主题发布后立即显示，每个账号最多同时发布三个。也可以在私有主题的编辑器中稍后发布。基准测试、模型、分数和反馈通过统一的贡献表单提交。审核员继续使用普通的 GitHub 账号登录，权限由 `users.role` 决定。`senior` 提交时仍使用与普通用户完全相同的端点和数据结构，但服务器会在同一个事务内完成校验、批准、应用、审计和审核结果邮件入队。
 
 主题可以没有场景，也可以包含一层场景；有场景时必须有且只有一个默认场景，并排在最前。搜索包含场景：仅匹配一级主题时，其场景默认折叠，点击后展开；直接匹配的场景立即展示。引用有场景的主题时必须指定具体场景。引用在计分前展开成基准权重，包括循环中的重复路径。公众指数取目标的公众权重，个人指数优先取当前用户保存的目标权重。私有主题仅可在私有配置中引用。无法到达基准的循环、空目标和不可访问的目标保留为缺失权重。详见 [How BenchPoll works](https://benchpoll.com/how-it-works#references)。
 
@@ -549,9 +548,8 @@ https://benchpoll.com:1337
 不再聚合父子分类，也不再提供公众构成接口。保存个人配置会更新其取样时间。编号为 54 的主题
 固定突出显示，其余按近期不同参与者的有效配置活动排序，每六个普通位置最多
 安排一个合格的新主题探索位，包括尚无已保存 Pie 的新主题。首页和侧栏提供热门、
-本机最近浏览、我的及搜索。“我的”包含创建私有主题入口；公开主题通过提案大厅提出。
-首页和配置页共用个人中心，提供资料编辑和账号操作。
-公开主题地址须唯一，并通过共用的官方路径保留词表检查。点击模型预览会进入
+收藏、已配置、已创建、最近浏览及搜索。创建主题表单可选择可见性。
+公开主题名称须唯一，并通过保留名称检查。点击模型预览会进入
 配置页并定位对应的比较条目，包括尚未加载的分页结果。
 
 首页使用固定的浅色手绘线条矩形树图和中性描边主题外观；可以翻页时，模型翻页

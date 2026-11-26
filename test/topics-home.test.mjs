@@ -300,8 +300,9 @@ test('selectable tile theme, top exposure/fade and full unmasked weights are exp
     assert.match(html, /<p class="th-intro-copy">Choose what matters\. Shape the weights together\.<\/p>/);
     assert.match(html, /<meta name="description" content="Define Super Intelligence, democratically\. Compare AI models with community-weighted benchmarks, explore public rankings, and build your own AI index\.">/);
     assert.match(html, /<script src="\/js\/topics-home\.js" type="module"><\/script>/);
-    assert.match(html, /id="new-topic-name"[^>]*maxlength="128"/);
-    assert.match(html, /id="new-topic-description"[^>]*required maxlength="180"/);
+    const editor = await readFile(new URL('../public/js/shared/private-topic-editor.js', import.meta.url), 'utf8');
+    assert.match(editor, /id="new-topic-name"[^>]*maxlength="128"/);
+    assert.match(editor, /id="new-topic-description"[^>]*required maxlength="180"/);
     assert.doesNotMatch(html, /th-eyebrow|th-intro-actions|data-open-mine|Explore topics|Our weights\./);
 });
 

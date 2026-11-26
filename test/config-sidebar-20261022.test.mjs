@@ -115,8 +115,10 @@ test('the sidebar uses the collection picker and keeps topic creation with autho
     const mine = html.slice(html.indexOf('id="sidebar-topic-creation"'), html.indexOf('id="tree-content"'));
     assert.match(mine, /data-create-topic="private"/);
     assert.match(mine, /id="topic-create-form"/);
-    assert.match(mine, /<span>Create private topic<\/span>/);
-    assert.match(mine, /<p id="topic-visibility-notice" class="bp-private-category-notice">Private topics and their weights stay private and do not affect public rankings\.<\/p>/);
+    assert.match(mine, /<span>Create topic<\/span>/);
+    assert.match(mine, /id="topic-visibility-notice"/);
+    assert.match(mine, /name="visibility" value="private" checked/);
+    assert.match(mine, /name="visibility" value="public"/);
     assert.match(mine, /id="topic-create-form"[^>]*aria-describedby="topic-visibility-notice"/);
     assert.doesNotMatch(html, /private-category-create-toggle|private-category-create-form/);
 });

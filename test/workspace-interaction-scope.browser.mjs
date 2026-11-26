@@ -10,12 +10,12 @@ await mkdir(output, { recursive: true });
 const scenes = [{ ID: 101, name: 'General', sceneNumber: 1, isDefault: true },
     { ID: 102, name: 'Research', sceneNumber: 2, isDefault: false }];
 
-async function setup(t, engine, width, sceneFixture = false) {
+async function setup(t, engine, width, sceneFixture = false, reducedMotion = 'reduce') {
     const app = await startPreview({ communityVersions: true, secondaryBenchmark: true, rankingStress: true,
         communityEstimationVotes: [{ targetConditionID: 1, sourceConditionID: 901, supportCount: 4, opposeCount: 2 }] });
     const browser = await engine.launch({ headless: true });
     const page = await browser.newPage({ viewport: { width, height: 900 }, hasTouch: width < 760,
-        isMobile: width < 760, reducedMotion: 'reduce' });
+        isMobile: width < 760, reducedMotion });
     page.setDefaultTimeout(10000);
     const errors = []; page.on('pageerror', error => errors.push(error.message));
     t.after(async () => { await browser.close(); await app.close(); assert.deepEqual(errors, []); });
@@ -54,8 +54,12 @@ for (const [engine, width] of [[chromium, 1440], [chromium, 320], [webkit, 390]]
         const toggle = page.locator('#inline-fallback-toggle');
         const select = async conditionID => {
             const tile = `#weight-pie [data-object-id="${conditionID}"]`;
-            await page.locator(tile).click();
-            await page.locator(`${tile}[aria-pressed="true"]`).waitFor();
+            if (await panel.isVisible()) {
+                await page.locator(`#benchmark-rows .bp-benchmark-row[data-condition-id="${conditionID}"] .bp-benchmark-rank`).click();
+            } else {
+                await page.locator(tile).click();
+            }
+            await page.locator(`${tile}[aria-pressed="true"]`).waitFor({ state: 'attached' });
         };
         await select(1);
         await page.locator('#public-fallback-toggle').click();
@@ -180,5 +184,55 @@ for (const [engine, width] of [[chromium, 1440], [chromium, 320], [webkit, 390]]
         await page.waitForFunction(initial => Number(document.querySelector('#weight-pie [data-object-id="1"]').dataset.weight) === initial, initial);
         await hint.scrollIntoViewIfNeeded();
         await page.screenshot({ path: `${output}/${engine.name()}-${width}-${built ? 'built' : 'source'}-hint.png` });
+    });
+}
+
+for (const [engine, width] of [[chromium, 1440], [webkit, 390]]) {
+    test(`${engine.name()} ${width}: settings slide over the full weight pane and Start over closes immediately`, async t => {
+        const { page } = await setup(t, engine, width, false, 'no-preference');
+        await page.locator('#pie-mode-personal').click();
+        await page.locator('#weight-pie [data-object-id="1"]').click();
+        const toggle = page.locator('#inline-fallback-toggle');
+        await toggle.scrollIntoViewIfNeeded();
+        const toggleMotion = () => toggle.evaluate(async button => {
+            const section = document.querySelector('#inline-fallback'), chart = document.querySelector('#pie-chart-view');
+            const topBefore = button.getBoundingClientRect().top;
+            button.click();
+            const movements = section.getAnimations().map(animation => animation.effect.getKeyframes()[0].transform);
+            await Promise.allSettled(section.getAnimations().map(animation => animation.finished));
+            const tools = document.querySelector('.bp-pie-tools-row').getBoundingClientRect();
+            const panel = document.querySelector('#benchmark-settings').getBoundingClientRect();
+            const card = document.querySelector('#pie-card').getBoundingClientRect();
+            return { topBefore, topAfter: button.getBoundingClientRect().top, movements, chartHidden: chart.hidden,
+                toolsBottom: tools.bottom, panelBottom: panel.bottom, cardBottom: card.bottom };
+        });
+        const open = await toggleMotion();
+        assert.equal(await toggle.getAttribute('aria-expanded'), 'true');
+        assert.equal(open.chartHidden, true);
+        assert.ok(open.topBefore > open.topAfter && open.movements.some(value => value.startsWith('translateY(')), JSON.stringify(open));
+        assert.ok(open.topAfter - open.toolsBottom <= 5 && open.topAfter >= open.toolsBottom, JSON.stringify(open));
+        assert.ok(Math.abs(open.panelBottom - open.cardBottom) <= 2, JSON.stringify(open));
+        await page.locator('#benchmark-settings').evaluate(panel => { panel.scrollTop = panel.scrollHeight; });
+        assert.equal(await page.locator('#weight-pie').isVisible(), false);
+        assert.equal(await toggle.getAttribute('aria-expanded'), 'true');
+
+        const closed = await toggleMotion();
+        assert.equal(closed.chartHidden, false);
+        assert.ok(closed.topAfter > closed.topBefore && closed.movements.some(value => value.startsWith('translateY(-')), JSON.stringify(closed));
+
+        await toggle.scrollIntoViewIfNeeded();
+        await toggle.click();
+        const reset = await page.locator('#workspace-reset').evaluate(button => {
+            button.click();
+            return { visible: !document.querySelector('#pie-chart-view').hidden,
+                moving: document.querySelector('#inline-fallback').getAnimations({ subtree: true }).length,
+                expanded: document.querySelector('#inline-fallback-toggle').getAttribute('aria-expanded') };
+        });
+        assert.deepEqual(reset, { visible: true, moving: 0, expanded: 'false' });
+        await page.locator('#personal-pie-start').waitFor();
+        await page.getByRole('button', { name: 'Cancel reset' }).click();
+        await page.locator('#personal-pie-start').waitFor({ state: 'hidden' });
+        assert.equal(await toggle.getAttribute('aria-expanded'), 'false');
+        assert.equal(await page.locator('#weight-pie').isVisible(), true);
     });
 }

@@ -105,9 +105,9 @@ body.th-home .bp-profile-editor input:focus { border-color: var(--bp-accent); ba
 .th-primary:hover { border-color: var(--bp-fill-hover); background: var(--bp-fill-hover); }
 .th-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; align-items: start; padding-top: 12px; }
 .th-topics { width: min(100%, calc(100vw - 2 * var(--th-page-inset))); max-width: var(--th-grid-max); min-height: 100vh; min-height: 100dvh; margin-inline: auto; }
-.th-card { position: relative; display: grid; grid-template-rows: 62px minmax(0, 1fr) 40px; min-width: 0; height: 416px; padding: 18px; border: 1px solid #dce1e6; border-radius: 8px; background: #fff; }
+.th-card { position: relative; display: grid; grid-template-rows: 62px minmax(0, 1fr) 40px; min-width: 0; height: 408px; padding: 18px 18px 10px; border: 1px solid #dce1e6; border-radius: 8px; background: #fff; }
 .th-card:hover { border-color: #afb7c1; }
-.th-card.is-featured { grid-column: 1 / -1; height: 456px; }
+.th-card.is-featured { grid-column: 1 / -1; height: 448px; }
 .th-card.is-clickable { cursor: pointer; }
 .th-card-header { display: flex; min-width: 0; align-self: start; align-items: start; gap: 10px; }
 .th-card-identity { display: flex; flex: 1 1 auto; min-width: 0; max-width: 100%; flex-direction: column; align-items: start; gap: 1px; }
@@ -249,8 +249,8 @@ body.th-home .bp-profile-editor input:focus { border-color: var(--bp-accent); ba
     .th-primary { min-height: 44px; padding-inline: 12px; font-size: 12px; }
     .th-secondary { font-size: 12px; }
     .th-grid { grid-template-columns: minmax(0, 1fr); gap: 14px; }
-    .th-card { height: 344px; padding: 12px; grid-template-rows: 52px minmax(0, 1fr) 40px; }
-    .th-card.is-featured { height: 356px; }
+    .th-card { height: 338px; padding: 12px 12px 6px; grid-template-rows: 52px minmax(0, 1fr) 40px; }
+    .th-card.is-featured { height: 350px; }
     .th-creator { max-width: none; }
     .th-card-footer { gap: 7px; }
     .th-topic-meta { gap: 7px; }
@@ -262,7 +262,7 @@ body.th-home .bp-profile-editor input:focus { border-color: var(--bp-accent); ba
     .th-card-title { font-size: 20px; }
     .is-featured .th-card-title { font-size: 23px; }
     .th-dialog { padding: 20px; }
-    .th-scene-grid .th-card { height: 304px; grid-template-rows: 34px minmax(0, 1fr) 28px; }
+    .th-scene-grid .th-card { height: 298px; grid-template-rows: 34px minmax(0, 1fr) 28px; }
 }
 @media (max-width: 380px) {
     .th-home { --th-logo-width: 110px; --th-wordmark-size: 17.6px; }

@@ -77,7 +77,7 @@ for (const [engine, width] of [[chromium, 1440], [chromium, 320], [webkit, 390]]
             name: `${action} mutual estimation between Evaluation ${target} and Evaluation ${source}`, exact: true
         });
         const row = conditionID => settings.locator(`.bp-version-choice-row[data-condition-id="${conditionID}"]`);
-        const rates = settings.locator('.bp-estimation-rate');
+        const rates = settings.locator('.bp-estimation-rate:visible');
         const rate = conditionID => row(conditionID).locator('.bp-estimation-rate');
         assert.equal(await settings.getByRole('listitem').count(), 42);
         assert.equal(await settings.locator('[aria-pressed="true"], .bp-choice-pagination, .bp-fallback-picker-embedded').count(), 0);
@@ -88,10 +88,15 @@ for (const [engine, width] of [[chromium, 1440], [chromium, 320], [webkit, 390]]
 
         await score(1).press('Enter');
         assert.equal(await score(1).getAttribute('aria-pressed'), 'true');
-        assert.equal(await rates.count(), 41);
+        assert.equal(await rates.count(), 2);
         assert.equal(await row(1).locator('[data-vote], .bp-estimation-rate').count(), 0);
         assert.equal(await rate(2).textContent(), '66.67%');
-        assert.equal(await rate(3).textContent(), 'No votes · Eligible by default');
+        assert.equal(await rate(3).isVisible(), false);
+        for (const action of ['Support', 'Oppose']) {
+            const button = vote(action, 3, 1);
+            assert.equal(await button.isEnabled(), true);
+            assert.equal(await button.textContent(), '0');
+        }
         assert.equal(await rate(4).textContent(), '0%');
         const support = vote('Support', 2, 1);
         assert.equal(await support.textContent(), '4');
@@ -147,7 +152,7 @@ for (const [engine, width] of [[chromium, 1440], [chromium, 320], [webkit, 390]]
         assert.equal(await rate(1).count(), 0);
         assert.equal(await rate(2).textContent(), '66.67%');
         assert.match(await rate(2).getAttribute('aria-label'), /4 in support, 2 opposed/);
-        assert.equal(await rate(3).textContent(), 'No votes · Eligible by default');
+        assert.equal(await rate(3).isVisible(), false);
         assert.equal(await settings.locator('.bp-estimation-vote').count(), 0);
         await inspect(2).click();
         assert.equal(await rate(1).textContent(), '66.67%');

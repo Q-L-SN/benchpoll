@@ -27,12 +27,12 @@ if (process.argv.includes('--serve')) {
         await page.waitForFunction(() => document.getElementById('benchmark-card').getAttribute('aria-busy') === 'false');
         const back = page.locator('#back-to-topics');
         assert.equal(await back.getAttribute('href'), '/');
-        assert.equal(await back.isVisible(), page.viewportSize().width > 760);
+        assert.equal(await back.isVisible(), true);
+        assert.equal(await back.innerText(), '');
         assert.equal(await back.getAttribute('data-ui-variant'), 'quiet');
-        if (page.viewportSize().width > 760) {
-            const box = await back.boundingBox();
-            assert.ok(box.height >= 44 && box.x >= 0 && box.x + box.width <= page.viewportSize().width, JSON.stringify(box));
-        }
+        const box = await back.boundingBox();
+        assert.ok(box.height >= (page.viewportSize().width > 760 ? 36 : 44)
+            && box.x >= 0 && box.x + box.width <= page.viewportSize().width, JSON.stringify(box));
     };
     const checkNavigationControls = async (page, minimumHeight) => {
         const controls = await page.locator('[data-navigation-view]').evaluateAll(nodes => nodes.map(node => ({

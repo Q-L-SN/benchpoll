@@ -42,7 +42,8 @@ for (const [engine, width, height] of built ? [[chromium, 1440, 900], [chromium,
         const scoringSave = page.waitForResponse(response => response.url().endsWith('/api/save_personal_pie') && response.ok());
         await score.click();
         await scoringSave;
-        assert.equal(await settings.locator('.bp-estimation-rate').count(), 26);
+        assert.equal(await settings.locator('.bp-estimation-rate:visible').count(), 0);
+        assert.equal(await settings.locator('button[data-vote]').count(), 52);
         const geometry = await settings.evaluate(node => {
             const longChoice = node.querySelector('.bp-version-choice[data-condition-id="105"]');
             const first = node.querySelector('.bp-version-choice');
@@ -55,6 +56,7 @@ for (const [engine, width, height] of built ? [[chromium, 1440, 900], [chromium,
             && geometry.longChoiceOverflow <= 1 && geometry.fits, JSON.stringify(geometry));
         for (const value of await settings.locator('.bp-evidence-count-value').allTextContents()) assert.match(value, /^\d+$/);
         const last = rows.last().locator('button[data-vote="support"]');
+        assert.equal(await last.textContent(), '0');
         const saved = page.waitForResponse(response => response.url().endsWith('/api/save_estimation_vote'));
         await last.click();
         const ballot = await saved;
@@ -64,6 +66,7 @@ for (const [engine, width, height] of built ? [[chromium, 1440, 900], [chromium,
             vote: 'support', nominate: false, expectedUserID: fixture.state.userID
         });
         await last.filter({ hasText: /^1$/ }).waitFor();
+        assert.equal(await rows.last().locator('.bp-estimation-rate:visible').textContent(), '100%');
         assert.equal(await last.getAttribute('aria-pressed'), 'true');
         assert.equal(await score.getAttribute('aria-pressed'), 'true');
         const longChoice = settings.locator('.bp-version-choice[data-condition-id="105"]');

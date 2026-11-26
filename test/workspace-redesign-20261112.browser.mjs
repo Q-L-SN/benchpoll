@@ -127,12 +127,17 @@ test('expanded reference mode retains only valid selections, resets across unsup
 for (const engine of [chromium, webkit]) {
     test(`${engine.name()}: mobile sidebar animates and content resizing cannot reset a page swipe`, async t => {
         const { page } = await setup(t, engine, 390, { communityVersions: true, rankingStress: true });
-        assert.equal(await page.locator('#config-mobile-home').isVisible(), true);
-        assert.equal(await page.locator('#back-to-topics').isVisible(), false);
-        const home = await page.locator('#config-mobile-home').boundingBox();
+        const homeLink = page.locator('#config-site-links #back-to-topics');
+        assert.equal(await homeLink.isVisible(), true);
+        assert.equal(await homeLink.innerText(), '');
+        assert.equal(await homeLink.getAttribute('aria-label'), 'Home');
+        const home = await homeLink.boundingBox();
+        const profileButton = page.locator('#config-site-links #header-user-profile');
+        await profileButton.waitFor();
+        const profile = await profileButton.boundingBox();
         const social = await page.locator('#config-site-links .th-social').boundingBox();
         const menu = await page.locator('#taxonomy-toggle').boundingBox();
-        assert.ok(social.x < home.x && home.x < menu.x);
+        assert.ok(social.x < home.x && home.x + home.width === profile.x && profile.x < menu.x);
         // Sample in the page from the click itself so the driver cannot miss a short transition.
         const animated = await page.evaluate(async () => {
             await document.fonts.ready;
@@ -143,6 +148,9 @@ for (const engine of [chromium, webkit]) {
                 await new Promise(requestAnimationFrame);
                 const rect = sidebar.getBoundingClientRect();
                 if (rect.x > -rect.width + 1 && rect.x < -1) return true;
+                const slide = sidebar.getAnimations().find(animation => animation.transitionProperty === 'transform');
+                const frames = slide?.effect.getKeyframes();
+                if (frames?.length > 1 && frames[0].transform !== frames.at(-1).transform) return true;
             }
             return false;
         });
@@ -151,11 +159,21 @@ for (const engine of [chromium, webkit]) {
         await page.locator('#taxonomy-close').click();
         await page.waitForFunction(() => !document.body.classList.contains('taxonomy-open'));
         await page.locator('.bp-mobile-panels [data-mobile-panel="models"]').click();
-        await page.waitForFunction(() => document.querySelector('#workspace-scene-panel').scrollLeft / document.querySelector('#workspace-scene-panel').clientWidth > .99);
+        await page.waitForFunction(() => {
+            const pager = document.querySelector('#workspace-scene-panel');
+            return Math.abs(pager.scrollLeft - pager.clientWidth) < 1 && pager.querySelector('.bp-left-workspace').inert;
+        });
         const panel = page.locator('#workspace-scene-panel');
-        const before = await panel.evaluate(e => {
-            e.style.scrollSnapType = 'none'; e.scrollLeft = e.clientWidth * 1.5;
+        await panel.evaluate(e => {
+            e.style.scrollSnapType = 'none';
+            e.scrollTo({ left: e.clientWidth * 1.5, behavior: 'instant' });
             e.dispatchEvent(new Event('scroll'));
+        });
+        await page.waitForFunction(() => {
+            const pager = document.querySelector('#workspace-scene-panel');
+            return Math.abs(pager.scrollLeft - pager.clientWidth * 1.5) < 2;
+        });
+        const before = await panel.evaluate(e => {
             document.querySelector('#discussion-feed').style.minHeight = '1600px';
             return e.scrollLeft;
         });

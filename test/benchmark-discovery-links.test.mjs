@@ -9,7 +9,7 @@ const read = path => readFile(new URL('../' + path, import.meta.url), 'utf8');
 test('shared version links preserve identity, escape text and inspect only ordinary clicks', () => {
     const previous = globalThis.document;
     globalThis.document = { createElement: tag => ({ tag, dataset: {}, children: [], attributes: {}, listeners: {},
-        append(child) { this.children.push(child); }, setAttribute(key, value) { this.attributes[key] = value; },
+        append(...children) { this.children.push(...children); }, setAttribute(key, value) { this.attributes[key] = value; },
         addEventListener(key, handler) { this.listeners[key] = handler; } }) };
     try {
         let inspections = 0;
@@ -19,7 +19,8 @@ test('shared version links preserve identity, escape text and inspect only ordin
         }, onInspect: () => { inspections++; }, showVersion: true });
         assert.equal(link.tag, 'a'); assert.equal(link.dataset.benchmarkControl, 'information');
         assert.equal(link.children[0].textContent, '<Benchmark>');
-        assert.equal(link.children[1].textContent, 'v2 & offline');
+        assert.equal(link.children[1], ' ');
+        assert.equal(link.children[2].textContent, 'v2 & offline');
         assert.equal(link.innerHTML, undefined);
         assert.match(link.href, /conditionID=7/);
         for (const modifier of ['ctrlKey', 'metaKey', 'shiftKey', 'altKey']) link.listeners.click({ button: 0, [modifier]: true });

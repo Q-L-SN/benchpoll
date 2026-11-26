@@ -48,11 +48,11 @@ test('version-based estimation uses calibrated scores and keeps retired coverage
     assert.match(read('private/how-it-works.html'), /Results with no measurement or estimate count as 0 at their full weight/);
 });
 
-test('topic creation starts private and the editor publishes directly with a three-public-topic limit', () => {
+test('creation offers private and public visibility while edits use the separate visibility action', () => {
     const editor = read('public/js/shared/private-topic-editor.js');
     assert.doesNotMatch(read('public/js/shared/site-header.js'), /topic-proposals|id="new-topic"/);
-    assert.match(home, /<h2 id="create-topic-title">New private topic<\/h2>/);
-    assert.match(home, /id="create-topic-submit"[^>]*>[\s\S]*?<span>Create private topic<\/span>/);
+    assert.match(editor, /<h2 id="create-topic-title">New topic<\/h2>/);
+    assert.match(editor, /'Create private topic' : 'Publish topic'/);
     assert.match(topics, /createPrivateTopicEditor/);
     assert.match(editor, /\/api\/save_private_topic/);
     assert.match(editor, /id="topic-editor-publish" hidden>Make public<\/button>/);
@@ -61,13 +61,13 @@ test('topic creation starts private and the editor publishes directly with a thr
     assert.match(editor, /public_topic_limit: 'You can have up to three public topics at a time\./);
     assert.match(read('public/js/shared/topic-actions.js'), /writeTopicAction\('\/api\/set_topic_visibility', \{ categoryID: Number\(topic\.categoryID \?\? topic\.ID\), isPublic/);
     assert.doesNotMatch(topics, /\$\('#new-topic'\)\.addEventListener|openCreateTopic\(false\)|result\.submissionID|createTopicIsPrivate/);
-    const modal = home.slice(home.indexOf('<dialog id="create-topic-dialog"'));
     const sidebarForm = configuration.match(/<form id="topic-create-form"[\s\S]*?<\/form>/)?.[0];
-    for (const markup of [modal, sidebarForm]) {
+    for (const markup of [editor, sidebarForm]) {
         assert.ok(markup);
-        assert.doesNotMatch(markup, /type="(?:checkbox|radio)"|review result by email|verified address linked/);
+        assert.match(markup, /type="radio" name="visibility" value="private" checked/);
+        assert.match(markup, /type="radio" name="visibility" value="public"/);
+        assert.doesNotMatch(markup, /review result by email|verified address linked/);
     }
-    assert.match(sidebarForm, /<input type="hidden" name="visibility" value="private">/);
 });
 
 test('shared navigation has no proposal hall and retains Search and Create topic', () => {
@@ -103,10 +103,10 @@ test('Official or real creator metadata sits in the card footer while the summar
 
 test('the second-line summary and plot controls preserve fixed cards and avoid accent side decoration', () => {
     const css = read('public/css/topics-home.css');
-    assert.match(css, /\.th-card \{[^}]*grid-template-rows: 62px minmax\(0, 1fr\) 40px;[^}]*height: 416px/);
+    assert.match(css, /\.th-card \{[^}]*grid-template-rows: 62px minmax\(0, 1fr\) 40px;[^}]*height: 408px; padding: 18px 18px 10px/);
     assert.match(css, /\.th-card-header \{[^}]*align-self: start; align-items: start/);
     assert.match(css, /\.th-card-identity \{[^}]*flex-direction: column; align-items: start/);
-    assert.match(css, /\.th-card\.is-featured \{[^}]*height: 456px/);
+    assert.match(css, /\.th-card\.is-featured \{[^}]*height: 448px/);
     assert.match(css, /\.th-topic-summary \{[^}]*font-size: 13px; line-height: 20px; font-weight: 400; white-space: nowrap;[^}]*mask-image: linear-gradient/);
     const sidebar = read('public/css/ui/config-sidebar.css');
     assert.match(sidebar, /#config-sidebar \{[^}]*border: 0; background: var\(--bp-surface-soft\)/);

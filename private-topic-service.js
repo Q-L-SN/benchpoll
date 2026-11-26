@@ -26,9 +26,11 @@ export function privateTopicRevision(topic, scenes) {
 }
 
 export function normalizePrivateTopicEdit(body) {
-    record(body, ['categoryID', 'expectedRevision', 'name', 'description', 'scenes', 'defaultSceneKey']);
-    const metadata = normalizeTopicRequest({ name: body.name, description: body.description, isPrivate: true });
+    record(body, ['categoryID', 'expectedRevision', 'name', 'description', 'scenes', 'defaultSceneKey', 'isPrivate']);
     const categoryID = body.categoryID == null ? null : topicID(body.categoryID);
+    if (categoryID !== null && Object.hasOwn(body, 'isPrivate')) fail(400, 'invalid_private_topic_request');
+    const isPrivate = Object.hasOwn(body, 'isPrivate') ? body.isPrivate : true;
+    const metadata = normalizeTopicRequest({ name: body.name, description: body.description, isPrivate });
     const expectedRevision = categoryID === null ? null : expectedVersion(body.expectedRevision);
     if (categoryID === null && body.expectedRevision != null) fail(400, 'invalid_private_topic_request');
     if (!Array.isArray(body.scenes) || body.scenes.length > 512) fail(400, 'invalid_topic_scene_list');
@@ -45,7 +47,9 @@ export function normalizePrivateTopicEdit(body) {
         return { key: item.key, ID, name: normalized.name };
     });
     if (scenes.length ? !seenKeys.has(body.defaultSceneKey) : body.defaultSceneKey != null) fail(400, 'topic_scene_default_required');
+    // Keep the original idempotency payload for private creation and edits.
     return { categoryID, expectedRevision, name: metadata.name, description: metadata.description,
+        ...(metadata.isPrivate ? {} : { isPrivate: false }),
         scenes, defaultSceneKey: body.defaultSceneKey ?? null };
 }
 
@@ -87,18 +91,23 @@ export async function privateTopicTransaction(db, userID, key, action, payload, 
     } finally { releaseTransactionConnection(connection, 'PRIVATE TOPIC'); }
 }
 
-export async function insertPrivateTopic(connection, owner, metadata) {
+async function insertTopicWithRoot(connection, owner, metadata) {
     const [[count]] = await connection.execute(`SELECT COUNT(*) AS count FROM categories
         WHERE created_by_user_ID = ? AND created_at >= NOW() - INTERVAL 1 DAY`, [owner]);
     if (Number(count.count) >= 20) fail(429, 'topic_creation_limit');
+    const topicOwner = metadata.isPrivate === false ? null : owner;
+    if (topicOwner === null) {
+        await assertPublicTopicCapacity(connection, owner);
+        await assertPublicTopicAvailable(connection, metadata);
+    }
     const { publicID, privateID } = await allocateTopicIdentity(connection);
     const [inserted] = await connection.execute(`INSERT INTO categories
         (name, slug, description, owner_user_ID, created_by_user_ID, public_ID, private_ID, is_official, position)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0)`, [metadata.name, topicSlug(metadata.name), metadata.description, owner, owner, publicID, privateID]);
+        VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0)`, [metadata.name, topicSlug(metadata.name), metadata.description, topicOwner, owner, publicID, privateID]);
     const ID = Number(inserted.insertId);
     await ensureTopicRootContext(connection, ID);
     return { ID, name: metadata.name, slug: topicSlug(metadata.name), description: metadata.description,
-        owner_user_ID: owner, created_by_user_ID: owner, public_ID: publicID, private_ID: privateID, is_official: 0, is_active: 1 };
+        owner_user_ID: topicOwner, created_by_user_ID: owner, public_ID: publicID, private_ID: privateID, is_official: 0, is_active: 1 };
 }
 
 // The graph lock prevents pie saves and concurrent reference/scene edits from racing this replacement.
@@ -130,7 +139,7 @@ export async function replacePrivateScenes(connection, topic, previous, request)
 export async function savePrivateTopic(db, userID, body, key) {
     const request = normalizePrivateTopicEdit(body);
     return privateTopicTransaction(db, userID, key, 'save_private_topic', request, async (connection, owner) => {
-        const topic = request.categoryID === null ? await insertPrivateTopic(connection, owner, request)
+        const topic = request.categoryID === null ? await insertTopicWithRoot(connection, owner, request)
             : await privateRow(connection, owner, request.categoryID, true);
         const catalog = (await loadTopicSceneCatalog(connection, [Number(topic.ID)])).get(Number(topic.ID));
         if (request.categoryID !== null && privateTopicRevision(topic, catalog.scenes) !== request.expectedRevision) fail(409, 'private_topic_changed');

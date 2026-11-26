@@ -54,6 +54,10 @@ async function voteAfter(page, action) {
     return ballot;
 }
 
+function evaluationRow(page, conditionID) {
+    return page.locator(`#benchmark-rows [data-condition-id="${conditionID}"][data-benchmark-control="selection"]`);
+}
+
 for (const [engine, width, height] of [[chromium, 1440, 900], [chromium, 320, 568], [webkit, 390, 660]]) {
     test(`${engine.name()} ${width}x${height}: workspace saves, undoes and restores separate scoring and estimation choices ${built ? 'built' : 'source'}`, async t => {
         const { page, fixture } = await setup(t, engine, width, height, {
@@ -98,7 +102,8 @@ for (const [engine, width, height] of [[chromium, 1440, 900], [chromium, 320, 56
         assert.equal(Object.hasOwn(versionSave, 'estimationVotes'), false);
         assert.equal(await scoreDefault.getAttribute('aria-pressed'), 'true');
         assert.equal(await row(1).locator('.bp-estimation-rate, button[data-vote]').count(), 0);
-        assert.equal(await row(900).locator('.bp-estimation-rate').textContent(), 'No votes · Eligible by default');
+        assert.equal(await row(900).locator('.bp-estimation-rate').isVisible(), false);
+        assert.deepEqual(await row(900).locator('button[data-vote]').allTextContents(), ['0', '0']);
         assert.equal(await rateExtended.textContent(), '71.43%');
         assert.equal(await opposeExtendedForDefault.textContent(), '2');
         const geometry = await settings.evaluate(node => {
@@ -152,13 +157,13 @@ for (const [engine, width, height] of [[chromium, 1440, 900], [chromium, 320, 56
         assert.deepEqual(fixture.state.personalEstimationVotes, [experimentalVote]);
 
         await saveAfter(page, () => scoreExperimental.click());
-        await page.locator('#weight-pie [data-object-id="2"]').click();
+        await evaluationRow(page, 2).press('Enter');
         assert.equal(await toggle.getAttribute('aria-expanded'), 'true');
         assert.equal(await settings.locator('button[data-vote]').count(), 0);
-        await page.locator('#weight-pie [data-object-id="900"]').click();
+        await evaluationRow(page, 900).press('Enter');
         assert.equal(await supportExtendedForExperimental.getAttribute('aria-pressed'), 'true');
         await page.reload();
-        await page.locator('#weight-pie [data-object-id="900"]').click();
+        await evaluationRow(page, 900).press('Enter');
         assert.equal(await toggle.getAttribute('aria-expanded'), 'true');
         assert.equal(await supportExtendedForExperimental.getAttribute('aria-pressed'), 'true');
         await supportExtendedForExperimental.scrollIntoViewIfNeeded();
@@ -166,7 +171,8 @@ for (const [engine, width, height] of [[chromium, 1440, 900], [chromium, 320, 56
         await page.screenshot({ path: `${output}/${engine.name()}-${width}-${height}-${built ? 'built' : 'source'}.png` });
 
         await page.locator('#pie-mode-public').click();
-        await page.locator('#weight-pie [data-object-id="1"]').click();
+        await page.locator('#pie-mode-public[aria-selected="true"][aria-busy="false"]').waitFor();
+        await evaluationRow(page, 1).press('Enter');
         const publicToggle = page.locator('#public-fallback-toggle');
         assert.equal(await publicToggle.getAttribute('aria-expanded'), 'true');
         assert.equal(await settings.locator('.bp-version-choice-share').count(), 3);
@@ -247,6 +253,15 @@ for (const [engine, width, height] of [[chromium, 1440, 900], [webkit, 390, 660]
         assert.equal(await card.getByRole('button', { name: /^Add .+ to Personal Weights$/ }).count(), 0);
         await search.fill('Advanced reasoning');
         assert.deepEqual(await rowIDs(), [2, 902]);
+        const identity = rows.filter({ has: page.locator('.bp-benchmark-condition', { hasText: /^Variant$/ }) })
+            .locator('.bp-benchmark-information-link');
+        assert.equal(await identity.textContent(), 'Advanced reasoning Variant');
+        const separated = await identity.evaluate(link => {
+            const name = link.querySelector('.bp-benchmark-link-name').getBoundingClientRect();
+            const version = link.querySelector('.bp-benchmark-condition').getBoundingClientRect();
+            return version.left > name.right || version.top >= name.bottom;
+        });
+        assert.equal(separated, true);
         const rowNominate = card.getByRole('button', { name: 'Nominate Advanced reasoning, Variant', exact: true });
         assert.equal(await card.getByRole('button', { name: 'Nominate Advanced reasoning, Default evaluation', exact: true }).count(), 1);
         assert.equal(await rowNominate.count(), 1);
@@ -263,11 +278,14 @@ for (const [engine, width, height] of [[chromium, 1440, 900], [webkit, 390, 660]
         assert.equal(await search.inputValue(), '');
         await search.fill('Variant');
         assert.deepEqual(await rowIDs(), [902]);
-        await addBenchmark.click();
+        assert.equal(await addBenchmark.isVisible(), false);
+        await toggle.click();
         await targetMode.waitFor({ state: 'detached' });
+        await addBenchmark.click();
+        await page.waitForFunction(() => document.activeElement === document.getElementById('benchmark-search'));
+        await toggle.click();
         assert.equal(await nominate.getAttribute('aria-pressed'), 'false');
         assert.equal(await search.inputValue(), 'Code generation');
-        assert.equal(await search.evaluate(input => document.activeElement === input), true);
         await addCode.waitFor();
         assert.deepEqual(await rowIDs(), [3]);
         assert.equal(await card.getByRole('button', { name: /^Nominate / }).count(), 0);
@@ -290,7 +308,7 @@ for (const [engine, width, height] of [[chromium, 1440, 900], [webkit, 390, 660]
         assert.deepEqual(fixture.state.personalEntries, weights);
 
         await page.locator('#pie-mode-public').click();
-        await page.locator('#weight-pie [data-object-id="1"]').click();
+        await page.locator('#pie-mode-public[aria-selected="true"][aria-busy="false"]').waitFor();
         const publicToggle = page.locator('#public-fallback-toggle');
         await settings.getByRole('button', { name: 'Inspect estimation sources for Default evaluation', exact: true }).click();
         assert.equal(await disclosureAngle(publicToggle), 90);
@@ -300,7 +318,8 @@ for (const [engine, width, height] of [[chromium, 1440, 900], [webkit, 390, 660]
         assert.equal(await targetMode.count(), 0);
 
         await page.locator('#pie-mode-personal').click();
-        await page.locator('#weight-pie [data-object-id="2"]').click();
+        await page.locator('#pie-mode-personal[aria-selected="true"][aria-busy="false"]').waitFor();
+        await evaluationRow(page, 2).press('Enter');
         await chooseScoring('Variant');
         const reverse = nominated(1);
         await reverse.waitFor();
@@ -312,7 +331,7 @@ for (const [engine, width, height] of [[chromium, 1440, 900], [webkit, 390, 660]
         await reverse.waitFor({ state: 'hidden' });
         assert.deepEqual(fixture.state.personalEstimationVotes, []);
 
-        await page.locator('#weight-pie [data-object-id="1"]').click();
+        await evaluationRow(page, 1).press('Enter');
         assert.equal(await forward.count(), 0);
         await nominate.click();
         assert.deepEqual(await voteAfter(page, () => rowNominate.click()), { ...pair, vote: 'support', nominate: true });
@@ -321,7 +340,9 @@ for (const [engine, width, height] of [[chromium, 1440, 900], [webkit, 390, 660]
         });
         await forward.waitFor({ state: 'hidden' });
         assert.deepEqual(fixture.state.personalEstimationVotes, [{ ...pair, vote: 'oppose' }]);
-        await page.locator('#weight-pie [data-object-id="902"]').click();
+        await nominate.click();
+        await targetMode.waitFor({ state: 'detached' });
+        await evaluationRow(page, 902).press('Enter');
         assert.equal(await reverse.count(), 0);
     });
 }
@@ -348,7 +369,7 @@ test(`guest can edit and restore personal estimation votes ${built ? 'built' : '
     assert.equal(await support.textContent(), '5');
     assert.equal(fixture.state.requests.some(request => request.path.startsWith('/api/save_')), false);
     await page.reload();
-    await page.locator('#weight-pie [data-object-id="1"]').click();
+    await evaluationRow(page, 1).press('Enter');
     assert.equal(await support.getAttribute('aria-pressed'), 'true');
 });
 
@@ -381,7 +402,10 @@ test(`removing and restoring a benchmark leaves sitewide pair votes intact ${bui
     const addedEntry = added.entries.find(entry => entry.conditionID === 1);
     assert.equal(addedEntry.followCommunityVersion, true);
     assert.equal(Object.hasOwn(added, 'estimationVotes'), false);
-    const adjusted = await saveAfter(page, () => page.locator('#weight-pie').dispatchEvent('wheel', { deltaY: -100 }));
+    await page.locator('#inline-fallback-toggle[aria-expanded="true"]').click();
+    const pie = page.locator('#weight-pie');
+    await pie.waitFor();
+    const adjusted = await saveAfter(page, () => pie.dispatchEvent('wheel', { deltaY: -100 }));
     assert.ok(adjusted.entries.find(entry => entry.conditionID === 1).weightBasisPoints > addedEntry.weightBasisPoints);
     assert.equal(adjusted.entries.reduce((total, entry) => total + entry.weightBasisPoints, 0), 10000);
     assert.equal(Object.hasOwn(adjusted, 'estimationVotes'), false);

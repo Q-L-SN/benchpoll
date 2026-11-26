@@ -119,6 +119,9 @@ export async function startTopicsPreview(options = {}) {
                 if (url.pathname === '/api/set_topic_visibility') {
                     const topic = state.topics.find(item => item.ID === Number(body.categoryID));
                     if (!topic?.isMine) return send(404, { error: 'topic_not_found' });
+                    if (body.isPublic && state.topics.filter(item => item !== topic && item.isMine && !item.isPrivate).length >= 3) {
+                        return send(409, { error: 'public_topic_limit' });
+                    }
                     topic.isPrivate = !body.isPublic;
                     if (topic.isPrivate) topic.privateID ??= `FixturePrivate${topic.ID}`;
                     else topic.publicID ??= topic.ID + 100;
@@ -197,11 +200,14 @@ export async function startTopicsPreview(options = {}) {
                     if (state.createError) return send(state.createError.status, { error: state.createError.error });
                     const previous = body.categoryID == null ? null : state.topics.find(item => item.ID === Number(body.categoryID) && item.isMine);
                     if (body.categoryID != null && !previous) return send(404, { error: 'private_topic_not_found' });
+                    if (!previous && body.isPrivate === false && state.topics.filter(item => item.isMine && !item.isPrivate).length >= 3) {
+                        return send(409, { error: 'public_topic_limit' });
+                    }
                     const ID = previous?.ID ?? 200 + state.created.length;
                     const privateID = previous?.privateID ?? `FixturePrivate${ID}`;
                     const scenes = (body.scenes ?? []).map((scene, index) => ({ ...scene, ID: scene.ID ?? ID * 100 + index + 1,
                         contextID: scene.ID ?? ID * 100 + index + 1, sceneNumber: index + 1, isDefault: scene.key === body.defaultSceneKey }));
-                    const topic = { ID, categoryID: ID, publicID: null, privateID, isPrivate: true, isOfficial: false, isMine: true, configured: false,
+                    const topic = { ID, categoryID: ID, publicID: ID + 100, privateID, isPrivate: body.isPrivate !== false, isOfficial: false, isMine: true, configured: false,
                         favoriteCount: 0, isFavorited: false, coverageIndex: null, configurationCount: 0,
                         creator: { id: '42', publicID: '42', handle: '42', name: 'Alex Chen', url: '/@42', avatarURL: '/assets/apple-touch-icon.png' },
                         ...previous, name: body.name, description: body.description, scenes, editRevision: `fixture-${ID}-${Date.now()}` };

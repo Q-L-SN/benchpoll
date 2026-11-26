@@ -6,6 +6,7 @@ import { loadUserProfile, saveUserProfile } from '../../user-profile-service.js'
 import { requireAccountWriteOwner } from '../../public/js/shared/account-identity.js';
 import { LEGAL_VERSIONS } from '../../public/js/shared/legal-versions.js';
 import { parseTopicPath } from '../../public/js/shared/topics.js';
+import { normalizePrivateTopicEdit } from '../../private-topic-service.js';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 
@@ -28,7 +29,7 @@ export async function startProfilePagesFixture({ viewerID = '10', port = 0 } = {
             isOfficial: false, creator: { handle: '1', name: 'Avery Chen', avatarURL: null }, favoriteCount: 45, isFavorited: false,
             configured: false, rootContextID: 14, defaultContextID: 14, scenes: [] }
     ];
-    const state = { viewerID, profiles, topics, requests: [], queried: [], visits: [
+    const state = { viewerID, profiles, topics, created: [], requests: [], queried: [], visits: [
         { userID: '10', categoryID: 8, contextID: 13, visitedAt: '2026-11-12T12:30:00Z' },
         { userID: '10', categoryID: 7, contextID: 12, visitedAt: '2026-11-11T09:20:00Z' }
     ] };
@@ -45,6 +46,7 @@ export async function startProfilePagesFixture({ viewerID = '10', port = 0 } = {
                 const profile = [...profiles.values()].find(profile => profile.publicID === args[0]);
                 return [profile ? [{ userID: profile.userID }] : []];
             }
+            if (sql.startsWith('SELECT p.ID, p.parent_ID, p.body, p.created_at')) return [[]];
             if (sql.startsWith('UPDATE user_public_profiles SET public_id')) { profiles.get(args[1]).publicID = args[0]; return [{ affectedRows: 1 }]; }
             if (sql.startsWith('UPDATE user_public_profiles SET bio')) { profiles.get(args[1]).bio = args[0]; return [{ affectedRows: 1 }]; }
             if (sql.startsWith('INSERT INTO user_public_profiles (user_ID, display_name')) {
@@ -86,7 +88,10 @@ export async function startProfilePagesFixture({ viewerID = '10', port = 0 } = {
         requireAuthForAPI: auth, discussionSameOrigin: sameOrigin, requireAccountWriteOwner,
         readProfileTopics: async (_db, options) => {
             state.queried.push(options);
-            const created = options.userID === '10' ? [topics[2]] : [];
+            const isOwner = options.userID === options.viewerID;
+            const created = state.created.filter(({ owner, topic }) => owner === options.userID && (isOwner || !topic.isPrivate))
+                .map(({ topic }) => ({ ...topic, isMine: isOwner, ...(isOwner ? {} : { privateID: undefined }) }));
+            if (options.userID === '10') created.push(topics[2]);
             if (options.userID === '10' && options.viewerID === '10') created.push({ ID: 10, categoryID: 10, name: 'Private notebook',
                 isPrivate: true, url: '/private/OwnerDraft1234', description: '', favoriteCount: 0 });
             return { created,
@@ -101,6 +106,21 @@ export async function startProfilePagesFixture({ viewerID = '10', port = 0 } = {
     API.post('/save_user_profile', sameOrigin, auth, requireAccountWriteOwner, async (req, res) => res.json(await saveUserProfile(db, req.user.ID, req.body)));
     API.post('/get_privacy_status', (_req, res) => res.json({ authenticated: Boolean(state.viewerID), userID: state.viewerID, accepted: true,
         isSenior: false, privateCategoryResearch: false, csrfToken: 'fixture-csrf', versions: LEGAL_VERSIONS, operator: { displayName: 'Fixture operator', identityPending: false } }));
+    API.post('/save_private_topic', sameOrigin, auth, requireAccountWriteOwner, (req, res) => {
+        const { csrfToken, ...body } = req.body;
+        if (csrfToken !== 'fixture-csrf' || !req.get('Idempotency-Key')) return res.status(403).json({ error: 'invalid_csrf_token' });
+        const draft = normalizePrivateTopicEdit(body), isPrivate = draft.isPrivate !== false;
+        const owner = req.user.ID;
+        const publicCount = Number(owner === '10') + state.created.filter(item => item.owner === owner && !item.topic.isPrivate).length;
+        if (!isPrivate && publicCount >= 3) return res.status(409).json({ error: 'public_topic_limit' });
+        const ID = 100 + state.created.length, privateID = `ProfileFixture${ID}`, url = isPrivate ? `/private/${privateID}` : `/${ID}`;
+        const scenes = draft.scenes.map((scene, index) => ({ ...scene, ID: ID * 100 + index + 1, name: scene.name,
+            isDefault: scene.key === draft.defaultSceneKey, url: `${url}/${index + 1}` }));
+        const topic = { ID, categoryID: ID, publicID: ID, privateID, url, name: draft.name, description: draft.description,
+            isPrivate, isMine: true, isOfficial: false, favoriteCount: 0, isFavorited: false, scenes, editRevision: 'a'.repeat(64) };
+        state.created.push({ owner, topic });
+        res.json(topic);
+    });
     API.post('/get_device_count', auth, (_req, res) => res.json({ deviceCount: 2 }));
     API.post(['/logout', '/delete_account'], sameOrigin, auth, requireAccountWriteOwner, (_req, res) => { state.viewerID = null; res.status(204).end(); });
     API.post('/set_topic_favorite', sameOrigin, auth, requireAccountWriteOwner, (req, res) => {

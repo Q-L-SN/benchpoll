@@ -73,12 +73,18 @@ import { FAVORITE_EVENT, createFavoriteButton, createConfiguredIndicator, create
 import { recordProfileVisit } from './shared/profile-history.js';
 import { createModelCoveragePreview } from './workspace/model-coverage-preview.js';
 
-const mobileHomeAction = document.createElement('a');
-mobileHomeAction.id = 'config-mobile-home'; mobileHomeAction.className = 'th-quiet'; mobileHomeAction.href = '/';
-mobileHomeAction.setAttribute('aria-label', 'Home'); mobileHomeAction.dataset.tooltip = 'Home';
-mobileHomeAction.innerHTML = '<i class="fa-solid fa-house" aria-hidden="true"></i>';
+const configHeaderAccount = document.querySelector('.bp-config-header-account');
+const desktopAccountSlot = configHeaderAccount.parentElement;
+const mobileAccountSlot = document.createElement('div');
+const mobileHeader = window.matchMedia('(max-width: 760px)');
 mountSiteActions(document.getElementById('config-site-links'), { accountID: 'config-site-account', moreID: 'config-site-more',
-    minimal: true, extraActions: [mobileHomeAction, document.getElementById('taxonomy-toggle')] });
+    minimal: true, extraActions: [mobileAccountSlot, document.getElementById('taxonomy-toggle')] });
+function placeConfigHeaderAccount() {
+    const slot = mobileHeader.matches ? mobileAccountSlot : desktopAccountSlot;
+    if (configHeaderAccount.parentElement !== slot) slot.append(configHeaderAccount);
+}
+mobileHeader.addEventListener('change', placeConfigHeaderAccount);
+placeConfigHeaderAccount();
 
 const pieSvg = document.getElementById('weight-pie');
 const pieHoverTooltip = document.getElementById('pie-hover-tooltip');
@@ -138,6 +144,9 @@ const benchmarkSummaryContent = document.getElementById('benchmark-summary-conte
 const benchmarkLeaderboardOpen = document.getElementById('benchmark-leaderboard-open');
 const benchmarkLeaderboardClose = document.getElementById('benchmark-leaderboard-close');
 const inlineFallback = document.getElementById('inline-fallback');
+const benchmarkSettingsPanel = document.getElementById('benchmark-settings');
+const pieChartView = document.getElementById('pie-chart-view');
+let benchmarkSettingsAnimations = [];
 const inlineFallbackPersonalControl = document.getElementById('inline-fallback-personal-control');
 const inlineFallbackToggle = document.getElementById('inline-fallback-toggle');
 const inlineFallbackSettings = document.getElementById('inline-fallback-settings');
@@ -210,7 +219,7 @@ function legacyFallbackPicker() {
     return fallbackPicker;
 }
 const benchmarkSettings = createBenchmarkSettings({
-    host: document.getElementById('benchmark-settings'),
+    host: benchmarkSettingsPanel,
     selectedHeader: document.getElementById('pie-focus-bar'),
     getScope: () => `${workspaceContextFingerprint()}|${state.mode}|${state.userID ?? 'guest'}`,
     getData(benchmarkID) {
@@ -1442,28 +1451,42 @@ function activateInlineFallbackTarget() {
     return true;
 }
 
+function setBenchmarkSettingsLayout(open) {
+    if (pieChartView.hidden === open) return;
+    pieChartView.hidden = open;
+    pieCard.classList.toggle('is-benchmark-settings-open', open);
+    pieHomeSlot.scrollTop = 0;
+    if (mobileHeader.matches) leftWorkspace.scrollTop = 0;
+    if (open) pieHoverTooltip.hidden = true;
+}
+
 function renderInlineFallback() {
     if (!activeNominationTarget() && !isInlineFallbackEditing()) {
         fallbackEditorScope = null;
         deactivateInlineFallbackTarget();
     }
-    if (isExpandedWeightView()) {
+    if (isExpandedWeightView() || personalPieStart.isOpen) {
         fallbackPicker?.close({ restore: false }); benchmarkSettings.close();
+        setBenchmarkSettingsLayout(false);
         inlineFallback.hidden = true; pieCard.classList.remove('has-inline-fallback');
         return;
     }
     if (state.versionComposition) {
         const selected = state.mode === 'personal' ? selectedInlineFallbackPrimary() : selectedPublicFallbackPrimary();
         const primary = selected && state.versionComposition.some(group => group.benchmarkID === selected.benchmarkID) ? selected : null;
-        benchmarkSettings.refresh(primary, state.benchmarkSettingsExpanded);
-        void setVisible(inlineFallback, Boolean(primary), { collapse: true });
+        const open = Boolean(primary) && state.benchmarkSettingsExpanded;
+        benchmarkSettings.refresh(primary, open);
+        setBenchmarkSettingsLayout(open);
+        inlineFallback.hidden = !primary;
+        inlineFallback.inert = !primary;
+        inlineFallback.setAttribute('aria-hidden', String(!primary));
         pieCard.classList.toggle('has-inline-fallback', Boolean(primary));
         inlineFallbackPersonalControl.hidden = state.mode !== 'personal';
         publicFallbackToggle.hidden = state.mode === 'personal';
         for (const control of [inlineFallbackToggle, publicFallbackToggle]) {
             control.querySelector('span').textContent = 'Advanced settings';
             control.removeAttribute('aria-haspopup'); control.setAttribute('aria-controls', 'benchmark-settings');
-            control.setAttribute('aria-expanded', String(Boolean(primary) && state.benchmarkSettingsExpanded)); control.disabled = state.loading;
+            control.setAttribute('aria-expanded', String(open)); control.disabled = state.loading;
         }
         inlineFallbackSaveError.hidden = true;
         void setVisible(inlineFallbackSettings, false, { collapse: true });
@@ -1471,6 +1494,7 @@ function renderInlineFallback() {
     }
     fallbackPicker?.refresh();
     benchmarkSettings.close();
+    setBenchmarkSettingsLayout(false);
     if (!isInlineFallbackEditing()) {
         fallbackEditorScope = null;
         deactivateInlineFallbackTarget();
@@ -1735,19 +1759,26 @@ function openInlineFallbackPicker() {
         getReturnFocus: () => inlineFallbackToggle });
 }
 
-function toggleBenchmarkSettings() {
-    state.benchmarkSettingsExpanded = !state.benchmarkSettingsExpanded;
+function setBenchmarkSettingsExpanded(open, { animate = true } = {}) {
+    const before = animate ? inlineFallback.getBoundingClientRect().top : 0;
+    benchmarkSettingsAnimations.forEach(animation => animation.cancel());
+    benchmarkSettingsAnimations = [];
+    inlineFallback.classList.toggle('is-settings-motion-disabled', !animate);
+    state.benchmarkSettingsExpanded = open;
     writeWorkspacePreferences(state);
     renderInlineFallback();
-    if (!state.benchmarkSettingsExpanded) { renderBenchmarks(); return; }
-    requestAnimationFrame(() => {
-        const firstRow = document.querySelector('#benchmark-settings .bp-version-choice-row');
-        if (!firstRow || firstRow.closest('[hidden], [inert]')) return;
-        revealInPanel(firstRow, {
-            behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth',
-            block: 'nearest'
-        });
-    });
+    if (!open) renderBenchmarks();
+    if (!animate || inlineFallback.hidden || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const distance = before - inlineFallback.getBoundingClientRect().top;
+    const timing = { duration: 240, easing: 'cubic-bezier(.22, 1, .36, 1)' };
+    benchmarkSettingsAnimations = [
+        inlineFallback.animate([{ transform: `translateY(${distance}px)` }, { transform: 'translateY(0)' }], timing),
+        (open ? benchmarkSettingsPanel : pieChartView).animate([{ opacity: .15 }, { opacity: 1 }], timing)
+    ];
+}
+
+function toggleBenchmarkSettings() {
+    setBenchmarkSettingsExpanded(!state.benchmarkSettingsExpanded);
 }
 
 inlineFallbackConfigurations.addEventListener('click', () => {
@@ -3291,7 +3322,10 @@ personalPieCreate.addEventListener('click', () => { void openPersonalStart(perso
 resetButton.addEventListener('click', () => {
     if (personalPieStart.isResetting) {
         if (!personalPieStart.isApplying) personalPieStart.close();
-    } else void openPersonalStart(resetButton, true);
+    } else {
+        if (state.benchmarkSettingsExpanded) setBenchmarkSettingsExpanded(false, { animate: false });
+        void openPersonalStart(resetButton, true);
+    }
 });
 async function toggleExpandedWeights() {
     if (!isExpandedWeightView() && topicViewButton.disabled) return;
@@ -3366,7 +3400,7 @@ function isPersonalBenchmarkFocus() {
 }
 
 function isWeightAdjustmentMode() {
-    return !isExpandedWeightView() && state.mode === 'personal' && state.personalEntries.length > 1
+    return !pieChartView.hidden && !isExpandedWeightView() && state.mode === 'personal' && state.personalEntries.length > 1
         && selectedObjectIndex(state.personalEntries) >= 0
         && (isPersonalBenchmarkFocus() || pieCard.classList.contains('is-adjusting-weight'));
 }

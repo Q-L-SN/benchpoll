@@ -9,6 +9,7 @@ import { parseTopicPath } from './shared/topics.js';
 import { setLoading } from './shared/loading.js';
 import { mountSegmentedControl } from './shared/ui-components.js';
 import { element, icon, link, avatar, initializeProfileHeader, showFailure } from './shared/profile-page.js';
+import { createPrivateTopicEditor } from './shared/private-topic-editor.js';
 
 initializeProfileHeader();
 const status = document.getElementById('profile-status');
@@ -18,6 +19,7 @@ const panel = document.getElementById('profile-topics');
 let cards = [], blocked = false;
 let discussionRequest = null;
 let tabMotion = null;
+let topicEditor = null;
 const profileEvents = new globalThis.AbortController();
 
 const tabAppearance = {
@@ -112,7 +114,21 @@ function renderProfile(data) {
     identity.append(intro);
     if (isSelf) {
         const actions = element('nav', 'pf-own-actions'); actions.setAttribute('aria-label', 'Your profile');
-        actions.append(link('/me/history', 'History', 'clock-rotate-left'), link('/settings', 'Settings', 'gear'));
+        const createTopic = element('button', 'pf-button is-primary', 'Create topic');
+        createTopic.type = 'button';
+        createTopic.setAttribute('aria-haspopup', 'dialog');
+        createTopic.prepend(icon('plus'));
+        const created = tabs.find(tab => tab.key === 'created');
+        topicEditor = createPrivateTopicEditor({
+            onSaved(topic) {
+                if (blocked) return;
+                if (!created.topics.some(item => item.ID === topic.ID)) created.topics.push(topic);
+                selectTab(created);
+                status.textContent = topic.isPrivate ? `${topic.name} created.` : `${topic.name} published.`;
+            }
+        });
+        createTopic.addEventListener('click', () => void topicEditor.open(null, createTopic));
+        actions.append(createTopic, link('/me/history', 'History', 'clock-rotate-left'), link('/settings', 'Settings', 'gear'));
         identity.append(actions);
     }
     identity.hidden = false;
@@ -196,6 +212,7 @@ function renderProfile(data) {
 
 listenAccountChange(() => {
     blocked = true; pageAccountWriteScope.invalidate();
+    topicEditor?.close();
     profileEvents.abort();
     discussionRequest?.abort();
     discussionRequest = null;

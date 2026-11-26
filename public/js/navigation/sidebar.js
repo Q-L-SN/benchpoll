@@ -11,7 +11,7 @@ import { mountTopicCollectionPicker } from './collection-picker.js';
 import { topicCollection, topicCollections, personalCollection } from './collections.js';
 import { sceneURL, searchTopicGroups, sceneMatchSummary } from './scenes.js';
 
-export function createSidebarNavigation({ onNavigate, onLogin, onSessionChange, onCreatePrivate }) {
+export function createSidebarNavigation({ onNavigate, onLogin, onSessionChange, onCreateTopic }) {
     const tree = document.getElementById('tree-content');
     const list = document.getElementById('configured-content');
     const viewport = document.querySelector('.bp-taxonomy');
@@ -27,6 +27,8 @@ export function createSidebarNavigation({ onNavigate, onLogin, onSessionChange, 
     const createName = document.getElementById('topic-create-name');
     const createDescription = document.getElementById('topic-create-description');
     const createError = document.getElementById('topic-create-error');
+    const visibilityNotice = document.getElementById('topic-visibility-notice');
+    const createSubmit = createForm.querySelector('[type="submit"]');
     const picker = mountTopicCollectionPicker(document.querySelector('#config-sidebar .bp-topic-collection'), {
         onSelect: setView, onQuery: renderCategorySearch,
         onResults() {
@@ -633,18 +635,25 @@ export function createSidebarNavigation({ onNavigate, onLogin, onSessionChange, 
     retry.addEventListener('click', () => { void (catalogError ? loadCatalog() : refresh()); });
     browse.addEventListener('click', () => setView('popular'));
     login.addEventListener('click', onLogin);
-    createButtons.forEach(button => button.addEventListener('click', () => {
-        if (!account) { onLogin(); return; }
-        if (onCreatePrivate) { void onCreatePrivate(button); return; }
-        if (creating) return;
-        createForm.elements.visibility.value = 'private';
-        document.getElementById('topic-create-title').textContent = 'New private topic';
-        document.getElementById('topic-visibility-notice').textContent = 'Private topics and their weights stay private and do not affect public rankings.';
-        createForm.querySelector('[type="submit"] span').textContent = 'Create private topic';
-        createButtons.forEach(item => item.setAttribute('aria-expanded', String(item === button)));
-        void setVisible(createForm, true, { collapse: true });
-        createError.textContent = ''; createName.focus({ preventScroll: true });
-    }));
+    function renderCreateVisibility() {
+        const isPrivate = createForm.elements.visibility.value === 'private';
+        visibilityNotice.textContent = isPrivate ? 'Only you can view this topic and its weights.'
+            : 'Anyone can view this topic as soon as you publish. You can have up to three public topics.';
+        createSubmit.querySelector('span').textContent = isPrivate ? 'Create private topic' : 'Publish topic';
+    }
+    createForm.querySelector('fieldset').addEventListener('change', renderCreateVisibility);
+    createButtons.forEach(button => {
+        if (onCreateTopic) button.setAttribute('aria-haspopup', 'dialog');
+        button.addEventListener('click', () => {
+            if (!account) { onLogin(); return; }
+            if (onCreateTopic) { void onCreateTopic(button); return; }
+            if (creating) return;
+            renderCreateVisibility();
+            createButtons.forEach(item => item.setAttribute('aria-expanded', String(item === button)));
+            void setVisible(createForm, true, { collapse: true });
+            createError.textContent = ''; createName.focus({ preventScroll: true });
+        });
+    });
     createForm.querySelector('[data-cancel]').addEventListener('click', () => {
         if (creating) return;
         createButtons.forEach(button => button.setAttribute('aria-expanded', 'false'));
@@ -654,7 +663,6 @@ export function createSidebarNavigation({ onNavigate, onLogin, onSessionChange, 
     createForm.addEventListener('submit', async event => {
         event.preventDefault();
         const owner = account;
-        const submit = createForm.querySelector('[type="submit"]');
         if (!owner || creating) return;
         const name = createName.value.trim().normalize('NFC');
         if (!name || [...name].length > 128 || /[\p{Cc}\p{Cf}]/u.test(name)) {
@@ -665,9 +673,9 @@ export function createSidebarNavigation({ onNavigate, onLogin, onSessionChange, 
         catch { createError.textContent = 'Write one sentence of up to 180 characters.'; createDescription.focus(); return; }
         creating = true;
         createForm.setAttribute('aria-busy', 'true');
-        submit.querySelector('i').className = 'bp-spinner';
-        submit.disabled = true; createName.disabled = true; createError.textContent = '';
-        const isPrivate = true;
+        createSubmit.querySelector('i').className = 'bp-spinner';
+        createError.textContent = '';
+        const isPrivate = createForm.elements.visibility.value === 'private';
         [...createForm.elements].forEach(control => { control.disabled = true; });
         try {
             if (pageAccountWriteScope.capture() !== owner) throw accountWriteError();
@@ -683,8 +691,8 @@ export function createSidebarNavigation({ onNavigate, onLogin, onSessionChange, 
             if (await navigate(entry)) {
                 createButtons.forEach(button => button.setAttribute('aria-expanded', 'false'));
                 void setVisible(createForm, false, { collapse: true });
-                createName.value = '';
-                createDescription.value = '';
+                createForm.reset();
+                visibilityNotice.textContent = 'Choose who can see your topic.';
             } else createError.textContent = 'Created. Open it from Home.';
         } catch (error) {
             if (owner !== account) return;
@@ -692,6 +700,7 @@ export function createSidebarNavigation({ onNavigate, onLogin, onSessionChange, 
             createError.textContent = isAccountWriteError(error) ? accountWriteError().message
                 : code === 'reserved_topic_name' ? 'This topic name is reserved. Choose another name.'
                 : ['topic_name_exists', 'private_category_name_exists'].includes(code) ? 'A topic with this name already exists. Choose another name.'
+                : code === 'public_topic_limit' ? 'You can have up to three public topics at a time. Make one private before publishing another.'
                 : code === 'legal_acceptance_required' ? error.message
                 : code === 'invalid_topic_name' ? 'Use 1 to 128 characters without control characters.'
                 : code === 'invalid_topic_description' ? 'Write one sentence of up to 180 characters.'
@@ -700,7 +709,7 @@ export function createSidebarNavigation({ onNavigate, onLogin, onSessionChange, 
                 : error.status === 401 ? 'Sign in to create a topic. Your draft is kept.' : 'Could not create this topic. Your draft is kept; try again.';
         } finally {
             creating = false; createForm.setAttribute('aria-busy', 'false');
-            submit.querySelector('i').className = 'fa-solid fa-plus';
+            createSubmit.querySelector('i').className = 'fa-solid fa-plus';
             [...createForm.elements].forEach(control => { control.disabled = false; });
         }
     });
