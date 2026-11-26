@@ -16,7 +16,7 @@ import { personalCollection, topicCollections } from './navigation/collections.j
 import { readRecentTopics, RECENT_TOPICS_PREFIX } from './navigation/preferences.js';
 import { normalizeModelFocusTarget } from './workspace/model-focus-target.js';
 import { topicURL } from './shared/topics.js';
-import { createPrivateTopicEditor } from './shared/private-topic-editor.js';
+import { createPrivateTopicEditor, createTopicEditButton } from './shared/private-topic-editor.js';
 import { createIdentityAvatar as avatar, createTopicCreator } from './shared/topic-identity.js';
 import { createFavoriteButton, createConfiguredIndicator, topicFavoritePending } from './shared/topic-actions.js';
 import { AVAILABLE_INFERENCE_VERSION } from './shared/available-score.js';
@@ -198,7 +198,7 @@ function createCard(topic) {
     delete sceneToggle.dataset.tooltip;
     heading.append(identity);
     if (topic.isMine && topic.sceneID == null) {
-        const edit = button('Edit topic', 'pen-to-square', 'th-quiet th-topic-edit');
+        const edit = createTopicEditButton('Edit topic');
         edit.addEventListener('click', event => { event.stopPropagation(); void privateTopicEditor.open(topic.ID, edit); });
         heading.append(edit);
     }

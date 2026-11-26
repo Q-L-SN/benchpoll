@@ -52,7 +52,7 @@ import { bulkImportTemplate } from './shared/feedback-templates.js';
 import { comparisonProfileKey } from './shared/comparison-profile-key.js';
 import { animateContent, setVisible, flipPie } from './shared/motion.js?v=workspace-ui-20261008';
 import { createSceneControls } from './workspace/scenes.js';
-import { createPrivateTopicEditor } from './shared/private-topic-editor.js';
+import { createPrivateTopicEditor, createTopicEditButton } from './shared/private-topic-editor.js';
 import { renderTopicReferences, isTopicReference, topicReferenceError, topicReferenceUnavailable } from './workspace/topic-references.js';
 import { mergeBenchmarkWeights } from './workspace/expanded-weights.js';
 import { createReferenceCoverage } from './workspace/reference-coverage.js';
@@ -816,9 +816,7 @@ function renderBreadcrumb() {
     if (state.contextIsPrivate) {
         const label = document.createElement('small'); label.className = 'bp-private-context-label'; label.textContent = 'Private';
         breadcrumb.append(label);
-        const edit = document.createElement('button'); edit.type = 'button'; edit.className = 'bp-quiet-action';
-        edit.setAttribute('aria-label', 'Edit private topic'); edit.dataset.tooltip = 'Edit private topic';
-        const icon = document.createElement('i'); icon.className = 'fa-regular fa-pen-to-square'; icon.setAttribute('aria-hidden', 'true'); edit.append(icon);
+        const edit = createTopicEditButton('Edit private topic');
         edit.disabled = !state.authenticated || state.accountWriteBlocked;
         edit.addEventListener('click', () => void privateTopicEditor.open(state.categoryID, edit)); breadcrumb.append(edit);
     }

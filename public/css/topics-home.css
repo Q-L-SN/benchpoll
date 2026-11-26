@@ -129,7 +129,7 @@ body.th-home .bp-profile-editor input:focus { border-color: var(--bp-accent); ba
 .th-home .bp-topic-favorite { display: inline-flex; min-height: 40px; align-items: center; gap: 6px; padding: 0 2px; border: 0; background: transparent; color: var(--bp-muted); font-size: 14px; font-variant-numeric: tabular-nums; }
 .th-home .bp-topic-favorite:is(:hover, [aria-pressed="true"]) { color: var(--bp-accent); }
 .th-home .bp-topic-configured-dot { flex: 0 0 8px; width: 8px; height: 8px; border-radius: 50%; background: var(--bp-accent); }
-.th-topic-edit { flex: 0 0 32px; min-height: 32px; width: 32px; }
+.th-card-header .bp-topic-edit { margin-block-start: -6px; margin-inline-end: -8px; }
 .th-scene-toggle { flex: 0 1 auto; z-index: 2; display: inline-flex; min-width: 0; align-items: center; justify-content: center; gap: 5px; min-height: 40px; padding: 0; border: 0; background: transparent; color: var(--bp-muted); font: inherit; font-size: var(--bp-topic-metric-size); cursor: pointer; }
 .th-scene-toggle:hover { color: var(--bp-accent); }
 .th-scene-toggle:focus-visible { outline: 2px solid var(--bp-accent); outline-offset: 2px; }

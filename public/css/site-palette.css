@@ -136,7 +136,7 @@ body.censor-page-body .tab-count { background: var(--bp-fill); color: #fff; }
 .bp-home .bp-pie-guidance p:first-child { color: var(--bp-text); }
 .bp-home .bp-account-action { background: var(--bp-surface-soft); }
 .bp-home .bp-account-action.danger { color: #b03535; }
-.bp-home :is(.bp-breadcrumb i, .bp-breadcrumb > span:not(.bp-breadcrumb-current), .bp-template-name) { color: var(--bp-muted); }
+.bp-home :is(.bp-breadcrumb > i, .bp-breadcrumb > span:not(.bp-breadcrumb-current), .bp-template-name) { color: var(--bp-muted); }
 .bp-home .bp-template-control { border-color: var(--bp-line); color: var(--bp-text); }
 .bp-home .bp-template-positive { color: var(--bp-purple); background: var(--bp-purple-soft); }
 .bp-home .bp-template-neutral { color: var(--bp-text); background: #eef0f4; }

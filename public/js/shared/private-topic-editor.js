@@ -32,6 +32,13 @@ export function openPrivateTopicEditor(categoryID = null, trigger) {
     return activeEditor?.open(categoryID, trigger);
 }
 
+export function createTopicEditButton(label) {
+    const button = createAction({ label, icon: 'fa-solid fa-pen', iconOnly: true, className: 'bp-topic-edit' });
+    button.setAttribute('aria-haspopup', 'dialog');
+    button.setAttribute('aria-controls', 'create-topic-dialog');
+    return button;
+}
+
 export function createPrivateTopicEditor({ beforeOpen = async () => true, onSaved = async () => {}, onDeleted = async () => {} } = {}) {
     const dialog = document.getElementById('create-topic-dialog') ?? element('dialog', '');
     dialog.id = 'create-topic-dialog'; dialog.className = 'bp-topic-editor';
@@ -53,7 +60,16 @@ export function createPrivateTopicEditor({ beforeOpen = async () => true, onSave
         </section>
         <p id="create-topic-status" role="status" hidden></p>
         <div id="topic-editor-delete-confirmation" hidden><p>Delete this private topic and all its saved scene weights?</p><p id="topic-editor-delete-impact"></p><button id="topic-editor-confirm-delete" type="button">Delete topic</button><button id="topic-editor-cancel-delete" type="button">Keep topic</button></div>
-        <footer><button id="topic-editor-delete" type="button" hidden>Delete topic</button><button type="button" id="topic-editor-publish" hidden>Make public</button><span class="bp-topic-editor-spacer"></span><button type="button" data-close-create>Cancel</button><button id="create-topic-submit" class="bp-topic-editor-primary" type="submit">Save topic</button></footer>
+        <footer>
+            <div class="bp-topic-editor-management">
+                <button id="topic-editor-delete" type="button" hidden>Delete topic</button>
+                <button type="button" id="topic-editor-publish" hidden>Make public</button>
+            </div>
+            <div class="bp-topic-editor-submit-actions">
+                <button type="button" data-close-create>Cancel</button>
+                <button id="create-topic-submit" class="bp-ui-action" data-ui-variant="primary" type="submit">Save topic</button>
+            </div>
+        </footer>
     </form>`;
     if (!dialog.isConnected) document.body.append(dialog);
     const $ = selector => dialog.querySelector(selector), form = $('#create-topic-form');
