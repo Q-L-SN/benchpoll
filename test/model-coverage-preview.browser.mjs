@@ -156,7 +156,7 @@ test('desktop row hover expands and merges coverage, preserves label typography,
     assert.equal(preview.count, 3);
     assert.equal(preview.faded, true);
     assert.equal(preview.zeroCovered, true);
-    assert.equal(preview.score, '42.81');
+    assert.equal(preview.score, '68.5');
     assert.equal(await page.locator('.bp-model-coverage-overlay .is-uncovered [data-estimated-score]').textContent(), '74.25');
     assert.equal(await page.locator('.bp-model-coverage-overlay [data-label-kind="percent"]').count(), 0);
     assert.equal(preview.sameSize, true);
@@ -287,7 +287,7 @@ test('mobile Used in this ranking shows the same treemap in a fullscreen dialog 
     });
     assert.ok(Math.abs(layout.x) < .01 && Math.abs(layout.y) < .01 && Math.abs(layout.width - 390) < .01 && Math.abs(layout.height - 900) < .01);
     assert.equal(layout.overflow, false);
-    assert.equal(layout.score, '42.81');
+    assert.equal(layout.score, '68.5');
     assert.equal(await page.locator('.bp-model-coverage-figure .is-uncovered [data-estimated-score]').textContent(), '74.25');
     await page.screenshot({ path: `${output}/mobile-scores-fullscreen.png` });
     await page.locator('.bp-model-configuration-link').click();

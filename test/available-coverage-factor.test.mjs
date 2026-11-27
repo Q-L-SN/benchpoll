@@ -94,7 +94,7 @@ test('archived factors adjust the combined score while new totals retain origina
     const [row] = score([model(1, { 1: 100, 2: -80 })], entries);
     assert.equal(row.availableInference.unpenalizedScore, 10);
     assert.equal(row.lower, 10);
-    assert.deepEqual(row.calculationScores.map(item => item.contribution), [25, -20]);
+    assert.deepEqual(row.calculationScores.map(item => item.contribution), [50, -40]);
 });
 
 test('weighted coverage, real zero and zero-weight versions retain their exact meaning', () => {
@@ -102,13 +102,13 @@ test('weighted coverage, real zero and zero-weight versions retain their exact m
         { conditionID: 3, weightBasisPoints: 0 }];
     const rows = score([model(1, { 1: 80, 3: 100 }), model(2, { 2: 80 }), model(3, { 1: 0 })], entries);
     assert.deepEqual(rows.map(row => row.coverage), [90, 10, 90]);
-    assert.deepEqual(rows.map(row => row.lower), [80, 80, 0]);
+    assert.deepEqual(rows.map(row => row.lower), [80, 44, 8]);
     assert.deepEqual(rows.map(row => row.resultCount), [1, 1, 1]);
 });
 
 test('point totals use exact weights independently of displayed coverage rounding', () => {
     const coverage = .123456789;
-    const [row] = score([model(1, { 1: 80 })], [{ conditionID: 1, weightBasisPoints: coverage * 10000 },
+    const [row] = score([model(1, { 1: 80 }), model(2, { 2: 80 })], [{ conditionID: 1, weightBasisPoints: coverage * 10000 },
         { conditionID: 2, weightBasisPoints: (1 - coverage) * 10000 }]);
     close(row.availableInference.coverageFraction, coverage);
     close(row.availableInference.observedContribution, 80 * coverage);
@@ -129,9 +129,9 @@ test('calibrated public shares support the point score while direct coverage sta
     ] });
     assert.equal(shared.coverage, 0);
     close(shared.availableInference.totalScore, 70);
-    close(shared.availableInference.inferredFraction, 1);
+    close(shared.availableInference.inferredFraction, .5);
     assert.deepEqual(shared.inferredScores.map(row => [row.estimationMethod, row.originalWeight]),
-        [['joint-versions', 30], ['treemap-weighted', 20], ['treemap-weighted', 50]]);
+        [['joint-versions', 30], ['peer-median', 20]]);
 });
 
 test('fully covered totals and Score range remain unchanged; no weighted evidence stays incomparable', () => {
@@ -178,7 +178,7 @@ test('all stale read versions and matched comparisons calculate original-weight 
         for (const version of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) {
             const rows = score(models, weights, { availableInferenceVersion: version }, mode);
             assert.deepEqual(rows.map(row => row.lower), [80, 60]);
-            assert.ok(rows.every(row => row.availableInference.weightPolicy === 'original'));
+            assert.ok(rows.every(row => row.availableInference.weightPolicy === 'supported'));
         }
     }
     assert.equal(AVAILABLE_INFERENCE_VERSION, 13);

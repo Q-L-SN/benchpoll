@@ -127,7 +127,7 @@ test('terms cover community ranking limits, necessary content rights and proport
         assert.match(terms, new RegExp(`href="#${id}"`));
     }
     assert.match(terms, /currently free[^.]*no payment or subscription/i);
-    assert.match(terms, /Remaining gaps use a weighted average of the model’s scores in the treemap/);
+    assert.match(terms, /medians of other models’ scores on the target versions/);
     assert.match(terms, /Personal pies define your evaluation choices and weights/i);
     assert.match(terms, /saved pies in public categories contribute to aggregate Public Weights/i);
     assert.match(terms, /exclude manipulated activity/i);

@@ -433,7 +433,7 @@
                         <div class="bp-scoring-switch" role="group" aria-label="Missing benchmark scores" data-ui-component="segmented" data-mode="available">
                             <button type="button" data-score-mode="available" aria-pressed="true" aria-label="Estimated score" data-tooltip="Estimated score"><i class="fa-solid fa-wand-magic-sparkles bp-score-mode-icon" aria-hidden="true"></i><span>Estimated score</span></button>
                             <button type="button" data-score-mode="range" aria-pressed="false" aria-label="Score range" data-tooltip="Score range"><i class="fa-solid fa-arrows-left-right bp-score-mode-icon" aria-hidden="true"></i><span>Score range</span></button>
-                            <button class="bp-scoring-help bp-help-trigger" type="button" aria-label="About missing scores" data-help-text="Estimated score combines measurements and estimates. Remaining gaps use the weighted average of this model’s scores in the treemap. Score range uses 0 and 100 for missing measurements."><i class="fa-regular fa-circle-question" aria-hidden="true"></i></button>
+                            <button class="bp-scoring-help bp-help-trigger" type="button" aria-label="About missing scores" data-help-text="Estimated score fills gaps with version estimates, then calibrated treemap paths, then the median of other models on the same version. Score range uses 0 and 100 for missing measurements."><i class="fa-regular fa-circle-question" aria-hidden="true"></i></button>
                         </div>
                         <div class="bp-quick-comparison" role="group" aria-label="Compare separately">
                             <button class="bp-comparison-icon" type="button" data-quick-comparison="reasoning" aria-label="Compare reasoning effort separately" data-tooltip="Compare reasoning effort separately" aria-pressed="false" disabled><i class="fa-solid fa-brain" aria-hidden="true"></i></button>
@@ -448,7 +448,7 @@
                     <div id="estimation-method-control" class="bp-estimation-method">
                         <label for="estimation-algorithm">Estimation method</label>
                         <select id="estimation-algorithm" aria-label="Estimation method"></select>
-                        <button type="button" class="bp-help-trigger" aria-label="About the estimation method" data-help-text="Related versions predict missing scores together. Nominated external versions can supply an estimate when the same benchmark provides none. Remaining gaps use the weighted average of this model’s scores in the treemap."><i class="fa-regular fa-circle-question" aria-hidden="true"></i></button>
+                        <button type="button" class="bp-help-trigger" aria-label="About the estimation method" data-help-text="Related versions predict missing scores together. Nominated external versions can supply an estimate when the same benchmark provides none. Remaining gaps use calibrated treemap paths or peer medians on the target version."><i class="fa-regular fa-circle-question" aria-hidden="true"></i></button>
                     </div>
                     <div class="bp-model-head" aria-hidden="true">
                         <span>#</span>

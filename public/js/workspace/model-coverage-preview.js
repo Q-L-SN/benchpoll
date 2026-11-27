@@ -1,7 +1,7 @@
 import { SVG_NS } from './constants.js';
 import { mergeBenchmarkWeights } from './expanded-weights.js';
 import { createPieRenderer } from './pie-renderer.js';
-import { TREEMAP_ESTIMATION_METHOD } from '../shared/fallback-inference.js';
+import { TREEMAP_ESTIMATION_METHOD, PEER_MEDIAN_METHOD } from '../shared/fallback-inference.js';
 
 const blockKey = entry => entry.conditionID < 0 ? 'unresolved' : `benchmark:${entry.benchmarkID ?? entry.conditionID}`;
 
@@ -27,16 +27,18 @@ export function buildModelCoverageEntries(entries, coverageEntries, versions = [
         if (!coverageByID.has(id) || !Number.isFinite(score.normalizedScore)) continue;
         const weight = score.weightBasisPoints ?? score.originalWeight / 100 * totalWeight;
         if (!Number.isFinite(weight) || weight <= 0) continue;
-        const estimate = estimatedByID.get(id) ?? { weight: 0, contribution: 0, treemapWeight: 0 };
+        const estimate = estimatedByID.get(id) ?? { weight: 0, contribution: 0, treemapWeight: 0, peerWeight: 0 };
         estimate.weight += weight;
         estimate.contribution += weight * score.normalizedScore;
         if (score.estimationMethod === TREEMAP_ESTIMATION_METHOD) estimate.treemapWeight += weight;
+        if (score.estimationMethod === PEER_MEDIAN_METHOD) estimate.peerWeight += weight;
         estimatedByID.set(id, estimate);
     }
     const totals = new Map();
     for (const entry of entries) {
         if (!(entry.weightBasisPoints > 0)) continue;
-        const key = blockKey(entry), total = totals.get(key) ?? { covered: 0, contribution: 0, estimated: 0, estimatedContribution: 0, treemapWeight: 0 };
+        const key = blockKey(entry), total = totals.get(key)
+            ?? { covered: 0, contribution: 0, estimated: 0, estimatedContribution: 0, treemapWeight: 0, peerWeight: 0 };
         const adopted = coverageByID.get(entry.conditionID);
         // Repeated references to the same condition retain their proportional share.
         const covered = adopted && entry.conditionID > 0 ? entry.weightBasisPoints * adopted.coveredWeightBasisPoints / adopted.weightBasisPoints : 0;
@@ -48,6 +50,7 @@ export function buildModelCoverageEntries(entries, coverageEntries, versions = [
             total.estimated += share * estimate.weight;
             total.estimatedContribution += share * estimate.contribution;
             total.treemapWeight += share * estimate.treemapWeight;
+            total.peerWeight += share * estimate.peerWeight;
         }
         totals.set(key, total);
     }
@@ -55,13 +58,17 @@ export function buildModelCoverageEntries(entries, coverageEntries, versions = [
         const total = totals.get(entry.isUnresolved ? 'unresolved' : blockKey(entry));
         const coveredWeightBasisPoints = total?.covered ?? 0;
         const estimatedWeightBasisPoints = total?.estimated ?? 0;
-        const unresolvedWeightBasisPoints = Math.max(0, entry.weightBasisPoints - coveredWeightBasisPoints - estimatedWeightBasisPoints);
+        const scoredWeight = coveredWeightBasisPoints + estimatedWeightBasisPoints;
+        const contribution = (total?.contribution ?? 0) + (total?.estimatedContribution ?? 0);
+        const unresolvedWeightBasisPoints = Math.max(0, entry.weightBasisPoints - scoredWeight);
         return { ...entry, coveredWeightBasisPoints, estimatedWeightBasisPoints, unresolvedWeightBasisPoints,
             treemapEstimatedWeightBasisPoints: total?.treemapWeight ?? 0,
+            peerEstimatedWeightBasisPoints: total?.peerWeight ?? 0,
             coverage: Math.min(100, coveredWeightBasisPoints / entry.weightBasisPoints * 100),
             adoptedNormalizedScore: coveredWeightBasisPoints > 0 ? total.contribution / coveredWeightBasisPoints : null,
             estimatedNormalizedScore: estimatedWeightBasisPoints > 0 ? total.estimatedContribution / estimatedWeightBasisPoints : null,
-            rankingNormalizedScore: ((total?.contribution ?? 0) + (total?.estimatedContribution ?? 0)) / entry.weightBasisPoints };
+            rankingNormalizedScore: contribution / entry.weightBasisPoints,
+            availableNormalizedScore: scoredWeight > 0 ? contribution / scoredWeight : null };
     });
 }
 

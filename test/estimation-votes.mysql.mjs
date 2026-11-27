@@ -207,14 +207,13 @@ test('SQL workspaces sample sitewide ballots per pair and jointly fit eligible m
     const olderOwner = await read({ userID: '1002' });
     checkEstimate(modelOne(olderOwner.modelLeaderboards.personal), target, sources, jointScore, .6);
     assert.deepEqual(olderOwner.personalPie.estimationVotes, [support(target, preciseSource)]);
-    assert.deepEqual([personal.lower, personal.upper, personal.coverage], [50.47, 50.47, 20]);
-    assert.deepEqual([publicRow.lower, publicRow.upper, publicRow.coverage], [51.18, 51.18, 20]);
+    assert.deepEqual([personal.lower, personal.upper, personal.coverage], [45.28, 45.28, 20]);
+    assert.deepEqual([publicRow.lower, publicRow.upper, publicRow.coverage], [45.84, 45.84, 20]);
     assert.deepEqual([personal.fallbackUsageCount, personal.fallbackCoverage], [1, 60]);
     near(personal.availableInference.observedContribution, 11);
-    const treemap = personal.inferredScores.find(estimate => estimate.estimationMethod === 'treemap-weighted');
-    assert.equal(treemap.conditionID, unresolved);
-    near(treemap.normalizedScore, (11 + jointScore * .6) / .8);
-    near(personal.availableInference.inferredContribution, jointScore * .6 + treemap.normalizedScore * .2);
+    const peer = personal.inferredScores.find(estimate => estimate.estimationMethod === 'peer-median');
+    assert.deepEqual([peer.conditionID, peer.normalizedScore, peer.referenceCount], [unresolved, 24.5, 6]);
+    near(personal.availableInference.inferredContribution, jointScore * .6 + 24.5 * .2);
     near(personal.availableInference.inferredFraction, .8);
     near(personal.availableInference.unresolvedFraction, 0);
     assert.equal(personal.availableInference.unresolvedContribution, 0);
@@ -529,9 +528,10 @@ test('HTTP external nominations appear and score in both directions until their 
             if (available) {
                 checkEstimate(row, conditionID, [{ sourceConditionID: sourceID, sourceScore, referenceCount: 6 }], prediction, .8);
             } else {
-                assert.deepEqual([row.lower, row.coverage], [21, 20]);
+                const expectedMedian = conditionID === target ? 49.25 : 53.75;
+                assert.deepEqual([row.lower, row.coverage], [conditionID === target ? 43.6 : 47.2, 20]);
                 assert.deepEqual(row.inferredScores.map(score => [score.conditionID, score.estimationMethod, score.normalizedScore]),
-                    [[conditionID, 'treemap-weighted', 21]]);
+                    [[conditionID, 'peer-median', expectedMedian]]);
             }
         }
     };
@@ -621,7 +621,7 @@ test('HTTP external nominations appear and score in both directions until their 
     assert.deepEqual(expiredPersonal.personalPie.estimationVotes, []);
     const expiredRow = expiredPersonal.modelLeaderboards.personal.find(model => model.modelID === forwardSubject);
     assert.deepEqual(expiredRow.inferredScores.map(score => [score.conditionID, score.estimationMethod, score.normalizedScore]),
-        [[target, 'treemap-weighted', 21]]);
+        [[target, 'peer-median', 49.25]]);
     await write('1010', { ...reversePair, vote: null });
     await expectPair(1, 9, false);
     await write('1010', { vote: 'oppose' });

@@ -1,4 +1,4 @@
-import { FALLBACK_INFERENCE_METHOD, TREEMAP_ESTIMATION_METHOD } from '../public/js/shared/fallback-inference.js';
+import { FALLBACK_INFERENCE_METHOD, TREEMAP_ESTIMATION_METHOD, PEER_MEDIAN_METHOD, SUPPORTED_WEIGHT_POLICY } from '../public/js/shared/fallback-inference.js';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
@@ -22,7 +22,8 @@ function summary(inference, coverage = .5, comparable = true, overrides = {}) {
         modelScoresSummary, modelScoresList: { append() {} },
         document: { createElement: () => ({ textContent: '', dataset: {}, append(...nodes) { this.textContent += nodes.map(node => node.textContent).join(' '); } }) },
         renderEstimate() {},
-        rankingNumber, isMissingInferenceMethod, FALLBACK_INFERENCE_METHOD, TREEMAP_ESTIMATION_METHOD, syncExpand() {}, filterScores() {}, expansionNoun: ''
+        rankingNumber, isMissingInferenceMethod, FALLBACK_INFERENCE_METHOD, TREEMAP_ESTIMATION_METHOD, PEER_MEDIAN_METHOD,
+        SUPPORTED_WEIGHT_POLICY, syncExpand() {}, filterScores() {}, expansionNoun: ''
     });
     render({ lower: inference?.totalScore ?? null, coverage: coverage * 100,
         missingWeight: (1 - coverage) * 100, comparable, availableInference: inference, calculationScores: [], ...overrides });
@@ -38,8 +39,8 @@ function factorInference(raw, coverage, inferredFraction = 0) {
 }
 
 test('brief help distinguishes calibrated estimates from measured weighted coverage', () => {
-    assert.match(rankingGuide, /Estimated score[\s\S]*version estimates and treemap estimates at their full weights/);
-    assert.match(rankingGuide, /their weights scaled to sum to 100%/);
+    assert.match(rankingGuide, /calibrated|paired measurements and eligible support/);
+    assert.match(rankingGuide, /using benchmark weights, vote shares and paired-model counts/);
     assert.match(rankingGuide, /Coverage is the share of weight with measured results/);
     assert.match(rankingGuide, /on selected versions/);
     assert.match(rankingGuide, /Version-based estimation/);
@@ -52,8 +53,8 @@ test('short score help preserves range endpoints, unresolved gaps and direct-fir
     assert.match(rankingGuide, /A direct score on a scoring version takes priority, including zero and negative scores/);
     assert.match(rankingGuide, /uses 0 at the lower end and 100 at the upper end for missing measurements/);
     assert.match(rankingGuide, /Both ends use the measured scores where available\. Models rank by the lower end/);
-    assert.match(rankingGuide, /Each gap gets that average at its original weight/);
-    assert.match(rankingGuide, /Models with no evidence in the treemap stay unranked/);
+    assert.match(rankingGuide, /With no peer score, the index uses the scored weight/);
+    assert.match(rankingGuide, /Models without direct or calibrated evidence stay unranked/);
     assert.match(estimationGuide, /Versions of the same benchmark are eligible by default, including with no votes or a tie/);
     assert.match(estimationGuide, /eligible measured versions of the same benchmark/);
     assert.match(estimationGuide, /fits eligible measured versions of the same benchmark together/);
@@ -77,10 +78,10 @@ test('score details report version and treemap estimates separately from measure
     const inference = { method: FALLBACK_INFERENCE_METHOD, weightPolicy: 'original', inferredFraction: .5,
         unresolvedFraction: 0, unpenalizedScore: 53, totalScore: 53 };
     const text = summary(inference, .5, true, { inferredScores: [{ originalWeight: 25, conditionID: 1, sources: [] },
-        { estimationMethod: TREEMAP_ESTIMATION_METHOD, originalWeight: 25, conditionID: 2 }] });
+        { estimationMethod: TREEMAP_ESTIMATION_METHOD, originalWeight: 25, conditionID: 2, sources: [] }] });
     assert.match(text, /measured results cover 50% of the weight/);
     assert.match(text, /25\.00% of the weight uses estimates from related benchmark versions/);
-    assert.match(text, /25\.00% uses this model’s weighted average of measured and version-estimated scores in the treemap/);
+    assert.match(text, /25\.00% uses calibrated version chains across the treemap/);
     assert.match(text, /How it works/);
     assert.doesNotMatch(text, /adjustment|fallback chains|left out|starts at 50/);
     const zero = summary({ ...inference, inferredFraction: 0, totalScore: 0, unresolvedFraction: 1 }, 0, false);

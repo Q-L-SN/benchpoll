@@ -11,15 +11,16 @@ function coverageScore(tile, range) {
     const measured = Number.isFinite(tile.adoptedNormalizedScore);
     const estimated = Number.isFinite(tile.estimatedNormalizedScore);
     const treemap = tile.treemapEstimatedWeightBasisPoints > 0;
+    const peerMedian = tile.peerEstimatedWeightBasisPoints > 0;
     const gap = tile.unresolvedWeightBasisPoints / tile.weightBasisPoints > 1e-9;
     const status = measured ? estimated ? 'mixed' : 'measured' : estimated ? 'estimated' : 'unresolved';
-    const value = status === 'unresolved' && !range ? '—' : previewNumber(tile.rankingNormalizedScore);
+    const value = status === 'unresolved' && !range ? '—' : previewNumber(range ? tile.rankingNormalizedScore : tile.availableNormalizedScore);
     if (status === 'unresolved') {
         const tooltip = range ? 'No measurement. Counts as 0 at the lower end and 100 at the upper end.'
             : 'No score available for this part of the treemap.';
         return { measured, status, value, tooltip, description: range ? `Score ${value} / 100. ${tooltip}` : tooltip };
     }
-    if (!gap && status !== 'mixed' && !treemap) {
+    if (!gap && status !== 'mixed' && !treemap && !peerMedian) {
         return { measured, status, value, description: `${measured ? 'Measured' : 'Estimated'} score ${value} / 100.` };
     }
     const share = weight => `${previewNumber(weight / tile.weightBasisPoints * 100)}%`;
@@ -27,10 +28,11 @@ function coverageScore(tile, range) {
     if (measured) parts.push(`Measured score ${previewNumber(tile.adoptedNormalizedScore)} on ${share(tile.coveredWeightBasisPoints)} of the weight.`);
     if (estimated) parts.push(`Estimated score ${previewNumber(tile.estimatedNormalizedScore)} on ${share(tile.estimatedWeightBasisPoints)} of the weight.`);
     if (treemap) parts.push(`Treemap estimate on ${share(tile.treemapEstimatedWeightBasisPoints)} of the weight.`);
+    if (peerMedian) parts.push(`Peer median on ${share(tile.peerEstimatedWeightBasisPoints)} of the weight.`);
     if (gap) parts.push(range ? `The remaining ${share(tile.unresolvedWeightBasisPoints)} is unmeasured and spans 0 to 100.`
         : `The remaining ${share(tile.unresolvedWeightBasisPoints)} has no score.`);
     const tooltip = parts.join(' ');
-    return { measured, status, value, treemap, tooltip, description: `${range ? 'Lower-end' : 'Weighted'} score ${value} / 100. ${tooltip}` };
+    return { measured, status, value, treemap, peerMedian, tooltip, description: `${range ? 'Lower-end' : 'Weighted'} score ${value} / 100. ${tooltip}` };
 }
 
 export function createPieRenderer({ state, pieSvg, pieHoverTooltip, orderedPieEntries, currentPieEntries, selectedObjectIndex, renderInlineFallback, fallbackRuleFor, publicFallbackRuleFor, onSelect, getPreview = () => null, autoSelect = () => false, coveragePreview = false, coverageMode = 'available', focusCoverage = false }) {
@@ -164,6 +166,7 @@ export function createPieRenderer({ state, pieSvg, pieHoverTooltip, orderedPieEn
             if (score) {
                 node.group.classList.toggle('is-uncovered', !score.measured);
                 node.group.classList.toggle('is-treemap-estimate', score.treemap === true);
+                node.group.classList.toggle('is-peer-median', score.peerMedian === true);
                 node.group.dataset.coverage = String(tile.coverage);
                 node.group.dataset.scoreStatus = score.status;
                 if (score.tooltip) {

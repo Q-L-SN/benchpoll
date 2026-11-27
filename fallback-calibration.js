@@ -1,5 +1,5 @@
 import { fitJointVersionModel, predictJointVersion } from './joint-version-estimator.js';
-import { JOINT_VERSION_METHOD } from './public/js/shared/fallback-inference.js';
+import { JOINT_VERSION_METHOD, TREEMAP_ESTIMATION_METHOD } from './public/js/shared/fallback-inference.js';
 import { estimationVotePairKey } from './public/js/shared/estimation-votes.js';
 
 const settingsKey = parameters => JSON.stringify(parameters == null ? null
@@ -53,6 +53,62 @@ function routeFrom(tree, measured, target) {
         from = to;
     }
     return { ...best, steps };
+}
+
+function weightedCalibrationTree(target, policy, pairedEvidence) {
+    const tree = new Map();
+    const frontier = new Map([[target, { cost: 0, distance: 0 }]]);
+    while (frontier.size) {
+        let to, suffix;
+        for (const [id, route] of frontier) {
+            if (!suffix || route.cost < suffix.cost || route.cost === suffix.cost
+                && (route.distance < suffix.distance || route.distance === suffix.distance && id < to)) {
+                to = id;
+                suffix = route;
+            }
+        }
+        frontier.delete(to);
+        tree.set(to, suffix);
+        for (const edge of policy.graph.get(to)) {
+            const from = edge.conditionID;
+            if (tree.has(from) || policy.blocked.has(estimationVotePairKey(target, from))) continue;
+            const referenceCount = pairedEvidence(to, edge);
+            if (!referenceCount) continue;
+            // Smoothly shrink support from sparse pairings at each step of the path.
+            const cost = suffix.cost - Math.log(edge.supportRate * referenceCount / (referenceCount + 2));
+            const distance = suffix.distance + 1;
+            const previous = frontier.get(from);
+            if (!previous || cost < previous.cost || cost === previous.cost
+                && (distance < previous.distance || distance === previous.distance && to < previous.targetConditionID)) {
+                frontier.set(from, { cost, distance, targetConditionID: to, referenceCount, supportRate: edge.supportRate });
+            }
+        }
+    }
+    return tree;
+}
+
+function blendTreemapPredictions(candidates, policy) {
+    if (!candidates.length) return null;
+    const counts = new Map();
+    let minCost = Infinity;
+    for (const candidate of candidates) {
+        const group = policy.groups.get(candidate.sourceConditionID);
+        counts.set(group, (counts.get(group) ?? 0) + 1);
+        minCost = Math.min(minCost, candidate.cost);
+    }
+    // Divide a benchmark’s allocation among its usable versions before applying path reliability.
+    const weights = candidates.map(candidate => {
+        const group = policy.groups.get(candidate.sourceConditionID);
+        return policy.weights.get(group) / counts.get(group) * Math.exp(minCost - candidate.cost);
+    });
+    const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+    const sources = candidates.flatMap(({ sourceConditionID, sourceScore, normalizedScore, calibrationPaths }, index) => {
+        const weightFraction = weights[index] / totalWeight;
+        return weightFraction > 0 ? [{ sourceConditionID, sourceScore, normalizedScore, calibrationPaths, weightFraction }] : [];
+    });
+    const normalizedScore = sources.reduce((sum, source) => sum + source.normalizedScore * source.weightFraction, 0);
+    return Number.isFinite(normalizedScore) && sources.length
+        ? { estimationMethod: TREEMAP_ESTIMATION_METHOD, normalizedScore, sources } : null;
 }
 
 export function createFallbackCalibration(configurations) {
@@ -270,6 +326,71 @@ export function createFallbackCalibration(configurations) {
                 ...(best.distance > 1 ? { calibrationPaths: [...paths.values()] } : {}) }] } : null;
     }
 
+    function treemapRouteTree(run, target, policy, validate) {
+        const group = referenceGroup(target, run);
+        if (!group) return null;
+        const modelHasPairs = [...run.results.keys()].some(id => policy.graph.get(Number(id))
+            ?.some(edge => Number.isFinite(readScore(run, edge.conditionID))));
+        const build = () => weightedCalibrationTree(target, policy, (to, { conditionID: from, external }) => {
+            const peers = referenceGroup(to, run);
+            const count = pairCount(peers, from, peers?.peers.get(modelID(run)));
+            return count && (!external || !validate || validatedSource(peers, from, run, to)) ? count : 0;
+        });
+        if (modelHasPairs) return build();
+        if (!group.trees.has(policy)) group.trees.set(policy, build());
+        return group.trees.get(policy);
+    }
+
+    function treemapSource(run, sourceConditionID, tree, target) {
+        const node = tree?.get(sourceConditionID);
+        const sourceScore = readScore(run, sourceConditionID);
+        if (!node || !Number.isFinite(sourceScore)) return null;
+        const steps = [];
+        for (let from = sourceConditionID; from !== target;) {
+            const { targetConditionID, referenceCount, supportRate } = tree.get(from);
+            steps.push({ targetConditionID, referenceCount, supportRate });
+            from = targetConditionID;
+        }
+        const normalizedScore = predictAlong(run, { sourceID: sourceConditionID, steps });
+        return Number.isFinite(normalizedScore) ? { sourceConditionID, sourceScore, normalizedScore,
+            cost: node.cost, calibrationPaths: [steps] } : null;
+    }
+
+    function estimateTreemapRun(run, target, sources, policy, validate) {
+        const measured = sources.filter(id => Number.isFinite(readScore(run, id)));
+        if (!measured.length) return null;
+        const tree = treemapRouteTree(run, target, policy, validate);
+        return blendTreemapPredictions(measured.map(id => treemapSource(run, id, tree, target)).filter(Boolean), policy);
+    }
+
+    function estimateTreemapMatched(target, sources, comparisons, policy, validate) {
+        const trees = new Map(), candidates = [];
+        for (const id of sources) {
+            const comparison = comparisons.get(id);
+            if (!comparison?.matchedCount) continue;
+            const paths = new Map();
+            let score = 0, cost = 0;
+            const complete = comparison.memberWeights.every(({ ID, weight }) => {
+                const run = runs().get(ID);
+                if (!run) return false;
+                if (!trees.has(ID)) trees.set(ID, treemapRouteTree(run, target, policy, validate));
+                const evidence = treemapSource(run, id, trees.get(ID), target);
+                if (!evidence) return false;
+                score += evidence.normalizedScore * weight;
+                cost = Math.max(cost, evidence.cost);
+                const [steps] = evidence.calibrationPaths;
+                const key = steps.map(step => step.targetConditionID).join(',');
+                const existing = paths.get(key);
+                if (!existing) paths.set(key, steps);
+                else steps.forEach((step, i) => { existing[i].referenceCount = Math.min(existing[i].referenceCount, step.referenceCount); });
+                return true;
+            });
+            if (complete) candidates.push({ sourceConditionID: id, sourceScore: comparison.normalizedScore,
+                normalizedScore: score, cost, calibrationPaths: [...paths.values()] });
+        }
+        return blendTreemapPredictions(candidates, policy);
+    }
+
     function bestRunPrediction(model, predict) {
         let best = null, bestRunID = null;
         for (const member of model.members) {
@@ -298,6 +419,16 @@ export function createFallbackCalibration(configurations) {
             const indirect = run => estimateIndirect(run, target, ids, policy);
             if (model.comparisonMode === 'best') return bestRunPrediction(model, direct) ?? (policy && bestRunPrediction(model, indirect));
             return direct(model) ?? (policy && indirect(model));
+        },
+        predictTreemap(model, target, policy, comparisons, validate) {
+            const benchmark = policy.groups.get(target);
+            if (benchmark === undefined) return null;
+            const sources = [...model.results.keys()].map(Number).filter(id => policy.weights.has(policy.groups.get(id)) && policy.groups.get(id) !== benchmark)
+                .sort((a, b) => a - b);
+            if (!sources.length) return null;
+            if (model.comparisonMode === 'matched') return estimateTreemapMatched(target, sources, comparisons, policy, validate);
+            const predict = run => estimateTreemapRun(run, target, sources, policy, validate);
+            return model.comparisonMode === 'best' ? bestRunPrediction(model, predict) : predict(model);
         }
     };
 }

@@ -31,7 +31,7 @@ test('partially covered fair comparisons use the same evidence in range and avai
     assert.deepEqual(range.map(row => [row.lower, row.upper, row.comparable]), [[20, 70, true], [40, 90, true]]);
     assert.deepEqual(available.map(row => [row.lower, row.upper, row.comparable]), [[40, 40, true], [80, 80, true]]);
     assert.deepEqual(available.map(row => row.availableInference.observedScore), [40, 80]);
-    assert.ok(available.every(row => row.inferredScores.length === 1 && row.inferredScores[0].estimationMethod === 'treemap-weighted'));
+    assert.ok(available.every(row => row.inferredScores.length === 0));
 });
 
 test('per-benchmark matched cohorts do not change when missing results are estimated', () => {
@@ -40,7 +40,7 @@ test('per-benchmark matched cohorts do not change when missing results are estim
     const { range, available } = bothModes(models, weights([10, 4000], [11, 6000]), { mode: 'matched', keys: ['model'] });
     assert.deepEqual(range.map(row => [row.lower, row.upper]), [[62, 62], [24, 84], [42, 82]]);
     assert.deepEqual(available.map(row => row.lower), [62, 60, 70]);
-    assert.ok(available.slice(1).every(row => row.inferredScores.length === 1 && row.inferredScores[0].estimationMethod === 'treemap-weighted'));
+    assert.ok(available.slice(1).every(row => row.inferredScores.length === 1 && row.inferredScores[0].estimationMethod === 'peer-median'));
     assert.deepEqual(available.slice(1).map(row => row.availableInference.method), ['calibrated-fallback', 'calibrated-fallback']);
     assert.deepEqual(available.slice(1).map(row => row.availableInference.unresolvedFraction), [0, 0]);
     assert.ok(range.every(row => row.comparable));
@@ -82,7 +82,7 @@ test('ordered family evidence is identical between score modes for both personal
         assert.deepEqual([range[1].lower, range[1].upper], [0, 100]);
         assert.equal(available[1].lower, 68.83);
         assert.deepEqual(available[1].inferredScores.map(row => [row.conditionID, row.estimationMethod]),
-            [[10, 'joint-versions'], [11, 'treemap-weighted']]);
+            [[10, 'joint-versions']]);
         assert.ok(Math.abs(available[1].inferredScores[0].normalizedScore - 68.82647494604078) < 1e-9);
         assert.deepEqual(range[1].calculationScores, []);
     }

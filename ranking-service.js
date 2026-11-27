@@ -18,7 +18,7 @@ import {
 import { normalizeAvailableInferenceVersion,
     AVAILABLE_INFERENCE_VERSION } from './public/js/shared/available-score.js';
 import { createFallbackCalibration } from './fallback-calibration.js';
-import { fallbackInference, TREEMAP_ESTIMATION_METHOD } from './public/js/shared/fallback-inference.js';
+import { fallbackInference, PEER_MEDIAN_METHOD, SUPPORTED_WEIGHT_POLICY } from './public/js/shared/fallback-inference.js';
 import { DEFAULT_ESTIMATION_ALGORITHM, normalizeEstimationAlgorithm } from './public/js/shared/estimation-algorithms.js';
 import { benchmarkVersionTieOrder, benchmarkEvaluationOrder } from './public/js/shared/benchmark-version-order.js';
 import { communityVersionComposition, expandCommunityVersions } from './public/js/shared/benchmark-version-choice.js';
@@ -938,7 +938,50 @@ function eligibleEstimationSources(entry, excludedConditionIDs) {
         : sources.filter(ID => !excludedConditionIDs.has(ID)).sort((left, right) => left - right);
 }
 
-export function scoreModels(models, weightedEntries, totalBasisPoints, { fallbackRules = [], familyComposition = [], fallbackScope = 'personal', scoreMode = 'range', availableInferenceVersion = AVAILABLE_INFERENCE_VERSION, estimationAlgorithm = DEFAULT_ESTIMATION_ALGORITHM, fallbackCalibration = null, validateExternal = fallbackScope === 'public', comparisonKeys = [], comparisonScoreIndexes = null, deferMetadata = false, excludedConditionIDs = new Set() } = {}) {
+function peerMedians(rows, comparisonKeys) {
+    const keys = comparisonKeys.filter(key => key !== 'model');
+    const pools = new Map(), scopes = new WeakMap();
+    for (const row of rows) {
+        if (!row.resultKeys.size || row.model.comparable === false) continue;
+        const modelID = row.model.modelID ?? row.model.ID;
+        if (row.model.members?.some(member => (member.modelID ?? member.ID) !== modelID)) continue;
+        const parameters = row.model.condition?.parameters ?? {};
+        const scopeKey = JSON.stringify(keys.map(key => [Object.hasOwn(parameters, key), parameters[key] ?? null]));
+        if (!pools.has(scopeKey)) pools.set(scopeKey, new Map());
+        const conditions = pools.get(scopeKey);
+        scopes.set(row, { modelID, conditions });
+
+        const scores = new Map();
+        for (const { conditionID, normalizedScore, weightBasisPoints } of [...row.calculationScores, ...row.inferredScores]) {
+            const previous = scores.get(conditionID);
+            const weight = (previous?.weight ?? 0) + weightBasisPoints;
+            const value = previous ? previous.value * (previous.weight / weight) + normalizedScore * (weightBasisPoints / weight) : normalizedScore;
+            scores.set(conditionID, { weight, value });
+        }
+        for (const [conditionID, { value }] of scores) {
+            if (!conditions.has(conditionID)) conditions.set(conditionID, { models: new Map() });
+            const { models } = conditions.get(conditionID);
+            if (!models.has(modelID) || models.get(modelID) < value) models.set(modelID, value);
+        }
+    }
+    return (row, conditionID) => {
+        const scope = scopes.get(row);
+        const pool = scope?.conditions.get(conditionID);
+        if (!pool) return null;
+        pool.sorted ??= [...pool.models].sort((left, right) => left[1] - right[1]);
+        pool.indices ??= new Map(pool.sorted.map(([ID], index) => [ID, index]));
+        const ownIndex = pool.indices.get(scope.modelID) ?? Infinity;
+        const referenceCount = pool.sorted.length - Number(ownIndex !== Infinity);
+        if (!referenceCount) return null;
+        const scoreAt = index => pool.sorted[index < ownIndex ? index : index + 1][1];
+        const upper = scoreAt(Math.floor(referenceCount / 2));
+        const lower = scoreAt(Math.floor((referenceCount - 1) / 2));
+        const normalizedScore = lower === upper ? upper : lower / 2 + upper / 2;
+        return { normalizedScore, referenceCount, estimationMethod: PEER_MEDIAN_METHOD };
+    };
+}
+
+export function scoreModels(models, weightedEntries, totalBasisPoints, { fallbackRules = [], familyComposition = [], fallbackScope = 'personal', scoreMode = 'range', availableInferenceVersion = AVAILABLE_INFERENCE_VERSION, estimationAlgorithm = DEFAULT_ESTIMATION_ALGORITHM, fallbackCalibration = null, treemapPolicy = null, validateExternal = fallbackScope === 'public', comparisonKeys = [], comparisonScoreIndexes = null, deferMetadata = false, excludedConditionIDs = new Set() } = {}) {
     currentInferenceVersion(availableInferenceVersion);
     currentEstimationAlgorithm(estimationAlgorithm);
     if (!['range', 'available'].includes(scoreMode)) {
@@ -967,7 +1010,7 @@ export function scoreModels(models, weightedEntries, totalBasisPoints, { fallbac
                 : resolvedFamilyConditionIDs(entry.conditionID, family.entries).filter(ID => !excludedConditionIDs.has(ID))
         })) };
     });
-    return models.map(model => {
+    const rows = models.map(model => {
         let lower = 0;
         let upper = 0;
         let coveredBasisPoints = 0;
@@ -1040,7 +1083,7 @@ export function scoreModels(models, weightedEntries, totalBasisPoints, { fallbac
                             ...(automatic ? { selection: 'automatic' } : { familyConditionIDs: chain }), ...prediction,
                             weightBasisPoints: weight, originalWeight: weight / totalBasisPoints * 100 });
                     }
-                } else if (missingWeights && !excludedConditionIDs.has(entry.conditionID)) {
+                } else if (missingWeights && entry.conditionID > 0 && !excludedConditionIDs.has(entry.conditionID)) {
                     missingWeights.set(entry.conditionID, (missingWeights.get(entry.conditionID) ?? 0) + weight);
                 }
                 if (family.entries.length) fallbackResolutions.push({ primaryConditionID: entry.conditionID,
@@ -1054,29 +1097,44 @@ export function scoreModels(models, weightedEntries, totalBasisPoints, { fallbac
             if (measuredScore !== null) coverage.coveredWeightBasisPoints += entry.weightBasisPoints;
             coverageByCondition.set(entry.conditionID, coverage);
         }
-        const observedFraction = measuredFraction(coveredBasisPoints, totalBasisPoints);
-        let availableInference = null;
-        if (missingWeights) {
-            const observedScore = calculationScores.reduce((sum, score) =>
-                sum + score.normalizedScore * (score.weightBasisPoints / coveredBasisPoints), 0);
-            const estimates = inferredScores.map(score => ({ normalizedScore: score.normalizedScore,
-                weightFraction: score.weightBasisPoints / totalBasisPoints }));
-            availableInference = fallbackInference(observedScore, observedFraction, estimates, estimationAlgorithm);
-            if (missingWeights.size && availableInference.supportedFraction > 0) {
-                // Use the scores already adopted in this treemap as evidence, before filling any gaps.
-                const normalizedScore = availableInference.unpenalizedScore / availableInference.supportedFraction;
-                for (const [conditionID, weightBasisPoints] of missingWeights) {
-                    const weightFraction = weightBasisPoints / totalBasisPoints;
-                    inferredScores.push({ conditionID, normalizedScore, weightBasisPoints, originalWeight: weightFraction * 100,
-                        familyID: null, estimationMethod: TREEMAP_ESTIMATION_METHOD });
-                    estimates.push({ normalizedScore, weightFraction });
-                }
-                availableInference = fallbackInference(observedScore, observedFraction, estimates, estimationAlgorithm);
+        if (missingWeights?.size && treemapPolicy) {
+            calibration ??= createFallbackCalibration(models);
+            for (const [conditionID, weightBasisPoints] of missingWeights) {
+                const prediction = calibration.predictTreemap(model, conditionID, treemapPolicy, comparisonScores, validateExternal);
+                if (!prediction) continue;
+                for (const source of prediction.sources) resultKeys.add(resultKey(source.sourceConditionID));
+                estimatedTargets.add(conditionID);
+                calibratedBasisPoints += weightBasisPoints;
+                inferredScores.push({ conditionID, ...prediction, weightBasisPoints,
+                    originalWeight: weightBasisPoints / totalBasisPoints * 100, familyID: null });
+                missingWeights.delete(conditionID);
             }
         }
+        return { model, lower, upper, coveredBasisPoints, calibratedBasisPoints, resultKeys, estimatedTargets,
+            fallbackResolutions, calculationScores, coverageByCondition, inferredScores, missingWeights };
+    });
+    // Build peer distributions before updating any row, so a peer estimate never enters another median.
+    const getMedian = rows.some(row => row.missingWeights?.size && row.resultKeys.size) ? peerMedians(rows, comparisonKeys) : null;
+    return rows.map(row => {
+        const { model, lower, upper, coveredBasisPoints, calibratedBasisPoints, resultKeys, estimatedTargets,
+            fallbackResolutions, calculationScores, coverageByCondition, inferredScores, missingWeights } = row;
+        if (getMedian && missingWeights?.size && resultKeys.size) {
+            for (const [conditionID, weightBasisPoints] of missingWeights) {
+                const estimate = getMedian(row, conditionID);
+                if (estimate) inferredScores.push({ conditionID, ...estimate, weightBasisPoints,
+                    originalWeight: weightBasisPoints / totalBasisPoints * 100, familyID: null });
+            }
+        }
+        const observedFraction = measuredFraction(coveredBasisPoints, totalBasisPoints);
+        const availableInference = missingWeights ? fallbackInference(calculationScores.reduce((sum, score) =>
+            sum + score.normalizedScore * (score.weightBasisPoints / coveredBasisPoints), 0), observedFraction,
+        inferredScores.map(score => ({ normalizedScore: score.normalizedScore,
+            weightFraction: score.weightBasisPoints / totalBasisPoints })), estimationAlgorithm, true) : null;
+        const scoringBasisPoints = availableInference?.weightPolicy === SUPPORTED_WEIGHT_POLICY
+            ? totalBasisPoints * availableInference.supportedFraction : totalBasisPoints;
         const availableScore = availableInference?.supportedFraction > 0 ? roundTo(availableInference.totalScore) : null;
-        const weightedScore = score => ({ ...score, effectiveWeight: score.weightBasisPoints / totalBasisPoints * 100,
-            contribution: score.normalizedScore * (score.weightBasisPoints / totalBasisPoints) });
+        const weightedScore = score => ({ ...score, effectiveWeight: score.weightBasisPoints / scoringBasisPoints * 100,
+            contribution: score.normalizedScore * (score.weightBasisPoints / scoringBasisPoints) });
         const response = {
             ID: model.ID,
             modelID: model.modelID,
@@ -1101,7 +1159,7 @@ export function scoreModels(models, weightedEntries, totalBasisPoints, { fallbac
             missingWeight: Math.max(0, totalBasisPoints - coveredBasisPoints) / totalBasisPoints * 100
         };
         if (deferMetadata) {
-            deferScoreMetadata(response, model.condition, calculationScores, totalBasisPoints);
+            deferScoreMetadata(response, model.condition, calculationScores, scoringBasisPoints);
         }
         return response;
     });
@@ -1117,10 +1175,11 @@ export function scoreComparison(models, entries, total, rules, options, prepared
     if (!Number.isFinite(total) || total <= 0 || entries.length === 0) return [];
     const scoreMode = rules.scoreMode ?? 'range';
     const excludedConditionIDs = rules.excludedConditionIDs ?? new Set();
+    const treemapPolicy = rules.treemapPolicy ?? null;
     const matchedEntries = options.mode === 'matched' && scoreMode === 'available'
-        ? entries.concat(Array.from(new Set(entries.filter(entry => entry.weightBasisPoints > 0)
-            .flatMap(entry => [...eligibleEstimationSources(entry, excludedConditionIDs) ?? [], ...entry.externalSourceIDs ?? []])),
-        conditionID => ({ conditionID, weightBasisPoints: 1 })))
+        ? entries.concat(Array.from(new Set([...entries.filter(entry => entry.weightBasisPoints > 0)
+            .flatMap(entry => [...eligibleEstimationSources(entry, excludedConditionIDs) ?? [], ...entry.externalSourceIDs ?? []]),
+            ...treemapPolicy?.conditionIDs ?? []]), conditionID => ({ conditionID, weightBasisPoints: 1 })))
         : entries;
     const grouped = preparedGroups ?? groupComparisonModels(models, options, matchedEntries);
     const groupsByID = new Map(grouped.map(group => [group.ID, group]));
@@ -1129,7 +1188,7 @@ export function scoreComparison(models, entries, total, rules, options, prepared
     // exact run settings of the source measurement selected by the comparison.
     const fallbackCalibration = rules.fallbackCalibration ?? createFallbackCalibration(models);
     const scores = scoreModels(grouped, entries, total, { ...(options.mode === 'matched' ? { scoreMode } : rules), fallbackCalibration,
-        availableInferenceVersion, estimationAlgorithm: rules.estimationAlgorithm,
+        availableInferenceVersion, estimationAlgorithm: rules.estimationAlgorithm, treemapPolicy,
         excludedConditionIDs,
         validateExternal: rules.validateExternal ?? (rules.fallbackScope === 'public'), comparisonKeys: options.keys, comparisonScoreIndexes: rules.comparisonScoreIndexes, deferMetadata: rules.jsonMemberMetadata === true });
     return scores.map(score => {
@@ -1554,13 +1613,18 @@ async function buildRankingWorkspace(db, {
     const publicExpanded = await expandedFor('public', publicDisplayWeights);
     const personalScoringEntries = personalExpanded?.scoringEntries ?? personalVersionEntries;
     const publicScoringEntries = publicExpanded?.scoringEntries ?? publicVersionEntries;
+    const treemapPolicies = scoreMode === 'available' ? {
+        personal: planEstimates.treemap(personalScoringEntries, ballots.community, personalEstimationVotes),
+        public: planEstimates.treemap(publicScoringEntries, ballots.community)
+    } : {};
     const evaluationConditions = [...conditions, ...referenceTargets.filter(target =>
         context.isPrivate || !target.isPrivate).map(referenceCondition)];
     const globalWeights = await loadGlobalConditionWeights(db);
     const benchmarkList = buildBenchmarkList(evaluationConditions, publicEntries, personalEntries, [], [], [], globalWeights);
     const fields = await loadScoreFieldCatalog(db);
-    const scoringConditionIDs = [...new Set([...personalScoringEntries, ...publicScoringEntries]
-        .flatMap(entry => [entry.conditionID, ...entry.estimationSourceIDs, ...entry.externalSourceIDs ?? []]))]
+    const scoringConditionIDs = [...new Set([...personalScoringEntries.concat(publicScoringEntries)
+        .flatMap(entry => [entry.conditionID, ...entry.estimationSourceIDs, ...entry.externalSourceIDs ?? []]),
+        ...treemapPolicies.personal?.conditionIDs ?? [], ...treemapPolicies.public?.conditionIDs ?? []])]
         .filter(ID => ID > 0 && !conditionsByID.get(ID)?.excludedFromRanking).sort((a, b) => a - b);
     const excludedConditionIDs = new Set([...conditionsByID].filter(([, condition]) => condition.excludedFromRanking).map(([ID]) => ID));
     const definitionsFor = IDs => IDs.map(ID => {
@@ -1593,11 +1657,13 @@ async function buildRankingWorkspace(db, {
     const scoringOptions = { scoreMode, availableInferenceVersion, estimationAlgorithm, fallbackCalibration,
         comparisonScoreIndexes, jsonMemberMetadata, excludedConditionIDs };
     const calculate = async (scope, entries, total) => {
-        const build = () => scoreComparison(models, entries, total, { ...scoringOptions, validateExternal: scope === 'public' }, compareOptions, preparedGroups);
+        const treemapPolicy = treemapPolicies[scope];
+        const build = () => scoreComparison(models, entries, total, { ...scoringOptions, treemapPolicy,
+            validateExternal: scope === 'public' }, compareOptions, preparedGroups);
         if (!jsonMemberMetadata || !preparedGroups) return build();
-        // Source eligibility is carried on each entry, so a ballot edit changes its calculation key.
+        // A ballot edit may change either a direct source or a link between two unweighted versions.
         const key = JSON.stringify([normalizeUserID(userID), context.categoryID, context.contextValues,
-            scope, comparisonKey, scoreMode, availableInferenceVersion, estimationAlgorithm, entries, total]);
+            scope, comparisonKey, scoreMode, availableInferenceVersion, estimationAlgorithm, entries, total, treemapPolicy?.cacheKey]);
         return cachedRankingCalculation(db, key, build);
     };
     const personalRanking = await calculate('personal', personalScoringEntries, PIE_TOTAL_BASIS_POINTS);

@@ -185,7 +185,7 @@ test('matched totals are null without matching evidence and do not use fallback'
     assert.ok(matched.every(item => item.lower === null && item.upper === null && item.fallbackUsageCount === 0));
 });
 
-test('matched comparison uses only the matched observed subset to seed treemap estimates', () => {
+test('matched comparison leaves a version without matched peer scores unscored', () => {
     const models = [model(1, 1, { harness: 'a' }, { 10: 40 }), model(2, 2, { harness: 'a' }, { 10: 80 })];
     const entries = [...weights, { conditionID: 11, weightBasisPoints: 10000 }];
     const options = comparisonOptions(models, { keys: ['model'], mode: 'matched' });
@@ -193,7 +193,7 @@ test('matched comparison uses only the matched observed subset to seed treemap e
     assert.deepEqual(ranked.map(item => [item.lower, item.upper, item.coverage, item.comparable]), [
         [40, 40, 50, true], [80, 80, 50, true]
     ]);
-    assert.ok(ranked.every(row => row.inferredScores[0].estimationMethod === 'treemap-weighted' && row.availableInference.unresolvedFraction === 0));
+    assert.ok(ranked.every(row => row.inferredScores.length === 0 && row.availableInference.unresolvedFraction === .5));
     const missing = scoreComparison([model(3, 3, { harness: 'a' }, {})], weights, 10000,
         { scoreMode: 'available' }, comparisonOptions([model(3, 3, { harness: 'a' }, {})]));
     assert.deepEqual([missing[0].lower, missing[0].upper, missing[0].comparable], [null, null, false]);

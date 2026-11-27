@@ -34,11 +34,11 @@ test('changing scores outside the treemap cannot affect the estimate for a missi
     const archived = createPercentileReference(models);
     close(archived.estimate(models[0]).percentile, 1 / 3);
     close(percentileScore(archived.distributions.get('2'), 1 / 3), 100 / 3);
-    assert.equal(actual.lower, 80);
+    assert.equal(actual.lower, 60);
     assert.equal(actual.coverage, 50);
     assert.equal(actual.resultCount, 1);
     assert.deepEqual(actual.inferredScores.map(row => [row.conditionID, row.estimationMethod, row.normalizedScore]),
-        [[2, 'treemap-weighted', 80]]);
+        [[2, 'peer-median', 40]]);
     const onlyWeighted = models.map(item => ({ ...item, results: new Map([...item.results].filter(([key]) => ['1', '2'].includes(key))) }));
     const [scoped] = score(onlyWeighted);
     assert.deepEqual(scoped.availableInference, actual.availableInference);

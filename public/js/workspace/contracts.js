@@ -1,4 +1,5 @@
-import { FALLBACK_INFERENCE_METHOD, JOINT_VERSION_METHOD, TREEMAP_ESTIMATION_METHOD, fallbackInference, storedFallbackInference } from '../shared/fallback-inference.js';
+import { FALLBACK_INFERENCE_METHOD, JOINT_VERSION_METHOD, TREEMAP_ESTIMATION_METHOD, PEER_MEDIAN_METHOD,
+    SUPPORTED_WEIGHT_POLICY, storedFallbackInference } from '../shared/fallback-inference.js';
 import { FALLBACK_RULE_MODE } from './constants.js';
 import { expandCommunityVersions } from '../shared/benchmark-version-choice.js';
 import { familyKey, resolvedFamilyConditionIDs } from '../shared/benchmark-families.js';
@@ -180,7 +181,7 @@ function requireFamilyEntry(entry, path) {
     return requireWorkspaceConditionIdentity(entry, path);
 }
 
-function validCalibrationPaths(source, target) {
+function validCalibrationPaths(source, target, weighted = false) {
     const paths = source.calibrationPaths;
     if (!Array.isArray(paths) || !paths.length) return false;
     let weakest = Infinity, hasBridge = false;
@@ -192,7 +193,8 @@ function validCalibrationPaths(source, target) {
         for (const step of path) {
             if (!step || !Number.isSafeInteger(step.targetConditionID) || step.targetConditionID < 1 || visited.has(step.targetConditionID)
                 || !Number.isSafeInteger(step.referenceCount) || step.referenceCount < 1
-                || Object.keys(step).some(key => key !== 'targetConditionID' && key !== 'referenceCount')) return false;
+                || (weighted && (!Number.isFinite(step.supportRate) || step.supportRate <= 0 || step.supportRate > 1))
+                || Object.keys(step).some(key => key !== 'targetConditionID' && key !== 'referenceCount' && !(weighted && key === 'supportRate'))) return false;
             visited.add(step.targetConditionID);
             weakest = Math.min(weakest, step.referenceCount);
         }
@@ -200,7 +202,7 @@ function validCalibrationPaths(source, target) {
         if (distinct.has(key)) return false;
         distinct.add(key);
     }
-    return hasBridge && weakest === source.referenceCount;
+    return weighted || hasBridge && weakest === source.referenceCount;
 }
 
 function validJointEstimate(score) {
@@ -222,11 +224,33 @@ function validJointEstimate(score) {
         && score.familyConditionIDs[0] === score.conditionID && score.familyConditionIDs.indexOf(score.sourceConditionID) > 0;
 }
 
+function validTreemapEstimate(score) {
+    if (score.familyID !== null || score.selection !== undefined || !Array.isArray(score.sources) || !score.sources.length) return false;
+    const seen = new Set();
+    let weight = 0, prediction = 0;
+    for (const source of score.sources) {
+        if (!source || !Number.isSafeInteger(source.sourceConditionID) || source.sourceConditionID < 1
+            || source.sourceConditionID === score.conditionID || seen.has(source.sourceConditionID)
+            || !Number.isFinite(source.sourceScore) || !Number.isFinite(source.normalizedScore)
+            || !Number.isFinite(source.weightFraction) || source.weightFraction <= 0 || source.weightFraction > 1
+            || Object.keys(source).some(key => !['sourceConditionID', 'sourceScore', 'normalizedScore', 'weightFraction', 'calibrationPaths'].includes(key))
+            || !validCalibrationPaths(source, score.conditionID, true)) return false;
+        seen.add(source.sourceConditionID);
+        weight += source.weightFraction;
+        prediction += source.weightFraction * source.normalizedScore;
+    }
+    return Math.abs(weight - 1) <= .000001 && Math.abs(prediction - score.normalizedScore) <= .000001;
+}
+
 function validPredictionSource(score, inference, chain, pairwise) {
-    if (chain && inference.weightPolicy === ORIGINAL_WEIGHT_POLICY) {
-        if (score.estimationMethod !== TREEMAP_ESTIMATION_METHOD) return validJointEstimate(score);
-        return score.familyID === null && Object.keys(score).every(key => ['conditionID', 'normalizedScore', 'familyID',
-            'estimationMethod', 'weightBasisPoints', 'originalWeight', 'effectiveWeight', 'contribution'].includes(key));
+    if (chain && [ORIGINAL_WEIGHT_POLICY, SUPPORTED_WEIGHT_POLICY].includes(inference.weightPolicy)) {
+        if (score.estimationMethod === TREEMAP_ESTIMATION_METHOD) return validTreemapEstimate(score);
+        if (score.estimationMethod === PEER_MEDIAN_METHOD) {
+            return score.familyID === null && Number.isSafeInteger(score.referenceCount) && score.referenceCount > 0
+                && Object.keys(score).every(key => ['conditionID', 'normalizedScore', 'familyID', 'referenceCount', 'estimationMethod',
+                    'weightBasisPoints', 'originalWeight', 'effectiveWeight', 'contribution'].includes(key));
+        }
+        return validJointEstimate(score);
     }
     if (score.selection !== undefined || !Number.isSafeInteger(score.referenceCount)
         || score.referenceCount < (chain ? 5 : pairwise ? 2 : 1)) return false;
@@ -277,10 +301,11 @@ function requireRankedModel(value, path, scoreMode) {
     let traceScore = model.lower;
     const evidence = scores.length > 0 || inferredScores.length > 0;
     const originalWeights = model.availableInference?.weightPolicy === ORIGINAL_WEIGHT_POLICY;
-    if (scoreMode === 'available' && (evidence || originalWeights)) {
+    const currentWeights = originalWeights || model.availableInference?.weightPolicy === SUPPORTED_WEIGHT_POLICY;
+    if (scoreMode === 'available' && (evidence || currentWeights)) {
         const inference = requireWorkspaceObject(model.availableInference, `${path}.availableInference`);
         if (!evidence && model.comparable !== false) throw invalidWorkspaceResponse(path, 'must have evidence to rank a model');
-        if (originalWeights && ['coverageFactor', 'appliedFactor', 'coveragePenalty', 'missingFactor', 'adjustedMissingContribution']
+        if (currentWeights && ['coverageFactor', 'appliedFactor', 'coveragePenalty', 'missingFactor', 'adjustedMissingContribution']
             .some(key => Object.hasOwn(inference, key))) throw invalidWorkspaceResponse(path, 'has an unexpected scoring adjustment');
         const chain = inference.method === FALLBACK_INFERENCE_METHOD;
         if (chain && scores.some(score => score.fallbackFor !== null)) throw invalidWorkspaceResponse(path, 'must count only direct measurements as observed');
@@ -288,8 +313,7 @@ function requireRankedModel(value, path, scoreMode) {
         const pairwise = missingOnly || [PAIRWISE_INFERENCE_METHOD, PAIRWISE_COVERAGE_METHOD, PAIRWISE_COVERAGE_FACTOR_METHOD,
             PAIRWISE_RATIONAL_COVERAGE_FACTOR_METHOD, PAIRWISE_ORIGINAL_WEIGHT_METHOD].includes(inference.method);
         inferredScores.forEach((score, index) => {
-            if (!Number.isSafeInteger(score.conditionID) || (score.estimationMethod === TREEMAP_ESTIMATION_METHOD
-                ? score.conditionID === 0 : score.conditionID < 1)
+            if (!Number.isSafeInteger(score.conditionID) || score.conditionID < 1
                 || !Number.isFinite(score.normalizedScore)
                 || !validPredictionSource(score, inference, chain, pairwise)
                 || !Number.isFinite(score.originalWeight) || score.originalWeight <= 0 || score.originalWeight > 100 + 1e-6
@@ -313,14 +337,8 @@ function requireRankedModel(value, path, scoreMode) {
                 throw invalidWorkspaceResponse(`${path}.availableInference.${key}`, 'must match the missing-score estimate');
             }
         }
-        const treemapEstimates = inferredScores.filter(score => score.estimationMethod === TREEMAP_ESTIMATION_METHOD);
-        if (treemapEstimates.length) {
-            const evidence = fallbackInference(inference.observedScore, inference.coverageFraction,
-                estimates.filter((_, index) => inferredScores[index].estimationMethod !== TREEMAP_ESTIMATION_METHOD), inference.algorithm);
-            const weightedAverage = evidence.unpenalizedScore / evidence.supportedFraction;
-            if (!Number.isFinite(weightedAverage) || treemapEstimates.some(score => Math.abs(score.normalizedScore - weightedAverage) > .000001)) {
-                throw invalidWorkspaceResponse(`${path}.inferredScores`, 'must match the weighted treemap evidence');
-            }
+        if (!scores.length && inferredScores.length && inferredScores.every(score => score.estimationMethod === PEER_MEDIAN_METHOD)) {
+            throw invalidWorkspaceResponse(`${path}.inferredScores`, 'must contain evidence from the ranked model');
         }
         const denominator = originalWeights ? 1 : chain ? inference.supportedFraction
             : missingOnly ? 1 : inference.coverageFraction + inference.inferredFraction;

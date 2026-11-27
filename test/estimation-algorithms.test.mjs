@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { calibrationModel as model, pairedModels } from './helpers/fallback-pairs.mjs';
 import { availableResultInference, storedAvailableResultInference } from '../public/js/shared/available-score.js';
 import { ESTIMATION_ALGORITHMS, normalizeEstimationAlgorithm } from '../public/js/shared/estimation-algorithms.js';
-import { TREEMAP_ESTIMATION_METHOD } from '../public/js/shared/fallback-inference.js';
+import { PEER_MEDIAN_METHOD, SUPPORTED_WEIGHT_POLICY } from '../public/js/shared/fallback-inference.js';
 import { readEstimationPreference, writeEstimationPreference } from '../public/js/workspace/preferences.js';
 import { scoreModels, scoreComparison, getRankingWorkspace } from '../ranking-service.js';
 import { comparisonOptions, groupComparisonModels } from '../model-comparison.js';
@@ -43,8 +43,8 @@ test('a joint fit uses partially observed reference rows and retains the target 
     const joint = 69.30700591100324; // Independent NumPy reference, seven EM steps.
     for (const IDs of [[2, 4, 3], [3, 2, 4]]) {
         const [row] = compare([subject, ...peersB, ...peersC], [weight(1, 4000, IDs), weight(9, 4000), weight(12, 2000)]);
-        assert.equal(row.inferredScores.length, 2);
-        const [estimate, treemap] = row.inferredScores;
+        assert.equal(row.inferredScores.length, 1);
+        const [estimate] = row.inferredScores;
         assert.deepEqual([row.lower, row.coverage, row.fallbackCoverage], [24.65, 40, 40]);
         assert.equal(estimate.selection, 'automatic');
         assert.equal(estimate.estimationMethod, 'joint-versions');
@@ -54,12 +54,11 @@ test('a joint fit uses partially observed reference rows and retains the target 
         ]);
         close(estimate.normalizedScore, joint);
         assert.equal(estimate.originalWeight, 40);
-        assert.equal(estimate.effectiveWeight, 40);
-        close(estimate.contribution, joint * .4);
-        assert.equal(row.calculationScores[0].contribution, -8);
-        assert.deepEqual([treemap.conditionID, treemap.estimationMethod, treemap.originalWeight], [12, TREEMAP_ESTIMATION_METHOD, 20]);
-        close(treemap.normalizedScore, (joint - 20) / 2);
-        assert.equal(row.availableInference.unresolvedFraction, 0);
+        assert.equal(estimate.effectiveWeight, 50);
+        close(estimate.contribution, joint * .5);
+        assert.equal(row.calculationScores[0].contribution, -10);
+        assert.equal(row.availableInference.weightPolicy, SUPPORTED_WEIGHT_POLICY);
+        close(row.availableInference.unresolvedFraction, .2);
         assert.equal(row.availableInference.unresolvedContribution, 0);
     }
 });
@@ -135,18 +134,16 @@ test('each contribution to a repeated version keeps the eligible sources of its 
     const models = [model(1, { 2: 70, 9: 80 }), ...pairedModels(1, 2, 70, -10)];
     const entries = [weight(1, 2500, [2]), weight(1, 2500), weight(9, 2000), weight(9, 1000), weight(-3, 2000)];
     const [row] = compare(models, entries);
-    assert.deepEqual([row.lower, row.coverage, row.fallbackCoverage], [70.91, 30, 25]);
-    assert.equal(row.availableInference.unresolvedFraction, 0);
+    assert.deepEqual([row.lower, row.coverage, row.fallbackCoverage], [67.5, 30, 25]);
+    close(row.availableInference.unresolvedFraction, .2);
     assert.deepEqual(row.coverageEntries.map(item => [item.conditionID, item.weightBasisPoints, item.coveredWeightBasisPoints]),
         [[1, 5000, 0], [9, 3000, 3000], [-3, 2000, 0]]);
-    assert.deepEqual(row.calculationScores.map(item => [item.conditionID, item.effectiveWeight, item.contribution]), [[9, 30, 24]]);
+    assert.deepEqual(row.calculationScores.map(item => [item.conditionID, item.effectiveWeight, item.contribution]), [[9, 37.5, 30]]);
     assert.deepEqual(row.inferredScores.map(item => [item.conditionID, item.sources?.[0].sourceConditionID, item.effectiveWeight]),
-        [[1, 2, 25], [1, undefined, 25], [-3, undefined, 20]]);
-    close(row.inferredScores[0].contribution, 15);
-    for (const estimate of row.inferredScores.slice(1)) {
-        assert.equal(estimate.estimationMethod, TREEMAP_ESTIMATION_METHOD);
-        close(estimate.normalizedScore, 39 / .55);
-    }
+        [[1, 2, 31.25], [1, undefined, 31.25]]);
+    close(row.inferredScores[0].contribution, 18.75);
+    assert.equal(row.inferredScores[1].estimationMethod, PEER_MEDIAN_METHOD);
+    close(row.inferredScores[1].normalizedScore, 60);
     const [range] = compare(models, entries, 'range');
     assert.deepEqual([range.lower, range.upper, range.coverage], [24, 94, 30]);
     assert.deepEqual(range.inferredScores, []);
@@ -160,8 +157,8 @@ test('an estimate only uses a recorded source, and a direct measured zero takes 
     const entry = [weight(1, 5000, [2]), weight(2, 5000, [3])];
     const rules = { fallbackRules: [{ primaryConditionID: 1, mode: 'ordered', entries: [{ conditionID: 3 }] }] };
     const [estimated] = compare([subject, ...peers], entry, 'available', 'best', rules);
-    assert.deepEqual(estimated.inferredScores.map(row => [row.conditionID, row.estimationMethod]), [[2, 'joint-versions'], [1, TREEMAP_ESTIMATION_METHOD]]);
-    assert.deepEqual([estimated.lower, estimated.coverage, estimated.availableInference.unresolvedFraction], [75, 0, 0]);
+    assert.deepEqual(estimated.inferredScores.map(row => [row.conditionID, row.estimationMethod]), [[2, 'joint-versions'], [1, PEER_MEDIAN_METHOD]]);
+    assert.deepEqual([estimated.lower, estimated.coverage, estimated.availableInference.unresolvedFraction], [70, 0, 0]);
     subject.results.set('1', { normalizedScore: 0 });
     const [recorded] = compare([subject, ...peers], entry, 'available', 'best', rules);
     assert.deepEqual([recorded.lower, recorded.coverage, recorded.calculationScores[0].normalizedScore], [37.5, 50, 0]);
@@ -192,7 +189,7 @@ test('matched scores calibrate measured runs before averaging their estimates', 
 });
 
 test('ranking pages validate original contributions, estimates and fully unresolved rows', () => {
-    const models = [model(1, { 901: 70 }), model(2, { 3: 90 }), ...pairedModels(1, 901, 70, -10)];
+    const models = [model(1, { 901: 70 }), model(2, { 3: 90 }), model(3, { 2: 70 }), ...pairedModels(1, 901, 70, -10)];
     const weights = [weight(1, 8000), weight(2, 2000)];
     const state = createFixtureState({ estimationSources: true, secondaryBenchmark: true, comparisonModels: models,
         personalEntries: weightedEntries(weights), publicWeights: weights });
@@ -202,7 +199,7 @@ test('ranking pages validate original contributions, estimates and fully unresol
     const rows = first.modelLeaderboards.public;
     assert.equal(rows.find(row => row.ID === 1).inferredScores[0].sources[0].sourceConditionID, 901);
     assert.deepEqual(rows.find(row => row.ID === 1).inferredScores.slice(1).map(score => [score.conditionID, score.estimationMethod]),
-        [[2, TREEMAP_ESTIMATION_METHOD]]);
+        [[2, PEER_MEDIAN_METHOD]]);
     const unresolved = rows.find(row => row.ID === 2);
     assert.deepEqual([unresolved.rank, unresolved.lower, unresolved.availableInference.totalScore], [null, null, 0]);
     const corrupt = structuredClone(first);
@@ -220,15 +217,9 @@ test('ranking pages validate original contributions, estimates and fully unresol
         mutate(broken.modelLeaderboards.public.find(row => row.ID === 1).inferredScores[0]);
         assert.throws(() => validateWorkspacePayload(broken), /inferredScores/);
     }
-    const wrongTreemap = structuredClone(first);
-    const invalid = wrongTreemap.modelLeaderboards.public.find(row => row.ID === 1);
-    const treemapEstimate = invalid.inferredScores[1];
-    treemapEstimate.normalizedScore += 10;
-    treemapEstimate.contribution += 2;
-    for (const key of ['inferredContribution', 'unpenalizedScore', 'totalScore']) invalid.availableInference[key] += 2;
-    invalid.lower += 2;
-    invalid.upper += 2;
-    assert.throws(() => validateWorkspacePayload(wrongTreemap), /weighted treemap evidence/);
+    const invalidPeer = structuredClone(first);
+    invalidPeer.modelLeaderboards.public.find(row => row.ID === 1).inferredScores[1].referenceCount = 0;
+    assert.throws(() => validateWorkspacePayload(invalidPeer), /inferredScores/);
 
     const stress = workspace(createFixtureState({ rankingStress: true }), { categoryID: 1, scoreMode: 'available' }, { paginate: false });
     const initial = pager.create(stress, { userID: state.userID, initialMode: 'public' });

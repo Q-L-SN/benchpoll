@@ -14,8 +14,8 @@ const links = [...html.matchAll(/<link\s+rel="([^"]+)"\s+href="([^"]+)"[^>]*>/g)
 test('missing-score help explains eligible versions, unresolved weight, and measured ranges', () => {
     const help = html.match(/<button class="bp-scoring-help[^>]*data-help-text="([^"]+)"/)?.[1];
     assert.ok(help);
-    assert.match(help, /Estimated score combines measurements and estimates/);
-    assert.match(help, /Remaining gaps use the weighted average of this model’s scores in the treemap/);
+    assert.match(help, /Estimated score fills gaps with version estimates/);
+    assert.match(help, /then calibrated treemap paths, then the median of other models on the same version/);
     assert.match(help, /Score range uses 0 and 100 for missing measurements/);
 });
 

@@ -1,4 +1,4 @@
-import { FALLBACK_INFERENCE_METHOD, TREEMAP_ESTIMATION_METHOD } from '../shared/fallback-inference.js';
+import { FALLBACK_INFERENCE_METHOD, TREEMAP_ESTIMATION_METHOD, PEER_MEDIAN_METHOD, SUPPORTED_WEIGHT_POLICY } from '../shared/fallback-inference.js';
 import { setLoading } from '../shared/loading.js';
 import { postJSON } from '../shared/http.js';
 import { isMissingInferenceMethod } from '../shared/estimation-algorithms.js';
@@ -455,7 +455,8 @@ export function createModelScoresView({ state, modelScoresDialog, modelScoresTit
 
     function renderEstimate(row, score) {
         const treemap = score.estimationMethod === TREEMAP_ESTIMATION_METHOD;
-        if (treemap) row.dataset.estimationMethod = TREEMAP_ESTIMATION_METHOD;
+        const peerMedian = score.estimationMethod === PEER_MEDIAN_METHOD;
+        if (treemap || peerMedian) row.dataset.estimationMethod = score.estimationMethod;
         const summary = document.createElement('div');
         summary.className = 'bp-model-estimate-summary';
         const identity = document.createElement('div');
@@ -466,7 +467,7 @@ export function createModelScoresView({ state, modelScoresDialog, modelScoresTit
         const aggregate = document.createElement('div');
         aggregate.className = 'bp-model-score-aggregate';
         const label = document.createElement('small');
-        label.textContent = treemap ? 'Treemap estimate' : 'Estimated score';
+        label.textContent = treemap ? 'Treemap estimate' : peerMedian ? 'Peer median' : 'Estimated score';
         const value = document.createElement('strong');
         value.className = 'bp-model-score-detail-value';
         value.textContent = score.normalizedScore.toFixed(2);
@@ -475,7 +476,12 @@ export function createModelScoresView({ state, modelScoresDialog, modelScoresTit
         aggregate.append(label, value, contribution);
         summary.append(identity, aggregate);
         row.append(summary);
-        if (treemap) return;
+        if (peerMedian) {
+            const explanation = document.createElement('small');
+            explanation.textContent = `Median from ${score.referenceCount} other ${score.referenceCount === 1 ? 'model' : 'models'} on this version.`;
+            identity.append(explanation);
+            return;
+        }
 
         const sources = document.createElement('ul');
         sources.className = 'bp-model-estimate-sources';
@@ -491,7 +497,7 @@ export function createModelScoresView({ state, modelScoresDialog, modelScoresTit
                     const details = document.createElement('small');
                     for (const step of path) {
                         details.append(' → ', estimateVersionLink(step.targetConditionID),
-                            ` (${step.referenceCount} paired ${step.referenceCount === 1 ? 'model' : 'models'})`);
+                            ` (${step.referenceCount} paired ${step.referenceCount === 1 ? 'model' : 'models'}${treemap ? ` · ${rankingNumber(step.supportRate * 100)}% support` : ''})`);
                     }
                     version.append(details);
                 }
@@ -501,13 +507,18 @@ export function createModelScoresView({ state, modelScoresDialog, modelScoresTit
                 version.append(details);
             }
             const metrics = document.createElement('dl');
-            const metric = document.createElement('div');
-            const term = document.createElement('dt');
-            const reading = document.createElement('dd');
-            term.textContent = 'Measured score';
-            reading.textContent = source.sourceScore.toFixed(2);
-            metric.append(term, reading);
-            metrics.append(metric);
+            const readings = [['Measured score', source.sourceScore.toFixed(2)]];
+            if (treemap) readings.push(['Target estimate', source.normalizedScore.toFixed(2)],
+                ['Share of estimate', `${(source.weightFraction * 100).toFixed(2)}%`]);
+            for (const [name, value] of readings) {
+                const metric = document.createElement('div');
+                const term = document.createElement('dt');
+                const reading = document.createElement('dd');
+                term.textContent = name;
+                reading.textContent = value;
+                metric.append(term, reading);
+                metrics.append(metric);
+            }
             item.append(version, metrics);
             sources.append(item);
         }
@@ -522,10 +533,12 @@ export function createModelScoresView({ state, modelScoresDialog, modelScoresTit
             const stage = document.createElement('div');
             const caption = document.createElement('figcaption');
             const hasTreemapEstimate = model.inferredScores?.some(score => score.estimationMethod === TREEMAP_ESTIMATION_METHOD);
+            const hasPeerMedian = model.inferredScores?.some(score => score.estimationMethod === PEER_MEDIAN_METHOD);
             caption.textContent = state.scoreMode === 'range'
                 ? 'Scores are out of 100 and show the lower end of the range. Faded zeros mark unmeasured results.'
                 : 'Scores are out of 100. Faded tiles mark missing measurements.';
             if (hasTreemapEstimate) caption.textContent += ' Dashed outlines mark treemap estimates.';
+            if (hasPeerMedian) caption.textContent += ' Dotted outlines mark peer medians.';
             figure.append(stage, caption);
             modelScoresList.append(figure);
             coverageView = coveragePreview.renderInto(stage, model);
@@ -545,18 +558,22 @@ export function createModelScoresView({ state, modelScoresDialog, modelScoresTit
         }
         const inference = model.availableInference;
         const calibrated = inference?.method === FALLBACK_INFERENCE_METHOD;
-        const originalWeights = inference?.weightPolicy === 'original';
+        const currentWeights = inference?.weightPolicy === 'original' || inference?.weightPolicy === SUPPORTED_WEIGHT_POLICY;
         const missingOnly = isMissingInferenceMethod(inference?.method);
         const usesCoverageFactor = inference && [inference.coverageFactor, inference.appliedFactor,
             inference.unpenalizedScore].every(Number.isFinite);
-        if (originalWeights) {
+        if (currentWeights) {
             const sentences = [];
-            const treemapWeight = inferredScores.reduce((sum, score) =>
-                sum + (score.estimationMethod === TREEMAP_ESTIMATION_METHOD ? score.originalWeight : 0), 0);
-            const versionWeight = inference.inferredFraction * 100 - treemapWeight;
+            const weightFor = method => inferredScores.reduce((sum, score) =>
+                sum + (score.estimationMethod === method ? score.originalWeight : 0), 0);
+            const treemapWeight = weightFor(TREEMAP_ESTIMATION_METHOD), peerWeight = weightFor(PEER_MEDIAN_METHOD);
+            const versionWeight = inference.inferredFraction * 100 - treemapWeight - peerWeight;
             if (versionWeight > 1e-6) sentences.push(`${versionWeight.toFixed(2)}% of the weight uses estimates from related benchmark versions.`);
-            if (treemapWeight > 0) sentences.push(`${treemapWeight.toFixed(2)}% uses this model’s weighted average of measured and version-estimated scores in the treemap.`);
-            if (inference.unresolvedFraction > 0 && model.comparable !== false) sentences.push(`${(inference.unresolvedFraction * 100).toFixed(2)}% of the weight has no score.`);
+            if (treemapWeight > 0) sentences.push(`${treemapWeight.toFixed(2)}% uses calibrated version chains across the treemap.`);
+            if (peerWeight > 0) sentences.push(`${peerWeight.toFixed(2)}% uses peer medians on the target versions.`);
+            if (inference.unresolvedFraction > 0 && model.comparable !== false) {
+                sentences.push(`${(inference.unresolvedFraction * 100).toFixed(2)}% of the weight has no score. The index uses the scored weight.`);
+            }
             if (sentences.length) {
                 const detail = document.createElement('p');
                 detail.className = 'bp-model-inference-summary';
@@ -714,7 +731,7 @@ export function createModelScoresView({ state, modelScoresDialog, modelScoresTit
                 const row = document.createElement('div'); row.className = 'bp-model-score-detail-row bp-model-inferred-row';
                 row.dataset.conditionId = String(score.conditionID);
                 modelScoresList.append(row);
-                if (Array.isArray(score.sources) || score.estimationMethod === TREEMAP_ESTIMATION_METHOD) {
+                if (Array.isArray(score.sources) || score.estimationMethod === PEER_MEDIAN_METHOD) {
                     renderEstimate(row, score);
                     continue;
                 }
@@ -731,7 +748,7 @@ export function createModelScoresView({ state, modelScoresDialog, modelScoresTit
                 } else description.textContent = `Estimate for ${score.originalWeight.toFixed(2)}% of the Pie, based on ${score.referenceCount} comparison entries`;
                 const value = document.createElement('strong'); value.textContent = score.normalizedScore.toFixed(2);
                 const contribution = document.createElement('span');
-                contribution.textContent = `${score.contribution.toFixed(2)} points ${originalWeights ? 'added to total' : 'before adjustment'}`;
+                contribution.textContent = `${score.contribution.toFixed(2)} points ${currentWeights ? 'added to total' : 'before adjustment'}`;
                 row.append(title, value, description, contribution);
             }
         }

@@ -20,12 +20,15 @@ for (const [engine, width] of engines) {
             { ...secondaryBenchmark, ID: 902, conditionID: 902, conditionKey: 'challenge', conditionName: challengeVersion },
             { ...secondaryBenchmark, ID: 903, conditionID: 903, conditionKey: 'diagnostic', conditionName: 'Diagnostic' }
         ];
+        app.state.communityEstimationVotes = [{ targetConditionID: 1, sourceConditionID: 3, supportCount: 3, opposeCount: 1 }];
         const bridgeSetting = { harness: 'bridge' };
         app.state.comparisonModels = [calibrationModel(1, { 2: 100, 901: 85, 902: 50, 903: 88 }),
-            calibrationModel(3, { 1: 70, 2: 80, 3: 40 }), ...pairedModels(1, 901, 85, -10),
+            calibrationModel(3, { 1: 70, 2: 80, 3: 40 }, { harness: 'other' }), ...pairedModels(1, 901, 85, -10),
             calibrationModel(4, { 2: 100, 3: 100, 903: 50 }, bridgeSetting),
             calibrationModel(5, { 903: 50, 902: 80 }, bridgeSetting),
             calibrationModel(6, { 902: 80, 1: 75 }, bridgeSetting),
+            calibrationModel(7, { 2: 55 }),
+            ...[30, 40, 50, 60, 70, 80].map((value, index) => calibrationModel(1201 + index, { 1: value, 3: value + 10 })),
             ...[-9, -7, -5, -3, -1, 1, 3, 5, 7, 9].map((step, index) => calibrationModel(1101 + index,
                 { 1: 60 + step, 902: 50 + step }))];
         app.state.publicWeights = [{ conditionID: 1, weightBasisPoints: 4000 }, { conditionID: 2, weightBasisPoints: 4000 },
@@ -59,12 +62,14 @@ for (const [engine, width] of engines) {
 
         assert.equal(data.estimationAlgorithm, 'current');
         const estimated = data.modelLeaderboards.public.find(row => row.modelID === 1);
-        assert.equal(estimated.lower, 81.16);
         assert.equal(estimated.coverage, 40);
         assert.equal(estimated.availableInference.unresolvedFraction, 0);
         assert.equal(estimated.inferredScores.length, 2);
         const [estimate, treemap] = estimated.inferredScores;
-        assert.deepEqual([treemap.conditionID, treemap.estimationMethod, treemap.originalWeight], [3, 'treemap-weighted', 20]);
+        assert.deepEqual([treemap.conditionID, treemap.estimationMethod, treemap.originalWeight], [3, 'treemap-chain', 20]);
+        assert.equal(estimated.lower, Number((40 + .4 * estimate.normalizedScore + .2 * treemap.normalizedScore).toFixed(2)));
+        assert.ok(treemap.sources.every(source => source.calibrationPaths[0].at(-1).supportRate === .75));
+        const tileScore = String(Number(treemap.normalizedScore.toFixed(2)));
         assert.deepEqual([estimate.conditionID, estimate.selection, estimate.originalWeight, estimate.effectiveWeight], [1, 'automatic', 40, 40]);
         assert.equal(Object.hasOwn(estimate, 'sourceConditionID'), false);
         assert.equal(Object.hasOwn(estimate, 'referenceCount'), false);
@@ -79,16 +84,16 @@ for (const [engine, width] of engines) {
             const tile = page.locator('.bp-model-coverage-overlay [data-object-id="1"] [data-estimated-score]');
             assert.equal(await tile.textContent(), '62.32');
             const treemapTile = page.locator('.bp-model-coverage-overlay [data-object-id="3"].is-treemap-estimate');
-            assert.equal(await treemapTile.locator('[data-estimated-score]').textContent(), '81.16');
+            assert.equal(await treemapTile.locator('[data-estimated-score]').textContent(), tileScore);
             assert.match(await treemapTile.getAttribute('data-tooltip'), /Treemap estimate on 100% of the weight/);
         }
         await row.click();
         await page.waitForSelector('#model-scores-dialog:not([hidden])');
         const summary = await page.locator('#model-scores-summary').innerText();
         const evidence = page.locator('#model-scores-list .bp-model-inferred-row:not([data-estimation-method])');
-        const treemapEvidence = page.locator('#model-scores-list .bp-model-inferred-row[data-estimation-method="treemap-weighted"]');
+        const treemapEvidence = page.locator('#model-scores-list .bp-model-inferred-row[data-estimation-method="treemap-chain"]');
         assert.match(summary, /measured results cover 40%/);
-        assert.match(summary, /20\.00% uses this model’s weighted average of measured and version-estimated scores in the treemap/);
+        assert.match(summary, /20\.00% uses calibrated version chains across the treemap/);
         assert.doesNotMatch(summary, /adjustment|penalty|fallback chain/);
         assert.equal(await evidence.count(), 1);
         assert.equal(await evidence.getByRole('link', { name: /General knowledge, Default benchmark version/ }).count(), 1);
@@ -97,8 +102,10 @@ for (const [engine, width] of engines) {
         assert.equal(await evidence.getByText('24.93 points added to total', { exact: true }).count(), 1);
         assert.equal(await evidence.getByText(/points added to total/).count(), 1);
         assert.equal(await treemapEvidence.getByText('Treemap estimate', { exact: true }).count(), 1);
-        assert.equal(await treemapEvidence.locator('.bp-model-score-detail-value').textContent(), '81.16');
-        assert.equal(await treemapEvidence.getByText('16.23 points added to total', { exact: true }).count(), 1);
+        assert.equal(await treemapEvidence.locator('.bp-model-score-detail-value').textContent(), treemap.normalizedScore.toFixed(2));
+        assert.equal(await treemapEvidence.getByText(`${treemap.contribution.toFixed(2)} points added to total`, { exact: true }).count(), 1);
+        assert.match(await treemapEvidence.innerText(), /75% support/);
+        assert.match(await treemapEvidence.innerText(), /Share of estimate/);
         const sources = evidence.getByRole('list', { name: 'Versions used for this estimate' }).getByRole('listitem');
         assert.equal(await sources.count(), 2);
         const [extended, challenge] = [sources.nth(0), sources.nth(1)];
@@ -115,7 +122,7 @@ for (const [engine, width] of engines) {
         if (width < 760) {
             assert.equal(await page.locator('.bp-model-coverage-figure [data-object-id="1"] [data-estimated-score]').textContent(), '62.32');
             const tile = page.locator('.bp-model-coverage-figure [data-object-id="3"].is-treemap-estimate');
-            assert.equal(await tile.locator('[data-estimated-score]').textContent(), '81.16');
+            assert.equal(await tile.locator('[data-estimated-score]').textContent(), tileScore);
             assert.match(await page.locator('.bp-model-coverage-figure figcaption').textContent(), /Dashed outlines mark treemap estimates/);
         }
         assert.equal(await evidence.evaluate(node => [node.parentElement, node, ...node.querySelectorAll('li, dl')]
@@ -139,6 +146,16 @@ for (const [engine, width] of engines) {
         assert.equal(await evidence.locator('.bp-model-score-detail-value').textContent(), '75.00');
         assert.equal(await evidence.locator('dd').textContent(), '50.00');
         if (width < 760) assert.equal(await page.locator('.bp-model-coverage-figure [data-object-id="1"] [data-estimated-score]').textContent(), '75');
+        await page.keyboard.press('Escape');
+
+        await page.locator('.bp-model-row').filter({ has: page.getByText('Model 7', { exact: true }) }).click();
+        const peer = page.locator('#model-scores-list .bp-model-inferred-row[data-estimation-method="peer-median"][data-condition-id="3"]');
+        await peer.getByText('Peer median', { exact: true }).waitFor();
+        assert.match(await peer.innerText(), /Median from \d+ other models on this version/);
+        if (width < 760) {
+            assert.equal(await page.locator('.bp-model-coverage-figure [data-object-id="3"].is-peer-median').count(), 1);
+            assert.match(await page.locator('.bp-model-coverage-figure figcaption').textContent(), /Dotted outlines mark peer medians/);
+        }
         await page.keyboard.press('Escape');
 
         const rangeResponse = waitForRanking('range');

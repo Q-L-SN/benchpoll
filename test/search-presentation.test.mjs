@@ -49,8 +49,8 @@ test('public discovery excludes private records and emits only canonical scene a
     assert.match(robots, /Sitemap: https:\/\/benchpoll.com\/sitemap.xml/);
     assert.doesNotMatch(robots, /Disallow: \/(?:js|css|assets)/);
     const methods = discoveryText([topic], origin);
-    assert.match(methods, /direct measurements and joint estimates from eligible versions of the same benchmark/);
-    assert.match(methods, /Remaining gaps use the weighted average of the model’s scores in the treemap/);
+    assert.match(methods, /direct measurements, estimates from eligible versions and calibrated chains across weighted benchmarks/);
+    assert.match(methods, /Other models’ median score on the target version fills gaps/);
     assert.match(methods, /Scoring versions and estimation sources/);
 });
 

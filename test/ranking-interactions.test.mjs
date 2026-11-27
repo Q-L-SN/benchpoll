@@ -87,9 +87,9 @@ test('a calibrated sibling retains its original share and leaves the score range
     assert.deepEqual(range.calculationScores, []);
     const [available] = scoreModels([model, ...peers], entries, 10000, { scoreMode: 'available' });
     assert.equal(available.lower, 70);
-    assert.deepEqual([available.inferredScores[0].originalWeight, available.inferredScores[0].effectiveWeight], [80, 80]);
-    assert.deepEqual(available.inferredScores.map(row => row.estimationMethod), ['joint-versions', 'treemap-weighted']);
-    assert.equal(available.availableInference.unresolvedFraction, 0);
+    assert.deepEqual([available.inferredScores[0].originalWeight, available.inferredScores[0].effectiveWeight], [80, 100]);
+    assert.deepEqual(available.inferredScores.map(row => row.estimationMethod), ['joint-versions']);
+    assert.ok(Math.abs(available.availableInference.unresolvedFraction - .2) < 1e-9);
 });
 
 test('search ranks exact names above prefixes, accepts reordered terms and conservative typos', () => {

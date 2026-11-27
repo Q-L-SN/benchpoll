@@ -202,10 +202,12 @@ export function workspace(state, body, { paginate = true } = {}) {
     const estimationPlans = estimationVoting ? createVersionEstimationPlanner(data.benchmarks, externalPairs) : null;
     data.modelLeaderboards = options ? {
         public: scoreComparison(state.comparisonModels, estimationPlans?.(data.publicPie.effectiveEntries, communityVotes) ?? publicWeights, 10000, {
-            scoreMode, estimationAlgorithm, availableInferenceVersion: body.availableInferenceVersion ?? AVAILABLE_INFERENCE_VERSION, fallbackScope: 'public', validateExternal: true, familyComposition: data.publicPie.familyComposition
+            scoreMode, estimationAlgorithm, availableInferenceVersion: body.availableInferenceVersion ?? AVAILABLE_INFERENCE_VERSION, fallbackScope: 'public', validateExternal: true, familyComposition: data.publicPie.familyComposition,
+            treemapPolicy: scoreMode === 'available' ? estimationPlans?.treemap(data.publicPie.effectiveEntries, communityVotes) : null
         }, options),
         personal: scoreComparison(state.comparisonModels, estimationPlans?.(data.personalPie.effectiveEntries, communityVotes, personalVotes) ?? personalEntries, 10000, { fallbackRules: personalFallbackRules,
             familyComposition: data.personalPie.communityFallbackComposition, scoreMode, estimationAlgorithm,
+            treemapPolicy: scoreMode === 'available' ? estimationPlans?.treemap(data.personalPie.effectiveEntries, communityVotes, personalVotes) : null,
             availableInferenceVersion: body.availableInferenceVersion ?? AVAILABLE_INFERENCE_VERSION }, options)
     } : {
         public: publicEmpty ? [] : [...models, ...extraModels].map(item => scoreMode === 'available' ? { ...item, upper: item.lower } : item),
