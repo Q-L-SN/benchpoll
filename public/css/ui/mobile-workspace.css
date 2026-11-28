@@ -49,7 +49,7 @@
         padding-bottom: var(--bp-dock-clearance);
         scroll-padding-bottom: var(--bp-dock-clearance);
     }
-    .bp-home:not(.is-showcase) .bp-context-actions > :is(#workspace-refresh, #workspace-undo, #workspace-reset) {
+    .bp-home:not(.is-showcase) .bp-context-actions :is(#workspace-refresh, #workspace-undo, #workspace-reset) {
         border: 0; background: transparent; box-shadow: none;
     }
     .bp-home:not(.is-showcase) .bp-pie-tools > :is(#workspace-undo, #workspace-reset) {

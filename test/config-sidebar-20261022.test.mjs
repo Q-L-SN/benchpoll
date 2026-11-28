@@ -114,12 +114,10 @@ test('the sidebar uses the collection picker and keeps topic creation with autho
     assert.match(html, /<input id="configured-search" type="search" placeholder="Search" aria-label="Search topics"/);
     const mine = html.slice(html.indexOf('id="sidebar-topic-creation"'), html.indexOf('id="tree-content"'));
     assert.match(mine, /data-create-topic="private"/);
-    assert.match(mine, /id="topic-create-form"/);
     assert.match(mine, /<span>Create topic<\/span>/);
-    assert.match(mine, /id="topic-visibility-notice"/);
-    assert.match(mine, /name="visibility" value="private" checked/);
-    assert.match(mine, /name="visibility" value="public"/);
-    assert.match(mine, /id="topic-create-form"[^>]*aria-describedby="topic-visibility-notice"/);
+    assert.doesNotMatch(mine, /<form\b|name="visibility"/);
+    const home = await readFile(new URL('../public/js/home.js', import.meta.url), 'utf8');
+    assert.match(home, /onCreateTopic: trigger => openPrivateTopicEditor\(null, trigger\)/);
     assert.doesNotMatch(html, /private-category-create-toggle|private-category-create-form/);
 });
 

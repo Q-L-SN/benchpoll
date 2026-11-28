@@ -2,7 +2,7 @@ import { setTopicVisibility } from './topic-actions.js';
 import { setLoading, setButtonLoading } from './loading.js';
 import { postJSON, postWriteJSON } from './http.js';
 import { pageAccountWriteScope } from './account-identity.js';
-import { createAction } from './ui-components.js';
+import { createAction, mountSegmentedControl } from './ui-components.js';
 
 const element = (tag, className, text) => {
     const node = document.createElement(tag); node.className = className;
@@ -45,26 +45,25 @@ export function createPrivateTopicEditor({ beforeOpen = async () => true, onSave
     dialog.setAttribute('aria-labelledby', 'create-topic-title');
     dialog.innerHTML = `<form id="create-topic-form">
         <header><h2 id="create-topic-title">New topic</h2><button type="button" data-close-create aria-label="Close topic editor"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button></header>
-        <label>Name<input id="new-topic-name" required maxlength="128" autocomplete="off"></label>
-        <label>One-sentence summary<input id="new-topic-description" required maxlength="180" autocomplete="off"></label>
         <fieldset class="bp-topic-editor-visibility" id="topic-editor-visibility" aria-describedby="topic-editor-visibility-hint">
             <legend>Visibility</legend>
-            <label><input type="radio" name="visibility" value="private" checked> Private</label>
-            <label><input type="radio" name="visibility" value="public"> Public</label>
+            <div class="bp-topic-visibility-choices" role="group" aria-label="Topic visibility">
+                <button type="button" data-visibility="private" aria-pressed="true"><i class="fa-solid fa-lock" aria-hidden="true"></i><span>Private</span></button>
+                <button type="button" data-visibility="public" aria-pressed="false"><i class="fa-solid fa-globe" aria-hidden="true"></i><span>Public</span></button>
+            </div>
             <p id="topic-editor-visibility-hint" class="bp-topic-editor-hint"></p>
         </fieldset>
+        <p id="create-topic-status" role="status" hidden></p>
+        <label>Name<input id="new-topic-name" required maxlength="128" autocomplete="off"></label>
+        <label>One-sentence summary<input id="new-topic-description" required maxlength="180" autocomplete="off"></label>
         <section class="bp-topic-scenes-editor" aria-labelledby="topic-scenes-title">
             <div class="bp-topic-editor-section-heading"><h3 id="topic-scenes-title">Scenes</h3><button id="topic-editor-add-scene" type="button"><i class="fa-solid fa-plus" aria-hidden="true"></i> Add scene</button></div>
             <p class="bp-topic-editor-hint">Optional. Choose a default scene. It opens when someone visits the topic.</p>
             <div id="topic-editor-scenes"></div><p id="topic-editor-scene-note" class="bp-topic-editor-hint"></p>
         </section>
-        <p id="create-topic-status" role="status" hidden></p>
         <div id="topic-editor-delete-confirmation" hidden><p>Delete this private topic and all its saved scene weights?</p><p id="topic-editor-delete-impact"></p><button id="topic-editor-confirm-delete" type="button">Delete topic</button><button id="topic-editor-cancel-delete" type="button">Keep topic</button></div>
         <footer>
-            <div class="bp-topic-editor-management">
-                <button id="topic-editor-delete" type="button" hidden>Delete topic</button>
-                <button type="button" id="topic-editor-publish" hidden>Make public</button>
-            </div>
+            <button id="topic-editor-delete" type="button" hidden>Delete topic</button>
             <div class="bp-topic-editor-submit-actions">
                 <button type="button" data-close-create>Cancel</button>
                 <button id="create-topic-submit" class="bp-ui-action" data-ui-variant="primary" type="submit">Save topic</button>
@@ -75,9 +74,12 @@ export function createPrivateTopicEditor({ beforeOpen = async () => true, onSave
     const $ = selector => dialog.querySelector(selector), form = $('#create-topic-form');
     const name = $('#new-topic-name'), description = $('#new-topic-description'), status = $('#create-topic-status');
     const sceneList = $('#topic-editor-scenes'), submit = $('#create-topic-submit');
-    const visibility = $('#topic-editor-visibility');
+    const visibility = $('.bp-topic-visibility-choices');
+    const visibilityButtons = [...visibility.querySelectorAll('button')];
+    const visibilitySwitch = mountSegmentedControl(visibility);
     let topic = null, scenes = [], defaultKey = null, busy = false, ready = false, owner = null, sequence = 0, trigger = null, savedDraft = '';
-    const isPrivate = () => form.elements.visibility.value === 'private';
+    let draftPrivate = true;
+    const isPrivate = () => topic?.isPrivate ?? draftPrivate;
     const payload = () => ({ ...(topic ? { categoryID: topic.ID, expectedRevision: topic.editRevision } : { isPrivate: isPrivate() }),
         name: name.value, description: description.value, scenes: scenes.map(({ key, ID, name }) => ({ key, ID, name })), defaultSceneKey: defaultKey });
     const message = value => { status.textContent = value; status.hidden = !value; };
@@ -93,9 +95,14 @@ export function createPrivateTopicEditor({ beforeOpen = async () => true, onSave
         message(messages[code] ?? error.message ?? 'Could not save this topic. Your draft is kept.');
     }
     function renderVisibility() {
-        $('#topic-editor-visibility-hint').textContent = isPrivate()
+        for (const button of visibilityButtons) {
+            button.setAttribute('aria-pressed', String(ready && (button.dataset.visibility === 'private') === isPrivate()));
+            button.disabled = busy || !ready;
+        }
+        visibilitySwitch.refresh();
+        $('#topic-editor-visibility-hint').textContent = !ready ? '' : isPrivate()
             ? 'Only you can view this topic and its weights.'
-            : 'Anyone can view this topic as soon as you publish. You can have up to three public topics.';
+            : topic ? 'Anyone can view this topic.' : 'Anyone can view this topic after you publish.';
         submit.textContent = topic ? 'Save changes' : isPrivate() ? 'Create private topic' : 'Publish topic';
     }
     function setBusy(value, action = 'save') {
@@ -108,7 +115,6 @@ export function createPrivateTopicEditor({ beforeOpen = async () => true, onSave
         setButtonLoading($('#topic-editor-confirm-delete'), value && action === 'delete', 'Deleting topic');
         $('#topic-editor-add-scene').disabled = value || scenes.length >= 512;
     }
-    visibility.addEventListener('change', renderVisibility);
     const action = (label, icon, handler) => {
         const button = createAction({ label, icon: 'fa-solid fa-' + icon, iconOnly: true, variant: 'quiet' });
         button.addEventListener('click', handler); return button;
@@ -159,12 +165,18 @@ export function createPrivateTopicEditor({ beforeOpen = async () => true, onSave
         $('#topic-editor-delete-confirmation').hidden = false; $('#topic-editor-cancel-delete').focus();
     });
     $('#topic-editor-cancel-delete').addEventListener('click', () => { $('#topic-editor-delete-confirmation').hidden = true; $('#topic-editor-delete').focus(); });
-    $('#topic-editor-publish').addEventListener('click', async () => {
-        if (busy || !topic) return;
+    for (const button of visibilityButtons) button.addEventListener('click', async () => {
+        const makePrivate = button.dataset.visibility === 'private';
+        if (busy || !ready || makePrivate === isPrivate()) return;
+        if (!topic) {
+            draftPrivate = makePrivate;
+            renderVisibility();
+            return;
+        }
         if (JSON.stringify(payload()) !== savedDraft) { message('Save your changes before changing visibility.'); return; }
         message(''); setBusy(true, 'publish');
         try {
-            const result = await setTopicVisibility(topic, topic.isPrivate);
+            const result = await setTopicVisibility(topic, !makePrivate);
             topic = result;
             dialog.close(); await onSaved(result);
         } catch (error) { report(error); }
@@ -207,9 +219,9 @@ export function createPrivateTopicEditor({ beforeOpen = async () => true, onSave
         try { owner = pageAccountWriteScope.capture(); }
         catch { message('Sign in to create a topic.'); owner = null; }
         topic = null; scenes = []; defaultKey = null; ready = owner !== null && categoryID === null; form.reset(); renderScenes();
-        visibility.hidden = categoryID !== null;
+        draftPrivate = true;
         $('#create-topic-title').textContent = categoryID === null ? 'New topic' : 'Edit topic';
-        $('#topic-editor-delete').hidden = $('#topic-editor-publish').hidden = true;
+        $('#topic-editor-delete').hidden = true;
         if (!dialog.open) dialog.showModal();
         if (!owner) {
             const link = element('a', '', 'Sign in'); link.href = '/login'; status.append(document.createTextNode(' '), link); setBusy(false); return;
@@ -223,8 +235,6 @@ export function createPrivateTopicEditor({ beforeOpen = async () => true, onSave
                 scenes = topic.scenes.map(scene => ({ key: String(scene.ID), ID: scene.ID, name: scene.name }));
                 defaultKey = topic.scenes.find(scene => scene.isDefault)?.ID?.toString() ?? null;
                 $('#topic-editor-delete').hidden = !topic.isPrivate;
-                $('#topic-editor-publish').hidden = false;
-                $('#topic-editor-publish').textContent = topic.isPrivate ? 'Make public' : 'Make private';
                 $('#create-topic-title').textContent = topic.isPrivate ? 'Edit private topic' : 'Edit public topic';
                 message(''); renderScenes();
             } catch (error) { report(error); return; }

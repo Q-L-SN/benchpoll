@@ -160,21 +160,6 @@
                     <div class="bp-mine-actions">
                         <button class="bp-quiet-action" type="button" data-create-topic="private"><i class="fa-solid fa-plus" aria-hidden="true"></i><span>Create topic</span></button>
                     </div>
-                    <p id="topic-visibility-notice" class="bp-private-category-notice">Choose who can see your topic.</p>
-                    <form id="topic-create-form" class="bp-topic-create-form" aria-describedby="topic-visibility-notice" hidden>
-                        <h3 id="topic-create-title">New topic</h3>
-                        <label for="topic-create-name">Topic name</label>
-                        <input id="topic-create-name" name="name" type="text" maxlength="128" autocomplete="off" required>
-                        <label for="topic-create-description">One-sentence summary</label>
-                        <input id="topic-create-description" name="description" type="text" maxlength="180" autocomplete="off" required>
-                        <fieldset>
-                            <legend>Visibility</legend>
-                            <label><input type="radio" name="visibility" value="private" checked> Private</label>
-                            <label><input type="radio" name="visibility" value="public"> Public</label>
-                        </fieldset>
-                        <p id="topic-create-error" role="alert"></p>
-                        <div><button class="bp-quiet-action" type="button" data-cancel><span>Cancel</span></button><button class="primary-button" type="submit"><i class="fa-solid fa-plus" aria-hidden="true"></i><span>Create private topic</span></button></div>
-                    </form>
                 </div>
                 <div id="tree-content"></div>
                 <div id="category-search-results" aria-label="Topic search results" hidden></div>
@@ -255,9 +240,11 @@
                                 <i class="fa-regular fa-comments" aria-hidden="true"></i><span data-discussion-count>Discussions</span>
                             </a>
                             <span id="workspace-topic-creator" class="bp-topic-creator-slot" hidden></span>
-                            <button id="workspace-refresh" class="bp-square-button" type="button" aria-label="Refresh data" data-tooltip="Refresh data">
-                                <i class="fa-solid fa-rotate" aria-hidden="true"></i>
-                            </button>
+                            <div class="bp-workspace-refresh-slot">
+                                <button id="workspace-refresh" class="bp-square-button" type="button" aria-label="Refresh data" data-tooltip="Refresh data">
+                                    <i class="fa-solid fa-rotate" aria-hidden="true"></i>
+                                </button>
+                            </div>
                         </div>
                     </section>
                 </div>

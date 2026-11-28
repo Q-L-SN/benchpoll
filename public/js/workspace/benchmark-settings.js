@@ -1,8 +1,11 @@
 import { estimationVotePairKey } from '../shared/estimation-votes.js';
 import { createAction } from '../shared/ui-components.js';
-import { versionChoiceOrder } from '../shared/benchmark-version-choice.js';
+import { expandCommunityVersions, groupBenchmarkRows, versionChoiceOrder } from '../shared/benchmark-version-choice.js';
+import { benchmarkEvaluationOrder, groupedEvaluationOrder } from '../shared/benchmark-version-order.js';
 import { createEvidenceCount, updateEvidenceCount } from '../shared/evidence-count.js';
 import { setHelpText } from '../shared/help-popover.js';
+import { excludedFromRanking } from '../shared/aa-ranking-policy.js';
+import { createExternalVersionPicker } from './external-version-picker.js';
 
 function node(tag, className, text) {
     const element = document.createElement(tag);
@@ -55,7 +58,27 @@ function statusText({ readOnly, entries, group }, active, target, estimationAvai
     return group.isDefault ? 'Using the default scoring version.' : 'Following community scoring versions.';
 }
 
-export function createBenchmarkSettings({ host, selectedHeader, getScope, getData, onVersion, onVote, onToggleNomination }) {
+function orderedExternalVersions({ catalogue, group, publicEntries = [], personalEntries = [], pinPersonal }) {
+    const publicWeights = new Map();
+    for (const entry of expandCommunityVersions(publicEntries, catalogue)) {
+        publicWeights.set(entry.conditionID, (publicWeights.get(entry.conditionID) ?? 0) + entry.weightBasisPoints);
+    }
+    const personalWeights = new Map(personalEntries.map(entry => [entry.conditionID, entry.weightBasisPoints]));
+    const versions = catalogue.filter(item => item.benchmarkID !== group.benchmarkID).flatMap(item => item.versions
+        .filter(version => !excludedFromRanking(version)).map(version => ({
+            ...version, name: item.name, versionLabel: versionName(version),
+            publicWeightBasisPoints: publicWeights.get(version.conditionID) ?? 0,
+            personalWeightBasisPoints: personalWeights.get(version.conditionID) ?? null
+        })));
+    const groups = groupBenchmarkRows(versions).sort((left, right) =>
+        (pinPersonal ? (right.personalWeightBasisPoints ?? 0) - (left.personalWeightBasisPoints ?? 0) : 0)
+        || groupedEvaluationOrder(left, right));
+    const order = new Map(groups.map((item, index) => [item.benchmarkID, index]));
+    return versions.sort((left, right) => order.get(left.benchmarkID) - order.get(right.benchmarkID)
+        || benchmarkEvaluationOrder(left, right));
+}
+
+export function createBenchmarkSettings({ host, selectedHeader, getScope, getData, onVersion, onVote }) {
     const title = node('h3', 'bp-benchmark-settings-title');
     title.hidden = Boolean(selectedHeader);
     const status = node('p', 'bp-benchmark-settings-status');
@@ -69,25 +92,38 @@ export function createBenchmarkSettings({ host, selectedHeader, getScope, getDat
     const list = node('ul', 'bp-version-choices');
     list.setAttribute('role', 'list');
     list.setAttribute('aria-label', 'Benchmark versions');
+    const scroller = node('div', 'bp-benchmark-settings-scroll');
+    scroller.append(title, status, heading, list);
     const external = node('section', 'bp-external-versions');
+    external.setAttribute('aria-labelledby', 'external-versions-title');
+    external.hidden = true;
+    const externalHeading = node('header', 'bp-external-versions-heading');
+    const externalTitle = node('h4', '', 'External versions');
+    externalTitle.id = 'external-versions-title';
     const externalList = node('ul', 'bp-version-choices');
+    externalList.setAttribute('role', 'list');
     externalList.setAttribute('aria-label', 'Nominated external versions');
-    const actions = node('div', 'bp-fallback-add-actions');
     const picker = node('button', 'bp-version-nomination');
     picker.type = 'button';
-    picker.setAttribute('aria-controls', 'benchmark-card');
-    picker.append(icon('fa-solid fa-plus'), node('span', '', 'Nominate a version from another benchmark'));
-    picker.addEventListener('click', () => {
+    picker.setAttribute('aria-label', 'Nominate a version from another benchmark');
+    picker.append(icon('fa-solid fa-plus'), node('span', '', 'Add version'));
+    const versionPicker = createExternalVersionPicker({ trigger: picker, scrollAnchor: host.closest('.bp-pie-card'), onChoose(source) {
         const current = data();
-        if (current?.editable && !current.busy) onToggleNomination(current.group, selectedScoringCondition(current.entries));
-    });
-    actions.append(picker);
+        const targetID = current && selectedScoringCondition(current.entries);
+        return targetID != null && current.editable && !current.readOnly && current.authenticated && !current.busy
+            && targetID === intent.externalTargetID && onVote(current.group, targetID, source.conditionID, 'support', true);
+    } });
     const login = node('a', '', 'Sign in to nominate a version');
     login.href = '/github_login';
-    external.append(node('h4', '', 'External versions'), externalList, actions, login);
-    host.append(title, status, heading, list, external);
+    externalHeading.append(externalTitle, picker, login);
+    external.append(externalHeading, externalList);
+    host.append(scroller, external, versionPicker.panel);
+    const externalSize = new ResizeObserver(() => {
+        host.style.setProperty('--bp-external-versions-height', `${external.getBoundingClientRect().height}px`);
+    });
+    externalSize.observe(external);
 
-    const rows = new Map();
+    const rows = new Map(), externalRows = new Map();
     let intent = null;
 
     function clearRows() {
@@ -97,9 +133,13 @@ export function createBenchmarkSettings({ host, selectedHeader, getScope, getDat
 
     function close() {
         if (intent) {
-            host.scrollTop = 0;
+            scroller.scrollTop = 0;
             clearRows();
+            externalRows.clear();
+            externalList.replaceChildren();
         }
+        versionPicker.close();
+        external.hidden = true;
         host.hidden = true;
         intent = null;
     }
@@ -301,27 +341,58 @@ export function createBenchmarkSettings({ host, selectedHeader, getScope, getDat
             updateChoice(row, version, active === conditionID, readOnly, interactive, disabled);
             updatePair(row, version, disabled);
         }
-        externalList.replaceChildren();
-        const nominatedIDs = new Set((current.externalPairs ?? []).filter(p => target
-            && [p.targetConditionID, p.sourceConditionID].includes(target.conditionID))
-            .map(p => p.targetConditionID === target.conditionID ? p.sourceConditionID : p.targetConditionID));
-        if (nominatedIDs.size) for (const group of current.catalogue ?? []) {
+        refreshExternalVersions(current, target, updatePair, disabled);
+        host.hidden = false;
+    }
+
+    function refreshExternalVersions(current, target, updatePair, disabled) {
+        const targetID = target?.conditionID;
+        if (intent.externalTargetID !== targetID || intent.externalReadOnly !== current.readOnly) {
+            versionPicker.close();
+            externalRows.clear();
+            externalList.replaceChildren();
+            externalList.scrollTop = 0;
+            intent.externalTargetID = targetID;
+            intent.externalReadOnly = current.readOnly;
+        }
+        const nominatedIDs = new Set();
+        for (const { targetConditionID, sourceConditionID } of current.externalPairs ?? []) {
+            if (targetConditionID === targetID) nominatedIDs.add(sourceConditionID);
+            if (sourceConditionID === targetID) nominatedIDs.add(targetConditionID);
+        }
+        for (const [ID, row] of externalRows) if (!nominatedIDs.has(ID)) {
+            row.row.remove();
+            externalRows.delete(ID);
+        }
+        const catalogue = current.catalogue ?? [];
+        if (nominatedIDs.size) for (const group of catalogue) {
             if (group.benchmarkID === current.group.benchmarkID) continue;
             for (const version of group.versions) if (nominatedIDs.has(version.conditionID)) {
                 const name = group.name + ' · ' + versionName(version);
-                const row = node('li', 'bp-version-choice-row');
-                row.dataset.externalConditionId = String(version.conditionID);
-                row.append(node('span', 'bp-version-choice-name', name));
-                externalList.append(row);
-                updatePair({ row, estimation: null }, { ...version, externalName: name }, disabled);
+                let row = externalRows.get(version.conditionID);
+                if (!row) {
+                    const item = node('li', 'bp-version-choice-row');
+                    item.dataset.externalConditionId = String(version.conditionID);
+                    item.append(node('span', 'bp-version-choice-name', name));
+                    externalList.append(item);
+                    row = { row: item, estimation: null };
+                    externalRows.set(version.conditionID, row);
+                }
+                row.row.firstElementChild.textContent = name;
+                updatePair(row, { ...version, externalName: name }, disabled);
             }
         }
-        external.hidden = !target || !(current.catalogue?.length > 1) || (readOnly && !nominatedIDs.size);
-        actions.hidden = readOnly || !current.authenticated;
-        picker.disabled = disabled;
-        picker.setAttribute('aria-pressed', String(Boolean(current.nominating)));
-        login.hidden = readOnly || current.authenticated;
-        host.hidden = false;
+        external.hidden = !target || catalogue.length <= 1 || current.readOnly && !externalRows.size;
+        picker.hidden = current.readOnly || !current.authenticated;
+        login.hidden = current.readOnly || current.authenticated;
+        const canNominate = !external.hidden && !picker.hidden && current.editable;
+        if (!canNominate) { versionPicker.close(); return; }
+        const inputs = [catalogue, current.publicEntries, current.personalEntries, current.pinPersonal];
+        if (inputs.some((item, index) => item !== intent.candidateInputs?.[index])) {
+            intent.candidateInputs = inputs;
+            intent.candidates = orderedExternalVersions(current);
+        }
+        versionPicker.update(intent.candidates, nominatedIDs, disabled);
     }
 
     return { refresh, close };

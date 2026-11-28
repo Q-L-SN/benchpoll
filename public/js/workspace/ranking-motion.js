@@ -1,13 +1,14 @@
 const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const scoreBars = ['known', 'fill'];
 
 export function rankingRowKey(model) {
     return model.comparisonIdentity ?? JSON.stringify([model.modelID, model.condition?.scoreFields ?? model.condition?.parameters ?? {}]);
 }
 
 export function captureRankingRows(container) {
-    return new Map([...container.querySelectorAll('[data-model-key]')].map(row => {
+    return new Map([...container.querySelectorAll('.bp-model-row[data-model-key]')].map(row => {
         const bars = {};
-        for (const name of ['known', 'uncertain', 'fill']) {
+        for (const name of scoreBars) {
             const element = row.querySelector(`.bp-score-${name}`);
             const style = getComputedStyle(element);
             bars[name] = name === 'fill' ? { clipPath: style.clipPath } : { left: style.left, width: style.width };
@@ -19,7 +20,7 @@ export function captureRankingRows(container) {
 export function animateRankingChanges(container, previous) {
     if (reducedMotion()) return;
     const options = { duration: 650, easing: 'cubic-bezier(.22, 1, .36, 1)' };
-    for (const row of container.querySelectorAll('[data-model-key]')) {
+    for (const row of container.querySelectorAll('.bp-model-row[data-model-key]')) {
         const old = previous.get(row.dataset.modelKey);
         if (!old) {
             row.animate([{ opacity: .25 }, { opacity: 1 }], options);
@@ -27,7 +28,7 @@ export function animateRankingChanges(container, previous) {
         }
         const dy = old.top - row.getBoundingClientRect().top;
         if (Math.abs(dy) > 1) row.animate([{ transform: `translateY(${dy}px)` }, { transform: 'translateY(0)' }], options);
-        for (const name of ['known', 'uncertain', 'fill']) {
+        for (const name of scoreBars) {
             const element = row.querySelector(`.bp-score-${name}`);
             const style = getComputedStyle(element);
             const end = name === 'fill' ? { clipPath: style.clipPath } : { left: style.left, width: style.width };

@@ -36,7 +36,15 @@ for (const engine of [webkit, chromium]) for (const width of [390, 1440]) {
         assert.equal(await empty.getAttribute('aria-disabled'), 'true');
         assert.match(await empty.getAttribute('aria-label'), /no weights yet/);
         assert.equal(await eligible.getAttribute('aria-disabled'), 'false');
-        await self.evaluate(node => node.click()); await empty.evaluate(node => node.click());
+        const tip = page.locator('#bp-help-popover:not([hidden])');
+        for (const [button, reason] of [[self, /same scene or topic/], [empty, /no weights yet/]]) {
+            if (width < 760) await button.tap({ force: true });
+            else await button.click({ force: true });
+            await tip.waitFor();
+            assert.match(await tip.textContent(), reason);
+            assert.equal(await button.getAttribute('aria-describedby'), 'bp-help-popover');
+            assert.equal(await page.locator('#last-updated').isVisible(), false);
+        }
         assert.equal(fixture.state.requests.filter(request => request.path === '/api/save_personal_pie').length, 0);
         await Promise.all([
             page.waitForResponse(response => response.url().endsWith('/api/save_personal_pie') && response.status() === 200),

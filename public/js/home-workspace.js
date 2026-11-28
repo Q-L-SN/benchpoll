@@ -31,13 +31,12 @@ import { createPieRenderer } from './workspace/pie-renderer.js?v=lightweight-cha
 import { updateTopicSearchMetadata } from './shared/search-metadata.js';
 import { createGuestDraftStore } from './workspace/guest-drafts.js?v=review-drafts-20261008';
 import { createPersonalPieRecovery } from './workspace/pie-recovery.js';
-import { expandCommunityVersions } from './shared/benchmark-version-choice.js';
 import { familyKey, portableFamilyEntry, familyEntryKey, FALLBACK_CONFIGURATION_VERSION } from './shared/benchmark-families.js';
 import { createFamilyView } from './workspace/family-view.js?v=percentile-ranking-20261007';
 import { createBenchmarkRowFocus } from './workspace/benchmark-family-row.js?v=fallback-picker-20261008';
 import { createBenchmarkFallbackCatalogue } from './workspace/benchmark-fallback-catalogue.js?v=fallback-picker-20261008';
 import { createFallbackPicker } from './workspace/fallback-picker.js?v=fallback-controls-20261009';
-import { createBenchmarkSettings, selectedScoringCondition, versionName } from './workspace/benchmark-settings.js';
+import { createBenchmarkSettings, selectedScoringCondition } from './workspace/benchmark-settings.js';
 import { revealInPanel } from './workspace/reveal-in-panel.js';
 import { createPersonalPieStart, publicWeightStart } from './workspace/personal-pie-start.js';
 import { fallbackStatusLabel } from './shared/fallback-choice.js';
@@ -162,6 +161,7 @@ const inlineFallbackChart = document.getElementById('inline-fallback-chart');
 const state = createWorkspaceState();
 const updateIndicator = createUpdateIndicator();
 updateIndicator.element.id = 'workspace-update-indicator';
+refreshButton.after(updateIndicator.element);
 window.addEventListener('pagehide', () => updateIndicator.destroy(), { once: true });
 const sceneControls = createSceneControls({ host: templateStrip, getState: () => state,
     beforeWrite: prepareContextChange,
@@ -223,13 +223,13 @@ const benchmarkSettings = createBenchmarkSettings({
         const IDs = new Set(group.versions.map(version => version.conditionID));
         const entries = state.personalEntries.filter(entry => IDs.has(entry.conditionID));
         return { group, entries, catalogue: state.versionComposition, externalPairs: state.externalEstimationPairs,
-            authenticated: state.authenticated, nominating: Boolean(activeNominationTarget()), estimationVoting: state.estimationVoting,
+            publicEntries: state.publicEntries, personalEntries: state.personalEntries, pinPersonal: state.pinPersonalBenchmarks,
+            authenticated: state.authenticated, estimationVoting: state.estimationVoting,
             personalEstimationVotes: state.personalEstimationVotes, communityEstimationVotes: state.communityEstimationVotes,
             editable: state.mode === 'personal' && !isExpandedWeightView() && entries.length > 0,
             readOnly: state.mode === 'public' || isExpandedWeightView(),
             busy: state.loading || state.gestureOpen || Boolean(state.ballotWrite) };
     },
-    onToggleNomination: toggleVersionNomination,
     onVersion: chooseBenchmarkVersion,
     onVote: chooseBenchmarkEstimationVote
 });
@@ -300,12 +300,7 @@ function nextVisibleBenchmarkGroup() {
 }
 
 function loadVisibleBenchmarkPage() {
-    if (state.nomination?.hasMore && !state.loading && shouldLoadMore(benchmarkRows)) {
-        state.nomination.limit += 48;
-        renderBenchmarks();
-        return;
-    }
-    if (isExpandedWeightView() || isSceneDiscovery() || state.versionComposition && isInlineFallbackTargetActive()) return;
+    if (isExpandedWeightView() || isSceneDiscovery()) return;
     const group = nextVisibleBenchmarkGroup();
     if (group && shouldLoadMore(benchmarkRows)) void loadNextRankingPage('benchmarks', group);
 }
@@ -591,24 +586,6 @@ function expandedBenchmarkRows() {
     })).filter(entry => entry.name.toLowerCase().includes(query));
 }
 
-function fallbackVersionRows(target) {
-    const query = benchmarkSearch.value.trim().toLowerCase();
-    const personal = new Map(state.personalEntries.map(entry => [entry.conditionID, entry.weight]));
-    const publicWeights = new Map();
-    for (const entry of expandCommunityVersions(state.publicEntries, state.versionComposition)) {
-        publicWeights.set(entry.conditionID, (publicWeights.get(entry.conditionID) ?? 0) + entry.weightBasisPoints);
-    }
-    const matches = state.versionComposition.filter(group => group.benchmarkID !== target.benchmarkID).flatMap(group => group.versions)
-        .filter(version => !excludedFromRanking(version) && `${version.name} ${versionName(version)}`.toLowerCase().includes(query));
-    state.nomination.hasMore = matches.length > state.nomination.limit;
-    return matches.slice(0, state.nomination.limit).map((version, index) => ({ ...version,
-        ID: version.conditionID, isBenchmarkGroup: false, rank: index + 1,
-        conditionName: versionName(version),
-        publicWeight: (publicWeights.get(version.conditionID) ?? 0) / 100,
-        personalWeight: personal.get(version.conditionID) ?? null
-    }));
-}
-
 function objectHasWeight(object) {
     return isExpandedWeightView() ? currentPieEntries().some(entry => entry.conditionID === Number(object.ID))
         : state.mode === 'personal' ? objectInPersonalPie(object) : Number(object.publicWeight) > 0;
@@ -778,7 +755,6 @@ function renderBreadcrumb() {
     if (state.categoryID && !state.contextIsPrivate) breadcrumb.append(createFavoriteButton({
         ...state.topicMetadata, ID: state.categoryID, categoryID: state.categoryID
     }));
-    breadcrumb.append(updateIndicator.element);
     if (state.contextIsPrivate) {
         const label = document.createElement('small'); label.className = 'bp-private-context-label'; label.textContent = 'Private';
         breadcrumb.append(label);
@@ -1152,7 +1128,7 @@ function reloadBenchmarkPage() {
 }
 
 function currentBenchmarkFilters() {
-    return { benchmarkQuery: (state.nomination?.query ?? benchmarkSearch.value).trim(), pinPersonal: state.pinPersonalBenchmarks };
+    return { benchmarkQuery: benchmarkSearch.value.trim(), pinPersonal: state.pinPersonalBenchmarks };
 }
 
 function refreshChangedBenchmarkFilters(requested) {
@@ -1243,8 +1219,7 @@ function appendBenchmarkDiscoveryActions(empty) {
 
 function onBenchmarkActivation(event, object) {
     if ((event.button !== undefined && event.button !== 0) || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
-    const hasWeight = !activeNominationTarget() && objectHasWeight(object);
-    if (!hasWeight) return;
+    if (!objectHasWeight(object)) return;
     event.preventDefault();
     void selectWeightedBenchmark(object, { toggle: true });
 }
@@ -1350,37 +1325,7 @@ function finishInlineFallbackEditing() {
     });
 }
 
-function activeNominationTarget() {
-    if (!state.nomination || !state.authenticated || !state.benchmarkSettingsExpanded || isExpandedWeightView()) return null;
-    const target = selectedInlineFallbackPrimary();
-    if (!target || state.nomination.scope !== inlineFallbackScope(target.ID)) return null;
-    const entries = state.personalEntries.filter(entry => entry.benchmarkID === target.benchmarkID);
-    return selectedScoringCondition(entries) === target.ID ? target : null;
-}
-
-function toggleVersionNomination(group, conditionID) {
-    if (activeNominationTarget()) {
-        deactivateInlineFallbackTarget();
-    } else {
-        const target = selectedInlineFallbackPrimary();
-        if (!target || !conditionID || target.ID !== conditionID || target.benchmarkID !== group.benchmarkID) return;
-        state.nomination = { scope: inlineFallbackScope(conditionID), query: benchmarkSearch.value,
-            searchActive: benchmarkSearchActive, limit: 48, hasMore: false };
-        benchmarkSearch.value = '';
-        benchmarkSearchActive = false;
-        if (state.workspaceView === 'focus') {
-            state.workspaceView = 'leaderboard';
-            applyWorkspaceView({ animate: true });
-            renderModeState();
-        }
-        benchmarkRows.scrollTop = 0;
-    }
-    renderInlineFallback();
-    renderBenchmarks();
-}
-
 function isInlineFallbackTargetActive() {
-    if (activeNominationTarget()) return true;
     const primary = selectedInlineFallbackPrimary();
     return Boolean(primary)
         && isInlineFallbackEditing()
@@ -1388,11 +1333,6 @@ function isInlineFallbackTargetActive() {
 }
 
 function deactivateInlineFallbackTarget() {
-    if (state.nomination) {
-        benchmarkSearch.value = state.nomination.query;
-        benchmarkSearchActive = state.nomination.searchActive;
-        state.nomination = null;
-    }
     fallbackTargetPrimaryID = null;
     inlineFallback?.classList.remove('is-target-active');
     benchmarkCard?.classList.remove('is-fallback-target-active');
@@ -1424,7 +1364,7 @@ function setBenchmarkSettingsLayout(open) {
 }
 
 function renderInlineFallback() {
-    if (!activeNominationTarget() && !isInlineFallbackEditing()) {
+    if (!isInlineFallbackEditing()) {
         fallbackEditorScope = null;
         deactivateInlineFallbackTarget();
     }
@@ -1699,7 +1639,6 @@ function chooseBenchmarkEstimationVote(group, targetConditionID, sourceCondition
     } });
     state.ballotWrite = request;
     renderInlineFallback();
-    if (nominate) renderBenchmarks();
     request.then(() => {
         if (state.userID === owner && guestChoices.length) clearImportedGuestEstimationVotes(guestChoices);
         if (state.ballotWrite === request) state.ballotWrite = null;
@@ -1760,7 +1699,7 @@ addFallbackBenchmarkButton.addEventListener('click', () => {
 
 function addObjectToPersonalPie(object) {
     const unavailable = isTopicReference(object) ? topicReferenceUnavailable(object, state.contextID, state.contextIsPrivate) : '';
-    if (unavailable) { setStatus(unavailable); return false; }
+    if (unavailable) return false;
     if (excludedFromRanking(object) || object.familyEntries?.some(excludedFromRanking)) {
         return false;
     }
@@ -1912,19 +1851,11 @@ function renderBenchmarks() {
     const fallbackTargetActive = isInlineFallbackTargetActive();
     const scenesVisible = isSceneDiscovery();
     benchmarkSearchClear.hidden = !benchmarkSearch.value && !scenesVisible;
-    const nominationTarget = activeNominationTarget();
-    const fallbackVersions = Boolean(nominationTarget);
     const fallbackPrimary = fallbackTargetActive ? selectedInlineFallbackPrimary() : null;
     const activeFallbackRule = fallbackPrimary ? fallbackRuleFor(fallbackPrimary.ID) : null;
     const activeFallbackConditionIDs = new Set((activeFallbackRule?.entries ?? []).map(entry => (
         Number(entry.conditionID)
     )));
-    if (nominationTarget) {
-        for (const pair of state.externalEstimationPairs) {
-            if (pair.targetConditionID === nominationTarget.ID) activeFallbackConditionIDs.add(pair.sourceConditionID);
-            if (pair.sourceConditionID === nominationTarget.ID) activeFallbackConditionIDs.add(pair.targetConditionID);
-        }
-    }
     benchmarkCard?.classList.toggle('is-fallback-target-active', fallbackTargetActive);
     const canPinPersonal = personalControlsActive
         && state.personalEntries.length > 0;
@@ -1966,7 +1897,7 @@ function renderBenchmarks() {
     const availableObjects = state.mode === 'personal'
         ? state.benchmarks.filter(object => !hiddenPersonalBenchmarkIDs.has(Number(object.ID)))
         : state.benchmarks;
-    const objects = scenesVisible ? sceneDiscoveryRows() : expanded ? expandedBenchmarkRows() : fallbackVersions ? fallbackVersionRows(nominationTarget)
+    const objects = scenesVisible ? sceneDiscoveryRows() : expanded ? expandedBenchmarkRows()
         : (fallbackTargetActive ? availableObjects.filter(object => !isTopicReference(object)) : availableObjects).map(object => {
         if (!object.isBenchmarkGroup) return object;
         const entries = (state.mode === 'personal' ? state.personalEntries : state.publicEntries)
@@ -1977,9 +1908,9 @@ function renderBenchmarks() {
         return { ...object, ...(current ? { ID: current.conditionID, conditionID: current.conditionID } : {}),
             personalWeight: personal.length ? total / 100 : null, personalWeightBasisPoints: personal.length ? total : null };
     });
-    if (objects.length === 0 && (expanded || fallbackVersions || !state.rankingPagination?.benchmarks.other.total
+    if (objects.length === 0 && (expanded || !state.rankingPagination?.benchmarks.other.total
         && !state.rankingPagination?.benchmarks.lowCoverage.total)) {
-        if (!fallbackVersions && !expanded && state.benchmarks.length > 0 && state.rankingPagination?.benchmarks.primary.hasMore
+        if (!expanded && state.benchmarks.length > 0 && state.rankingPagination?.benchmarks.primary.hasMore
             && !state.rankingPageError.benchmarks) {
             const loading = document.createElement('div');
             loading.className = 'bp-loading-state';
@@ -1990,7 +1921,7 @@ function renderBenchmarks() {
         }
         const empty = document.createElement('div');
         empty.className = 'bp-empty-state';
-        empty.textContent = fallbackVersions ? 'No matching external versions.' : state.rankingPageError.benchmarks || (state.benchmarks.length > 0
+        empty.textContent = state.rankingPageError.benchmarks || (state.benchmarks.length > 0
             ? 'No other benchmarks in this view.'
             : 'No benchmarks found');
         benchmarkRows.append(empty);
@@ -2000,10 +1931,10 @@ function renderBenchmarks() {
             retry.textContent = 'Retry';
             retry.addEventListener('click', () => { void loadNextRankingPage('benchmarks'); });
             empty.append(retry);
-        } else if (!expanded && !fallbackVersions) appendBenchmarkDiscoveryActions(empty);
+        } else if (!expanded) appendBenchmarkDiscoveryActions(empty);
     }
 
-    const groupPages = expanded || fallbackVersions || scenesVisible ? null : currentBenchmarkPages();
+    const groupPages = expanded || scenesVisible ? null : currentBenchmarkPages();
     const hasOtherVersions = (groupPages?.other.total ?? 0) > 0;
     const lowCoverageRows = document.createElement('div');
     lowCoverageRows.id = 'benchmark-low-rows';
@@ -2042,7 +1973,7 @@ function renderBenchmarks() {
             ? [benchmarkAccessibleName(object), ...object.familyEntries.map(benchmarkAccessibleName)].join(' → ')
             : benchmarkAccessibleName(object, { showVersion: fallbackTargetActive });
         row.setAttribute('aria-label', object.isFamily ? `Fallback configuration for ${accessibleName}` : `${isTopicReference(object) ? 'Topic' : 'Benchmark'} ${accessibleName}`);
-        const hasWeight = !nominationTarget && objectHasWeight(object);
+        const hasWeight = objectHasWeight(object);
         if (hasWeight) {
             row.tabIndex = 0;
             row.dataset.benchmarkControl = 'selection';
@@ -2097,35 +2028,27 @@ function renderBenchmarks() {
             const unavailable = fallbackTargetActive && object.isFamily;
             if (!alreadyAdded && !unavailable) {
                 const add = document.createElement('button'); add.type = 'button';
-                if (nominationTarget) add.disabled = Boolean(state.ballotWrite);
                 add.className = 'bp-benchmark-add'; add.dataset.benchmarkControl = 'add';
                 const referenceError = isTopicReference(object) ? topicReferenceUnavailable(object, state.contextID, state.contextIsPrivate) : '';
                 const excluded = excludedFromRanking(object) || object.familyEntries?.some(excludedFromRanking) || Boolean(referenceError);
                 add.setAttribute('aria-disabled', String(Boolean(excluded)));
                 const target = fallbackTargetActive ? 'Fallback' : 'Personal Weights';
-                const label = nominationTarget ? `Nominate ${accessibleName}` : `Add ${accessibleName} to ${target}`;
+                const label = `Add ${accessibleName} to ${target}`;
                 const exclusionMessage = referenceError;
                 if (!excluded || exclusionMessage) add.dataset.tooltip = exclusionMessage || label;
                 add.setAttribute('aria-label', exclusionMessage ? `${label}. ${exclusionMessage}` : label);
                 add.innerHTML = '<i class="fa-solid fa-plus" aria-hidden="true"></i>';
                 const addLabel = document.createElement('span');
                 addLabel.className = 'bp-benchmark-add-label';
-                addLabel.textContent = nominationTarget ? 'Nominate' : 'Add';
+                addLabel.textContent = 'Add';
                 const addTarget = document.createElement('span');
                 addTarget.className = 'bp-benchmark-add-target';
                 addTarget.textContent = fallbackTargetActive ? ' to Fallback' : ' to Pie';
-                if (!nominationTarget) addLabel.append(addTarget);
+                addLabel.append(addTarget);
                 add.append(addLabel);
                 add.addEventListener('click', event => {
                     event.stopPropagation();
-                    if (excluded) { if (exclusionMessage) setStatus(exclusionMessage); return; }
-                    if (nominationTarget) {
-                        if (activeNominationTarget()?.ID === nominationTarget.ID) {
-                            const group = state.versionComposition.find(item => item.benchmarkID === nominationTarget.benchmarkID);
-                            chooseBenchmarkEstimationVote(group, nominationTarget.ID, object.ID, 'support', true);
-                        }
-                        return;
-                    }
+                    if (excluded) return;
                     if (isInlineFallbackTargetActive()) {
                         addObjectToFallbackChain(object);
                         return;
@@ -2182,7 +2105,7 @@ function renderBenchmarks() {
     objects.forEach(object => {
         const entry = document.createElement('div'); entry.className = 'bp-benchmark-entry';
         entry.append(createRow(object));
-        const group = expanded || fallbackVersions || scenesVisible ? 'primary' : currentBenchmarkGroup(object);
+        const group = expanded || scenesVisible ? 'primary' : currentBenchmarkGroup(object);
         if (group === 'lowCoverage') lowCoverageRows.append(entry);
         else if (group === 'other') otherRows.append(entry);
         else benchmarkRows.append(entry);
@@ -2192,7 +2115,7 @@ function renderBenchmarks() {
         retry.textContent = 'Retry scene details'; retry.addEventListener('click', loadSceneTargets); benchmarkRows.append(retry);
     }
     const appendPageFooter = (container, group) => {
-        if (expanded || fallbackVersions || scenesVisible) return;
+        if (expanded || scenesVisible) return;
         const page = groupPages?.[group];
         const key = benchmarkPageKey(group);
         if (!page?.hasMore && !state.rankingPageError[key]) return;
@@ -2560,7 +2483,6 @@ function applyServerWorkspace(payload, {
     );
     const contextChanged = state.pieContextFingerprint !== nextContextFingerprint;
     if (contextChanged) {
-        state.nomination = null;
         state.editHistory.clear();
         benchmarkSearchActive = false;
         state.selectedObjectID = null;
@@ -2757,7 +2679,7 @@ async function loadWeightedWorkspace({ resetTemplates = false, retryAttempt = 0,
     const requestedContextValues = resetTemplates
         ? {}
         : { ...state.selectedContextValues };
-    const requestedBenchmarkQuery = (state.nomination?.query ?? benchmarkSearch.value).trim();
+    const requestedBenchmarkQuery = benchmarkSearch.value.trim();
     const requestedPinPersonal = state.pinPersonalBenchmarks;
     const requestedCategoryID = state.categoryID;
     const requestedComparison = structuredClone(state.comparisonRequest);
@@ -2864,7 +2786,7 @@ async function loadWeightedWorkspace({ resetTemplates = false, retryAttempt = 0,
         }
         renderAll();
         if (typeof modelFocus !== 'undefined') void modelFocus.reveal();
-        if (requestedBenchmarkQuery !== (state.nomination?.query ?? benchmarkSearch.value).trim()
+        if (requestedBenchmarkQuery !== benchmarkSearch.value.trim()
             || requestedPinPersonal !== state.pinPersonalBenchmarks) {
             reloadBenchmarkPage();
         }
@@ -3599,12 +3521,11 @@ document.addEventListener('visibilitychange', () => {
 });
 
 benchmarkSearch.addEventListener('input', () => {
-    if (state.nomination) { state.nomination.limit = 48; benchmarkRows.scrollTop = 0; }
     benchmarkSearchActive = true;
     hiddenPersonalBenchmarkIDs.clear();
     window.clearTimeout(benchmarkSearchTimer);
     if (isSceneDiscovery()) { loadSceneTargets(); renderBenchmarks(); return; }
-    if (isExpandedWeightView() || state.versionComposition && isInlineFallbackTargetActive()) { renderBenchmarks(); return; }
+    if (isExpandedWeightView()) { renderBenchmarks(); return; }
     if (!state.rankingPagination || state.loading || workspaceLoadFailed) return;
     state.rankingPageSequence.benchmarks += 1;
     state.rankingPageLoading.benchmarks = true;
@@ -3669,7 +3590,7 @@ publicFallbackToggle.addEventListener('click', () => {
 });
 document.addEventListener('keydown', event => {
     if (state.mode !== 'personal') return;
-    if (event.key === 'Escape' && (activeNominationTarget() || inlineFallbackChart.contains(event.target) && isInlineFallbackTargetActive())) {
+    if (event.key === 'Escape' && inlineFallbackChart.contains(event.target) && isInlineFallbackTargetActive()) {
         event.preventDefault();
         deactivateInlineFallbackTarget();
         renderInlineFallback();

@@ -2,13 +2,27 @@
 
 .bp-benchmark-settings {
     --bp-estimation-column-width: clamp(106px, 38%, 156px);
+    --bp-settings-inline-padding: 0px;
+    --bp-nomination-ink: #166575;
+    --bp-nomination-surface: #e9f5f6;
     --bp-version-focus: var(--bp-accent);
     --bp-version-active-ink: var(--bp-accent);
     --bp-version-active-surface: var(--bp-purple-soft);
+    position: relative;
+    display: flex;
+    flex-direction: column;
     width: 100%;
     min-width: 0;
-    padding-bottom: 6px;
     color: var(--bp-ink);
+}
+.bp-benchmark-settings-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    scrollbar-width: thin;
+    padding: 0 var(--bp-settings-inline-padding) calc(8px + var(--bp-external-versions-height, 0px));
+    scroll-padding-bottom: calc(8px + var(--bp-external-versions-height, 0px));
 }
 .bp-benchmark-settings[data-readonly="true"] {
     --bp-version-focus: var(--bp-muted);
@@ -162,6 +176,141 @@ button:is(.bp-version-choice, .bp-estimation-vote):focus-visible { outline: 2px 
     .bp-fallback-picker-column, .bp-fallback-picker-entry, .bp-fallback-picker-entry > i { transition: none; }
 }
 
-.bp-external-versions { display: grid; gap: .5rem; }
-.bp-external-versions h4 { margin: .5rem 0 0; font-size: .875rem; }
-.bp-external-versions ul:empty { display: none; }
+.bp-external-versions {
+    position: absolute;
+    inset: auto 0 0;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    max-height: min(38%, 216px);
+    min-height: min(100%, 49px);
+    padding-inline: max(8px, var(--bp-settings-inline-padding));
+    border-top: 1px solid var(--bp-line);
+    background: var(--bp-surface, #fff);
+}
+.bp-external-versions-heading {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-height: 44px;
+    padding: 2px 0;
+}
+.bp-external-versions-heading h4 { margin: 0; font-size: 13px; line-height: 1.3; }
+.bp-external-versions-heading a { color: var(--bp-nomination-ink); font-size: 12px; }
+.bp-external-versions > ul {
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    scrollbar-width: thin;
+}
+.bp-external-versions > ul:empty { display: none; }
+.bp-external-versions .bp-version-choice-name { padding-inline-start: 4px; }
+.bp-benchmark-settings:has(> .bp-external-version-picker:not([hidden])) > .bp-external-versions {
+    max-height: min(38%, 216px, max(49px, calc(100% - 160px)));
+}
+.bp-version-nomination {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    min-height: 36px;
+    padding: 0 9px;
+    border: 0;
+    border-radius: 5px;
+    background: var(--bp-nomination-surface);
+    color: var(--bp-nomination-ink);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+}
+.bp-version-nomination:disabled { opacity: .55; cursor: default; }
+.bp-version-nomination[aria-expanded="true"] { background: var(--bp-nomination-ink); color: #fff; }
+.bp-version-nomination:focus-visible { outline: 2px solid var(--bp-nomination-ink); outline-offset: 2px; }
+@media (hover: hover) {
+    .bp-version-nomination:not(:disabled, [aria-expanded="true"]):hover { background: #d9ebee; }
+}
+.bp-external-version-picker {
+    position: absolute;
+    inset-inline: max(8px, var(--bp-settings-inline-padding));
+    inset-block-end: calc(var(--bp-external-versions-height, 0px) + 8px);
+    z-index: 2;
+    display: flex;
+    width: auto;
+    max-height: min(320px, calc(100% - var(--bp-external-versions-height, 0px) - 12px));
+    border: 1px solid #afc9cd;
+    border-radius: 8px;
+    background: var(--bp-nomination-surface);
+    box-shadow: 0 6px 18px #153d4624;
+    animation: bp-external-picker-open 150ms ease-out;
+}
+.bp-external-version-picker-content {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+    padding: 10px;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    scrollbar-width: thin;
+}
+.bp-external-version-picker-content > * { flex-shrink: 0; }
+.bp-external-version-picker::after {
+    content: '';
+    position: absolute;
+    inset-inline-end: 18px;
+    inset-block-end: -5px;
+    width: 8px;
+    height: 8px;
+    border-right: 1px solid #afc9cd;
+    border-bottom: 1px solid #afc9cd;
+    background: var(--bp-nomination-surface);
+    transform: rotate(45deg);
+    pointer-events: none;
+}
+@keyframes bp-external-picker-open {
+    from { opacity: .25; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+.bp-external-version-picker p { margin: 0; color: var(--bp-nomination-ink); font-size: 12px; line-height: 1.4; }
+.bp-external-version-picker-content > p { font-weight: 600; }
+.bp-external-version-picker input {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    min-height: 36px;
+    padding: 5px 8px;
+    border: 1px solid #afc9cd;
+    border-radius: 5px;
+    background: #fff;
+    color: var(--bp-ink);
+    font: inherit;
+    font-size: 14px;
+}
+.bp-external-version-results {
+    border-radius: 5px;
+    background: var(--bp-surface, #fff);
+}
+.bp-external-version-results ul { margin: 0; padding: 0; list-style: none; }
+.bp-external-version-results p { padding: 8px; }
+.bp-external-version-results li + li { border-top: 1px solid var(--bp-line); }
+.bp-external-version-results .bp-external-version-option {
+    justify-content: space-between;
+    width: 100%;
+    text-align: left;
+}
+.bp-external-version-option > span { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; min-width: 0; overflow-wrap: anywhere; }
+.bp-external-version-option strong { font-size: 12px; font-weight: 600; }
+.bp-external-version-option small { color: var(--bp-muted); font-size: 11px; }
+.bp-external-version-option > i { flex: none; color: var(--bp-nomination-ink); }
+@media (max-width: 760px), (pointer: coarse) {
+    .bp-version-nomination { min-height: 44px; }
+    .bp-external-version-picker input { font-size: 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .bp-external-version-picker { animation: none; }
+}

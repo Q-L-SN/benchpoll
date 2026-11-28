@@ -3,10 +3,10 @@ import { navigationChannel } from '../shared/navigation-channel.js';
 import { configuredRows, contextKey, entryFromContext, locationURL, popularTopics, validateNavigationPayload } from './model.js?v=comparison-experiment-20261007';
 import { readSidebarPreferences, writeSidebarPreferences, readRecentTopics, writeRecentTopics, addRecentTopic, RECENT_TOPICS_PREFIX } from './preferences.js';
 import { postJSON } from '../shared/http.js';
-import { isAccountWriteError, accountWriteError, pageAccountWriteScope } from '../shared/account-identity.js';
-import { animateContent, setVisible } from '../shared/motion.js';
+import { pageAccountWriteScope } from '../shared/account-identity.js';
+import { animateContent } from '../shared/motion.js';
 import { FAVORITE_EVENT, createFavoriteButton, createConfiguredIndicator, topicFavoritePending } from '../shared/topic-actions.js';
-import { normalizeTopicSummary, sceneSummary } from '../shared/topics.js';
+import { sceneSummary } from '../shared/topics.js';
 import { mountTopicCollectionPicker } from './collection-picker.js';
 import { topicCollection, topicCollections, personalCollection } from './collections.js';
 import { sceneURL, searchTopicGroups, sceneMatchSummary } from './scenes.js';
@@ -23,12 +23,6 @@ export function createSidebarNavigation({ onNavigate, onLogin, onSessionChange, 
     const login = document.getElementById('configured-login');
     const topicCreation = document.getElementById('sidebar-topic-creation');
     const createButtons = [...document.querySelectorAll('[data-create-topic]')];
-    const createForm = document.getElementById('topic-create-form');
-    const createName = document.getElementById('topic-create-name');
-    const createDescription = document.getElementById('topic-create-description');
-    const createError = document.getElementById('topic-create-error');
-    const visibilityNotice = document.getElementById('topic-visibility-notice');
-    const createSubmit = createForm.querySelector('[type="submit"]');
     const picker = mountTopicCollectionPicker(document.querySelector('#config-sidebar .bp-topic-collection'), {
         onSelect: setView, onQuery: renderCategorySearch,
         onResults() {
@@ -49,7 +43,6 @@ export function createSidebarNavigation({ onNavigate, onLogin, onSessionChange, 
     const accessiblePrivateTopics = new Map();
     let catalog = [], catalogLoaded = false, catalogLoading = false, catalogError = false, catalogRequest = 0;
     let catalogFavoriteUpdates = null;
-    let creating = false;
     const catalogView = view => ['favorites', 'created', 'search'].includes(view);
 
     const keyFor = entry => contextKey(entry.categoryID, entry.contextValues);
@@ -580,8 +573,6 @@ export function createSidebarNavigation({ onNavigate, onLogin, onSessionChange, 
             catalog = []; catalogLoaded = false; catalogLoading = false; catalogError = false;
             catalogFavoriteUpdates = null;
             scrollReady.search = scrollReady.favorites = scrollReady.created = false;
-            createForm.reset(); createError.textContent = ''; void setVisible(createForm, false, { collapse: true });
-            createButtons.forEach(button => button.setAttribute('aria-expanded', 'false'));
             ++privateValidation;
             privateRecentsLoading = false;
             accessiblePrivateTopics.clear();
@@ -635,84 +626,13 @@ export function createSidebarNavigation({ onNavigate, onLogin, onSessionChange, 
     retry.addEventListener('click', () => { void (catalogError ? loadCatalog() : refresh()); });
     browse.addEventListener('click', () => setView('popular'));
     login.addEventListener('click', onLogin);
-    function renderCreateVisibility() {
-        const isPrivate = createForm.elements.visibility.value === 'private';
-        visibilityNotice.textContent = isPrivate ? 'Only you can view this topic and its weights.'
-            : 'Anyone can view this topic as soon as you publish. You can have up to three public topics.';
-        createSubmit.querySelector('span').textContent = isPrivate ? 'Create private topic' : 'Publish topic';
-    }
-    createForm.querySelector('fieldset').addEventListener('change', renderCreateVisibility);
-    createButtons.forEach(button => {
-        if (onCreateTopic) button.setAttribute('aria-haspopup', 'dialog');
+    for (const button of createButtons) {
+        button.setAttribute('aria-haspopup', 'dialog');
         button.addEventListener('click', () => {
             if (!account) { onLogin(); return; }
-            if (onCreateTopic) { void onCreateTopic(button); return; }
-            if (creating) return;
-            renderCreateVisibility();
-            createButtons.forEach(item => item.setAttribute('aria-expanded', String(item === button)));
-            void setVisible(createForm, true, { collapse: true });
-            createError.textContent = ''; createName.focus({ preventScroll: true });
+            void onCreateTopic(button);
         });
-    });
-    createForm.querySelector('[data-cancel]').addEventListener('click', () => {
-        if (creating) return;
-        createButtons.forEach(button => button.setAttribute('aria-expanded', 'false'));
-        void setVisible(createForm, false, { collapse: true });
-        createButtons[0].focus({ preventScroll: true });
-    });
-    createForm.addEventListener('submit', async event => {
-        event.preventDefault();
-        const owner = account;
-        if (!owner || creating) return;
-        const name = createName.value.trim().normalize('NFC');
-        if (!name || [...name].length > 128 || /[\p{Cc}\p{Cf}]/u.test(name)) {
-            createError.textContent = 'Use 1 to 128 characters without control characters.'; createName.focus(); return;
-        }
-        let description;
-        try { description = normalizeTopicSummary(createDescription.value); }
-        catch { createError.textContent = 'Write one sentence of up to 180 characters.'; createDescription.focus(); return; }
-        creating = true;
-        createForm.setAttribute('aria-busy', 'true');
-        createSubmit.querySelector('i').className = 'bp-spinner';
-        createError.textContent = '';
-        const isPrivate = createForm.elements.visibility.value === 'private';
-        [...createForm.elements].forEach(control => { control.disabled = true; });
-        try {
-            if (pageAccountWriteScope.capture() !== owner) throw accountWriteError();
-            const response = await pageAccountWriteScope.write(postJSON, '/api/create_topic', { name, description, isPrivate });
-            if (owner !== account) return;
-            const entry = entryFromContext(response?.topic ?? response);
-            if (!Number.isSafeInteger(entry?.categoryID) || entry.categoryID < 1 || entry.isPrivate !== isPrivate) throw new TypeError('Invalid new topic');
-            locationURL(entry);
-            catalog = [...catalog.filter(topic => topic.categoryID !== entry.categoryID), { ...entry, isMine: true }];
-            catalogLoaded = true;
-            await loadCatalog();
-            if (owner !== account || pageAccountWriteScope.capture() !== owner) return;
-            if (await navigate(entry)) {
-                createButtons.forEach(button => button.setAttribute('aria-expanded', 'false'));
-                void setVisible(createForm, false, { collapse: true });
-                createForm.reset();
-                visibilityNotice.textContent = 'Choose who can see your topic.';
-            } else createError.textContent = 'Created. Open it from Home.';
-        } catch (error) {
-            if (owner !== account) return;
-            const code = error.payload?.error;
-            createError.textContent = isAccountWriteError(error) ? accountWriteError().message
-                : code === 'reserved_topic_name' ? 'This topic name is reserved. Choose another name.'
-                : ['topic_name_exists', 'private_category_name_exists'].includes(code) ? 'A topic with this name already exists. Choose another name.'
-                : code === 'public_topic_limit' ? 'You can have up to three public topics at a time. Make one private before publishing another.'
-                : code === 'legal_acceptance_required' ? error.message
-                : code === 'invalid_topic_name' ? 'Use 1 to 128 characters without control characters.'
-                : code === 'invalid_topic_description' ? 'Write one sentence of up to 180 characters.'
-                : code === 'verified_email_required' ? 'Sign in with GitHub again to confirm your email, then retry. Your draft is kept.'
-                : error.status === 429 ? 'You have reached the daily topic creation limit. Try again later.'
-                : error.status === 401 ? 'Sign in to create a topic. Your draft is kept.' : 'Could not create this topic. Your draft is kept; try again.';
-        } finally {
-            creating = false; createForm.setAttribute('aria-busy', 'false');
-            createSubmit.querySelector('i').className = 'fa-solid fa-plus';
-            [...createForm.elements].forEach(control => { control.disabled = false; });
-        }
-    });
+    }
     viewport.addEventListener('scroll', () => {
         if (restoring || !scrollReady[preferences.view]) return;
         preferences.scroll[preferences.view] = viewport.scrollTop;

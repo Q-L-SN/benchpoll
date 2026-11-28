@@ -208,7 +208,9 @@ test('legal links and private-category disclosure are accessible before signing 
         assert.match(document, /href="\/privacy"/);
         assert.match(document, /href="\/terms"/);
     }
-    assert.match(read('private/home.html'), /bp-private-category-notice/);
+    const topicEditor = read('public/js/shared/private-topic-editor.js');
+    assert.match(topicEditor, /aria-describedby="topic-editor-visibility-hint"/);
+    assert.match(topicEditor, /Only you can view this topic and its weights/);
     assert.doesNotMatch(read('private/home.html'), /terms-dialog|terms-button/);
     assert.doesNotMatch(read('public/js/home-workspace.js'), /termsButton|termsDialog/);
 });

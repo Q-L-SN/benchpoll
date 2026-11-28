@@ -36,12 +36,9 @@
 .is-benchmark-settings-open .bp-inline-fallback-toolbar { flex: none; }
 .bp-inline-fallback.is-settings-motion-disabled .bp-ui-disclosure-chevron { transition: none; }
 .is-benchmark-settings-open .bp-benchmark-settings {
+    --bp-settings-inline-padding: 16px;
     flex: 1 1 0;
     min-height: 0;
-    padding: 0 16px 8px;
-    overflow-y: auto;
-    overscroll-behavior-y: contain;
-    scrollbar-width: thin;
 }
 #pie-chart-view[hidden] { display: none; }
 .bp-pie-tools-row { flex-wrap: nowrap; align-items: center; gap: 6px; padding: 6px 12px 0; }
@@ -68,6 +65,7 @@
 .bp-home .bp-benchmark-row > .bp-benchmark-identity { display: block; min-width: 0; line-height: 1.65; }
 .bp-home .bp-benchmark-row > .bp-benchmark-identity > .bp-benchmark-information-link { display: inline; width: auto; }
 .bp-benchmark-identity > .bp-evaluation-meta { display: inline-flex; align-items: center; gap: 5px; margin-left: 5px; vertical-align: baseline; white-space: nowrap; }
+.bp-benchmark-identity > .bp-evaluation-meta.bp-topic-metrics { --bp-topic-metric-size: 11px; }
 .bp-benchmark-identity > .bp-benchmark-score-count { display: inline-flex; margin-left: 5px; vertical-align: baseline; }
 .bp-home .bp-benchmark-toolbar-actions { gap: 6px; }
 .bp-home .bp-benchmark-search { --ui-control-height: 32px; height: 32px; min-height: 32px; padding-block: 2px; }
@@ -84,7 +82,8 @@
 @media (max-width: 760px) {
     .bp-home #workspace-brand-slot { display: none; }
     .bp-pie-scroll-shell:has(.is-benchmark-settings-open), .bp-pie-home-slot:has(.is-benchmark-settings-open) { height: 100%; }
-    .is-benchmark-settings-open .bp-benchmark-settings { padding-inline: 10px; overscroll-behavior-y: auto; }
+    .is-benchmark-settings-open .bp-benchmark-settings { --bp-settings-inline-padding: 10px; }
+    .is-benchmark-settings-open .bp-benchmark-settings-scroll { overscroll-behavior-y: auto; }
     .bp-home .bp-workspace-header { margin-bottom: 4px; }
     .bp-home .bp-page-heading { gap: 8px; }
     .bp-home .bp-page-heading #workspace-topic-summary { font-size: 12px; }

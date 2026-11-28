@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { BENCHMARK_GROUPS, benchmarkConditionGroup } from './public/js/shared/benchmark-condition-groups.js';
 import { createSearchIndex, dominantSearchMatch } from './public/js/shared/search.js';
 import { FEATURED_FALLBACK_LIMIT, FEATURED_FALLBACK_MIN_BASIS_POINTS } from './public/js/shared/fallback-catalogue-policy.js';
-import { benchmarkVersionTieOrder, benchmarkEvaluationOrder } from './public/js/shared/benchmark-version-order.js';
+import { benchmarkVersionTieOrder, benchmarkEvaluationOrder, groupedEvaluationOrder } from './public/js/shared/benchmark-version-order.js';
 import { groupBenchmarkRows } from './public/js/shared/benchmark-version-choice.js';
 import { normalizeRankingResume, RANKING_PAGE_SIZE } from './public/js/shared/ranking-resume.js';
 import { normalizeModelFocusTarget, findModelFocusIndex } from './public/js/workspace/model-focus-target.js';
@@ -130,13 +130,6 @@ function updateBenchmarkCatalogue(snapshot, catalogue) {
     }).sort(benchmarkEvaluationOrder);
     snapshot.search = null;
     snapshot.benchmarkPages.clear();
-}
-
-function groupedEvaluationOrder(left, right) {
-    return right.publicWeightBasisPoints - left.publicWeightBasisPoints
-        || (left.publicWeightBasisPoints === 0 && right.publicWeightBasisPoints === 0
-            ? (right.globalWeightBasisPoints ?? 0) - (left.globalWeightBasisPoints ?? 0) : 0)
-        || left.conditionID - right.conditionID;
 }
 
 function benchmarkPage(snapshot, query, pinPersonal, offset, group, groupVersions, size = RANKING_PAGE_SIZE.benchmarks) {

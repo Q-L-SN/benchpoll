@@ -48,26 +48,20 @@ test('version-based estimation uses calibrated scores and keeps retired coverage
     assert.match(read('private/how-it-works.html'), /searches all versions of other weighted benchmarks/);
 });
 
-test('creation offers private and public visibility while edits use the separate visibility action', () => {
+test('the editor puts the shared Public and Private control before the topic fields', () => {
     const editor = read('public/js/shared/private-topic-editor.js');
     assert.doesNotMatch(read('public/js/shared/site-header.js'), /topic-proposals|id="new-topic"/);
     assert.match(editor, /<h2 id="create-topic-title">New topic<\/h2>/);
     assert.match(editor, /'Create private topic' : 'Publish topic'/);
     assert.match(topics, /createPrivateTopicEditor/);
     assert.match(editor, /\/api\/save_private_topic/);
-    assert.match(editor, /id="topic-editor-publish" hidden>Make public<\/button>/);
-    assert.match(editor, /setTopicVisibility\(topic, topic\.isPrivate\)/);
-    assert.match(editor, /topic\.isPrivate \? 'Make public' : 'Make private'/);
+    assert.match(editor, /data-visibility="private" aria-pressed="true"[\s\S]*data-visibility="public" aria-pressed="false"[\s\S]*id="new-topic-name"/);
+    assert.match(editor, /mountSegmentedControl\(visibility\)/);
+    assert.match(editor, /setTopicVisibility\(topic, !makePrivate\)/);
     assert.match(editor, /public_topic_limit: 'You can have up to three public topics at a time\./);
     assert.match(read('public/js/shared/topic-actions.js'), /writeTopicAction\('\/api\/set_topic_visibility', \{ categoryID: Number\(topic\.categoryID \?\? topic\.ID\), isPublic/);
     assert.doesNotMatch(topics, /\$\('#new-topic'\)\.addEventListener|openCreateTopic\(false\)|result\.submissionID|createTopicIsPrivate/);
-    const sidebarForm = configuration.match(/<form id="topic-create-form"[\s\S]*?<\/form>/)?.[0];
-    for (const markup of [editor, sidebarForm]) {
-        assert.ok(markup);
-        assert.match(markup, /type="radio" name="visibility" value="private" checked/);
-        assert.match(markup, /type="radio" name="visibility" value="public"/);
-        assert.doesNotMatch(markup, /review result by email|verified address linked/);
-    }
+    assert.doesNotMatch(editor + configuration, /topic-create-form|name="visibility"|review result by email|verified address linked/);
 });
 
 test('shared navigation has no proposal hall and retains Search and Create topic', () => {

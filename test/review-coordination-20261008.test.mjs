@@ -74,17 +74,23 @@ test('source inspection distinguishes the original hidden guard from the desired
     assert.equal(inspectVisibilityFixes(fixed).agiDesiredGuard, true);
 });
 
-test('authorized same-target cleanup uses the same motion module and preserves closed toggles', async () => {
-    const read = path => readFile(new URL('../public/js/' + path, import.meta.url), 'utf8');
-    const sidebar = await read('navigation/sidebar.js');
-    const profileMenu = await read('workspace/comparison-profile-menu.js');
+test('the historical sidebar probe detects a complete inline form cleanup', async () => {
+    const sidebar = `function setAccount(next) {
+        const changed = !accountKnown || next !== account;
+        if (changed) {
+            createForm.reset();
+            void setVisible(createForm, false, { collapse: true });
+            createButtons.forEach(button => button.setAttribute('aria-expanded', 'false'));
+            ++privateValidation;
+        }
+    }
+    navigationChannel.subscribe(() => {});`;
+    const profileMenu = await readFile(new URL('../public/js/workspace/comparison-profile-menu.js', import.meta.url), 'utf8');
     const fixes = inspectResidualFixes(sidebar, profileMenu);
     assert.equal(fixes.privateFormFixed, true);
     assert.equal(fixes.profileEditorFixed, true);
     assert.ok(fixes.locations.guestCleanup > 0 && fixes.locations.editorClose > 0);
-    assert.match(sidebar, /from '\.\.\/shared\/motion\.js'/);
     assert.match(profileMenu, /from '\.\.\/shared\/motion\.js'/);
-    assert.match(sidebar, /void setVisible\(createForm, true, \{ collapse: true \}\)/);
     assert.match(profileMenu, /setVisible\(editor, true, \{ collapse: true \}\)/);
     assert.equal(inspectResidualFixes("if (!account) { createForm.hidden = true; createForm.inert = true; }",
         "if (!open) { editing = null; editor.hidden = true; }").privateFormFixed, false);

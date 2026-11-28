@@ -38,8 +38,8 @@ test('the workspace breadcrumb shows the flat topic name instead of URL segments
     assert.match(breadcrumb, /breadcrumb\.append\(name\)/);
     assert.match(breadcrumb, /if \(state\.authenticated && state\.hasSavedPersonalWeights\) breadcrumb\.append\(createConfiguredIndicator\(\{ configured: true \}\)\)/);
     assert.match(breadcrumb, /if \(state\.categoryID && !state\.contextIsPrivate\) breadcrumb\.append\(createFavoriteButton/);
-    assert.match(breadcrumb, /breadcrumb\.append\(updateIndicator\.element\)/);
-    assert.doesNotMatch(breadcrumb, /categoryPath|lineage|displayParts|rootOffset/);
+    assert.match(workspace, /refreshButton\.after\(updateIndicator\.element\)/);
+    assert.doesNotMatch(breadcrumb, /updateIndicator|categoryPath|lineage|displayParts|rootOffset/);
 });
 
 test('the current homepage topic is emphasized and opens topic navigation on mobile', () => {

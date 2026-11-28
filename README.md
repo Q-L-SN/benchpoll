@@ -219,7 +219,7 @@ Advanced settings lists each benchmark's versions. Each scoring choice carries t
 
 Choose a scoring version to inspect its estimation pairs. Each signed-in account has one sitewide vote per unordered pair. Voting from either version or any topic edits the same ballot. Per pair, count every vote updated in the last 72 hours, or the latest 10 votes if fewer are recent. A majority against excludes the pair. Same-benchmark versions are eligible with no votes or a tie. Your own vote takes priority in your personal rankings.
 
-With a scoring version selected, click **Nominate a version from another benchmark**. Pick a version in **Evaluation items** to cast a support vote, then click the same toggle to exit. Both versions list the external pair while it has support in the current sample. Withdrawing the last support removes it from both lists. External measurements are used after same-benchmark evidence. Public estimates test each external direction on held-out models with matching settings. Both its MAE and RMSE must beat predicting the median training target. Personal rankings can try a nominated source with one paired model. The scoring version's weight and measured coverage keep their original meanings.
+With a scoring version selected, click **Add version** at the bottom of Advanced settings. Search by benchmark or version name and select the version to cast a support vote. The picker starts in Evaluation items order and shows only versions of other benchmarks. Both versions list the external pair while it has support in the current sample. Withdrawing the last support removes it from both lists. External measurements are used after same-benchmark evidence. Public estimates test each external direction on held-out models with matching settings. Both its MAE and RMSE must beat predicting the median training target. Personal rankings can try a nominated source with one paired model. The scoring version's weight and measured coverage keep their original meanings.
 Topic references share a topic icon and parent/scene separator across treemaps, selectors,
 and benchmark search. A parent-only search keeps its scenes collapsed. The weight-chart heading
 shows its selected block; scene tabs omit the Default badge. Successful refreshes briefly show
@@ -549,7 +549,7 @@ https://benchpoll.com:1337
 
 选定计分版本后，每个账号对每对版本在全站拥有一票。从任一版本、主题或场景进入，都在修改同一票。每对版本纳入过去 72 小时的全部有效票；若不足 10 票，取最近的 10 票或现有全部票。同基准版本在无人投票或平票时可参与，反对占多数时排除。个人排行优先采用本人的选择。
 
-选定计分版本后，点击 **Nominate a version from another benchmark**，再从评估项列表中选一个版本，即可投一张赞成票。再次点击提名按钮可退出。近期样本中有赞成票时，两个版本都显示这项提名。最后一张赞成票撤回或退出样本后，两端都移除提名。同基准证据优先。公共排行采用外部来源前，按预测方向和运行设置留出模型实测做验证，平均绝对误差和均方根误差均须优于训练集目标分数中位数。个人排行有一个配对模型就可尝试。估分使用计分版本的权重，只有实测计入覆盖率。
+选定计分版本后，点击高级配置底部的 **Add version**。按基准名或版本名搜索，选择版本即可投一张赞成票。选取器默认沿用评估项列表的排序，只列出其他基准的版本。近期样本中有赞成票时，两个版本都显示这项提名。最后一张赞成票撤回或退出样本后，两端都移除提名。同基准证据优先。公共排行采用外部来源前，按预测方向和运行设置留出模型实测做验证，平均绝对误差和均方根误差均须优于训练集目标分数中位数。个人排行有一个配对模型就可尝试。估分使用计分版本的权重，只有实测计入覆盖率。
 树图、选择器和基准搜索中的主题引用统一使用主题图标及一级主题/场景分隔图标。
 只匹配一级主题时，其场景默认折叠。权重图标题显示当前选中分区；场景标签不再显示 Default。
 刷新成功后短暂显示“已更新”，随后隐藏，不再常驻时间戳。

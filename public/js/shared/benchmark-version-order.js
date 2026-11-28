@@ -14,9 +14,16 @@ export function benchmarkVersionTieOrder(left, right) {
 
 // A topic's positive weights keep their existing order. For items outside that
 // composition, prior public allocations across the site determine discovery.
-export function benchmarkEvaluationOrder(left, right) {
+function evaluationWeightOrder(left, right) {
     return right.publicWeightBasisPoints - left.publicWeightBasisPoints
         || (left.publicWeightBasisPoints === 0 && right.publicWeightBasisPoints === 0
-            ? (right.globalWeightBasisPoints ?? 0) - (left.globalWeightBasisPoints ?? 0) : 0)
-        || benchmarkVersionTieOrder(left, right);
+            ? (right.globalWeightBasisPoints ?? 0) - (left.globalWeightBasisPoints ?? 0) : 0);
+}
+
+export function benchmarkEvaluationOrder(left, right) {
+    return evaluationWeightOrder(left, right) || benchmarkVersionTieOrder(left, right);
+}
+
+export function groupedEvaluationOrder(left, right) {
+    return evaluationWeightOrder(left, right) || left.conditionID - right.conditionID;
 }

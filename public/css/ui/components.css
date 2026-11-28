@@ -95,7 +95,9 @@ body .bp-ui-segmented[data-ui-component="segmented"]::before {
     background: var(--bp-surface);
     transform: translateX(var(--ui-segment-x, 2px));
     pointer-events: none;
-    transition: width 240ms ease, transform 240ms cubic-bezier(.22, 1, .36, 1);
+    transition-property: transform, width;
+    transition-duration: 240ms;
+    transition-timing-function: cubic-bezier(.22, 1, .36, 1);
 }
 body .bp-ui-segmented[data-ui-component="segmented"] > :is(button[aria-pressed], button[aria-selected]) {
     position: relative;

@@ -22,6 +22,7 @@ try {
     assert.equal(await page.getByRole('img', { name: 'Private topic' }).count(), 1);
     await page.getByRole('link', { name: 'Research', exact: true }).waitFor();
     await page.getByRole('heading', { name: 'Avery Chen' }).waitFor();
+    assert.equal(await page.locator('.pf-own-actions').evaluate(node => getComputedStyle(node).borderTopWidth), '0px');
     assert.equal(await page.getByRole('link', { name: 'Settings', exact: true }).getAttribute('href'), '/settings');
     assert.equal(await page.getByRole('link', { name: 'History', exact: true }).getAttribute('href'), '/me/history');
     await page.getByRole('tab', { name: 'Favorited topics, only you' }).click();
@@ -53,13 +54,15 @@ try {
 
     const create = page.getByRole('button', { name: 'Create topic', exact: true });
     const editor = page.getByRole('dialog', { name: 'New topic', exact: true });
+    const publicOption = editor.getByRole('button', { name: 'Public', exact: true });
+    const privateOption = editor.getByRole('button', { name: 'Private', exact: true });
     for (const name of ['Topics I created', 'Favorited topics, only you', 'Configured topics, only you', 'Discussion']) {
         await page.getByRole('tab', { name, exact: true }).click();
         assert.equal(await create.isVisible(), true);
         assert.equal(await page.getByRole('tabpanel').getByRole('button', { name: 'Create topic', exact: true }).count(), 0);
     }
     await create.click();
-    await editor.getByRole('radio', { name: 'Public' }).check();
+    await publicOption.click();
     await editor.getByLabel('Name', { exact: true }).fill('Open evaluation');
     await editor.getByLabel('One-sentence summary').fill('Compare practical evaluations.');
     await editor.getByRole('button', { name: 'Add scene' }).click();
@@ -73,16 +76,16 @@ try {
     await page.setViewportSize({ width: 320, height: 760 });
     await page.getByRole('tab', { name: 'Configured topics, only you' }).click();
     await create.click();
-    assert.equal(await editor.getByRole('radio', { name: 'Private' }).isChecked(), true);
+    assert.equal(await privateOption.getAttribute('aria-pressed'), 'true');
     assert.ok(await editor.evaluate(node => node.scrollWidth <= node.clientWidth + 1));
     await page.screenshot({ path: output + '/profile-create-mobile.png', fullPage: true });
-    await editor.getByRole('radio', { name: 'Public' }).check();
+    await publicOption.click();
     await editor.getByLabel('Name', { exact: true }).fill('Second open evaluation');
     await editor.getByLabel('One-sentence summary').fill('Review another public evaluation.');
     await editor.getByRole('button', { name: 'Publish topic' }).click();
     await editor.waitFor({ state: 'hidden' });
     await create.click();
-    await editor.getByRole('radio', { name: 'Public' }).check();
+    await publicOption.click();
     await editor.getByLabel('Name', { exact: true }).fill('Personal evaluation');
     await editor.getByLabel('One-sentence summary').fill('Keep these evaluation weights personal.');
     await editor.getByRole('button', { name: 'Publish topic' }).click();
@@ -90,7 +93,7 @@ try {
     assert.equal(fixture.state.created.length, 2);
     assert.equal(await editor.getByLabel('Name', { exact: true }).inputValue(), 'Personal evaluation');
     assert.equal(await editor.getByLabel('One-sentence summary').inputValue(), 'Keep these evaluation weights personal.');
-    await editor.getByRole('radio', { name: 'Private' }).check();
+    await privateOption.click();
     await editor.getByRole('button', { name: 'Create private topic' }).click();
     await editor.waitFor({ state: 'hidden' });
     assert.match(await page.getByRole('link', { name: 'Personal evaluation', exact: true }).getAttribute('href'), /^\/private\//);

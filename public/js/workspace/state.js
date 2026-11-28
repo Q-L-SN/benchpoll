@@ -52,7 +52,6 @@ export function createWorkspaceState() {
         personalFallbackRules: [],
         estimationVoting: false,
         ballotWrite: null,
-        nomination: null,
         guestVoteRevision: 0,
         personalEstimationVotes: [],
         communityEstimationVotes: [],

@@ -96,7 +96,7 @@ for (const [engine, width, height] of [[chromium, 1440, 900], [chromium, 320, 56
         assert.equal(await settings.locator('.bp-version-choice-share').count(), 3);
         assert.equal(await settings.locator('.bp-estimation-rate, button[data-vote]').count(), 0);
         assert.equal(await page.locator('#fallback-picker').count(), 0);
-        assert.equal(await settings.locator('.bp-fallback-picker-embedded, [aria-expanded], #inline-fallback-settings').count(), 0);
+        assert.equal(await settings.locator('.bp-fallback-picker-embedded, [aria-expanded]:not(.bp-version-nomination), #inline-fallback-settings').count(), 0);
         const versionSave = await saveAfter(page, () => scoreDefault.click());
         assert.equal(versionSave.entries.find(entry => entry.conditionID === 1).followCommunityVersion, undefined);
         assert.equal(Object.hasOwn(versionSave, 'estimationVotes'), false);
@@ -197,153 +197,122 @@ for (const [engine, width, height] of [[chromium, 1440, 900], [chromium, 320, 56
     });
 }
 
-for (const [engine, width, height] of [[chromium, 1440, 900], [webkit, 390, 660]]) {
-    test(`${engine.name()} ${width}: nominate a concrete version from Evaluation items ${built ? 'built' : 'source'}`, async t => {
+for (const [engine, width, height] of [[chromium, 1440, 900], [chromium, 320, 568], [webkit, 390, 660]]) {
+    test(`${engine.name()} ${width}: nominate from a pinned external versions dock ${built ? 'built' : 'source'}`, async t => {
+        const extraVersions = (benchmark, firstID, count, name) => Array.from({ length: count }, (_, index) => ({
+            ...benchmark, ID: firstID + index, conditionID: firstID + index,
+            isDefaultCondition: false, isPrimaryCondition: false, conditionKey: name + index, conditionName: name + ' ' + (index + 1)
+        }));
+        const sameBenchmark = extraVersions(benchmarks[0], 1001, 18, 'Scoring version');
+        const external = extraVersions(benchmarks[2], 1101, 14, 'Source version');
         const { page, fixture } = await setup(t, engine, width, height, {
-            personalEntries: weightedEntries([{ conditionID: 1, weightBasisPoints: 6000, followCommunityVersion: true },
-                { conditionID: 2, weightBasisPoints: 4000 }]),
-            communityEstimationVotes: [],
-            additionalBenchmarkVersions: [{ ...benchmarks[1], ID: 902, conditionID: 902, isDefaultCondition: false,
-                isPrimaryCondition: false, conditionKey: 'variant', conditionName: 'Variant' }]
+            publicWeights: [{ conditionID: 1, weightBasisPoints: 1000 }, { conditionID: 2, weightBasisPoints: 6000 },
+                { conditionID: 3, weightBasisPoints: 3000 }],
+            communityEstimationVotes: external.map(version => ({
+                targetConditionID: 1, sourceConditionID: version.conditionID, supportCount: 1, opposeCount: 0
+            })),
+            additionalBenchmarkVersions: [...sameBenchmark, ...external, { ...benchmarks[1], ID: 902, conditionID: 902,
+                isDefaultCondition: false, isPrimaryCondition: false, conditionKey: 'variant', conditionName: 'Variant' }],
+            transformWorkspace(data) {
+                for (const group of data.versionComposition) for (const version of group.versions) {
+                    version.globalWeightBasisPoints = version.conditionID === 7 ? 80000 : 0;
+                }
+            }
         });
         const card = page.locator('#benchmark-card');
-        const targetMode = card.and(page.locator('.is-fallback-target-active'));
         const search = card.locator('#benchmark-search');
-        const rows = card.locator('#benchmark-rows .bp-benchmark-row');
-        const rowIDs = () => rows.evaluateAll(nodes => nodes.map(node => Number(node.dataset.conditionId)).sort((a, b) => a - b));
-        const addCode = card.getByRole('button', { name: 'Add Code generation to Personal Weights', exact: true });
-        const addBenchmark = page.getByRole('button', { name: 'Add benchmark or topic', exact: true });
-        const toggle = page.locator('#inline-fallback-toggle');
         const settings = page.locator('#benchmark-settings');
-        const nominate = settings.getByRole('button', { name: 'Nominate a version from another benchmark', exact: true });
-        const nominated = conditionID => settings.getByRole('list', { name: 'Nominated external versions' })
-            .locator(`[data-external-condition-id="${conditionID}"]`);
+        const dock = settings.locator('.bp-external-versions');
+        const nominate = dock.getByRole('button', { name: 'Nominate a version from another benchmark', exact: true });
+        const picker = settings.locator('#external-version-picker');
+        const versionSearch = picker.getByRole('searchbox');
+        const results = picker.getByRole('list', { name: 'Versions available to nominate' });
+        const resultIDs = () => results.locator('li').evaluateAll(rows => rows.map(row => Number(row.dataset.conditionId)));
+        const nominated = conditionID => dock.locator('[data-external-condition-id="' + conditionID + '"]');
         const chooseScoring = name => saveAfter(page, () => settings.getByRole('button', {
-            name: `Use ${name} for scoring`, exact: true
+            name: 'Use ' + name + ' for scoring', exact: true
         }).click());
-        const disclosureAngle = trigger => trigger.locator('.bp-ui-disclosure-chevron').evaluate(icon =>
-            Math.round(Math.asin(new DOMMatrixReadOnly(getComputedStyle(icon).transform).b) * 180 / Math.PI));
 
         await page.locator('#pie-mode-personal').click();
         await page.locator('#weight-pie [data-object-id="1"]').click();
-        assert.equal(await disclosureAngle(toggle), 0);
+        const toggle = page.locator('#inline-fallback-toggle');
         await toggle.click();
-        assert.equal(await disclosureAngle(toggle), 90);
-        assert.equal(await nominate.count(), 0);
-        assert.equal(await targetMode.count(), 0);
+        assert.equal(await dock.isVisible(), false, 'An explicit scoring choice enables the dock');
         await chooseScoring('Default evaluation');
-
-        assert.equal(await nominate.getAttribute('aria-controls'), 'benchmark-card');
-        assert.equal(await nominate.getAttribute('aria-pressed'), 'false');
-        assert.deepEqual(await nominate.evaluate(button => {
-            const style = getComputedStyle(button);
-            return [style.backgroundColor, style.color];
-        }), ['rgb(233, 245, 246)', 'rgb(22, 101, 117)']);
-        await search.fill('Code generation');
-        await addCode.waitFor();
-        assert.deepEqual(await rowIDs(), [3]);
-        await nominate.click();
-        await targetMode.waitFor();
-        assert.equal(await search.inputValue(), '');
-        assert.equal(await nominate.getAttribute('aria-pressed'), 'true');
-        assert.equal(await nominate.evaluate(button => getComputedStyle(button).backgroundColor), 'rgb(22, 101, 117)');
-        assert.deepEqual(await rowIDs(), [2, 3, 4, 5, 6, 7, 8, 902]);
-        assert.equal(await rows.locator('[data-benchmark-control="remove"]').count(), 0);
-        assert.equal(await rows.and(page.locator('[data-benchmark-control="selection"]')).count(), 0);
-        assert.equal(await card.getByRole('button', { name: /^Add .+ to Personal Weights$/ }).count(), 0);
-        await search.fill('Advanced reasoning');
-        assert.deepEqual(await rowIDs(), [2, 902]);
-        const identity = rows.filter({ has: page.locator('.bp-benchmark-condition', { hasText: /^Variant$/ }) })
-            .locator('.bp-benchmark-information-link');
-        assert.equal(await identity.textContent(), 'Advanced reasoning Variant');
-        const separated = await identity.evaluate(link => {
-            const name = link.querySelector('.bp-benchmark-link-name').getBoundingClientRect();
-            const version = link.querySelector('.bp-benchmark-condition').getBoundingClientRect();
-            return version.left > name.right || version.top >= name.bottom;
+        await dock.waitFor();
+        assert.equal(await nominate.getAttribute('aria-controls'), 'external-version-picker');
+        assert.equal(await nominate.getAttribute('aria-expanded'), 'false');
+        const bounds = () => dock.evaluate(node => {
+            const main = node.previousElementSibling;
+            const versions = node.querySelector('ul');
+            return {
+                position: getComputedStyle(node).position,
+                height: node.offsetHeight, hostHeight: node.parentElement.offsetHeight,
+                top: node.getBoundingClientRect().top, bottom: node.getBoundingClientRect().bottom,
+                hostBottom: node.parentElement.getBoundingClientRect().bottom,
+                mainCanScroll: main.scrollHeight > main.clientHeight,
+                externalCanScroll: versions.scrollHeight > versions.clientHeight
+            };
         });
-        assert.equal(separated, true);
-        const rowNominate = card.getByRole('button', { name: 'Nominate Advanced reasoning, Variant', exact: true });
-        assert.equal(await card.getByRole('button', { name: 'Nominate Advanced reasoning, Default evaluation', exact: true }).count(), 1);
-        assert.equal(await rowNominate.count(), 1);
+        const start = await bounds();
+        assert.equal(start.position, 'absolute');
+        assert.ok(Math.abs(start.bottom - start.hostBottom) < 1);
+        assert.ok(start.height <= Math.max(49, Math.min(start.hostHeight * .38, 216)) + 1
+            && start.externalCanScroll && start.mainCanScroll, JSON.stringify(start));
+        await settings.locator('.bp-benchmark-settings-scroll').evaluate(node => { node.scrollTop = node.scrollHeight; });
+        const scrolled = await bounds();
+        assert.equal(scrolled.top, start.top);
+        const externalScroll = await dock.locator('ul').evaluate(node => { node.scrollTop = node.scrollHeight; return node.scrollTop; });
+        assert.ok(externalScroll > 0);
+
+        await search.fill('Code generation');
+        await card.getByRole('button', { name: 'Add Code generation to Personal Weights', exact: true }).waitFor();
+        const evaluationRows = await card.locator('.bp-benchmark-row').count();
         await nominate.click();
-        assert.equal(await targetMode.count(), 0);
-        assert.equal(await nominate.getAttribute('aria-pressed'), 'false');
+        assert.equal(await nominate.getAttribute('aria-expanded'), 'true');
+        assert.equal(await nominate.evaluate(node => getComputedStyle(node).backgroundColor), 'rgb(22, 101, 117)');
+        assert.ok((await picker.boundingBox()).y + (await picker.boundingBox()).height < (await dock.boundingBox()).y);
+        assert.equal(await versionSearch.inputValue(), '');
         assert.equal(await search.inputValue(), 'Code generation');
-        await addCode.waitFor();
-        assert.deepEqual(await rowIDs(), [3]);
-        assert.equal(await card.getByRole('button', { name: /^Nominate / }).count(), 0);
-        assert.equal(await disclosureAngle(toggle), 90);
+        assert.equal(await card.locator('.bp-benchmark-row').count(), evaluationRows);
+        assert.deepEqual((await resultIDs()).slice(0, 4), [2, 902, 3, 7]);
+        assert.equal(await results.locator('li[data-condition-id="1101"]').count(), 0, 'Already nominated versions stay in the dock');
+        assert.match(await picker.textContent(), /Select Add version again to close/);
+
+        await versionSearch.fill('variant');
+        assert.deepEqual(await resultIDs(), [902]);
+        await versionSearch.press('Escape');
+        assert.equal(await picker.isVisible(), false);
+        assert.equal(await nominate.evaluate(node => node === document.activeElement), true);
+        assert.equal(await search.inputValue(), 'Code generation');
 
         await nominate.click();
-        assert.equal(await search.inputValue(), '');
-        await search.fill('Variant');
-        assert.deepEqual(await rowIDs(), [902]);
-        assert.equal(await addBenchmark.isVisible(), false);
-        await toggle.click();
-        await targetMode.waitFor({ state: 'detached' });
-        await addBenchmark.click();
-        await page.waitForFunction(() => document.activeElement === document.getElementById('benchmark-search'));
-        await toggle.click();
-        assert.equal(await nominate.getAttribute('aria-pressed'), 'false');
-        assert.equal(await search.inputValue(), 'Code generation');
-        await addCode.waitFor();
-        assert.deepEqual(await rowIDs(), [3]);
-        assert.equal(await card.getByRole('button', { name: /^Nominate / }).count(), 0);
-
-        await search.clear();
-        await card.getByRole('button', { name: 'Add Mathematics to Personal Weights', exact: true }).waitFor();
         await nominate.click();
+        assert.equal(await picker.isVisible(), false);
+        await nominate.click();
+        await versionSearch.fill('variant');
         const pair = { targetConditionID: 1, sourceConditionID: 902 };
-        const saves = () => fixture.state.requests.filter(request => request.path === '/api/save_personal_pie').length;
-        const saveCount = saves();
-        const weights = structuredClone(fixture.state.personalEntries);
-        assert.deepEqual(await voteAfter(page, () => rowNominate.click()), { ...pair, vote: 'support', nominate: true });
-        const forward = nominated(902);
-        await forward.waitFor();
-        assert.equal(await forward.locator('.bp-version-choice-name').textContent(), 'Advanced reasoning · Variant');
-        assert.equal(await forward.locator('.bp-estimation-rate').textContent(), '100%');
-        assert.equal(await forward.locator('button[data-vote="support"]').getAttribute('aria-pressed'), 'true');
-        assert.deepEqual(fixture.state.personalEstimationVotes, [{ ...pair, vote: 'support' }]);
-        assert.equal(saves(), saveCount);
-        assert.deepEqual(fixture.state.personalEntries, weights);
+        const savedWeights = structuredClone(fixture.state.personalEntries);
+        const saveCount = fixture.state.requests.filter(request => request.path === '/api/save_personal_pie').length;
+        const choice = picker.getByRole('button', { name: 'Nominate Advanced reasoning, Variant', exact: true });
+        assert.deepEqual(await voteAfter(page, () => choice.click()), { ...pair, vote: 'support', nominate: true });
+        await nominated(902).waitFor({ state: 'attached' });
+        assert.equal(await nominated(902).locator('.bp-estimation-rate').textContent(), '100%');
+        assert.equal(await picker.isVisible(), false);
+        assert.deepEqual(fixture.state.personalEntries, savedWeights);
+        assert.equal(fixture.state.requests.filter(request => request.path === '/api/save_personal_pie').length, saveCount);
 
+        await nominate.click();
+        await toggle.click();
+        assert.equal(await picker.isVisible(), false);
+        await toggle.click();
+        assert.equal(await nominate.getAttribute('aria-expanded'), 'false');
         await page.locator('#pie-mode-public').click();
         await page.locator('#pie-mode-public[aria-selected="true"][aria-busy="false"]').waitFor();
-        const publicToggle = page.locator('#public-fallback-toggle');
         await settings.getByRole('button', { name: 'Inspect estimation sources for Default evaluation', exact: true }).click();
-        assert.equal(await disclosureAngle(publicToggle), 90);
-        assert.equal(await forward.locator('.bp-estimation-rate').textContent(), '100%');
-        assert.equal(await settings.locator('button[data-vote]').count(), 0);
-        assert.equal(await nominate.count(), 0);
-        assert.equal(await targetMode.count(), 0);
-
-        await page.locator('#pie-mode-personal').click();
-        await page.locator('#pie-mode-personal[aria-selected="true"][aria-busy="false"]').waitFor();
-        await evaluationRow(page, 2).press('Enter');
-        await chooseScoring('Variant');
-        const reverse = nominated(1);
-        await reverse.waitFor();
-        assert.equal(await reverse.locator('.bp-version-choice-name').textContent(), 'General knowledge · Default evaluation');
-        assert.equal(await reverse.locator('button[data-vote="support"]').getAttribute('aria-pressed'), 'true');
-        assert.deepEqual(await voteAfter(page, () => reverse.locator('button[data-vote="support"]').click()), {
-            targetConditionID: 902, sourceConditionID: 1, vote: null, nominate: false
-        });
-        await reverse.waitFor({ state: 'hidden' });
-        assert.deepEqual(fixture.state.personalEstimationVotes, []);
-
-        await evaluationRow(page, 1).press('Enter');
-        assert.equal(await forward.count(), 0);
-        await nominate.click();
-        assert.deepEqual(await voteAfter(page, () => rowNominate.click()), { ...pair, vote: 'support', nominate: true });
-        assert.deepEqual(await voteAfter(page, () => forward.locator('button[data-vote="oppose"]').click()), {
-            ...pair, vote: 'oppose', nominate: false
-        });
-        await forward.waitFor({ state: 'hidden' });
-        assert.deepEqual(fixture.state.personalEstimationVotes, [{ ...pair, vote: 'oppose' }]);
-        await nominate.click();
-        await targetMode.waitFor({ state: 'detached' });
-        await evaluationRow(page, 902).press('Enter');
-        assert.equal(await reverse.count(), 0);
+        assert.equal(await nominated(902).locator('.bp-estimation-rate').textContent(), '100%');
+        assert.equal(await nominate.isVisible(), false);
+        assert.equal(await dock.locator('button[data-vote]').count(), 0);
     });
 }
 
@@ -371,6 +340,33 @@ test(`guest can edit and restore personal estimation votes ${built ? 'built' : '
     await page.reload();
     await evaluationRow(page, 1).press('Enter');
     assert.equal(await support.getAttribute('aria-pressed'), 'true');
+});
+
+test(`WebKit keeps the title and summary spacing through refresh ${built ? 'built' : 'source'}`, async t => {
+    const { page } = await setup(t, webkit, 390, 660, {
+        workspaceDelay: 200,
+        transformWorkspace(data) {
+            data.context.categoryName = 'Communication & EQ1';
+            data.context.description = 'Personal benchmark weights for Communication & EQ.';
+        }
+    });
+    const indicator = page.locator('.bp-workspace-refresh-slot #workspace-update-indicator');
+    const geometry = () => page.evaluate(() => {
+        const headline = document.getElementById('workspace-headline').getBoundingClientRect();
+        const summary = document.getElementById('workspace-topic-summary').getBoundingClientRect();
+        return { height: headline.height, gap: summary.top - headline.bottom };
+    });
+    await indicator.and(page.locator('[data-phase="idle"]')).waitFor();
+    const initial = await geometry();
+    assert.ok(initial.gap >= 0 && initial.gap < 8);
+    await page.locator('#workspace-refresh').click();
+    await indicator.and(page.locator('[data-phase="pending"]')).waitFor();
+    assert.deepEqual(await geometry(), initial);
+    await indicator.and(page.locator('[data-phase="complete"]')).waitFor();
+    assert.deepEqual(await geometry(), initial);
+    await indicator.and(page.locator('[data-phase="idle"]')).waitFor();
+    assert.deepEqual(await geometry(), initial);
+    assert.equal(await indicator.evaluate(node => getComputedStyle(node).position), 'absolute');
 });
 
 test(`removing and restoring a benchmark leaves sitewide pair votes intact ${built ? 'built' : 'source'}`, async t => {

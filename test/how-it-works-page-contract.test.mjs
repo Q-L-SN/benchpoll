@@ -128,7 +128,7 @@ test('the guide explains sitewide pair votes and dynamic cross-benchmark nominat
     const sectionText = section('fallback');
     for (const phrase of ['Scoring version', 'Estimation support', 'Either version opens the same sitewide vote',
         'last 72 hours', 'reach ten', 'Versions of the same benchmark are eligible by default',
-        'Your own vote takes priority', 'Evaluation items', 'Both versions list the pair while its sample has at least one supporter']) {
+        'Your own vote takes priority', 'Add version', 'Search for a version from another benchmark', 'Both versions list the pair while its sample has at least one supporter']) {
         assert.ok(sectionText.includes(phrase), phrase);
     }
 });
@@ -150,8 +150,8 @@ test('version estimation explains joint evidence, shrinkage, extrapolation and r
 
 test('publication and evidence copy includes settings, visibility and score contributions', () => {
     const account = section('account');
-    assert.match(account, /Choose <strong>Public<\/strong> or <strong>Private<\/strong> when creating a topic/);
-    assert.match(account, /<strong>Make public<\/strong> in its editor/);
+    assert.match(account, /Choose <strong>Public<\/strong> or <strong>Private<\/strong> at the top of the topic editor/);
+    assert.match(account, /select <strong>Public<\/strong> in its editor/);
     assert.match(account, /Public topics appear as soon as you publish/);
     assert.match(account, /up to three public topics at a time/);
     assert.match(account, /Make a public topic private before deleting it/);

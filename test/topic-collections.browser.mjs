@@ -35,6 +35,12 @@ async function choose(page, value, keyboard = false) {
 
 async function checkDisclosure(page, target) {
     const trigger = page.getByRole('combobox', { name: 'Topic collection' });
+    const homeIsland = page.locator('#topics-navigation .bp-topic-collection');
+    const framed = await homeIsland.count() > 0;
+    const islandStyle = () => homeIsland.evaluate(node => {
+        const style = getComputedStyle(node, '::before');
+        return [style.borderWidth, style.opacity, style.transitionProperty];
+    });
     const before = await trigger.textContent();
     const triggerStyle = () => trigger.evaluate(el => {
         const style = getComputedStyle(el);
@@ -44,8 +50,13 @@ async function checkDisclosure(page, target) {
     const unframed = ['0px', 'none', 'rgba(0, 0, 0, 0)', 'none', 'flex-start'];
     const resting = await triggerStyle();
     assert.deepEqual(resting.frame, unframed);
+    if (framed) assert.deepEqual(await islandStyle(), ['1px', '1', 'opacity']);
     await trigger.click();
     assert.deepEqual((await triggerStyle()).frame, unframed);
+    if (framed) {
+        await page.waitForFunction(() => getComputedStyle(document.querySelector('#topics-navigation .bp-topic-collection'), '::before').opacity === '0');
+        assert.deepEqual(await islandStyle(), ['1px', '0', 'opacity']);
+    }
     const backdrop = page.locator('.is-choosing-collection > .bp-collection-backdrop');
     assert.match(await backdrop.evaluate(el => getComputedStyle(el).backdropFilter || getComputedStyle(el).webkitBackdropFilter), /blur/);
     const point = await page.locator(target).first().boundingBox();
@@ -56,6 +67,7 @@ async function checkDisclosure(page, target) {
     assert.equal(await trigger.getAttribute('aria-expanded'), 'false');
     assert.equal(await trigger.textContent(), before);
     assert.equal(page.url(), url);
+    if (framed) await page.waitForFunction(() => getComputedStyle(document.querySelector('#topics-navigation .bp-topic-collection'), '::before').opacity === '1');
     await trigger.press('ArrowDown');
     assert.equal(await trigger.evaluate(el => el.matches(':focus-visible')), true);
     const focused = await triggerStyle();
@@ -74,6 +86,8 @@ async function checkLanding(page) {
     const trajectory = await page.locator('.bp-collection-option[data-view="created"]').evaluate(async option => {
         const word = option.firstElementChild;
         await Promise.all(word.getAnimations().map(animation => animation.finished));
+        const island = option.closest('.th-directory-nav');
+        const startWidth = island?.getBoundingClientRect().width;
         const start = word.getBoundingClientRect();
         option.click();
         const carried = document.querySelector('.bp-collection-flight');
@@ -84,11 +98,24 @@ async function checkLanding(page) {
         motion.currentTime = motion.effect.getTiming().duration;
         const to = word.getBoundingClientRect(), anchor = document.querySelector('.bp-collection-trigger span').getBoundingClientRect();
         motion.finish();
+        let islandWidths;
+        if (island) {
+            const resize = island.getAnimations().find(animation => animation.transitionProperty === 'width');
+            resize.pause();
+            resize.currentTime = resize.effect.getTiming().duration / 2;
+            const middle = island.getBoundingClientRect().width;
+            resize.finish();
+            islandWidths = [startWidth, middle, island.getBoundingClientRect().width];
+        }
         const center = box => box.top + box.height / 2;
         return { from: Math.abs(center(start) - center(from)), to: Math.abs(center(anchor) - center(to)),
-            x: Math.abs(anchor.left - to.left), distance: Math.abs(center(from) - center(to)) };
+            x: Math.abs(anchor.left - to.left), distance: Math.abs(center(from) - center(to)), islandWidths };
     });
     assert.ok(trajectory && trajectory.from <= 1 && trajectory.to <= 1 && trajectory.x <= 1 && trajectory.distance > 20, JSON.stringify(trajectory));
+    if (trajectory.islandWidths) {
+        const [start, middle, end] = trajectory.islandWidths;
+        assert.ok(middle > start + 1 && end > middle + 1, JSON.stringify(trajectory));
+    }
     await page.locator('.bp-collection-flight').waitFor({ state: 'detached' });
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await choose(page, 'popular');
@@ -110,9 +137,22 @@ async function checkSearch(page, surface, query, matchingName) {
     }));
     const unframed = ['0px', 'none', 'none', 'rgba(0, 0, 0, 0)'];
     assert.deepEqual(searchSurfaces, [unframed, unframed], surface + ' focused search remains borderless');
+    const island = page.locator('#topics-navigation');
+    const settleWidth = async () => {
+        if (isHome) await island.evaluate(async node => {
+            node.getBoundingClientRect();
+            await Promise.allSettled(node.getAnimations().map(animation => animation.finished));
+        });
+    };
+    await settleWidth();
     const after = await field.locator('..').boundingBox();
-    for (const axis of ['x', 'y', 'width', 'height']) assert.ok(Math.abs(before[axis] - after[axis]) <= 1, surface + ' ' + axis);
+    for (const axis of isHome ? ['x', 'y', 'height'] : ['x', 'y', 'width', 'height']) {
+        assert.ok(Math.abs(before[axis] - after[axis]) <= 1, surface + ' ' + axis);
+    }
+    if (isHome) assert.ok(Math.abs(before.width - after.width) > 1);
     await field.fill(query);
+    await settleWidth();
+    if (isHome) assert.ok((await island.boundingBox()).width > after.width + 1);
     const result = page.locator(isHome ? '#topics-grid .th-card:not([hidden]) .th-topic-name' : '#category-search-results .bp-topic-row-heading');
     await result.filter({ hasText: matchingName }).first().waitFor();
     await page.getByRole('button', { name: 'Clear search', exact: true }).first().click();

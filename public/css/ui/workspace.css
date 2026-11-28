@@ -53,7 +53,7 @@
     touch-action: manipulation;
 }
 
-.bp-context-actions > #workspace-refresh, .bp-pie-tools > .bp-square-button {
+.bp-context-actions #workspace-refresh, .bp-pie-tools > .bp-square-button {
     border: 0;
     background: transparent;
     box-shadow: none;

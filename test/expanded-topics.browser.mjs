@@ -55,6 +55,12 @@ for (const [engine, width] of [[chromium, 1440], [chromium, 320], [webkit, 390]]
         if (built) await page.route(app.url + '/1', async route => route.fulfill({ contentType: 'text/html', body: await readFile(new URL('../private/home-built.html', import.meta.url), 'utf8') }));
         await page.goto(app.url + '/1');
         await page.locator('#benchmark-card[aria-busy="false"]').waitFor();
+        const metricSize = metrics => metrics.evaluateAll(nodes => nodes.map(node => [
+            getComputedStyle(node.querySelector('span')).fontSize, getComputedStyle(node.querySelector('i')).fontSize
+        ]));
+        const [scoreSize] = await metricSize(page.locator('#benchmark-rows .bp-benchmark-row:not([data-context-id]) .bp-benchmark-score-count').first());
+        const topicSizes = await metricSize(page.locator('#benchmark-rows [data-condition-id="-101"] .bp-topic-metrics > :is(button, .bp-evidence-count)'));
+        assert.deepEqual(topicSizes, [scoreSize, scoreSize, scoreSize]);
         const topicTile = page.locator('#weight-pie [data-object-id="-101"]');
         const panel = page.locator('#topic-reference-weights');
         const view = page.locator('#weight-topic-view');

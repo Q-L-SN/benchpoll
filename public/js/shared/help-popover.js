@@ -394,10 +394,14 @@ function createHelpController() {
             handledTap = null;
             return;
         }
-        if (isHelp(trigger)) {
+        const help = isHelp(trigger);
+        if (help || trigger.matches('button[aria-disabled="true"]')) {
             event.preventDefault();
             if (active === trigger && pinned) close();
-            else { show(trigger, true); trigger.focus({ preventScroll: true }); }
+            else {
+                show(trigger, true);
+                if (help) trigger.focus({ preventScroll: true });
+            }
         } else if (!(pointerType === 'touch' && !trigger.closest(actionSelector))) close();
     }, true);
     // Escape closes only this layer, before any underlying dialog handles the key.

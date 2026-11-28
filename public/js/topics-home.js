@@ -950,17 +950,43 @@ function filterTopics() {
     pump();
 }
 
-const collectionPicker = mountTopicCollectionPicker($('#topics-navigation .bp-topic-collection'), {
-    onSelect: selectDirectoryView, onQuery: filterTopics,
+const directoryNavigation = $('#topics-navigation');
+const directoryTrigger = $('#home-topic-collection');
+const directorySearch = $('#topic-search');
+const directorySearchAction = $('#topic-search-close');
+const collectionPicker = mountTopicCollectionPicker(directoryNavigation.querySelector('.bp-topic-collection'), {
+    onSelect: selectDirectoryView,
+    onQuery() { resizeCollectionIsland(); filterTopics(); },
     onResults() {
         const first = grid.querySelector('.th-card:not([hidden]) .th-topic-link');
         first?.focus(); return Boolean(first);
     }
 });
 
+function resizeCollectionIsland() {
+    const searching = directoryTrigger.hidden;
+    const text = searching ? directorySearch : directoryTrigger.firstElementChild;
+    const label = searching ? directorySearch.value || directorySearch.placeholder : text.textContent;
+    const control = searching ? directorySearch.parentElement : directoryTrigger;
+    const action = searching ? directorySearchAction : directoryTrigger.lastElementChild;
+    const { fontWeight, fontSize, fontFamily } = getComputedStyle(text);
+    const { paddingInlineStart, paddingInlineEnd, columnGap } = getComputedStyle(control);
+    canvas.font = `${fontWeight} ${fontSize} ${fontFamily}`;
+    const actionsWidth = action.hidden ? 0 : action.offsetWidth + parseFloat(columnGap);
+    const width = Math.ceil(canvas.measureText(label).width + parseFloat(paddingInlineStart) + parseFloat(paddingInlineEnd) + actionsWidth + 2);
+    directoryNavigation.style.setProperty('--th-picker-width', `${width}px`);
+}
+
+const directorySize = new ResizeObserver(resizeCollectionIsland);
+directorySize.observe(directoryTrigger.lastElementChild);
+directorySize.observe(directorySearchAction);
+document.fonts?.ready.then(resizeCollectionIsland);
+resizeCollectionIsland();
+
 function selectDirectoryView(next, options) {
     directoryView = next;
     collectionPicker.setView(next, options);
+    resizeCollectionIsland();
     grid.setAttribute('aria-label', next === 'search' ? 'Search results' : topicCollections[next]);
     document.body.dataset.collection = next;
     siteNavigation.refreshLayout();
@@ -1219,7 +1245,8 @@ betaFeedbackLink.addEventListener('click', prepareBetaFeedback);
 const privateTopicEditor = createPrivateTopicEditor({
     async beforeOpen() { await profileReady; if (profileReadFailed) await loadProfile(); return true; },
     async onSaved(topic, { created = false } = {}) {
-        $('#topic-search').value = '';
+        directorySearch.value = '';
+        resizeCollectionIsland();
         await loadTopics();
         const card = cards.get(String(topic.ID))?.card;
         if (created && card?.hidden) selectDirectoryView('created');

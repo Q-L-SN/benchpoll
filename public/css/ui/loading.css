@@ -40,6 +40,15 @@ i.fa-circle-notch::before { content: none; }
 }
 #workspace-update-indicator,
 #workspace-update-indicator > i { color: var(--bp-accent, #be4b00); }
+.bp-workspace-refresh-slot { position: relative; display: grid; flex: none; }
+.bp-workspace-refresh-slot #workspace-update-indicator {
+    position: absolute;
+    inset: 0;
+    width: auto;
+    height: auto;
+    pointer-events: none;
+}
+.bp-workspace-refresh-slot:has(.bp-update-indicator:is([data-phase="pending"], [data-phase="complete"])) #workspace-refresh > i { opacity: 0; }
 .bp-update-indicator[data-phase="idle"],
 .bp-update-indicator[data-phase="fading"] { opacity: 0; }
 .bp-update-indicator[data-phase="pending"] { transition: none; }

@@ -33,7 +33,7 @@ test('row backgrounds use the primary action and never allocate weights', () => 
     const endActivation = home.indexOf('function fallbackRuleFor(', startActivation);
     assert.ok(startActivation >= 0 && endActivation > startActivation);
     const activation = home.slice(startActivation, endActivation);
-    assert.match(activation, /if \(!hasWeight\) return/);
+    assert.match(activation, /if \(!objectHasWeight\(object\)\) return/);
     assert.match(activation, /toggle && selected \? 'leaderboard' : 'focus'/);
     assert.doesNotMatch(activation, /onBenchmarkInspection|addObject/);
 });

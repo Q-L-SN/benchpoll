@@ -43,11 +43,11 @@ for (const [engine, width] of [[chromium, 1440], [chromium, 390], [webkit, 390]]
         await page.route('https://**/*', route => route.abort());
         await page.addInitScript(() => localStorage.setItem('benchpoll:config-sidebar-collapsed', 'false'));
         const editor = page.getByRole('dialog', { name: 'New topic', exact: true });
-        const publicChoice = editor.getByRole('radio', { name: 'Public' });
+        const publicChoice = editor.getByRole('button', { name: 'Public', exact: true });
         const publish = editor.getByRole('button', { name: 'Publish topic' });
         const fill = async name => {
-            assert.equal(await editor.getByRole('radio', { name: 'Private' }).isChecked(), true);
-            await publicChoice.check();
+            assert.equal(await editor.getByRole('button', { name: 'Private', exact: true }).getAttribute('aria-pressed'), 'true');
+            await publicChoice.click();
             await editor.getByLabel('Name', { exact: true }).fill(name);
             await editor.getByLabel('One-sentence summary').fill('Compare a collection of useful benchmarks.');
         };
@@ -74,6 +74,21 @@ for (const [engine, width] of [[chromium, 1440], [chromium, 390], [webkit, 390]]
         await publicEditor.getByRole('button', { name: 'Save changes' }).click();
         await page.getByRole('link', { name: 'Edited directory evaluation', exact: true }).click();
         await page.waitForURL(home.url + home.state.created[0].url);
+        await page.goto(home.url);
+        await page.getByRole('combobox', { name: 'Topic collection' }).click();
+        await page.getByRole('option', { name: 'Topics I created' }).click();
+        const editedLink = page.getByRole('link', { name: 'Edited directory evaluation', exact: true });
+        const editedCard = page.locator('.th-card').filter({ has: editedLink });
+        const edit = editedCard.getByRole('button', { name: 'Edit topic', exact: true });
+        await edit.click();
+        assert.equal(await publicEditor.getByRole('button', { name: 'Delete topic', exact: true }).isVisible(), false);
+        await publicEditor.getByRole('button', { name: 'Private', exact: true }).click();
+        await publicEditor.waitFor({ state: 'hidden' });
+        await edit.click();
+        const unpublished = page.getByRole('dialog', { name: 'Edit private topic', exact: true });
+        await unpublished.getByRole('button', { name: 'Delete topic', exact: true }).click();
+        await unpublished.locator('#topic-editor-confirm-delete').click();
+        await editedLink.waitFor({ state: 'hidden' });
 
         await page.goto(workspace.url + '/1');
         await page.locator('#benchmark-rows .bp-benchmark-row').first().waitFor({ state: 'attached' });

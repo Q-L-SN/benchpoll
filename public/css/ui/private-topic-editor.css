@@ -29,18 +29,19 @@
 .bp-topic-editor .bp-ui-action[data-ui-variant="primary"] { min-height: 44px; padding-inline: 16px; }
 .bp-topic-editor .bp-ui-action[data-ui-variant="primary"]:focus-visible { outline-offset: 2px; }
 .bp-topic-editor-hint { margin: 8px 0; color: #637080; font-size: 12px; line-height: 1.6; }
-.bp-topic-editor-visibility { display: flex; flex-wrap: wrap; align-items: center; gap: 0 24px; min-width: 0; margin: 0; padding: 0; border: 0; }
-.bp-topic-editor-visibility legend { padding: 0; font-size: 13px; font-weight: 600; }
-.bp-topic-editor-visibility label { display: inline-flex; align-items: center; min-height: 44px; cursor: pointer; }
-.bp-topic-editor-visibility input { margin: 0; accent-color: var(--bp-accent, #c45000); }
-.bp-topic-editor-visibility .bp-topic-editor-hint { flex-basis: 100%; margin: 0; }
+.bp-topic-editor-visibility { display: grid; justify-items: start; gap: 6px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.bp-topic-editor-visibility legend { margin-bottom: 8px; padding: 0; font-size: 13px; font-weight: 600; }
+.bp-topic-visibility-choices { width: min(100%, 250px); }
+.bp-topic-visibility-choices > button { gap: 7px; }
+.bp-topic-editor-visibility .bp-topic-editor-hint { margin: 0; }
+.bp-topic-editor-visibility .bp-topic-editor-hint:empty { display: none; }
 .bp-topic-scene-row { display: flex; align-items: center; gap: 10px; margin-block: 14px; }
 .bp-topic-scene-fields { display: grid; flex: 1 1 auto; min-width: 0; gap: 6px; }
 .bp-topic-scene-fields input { font-size: 13px; }
 .bp-topic-scene-actions { display: flex; flex: 0 0 auto; }
 .bp-topic-scene-actions button { width: 36px; }
 .bp-topic-editor footer { flex-wrap: wrap; }
-.bp-topic-editor-management, .bp-topic-editor-submit-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.bp-topic-editor-submit-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
 .bp-topic-editor-submit-actions { justify-content: flex-end; margin-inline-start: auto; }
 .bp-topic-editor footer a { color: inherit; font-size: 13px; text-decoration: none; padding-block: 12px; }
 #topic-editor-delete-confirmation { padding: 12px; border: 1px solid #dce1e6; border-radius: 6px; font-size: 13px; }

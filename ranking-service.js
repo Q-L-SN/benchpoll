@@ -1680,7 +1680,9 @@ async function buildRankingWorkspace(db, {
         authenticated: Boolean(userID),
         userID: normalizeUserID(userID),
         context,
-        versionComposition,
+        versionComposition: versionComposition.map(group => ({ ...group, versions: group.versions.map(version => ({
+            ...version, globalWeightBasisPoints: globalWeights.get(version.conditionID) ?? 0
+        })) })),
         communityEstimationVotes: ballots.community,
         externalEstimationPairs: ballots.externalPairs,
         personalPie: {

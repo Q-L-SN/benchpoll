@@ -103,10 +103,11 @@ test('topic creation is contained in the authored collection and other navigatio
     const mine = html.slice(html.indexOf('id="sidebar-topic-creation"'), html.indexOf('id="tree-content"'));
     assert.doesNotMatch(html, /data-create-topic="public"|id="mine-panel"/);
     assert.match(mine, /data-create-topic="private"/);
-    assert.match(mine, /for="topic-create-name">Topic name<\/label>/);
+    const editor = read('public/js/shared/private-topic-editor.js');
+    assert.match(editor, /<label>Name<input id="new-topic-name" required/);
     assert.doesNotMatch(html, /private-category-create-toggle/);
     assert.match(html, /id="configured-browse"[^>]*><span class="bp-ui-action-label">Browse topics<\/span>/);
-    assert.match(mine, /class="primary-button" type="submit"><i[^>]+><\/i><span>Create private topic<\/span>/);
+    assert.match(editor, /class="bp-ui-action" data-ui-variant="primary" type="submit">/);
     assert.doesNotMatch(read('public/css/ui/navigation.css'), /\.bp-configured-actions button\s*\{/);
     assert.doesNotMatch(read('public/css/ui/private-categories.css'), /\.bp-private-category-form button/);
 });
