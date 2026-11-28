@@ -228,7 +228,7 @@ test('model scoring exposes an uncertainty interval for missing results', () => 
     assert.equal(scored[0].resultCount, 1);
 });
 
-test('available-results mode normalizes signed evidence when a target has no peer scores', () => {
+test('available-results mode keeps signed evidence at its original weight when a target has no peer scores', () => {
     const model = { ID: 7, modelID: 3, name: 'Partial evidence', results: new Map([
         ['21', { normalizedScore: 120 }], ['22', { normalizedScore: -20 }]
     ]) };
@@ -238,13 +238,14 @@ test('available-results mode normalizes signed evidence when a target has no pee
         { conditionID: 23, weightBasisPoints: 3000 }
     ];
     const [scored] = scoreModels([model], entries, 10000, { scoreMode: 'available' });
-    assert.equal(scored.lower, 60);
-    assert.equal(scored.upper, 60);
-    assert.ok(Math.abs(scored.availableInference.unpenalizedScore - 60) < 1e-9);
+    assert.equal(scored.lower, 42);
+    assert.equal(scored.upper, 42);
+    assert.ok(Math.abs(scored.availableInference.unpenalizedScore - 42) < 1e-9);
     assert.equal(scored.availableInference.unresolvedContribution, 0);
     assert.equal(scored.availableInference.observedScore, 60);
     assert.equal(scored.availableInference.inferredFraction, 0);
-    assert.deepEqual(scored.inferredScores, []);
+    assert.deepEqual(scored.inferredScores.map(row => [row.conditionID, row.estimationMethod, row.originalWeight, row.contribution]),
+        [[23, 'missing-score-zero', 30, 0]]);
     assert.equal(scored.coverage, 70);
     assert.equal(scored.resultCount, 2);
     assert.deepEqual(scoreModels([model], entries, 10000)[0].lower, 42);
@@ -260,11 +261,11 @@ test('available-results mode retains original 20% and 40% weights when other res
     ]) };
     const [score] = scoreModels([model], entries, 10000, { scoreMode: 'available' });
     assert.equal(score.coverage, 60);
-    assert.equal(score.lower, 80);
-    assert.equal(score.upper, 80);
+    assert.equal(score.lower, 48);
+    assert.equal(score.upper, 48);
     assert.equal(score.availableInference.observedScore, 80);
-    assert.deepEqual(score.inferredScores, []);
-    score.calculationScores.forEach((row, index) => assert.ok(Math.abs(row.effectiveWeight - [100 / 3, 200 / 3][index]) < 1e-9));
+    assert.deepEqual(score.inferredScores.map(row => [row.normalizedScore, row.effectiveWeight]), [[0, 10], [0, 30]]);
+    assert.deepEqual(score.calculationScores.map(row => row.effectiveWeight), [20, 40]);
 });
 
 test('ordered fallback resolves the whole entrance and leaves exhausted chains missing in both modes', () => {

@@ -758,7 +758,9 @@ function renderBreadcrumb() {
     if (state.contextIsPrivate) {
         const label = document.createElement('small'); label.className = 'bp-private-context-label'; label.textContent = 'Private';
         breadcrumb.append(label);
-        const edit = createTopicEditButton('Edit private topic');
+    }
+    if ((state.contextIsPrivate || state.topicMetadata?.isMine === true) && state.topicMetadata?.isOfficial !== true) {
+        const edit = createTopicEditButton(state.contextIsPrivate ? 'Edit private topic' : 'Edit public topic');
         edit.disabled = !state.authenticated || state.accountWriteBlocked;
         edit.addEventListener('click', () => void privateTopicEditor.open(state.categoryID, edit)); breadcrumb.append(edit);
     }

@@ -185,15 +185,15 @@ test('matched totals are null without matching evidence and do not use fallback'
     assert.ok(matched.every(item => item.lower === null && item.upper === null && item.fallbackUsageCount === 0));
 });
 
-test('matched comparison leaves a version without matched peer scores unscored', () => {
+test('matched comparison counts a version without matched peer scores as zero', () => {
     const models = [model(1, 1, { harness: 'a' }, { 10: 40 }), model(2, 2, { harness: 'a' }, { 10: 80 })];
     const entries = [...weights, { conditionID: 11, weightBasisPoints: 10000 }];
     const options = comparisonOptions(models, { keys: ['model'], mode: 'matched' });
     const ranked = scoreComparison(models, entries, 20000, { scoreMode: 'available' }, options);
     assert.deepEqual(ranked.map(item => [item.lower, item.upper, item.coverage, item.comparable]), [
-        [40, 40, 50, true], [80, 80, 50, true]
+        [20, 20, 50, true], [40, 40, 50, true]
     ]);
-    assert.ok(ranked.every(row => row.inferredScores.length === 0 && row.availableInference.unresolvedFraction === .5));
+    assert.ok(ranked.every(row => row.inferredScores[0].estimationMethod === 'missing-score-zero' && row.availableInference.unresolvedFraction === .5));
     const missing = scoreComparison([model(3, 3, { harness: 'a' }, {})], weights, 10000,
         { scoreMode: 'available' }, comparisonOptions([model(3, 3, { harness: 'a' }, {})]));
     assert.deepEqual([missing[0].lower, missing[0].upper, missing[0].comparable], [null, null, false]);
@@ -204,7 +204,7 @@ test('very small but nonzero public evidence is still comparable after rounded c
     const entries = [{ conditionID: 10, weightBasisPoints: 0.00001 }, { conditionID: 11, weightBasisPoints: 9999.99999 }];
     const [ranked] = scoreComparison(models, entries, 10000, { scoreMode: 'available' }, comparisonOptions(models));
     assert.equal(ranked.coverage, 0);
-    assert.equal(ranked.lower, 100);
+    assert.equal(ranked.lower, 0);
     assert.ok(ranked.availableInference.coverageFraction > 0 && ranked.availableInference.totalScore > 0);
     assert.equal(ranked.availableInference.observedScore, 100);
     assert.equal(ranked.comparable, true);

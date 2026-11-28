@@ -74,7 +74,10 @@ for (const [engine, width] of [[chromium, 1440], [chromium, 320], [webkit, 390]]
         const settings = page.locator('#settings');
         const score = conditionID => settings.getByRole('button', { name: `Use Evaluation ${conditionID} for scoring`, exact: true });
         const vote = (action, source, target) => settings.getByRole('button', {
-            name: `${action} mutual estimation between Evaluation ${target} and Evaluation ${source}`, exact: true
+            name: action === 'Support'
+                ? `Allow Evaluation ${target} and Evaluation ${source} to help estimate each other’s missing scores`
+                : `Block Evaluation ${target} and Evaluation ${source} from estimating each other’s missing scores`,
+            exact: true
         });
         const row = conditionID => settings.locator(`.bp-version-choice-row[data-condition-id="${conditionID}"]`);
         const rates = settings.locator('.bp-estimation-rate:visible');
@@ -88,6 +91,7 @@ for (const [engine, width] of [[chromium, 1440], [chromium, 320], [webkit, 390]]
 
         await score(1).press('Enter');
         assert.equal(await score(1).getAttribute('aria-pressed'), 'true');
+        assert.match(await settings.getByRole('status').textContent(), /Votes only affect missing scores/);
         assert.equal(await rates.count(), 2);
         assert.equal(await row(1).locator('[data-vote], .bp-estimation-rate').count(), 0);
         assert.equal(await rate(2).textContent(), '66.67%');
@@ -103,6 +107,7 @@ for (const [engine, width] of [[chromium, 1440], [chromium, 320], [webkit, 390]]
         assert.equal(await vote('Oppose', 2, 1).textContent(), '2');
         await support.press('Space');
         assert.equal(await support.getAttribute('aria-pressed'), 'true');
+        assert.match(await support.getAttribute('data-tooltip'), /missing scores.*Select again to clear your vote/);
         assert.equal(await support.evaluate(button => button.matches(':focus')), true);
 
         await score(2).click();

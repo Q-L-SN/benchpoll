@@ -75,6 +75,7 @@
                                     <ul role="list">
                                         <li><a href="#treemap-estimates">Treemap estimates</a></li>
                                         <li><a href="#peer-median">Peer median</a></li>
+                                        <li><a href="#missing-score-zero">Missing scores counted as zero</a></li>
                                     </ul>
                                 </li>
                                 <li><a href="#measured-coverage">Measured coverage</a></li>
@@ -100,19 +101,19 @@
 
             <div class="hi-document">
                 <h2 id="topics" tabindex="-1">Topics and scenes</h2>
-                <p>Open a topic to see its public index. Topics group related tasks. Scenes narrow the comparison to a specific goal, such as Python within Coding. A topic can have one level of scenes, with the default scene first. Each scene has its own weights and discussion and shares the topic summary.</p>
+                <p>Open a topic to see its public index. Scenes focus on tasks such as Python coding. Topics have one level of scenes, with the default scene first. Each scene has its own weights and discussion.</p>
                 <p>Use the topic menu to find favorites, topics you configured or created, recent visits, or search by name. Search shows matching scenes inside their topic card. Favorite topics appear in your profile. Popular topics are ranked by favorites, with recent favorites carrying more weight.</p>
                 <p>Filters apply to every ranking card. Open a model to see its results and sources.</p>
 
                 <h2 id="weights" tabindex="-1">Benchmark weights</h2>
-                <p>Weights determine how much each evaluation item contributes to an index.</p>
+                <p>Weights set each item’s share of the index.</p>
 
                 <h3 id="personal" tabindex="-1">Personal Weights</h3>
                 <p>Add benchmarks or topic references from <strong>Evaluation items</strong>. A nonempty <strong>Index composition</strong> adds up to 100%. With two or more items, select a block and scroll over the chart, or drag vertically on a phone, to change its weight. The other shares rebalance.</p>
                 <p>You can try adjusting weights without signing in. Sign in to save your weights. The page marks unsaved changes.</p>
 
                 <h3 id="public" tabindex="-1">Public Weights</h3>
-                <p>Public Weights combine saved configurations for the current topic or scene. Each person contributes one configuration, updated as they save edits. Another public topic contributes only through an explicit reference. Private topics and their weights are visible only to their creator.</p>
+                <p>Public Weights combine one saved configuration per person for the current topic or scene. Another public topic contributes only through an explicit reference. Private topics and their weights are visible only to their creator.</p>
 
                 <h4 id="calculation-details" tabindex="-1">Which configurations count</h4>
                 <p>BenchPoll uses all nonempty configurations updated for the topic or scene in the past 72 hours. If fewer than 10 qualify, it uses the latest 10 or as many as exist. The same sample determines community scoring version shares.</p>
@@ -120,21 +121,24 @@
                 <h3 id="references" tabindex="-1">Topic references</h3>
                 <p>To combine topics, add another topic that has saved weights and choose a specific scene if it has scenes. The reference stays linked to that scene’s live weights. Public indices use the referenced scene’s public weights. Personal indices use your saved weights there when available and otherwise use public weights.</p>
                 <p>Choose a different topic or scene from the one you’re editing. Public topics can reference public topics and scenes. Private topics can reference those and your other private topics.</p>
-                <p>BenchPoll multiplies weights along each path and adds the shares for each benchmark version. Pair votes apply across scenes. If references form a loop, BenchPoll includes the benchmark shares reached along repeated paths. Empty or unavailable targets and loops with no path to benchmarks keep their missing weight.</p>
+                <p>BenchPoll multiplies weights along each path and adds the shares for each benchmark version. If references form a loop, BenchPoll includes shares reached along repeated paths. Empty or unavailable targets and loops with no path to benchmarks keep their missing weight.</p>
 
                 <h2 id="rankings" tabindex="-1">Scores and rankings</h2>
                 <p>BenchPoll converts measurements using each benchmark version’s scoring scale and direction. A direct score on a scoring version takes priority, including zero and negative scores.</p>
                 <p>BenchPoll uses the best qualifying score per test by default. Turn on effort or harness to rank settings separately. Missing settings stay in an unknown group. Matched comparisons calibrate each qualifying run separately.</p>
 
                 <h3 id="estimated-score" tabindex="-1">How scores are estimated</h3>
-                <p>A benchmark with weight <var>W</var> contributes <span class="hi-formula"><var>W</var> × Σ(<var>p<sub>a</sub></var> <var>s<sub>a</sub></var>)</span>, where version shares <var>p<sub>a</sub></var> sum to 100% and <var>s<sub>a</sub></var> are version scores. For missing scores, BenchPoll tries <a href="#calibration">eligible versions of the same benchmark</a>, then nominated external versions.</p>
+                <p>A benchmark with weight <var>W</var> contributes <span class="hi-formula"><var>W</var> × Σ(<var>p<sub>a</sub></var> <var>s<sub>a</sub></var>)</span>, where version shares <var>p<sub>a</sub></var> sum to 100% and <var>s<sub>a</sub></var> are version scores. For missing scores, BenchPoll tries <a href="#calibration">eligible versions of the same benchmark</a>, then eligible external estimation sources.</p>
 
                 <h4 id="treemap-estimates" tabindex="-1">Treemap estimates</h4>
                 <p>Next, BenchPoll searches all versions of other weighted benchmarks. It converts measured scores along the path with the highest product of link weights. Each link weighs its support rate times <span class="hi-formula"><var>n</var> / (<var>n</var> + 2)</span>, with <var>n</var> models measured on both versions under matching settings.</p>
-                <p>Cross-benchmark links require nomination. Public rankings also validate those links. Nominated versions outside the treemap can connect versions. BenchPoll divides each benchmark’s weight among usable sources and multiplies each share by its path weight. It normalizes those weights to average the converted scores.</p>
+                <p>Cross-benchmark links need a support vote in the sample. Public rankings validate them. Versions outside the treemap can connect benchmarks. BenchPoll divides each benchmark’s weight among usable sources, multiplies each share by its path weight, then normalizes to average the converted scores.</p>
 
                 <h4 id="peer-median" tabindex="-1">Peer median</h4>
-                <p>With no eligible path, BenchPoll takes the median of other models’ scores on the target version, using one measurement or earlier estimate per model. The index averages over scored weight if gaps remain. Models need measured or calibrated evidence to rank.</p>
+                <p>With no eligible path, BenchPoll takes the median of other models’ scores on the target version, using one measurement or earlier estimate per model.</p>
+
+                <h4 id="missing-score-zero" tabindex="-1">Missing scores counted as zero</h4>
+                <p>A score left missing by all three methods counts as zero at its original weight. With 80 on 10% and the rest counted as zero, the index is 8. Models need measured or calibrated evidence to rank.</p>
 
                 <h3 id="measured-coverage" tabindex="-1">Measured coverage</h3>
                 <p><strong>Coverage is the share of weight with measured results</strong> on selected versions. A faded tile in the score preview marks a missing measurement. Estimate icons link to the calculation method.</p>
@@ -143,14 +147,14 @@
                 <p>Each community scoring choice carries that person’s benchmark weight. BenchPoll splits the benchmark’s weight among versions in proportion to those choices. If nobody chose a version, the primary version gets the full weight.</p>
 
                 <h3 id="fallback" tabindex="-1">Estimation votes</h3>
-                <p>In <strong>Personal Weights</strong>, choose a <strong>Scoring version</strong> in <strong>Advanced settings</strong>. Under <strong>Estimation support</strong>, vote on whether two versions may estimate each other. Either version opens the same sitewide vote. Tap the same thumb to clear it.</p>
+                <p>In <strong>Personal Weights</strong>, choose a <strong>Scoring version</strong> in <strong>Advanced settings</strong>. Under <strong>Estimate missing scores</strong>, thumbs up allows each version to help estimate a missing score on the other. Thumbs down blocks that use. The same sitewide vote applies in both directions. Tap the same thumb to clear it.</p>
                 <p>Each pair counts votes from the last 72 hours, including older votes to reach ten when available. Versions of the same benchmark are eligible by default, including with no votes or a tie. A majority against excludes it. Your own vote takes priority for your personal ranking.</p>
-                <p>Choose <strong>Add version</strong> at the bottom of Advanced settings. Search for a version from another benchmark and select it to cast a support vote. Both versions list the pair while its sample has at least one supporter.</p>
+                <p>Choose <strong>Add source</strong> in Advanced settings. Select a version from another benchmark to vote for using it only when a model has no measured score on the scoring version. Both versions list the pair while it has sampled support.</p>
 
                 <h3 id="calibration" tabindex="-1">How versions predict a missing score</h3>
                 <p>BenchPoll fits eligible measured versions of the same benchmark together. Each link needs paired scores from at least one other model under the same run settings. A model measured on A and B can contribute without C. Sparse samples favor a shared starting correlation. Extreme scores have less influence outside the observed source range.</p>
                 <p>When direct pairing is unavailable, C can predict A through B. Each link follows the pair vote. Every version must be eligible for A. BenchPoll chooses the shortest path and breaks ties by the number of paired models on the weakest link. Score details show each link.</p>
-                <p>When same-benchmark versions cannot fill the gap, BenchPoll tries nominated external versions. Public predictions must beat the training median on held-out models in both mean absolute and root mean squared error for that direction. Personal rankings can use one paired model.</p>
+                <p>When same-benchmark versions cannot fill the gap, BenchPoll tries eligible external estimation sources. Public predictions must beat the training median on held-out models in both mean absolute and root mean squared error for that direction. Personal rankings can use one paired model.</p>
                 <p>Best performance uses the highest qualifying run prediction. Matched comparisons average predictions within each matched control setting and give settings equal weight.</p>
 
                 <h2 id="publishing" tabindex="-1">Publishing and contributions</h2>

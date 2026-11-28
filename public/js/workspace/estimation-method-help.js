@@ -1,4 +1,4 @@
-import { JOINT_VERSION_METHOD, PEER_MEDIAN_METHOD, TREEMAP_ESTIMATION_METHOD } from '../shared/fallback-inference.js';
+import { JOINT_VERSION_METHOD, MISSING_SCORE_ZERO_METHOD, PEER_MEDIAN_METHOD, TREEMAP_ESTIMATION_METHOD } from '../shared/fallback-inference.js';
 
 const methods = new Map([
     [JOINT_VERSION_METHOD, { label: 'Version estimate', icon: 'fa-code-branch', glyph: '\uf126', href: '/how-it-works#calibration',
@@ -6,7 +6,9 @@ const methods = new Map([
     [TREEMAP_ESTIMATION_METHOD, { label: 'Treemap estimate', icon: 'fa-diagram-project', glyph: '\uf542', href: '/how-it-works#treemap-estimates',
         description: 'A treemap estimate follows calibrated version chains from other weighted benchmarks.' }],
     [PEER_MEDIAN_METHOD, { label: 'Peer median', icon: 'fa-users', glyph: '\uf0c0', href: '/how-it-works#peer-median',
-        description: 'A peer median uses other models’ measured or previously estimated scores on the target version.' }]
+        description: 'A peer median uses other models’ measured or previously estimated scores on the target version.' }],
+    [MISSING_SCORE_ZERO_METHOD, { label: 'Missing score counted as zero', icon: 'fa-circle-minus', glyph: '\uf056', href: '/how-it-works#missing-score-zero',
+        description: 'A score left missing by all three estimation methods counts as zero at its original weight.' }]
 ]);
 const explanation = [...methods.values()].map(method => method.description).join('\n')
     + '\n\nClick to read more in How it works.';

@@ -45,7 +45,8 @@ test('the live score trace fills missing weight when there is evidence and leave
     const weights = [{ conditionID: 1, weightBasisPoints: 3000 }, { conditionID: 2, weightBasisPoints: 7000 }];
     const estimated = scoreModels(models, weights, 10000, { scoreMode: 'available' });
     assert.equal(estimated[0].availableInference.method, 'calibrated-fallback');
-    close(estimated[0].availableInference.totalScore, 80);
+    close(estimated[0].availableInference.totalScore, 24);
+    assert.equal(estimated[0].inferredScores[0].estimationMethod, 'missing-score-zero');
     assert.equal(estimated[1].lower, null);
     assert.equal(estimated[1].availableInference.unresolvedFraction, 1);
     assert.deepEqual(scoreModels(models, weights, 10000, { scoreMode: 'range', availableInferenceVersion: 5 }),

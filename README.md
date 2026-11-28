@@ -217,9 +217,9 @@ The participant count is the sample size. Older configurations in the sample can
 topics available. A topic with scenes opens its default scene.
 Advanced settings lists each benchmark's versions. Each scoring choice carries that person's benchmark weight in the current scene. Personal rankings can follow community shares. With no explicit choices, the primary version is used.
 
-Choose a scoring version to inspect its estimation pairs. Each signed-in account has one sitewide vote per unordered pair. Voting from either version or any topic edits the same ballot. Per pair, count every vote updated in the last 72 hours, or the latest 10 votes if fewer are recent. A majority against excludes the pair. Same-benchmark versions are eligible with no votes or a tie. Your own vote takes priority in your personal rankings.
+Choose a scoring version to inspect its estimation sources. Thumbs up allows the two versions to help estimate each other’s missing scores. Thumbs down blocks that use. BenchPoll uses a model’s measured score on the scoring version whenever one exists. Each signed-in account has one sitewide vote per unordered pair. Voting from either version or any topic edits the same ballot. Per pair, count every vote updated in the last 72 hours, or the latest 10 votes if fewer are recent. A majority against excludes the pair. Same-benchmark versions are eligible with no votes or a tie. Your own vote takes priority in your personal rankings.
 
-With a scoring version selected, click **Add version** at the bottom of Advanced settings. Search by benchmark or version name and select the version to cast a support vote. The picker starts in Evaluation items order and shows only versions of other benchmarks. Both versions list the external pair while it has support in the current sample. Withdrawing the last support removes it from both lists. External measurements are used after same-benchmark evidence. Public estimates test each external direction on held-out models with matching settings. Both its MAE and RMSE must beat predicting the median training target. Personal rankings can try a nominated source with one paired model. The scoring version's weight and measured coverage keep their original meanings.
+With a scoring version selected, click **Add source** at the bottom of Advanced settings. Search by benchmark or version name and select a version to vote for using it to estimate missing scores. The picker starts in Evaluation items order and shows only versions of other benchmarks. Both versions list the external source while the pair has support in the current sample. Withdrawing the last support removes it from both lists. BenchPoll tries eligible external sources after same-benchmark evidence. Public estimates test each external direction on held-out models with matching settings. Both its MAE and RMSE must beat predicting the median training target. Personal rankings can try an external source with one paired model. Estimates use the scoring version's weight. Only measured scores add coverage.
 Topic references share a topic icon and parent/scene separator across treemaps, selectors,
 and benchmark search. A parent-only search keeps its scenes collapsed. The weight-chart heading
 shows its selected block; scene tabs omit the Default badge. Successful refreshes briefly show
@@ -248,12 +248,13 @@ Shorter paths take priority, then the number of paired models on the weakest lin
 original weight when every version is scored. A treemap estimate searches versions of all weighted
 benchmarks. Each source follows the eligible path with the highest product of link weights. A link
 weighs its support rate times `n / (n + 2)`, where `n` counts paired models under matching settings.
-Cross-benchmark links follow nominations and the public validation rule. Nominated versions can
+A link between benchmarks needs a support vote in the current sample. Public rankings also validate those links. Supported versions can
 connect weighted benchmarks through a bridge outside the treemap. Each benchmark splits its
 weight across usable source versions. BenchPoll multiplies these shares by path weights, then
 normalizes them to average the converted scores. If no path is available, the peer median uses one
-score per other model on the same target version, including version and treemap estimates. With no
-peer score, the index normalizes the scored weight. Models need direct or calibrated evidence to rank.
+score per other model on the same target version, including version and treemap estimates. If a score
+is still missing, it counts as zero at its original weight. The score details and treemap mark it
+with a separate icon. Models need direct or calibrated evidence to rank.
 Only measurements add coverage. See
 [How BenchPoll works](https://benchpoll.com/how-it-works#rankings).
 
@@ -547,9 +548,9 @@ https://benchpoll.com:1337
 有场景的主题默认打开其默认场景。高级设置列出基准的各个版本。
 计分版本的占比按当前场景的个人配置计算，个人排行可跟随社区比例。无人选择时使用主版本。
 
-选定计分版本后，每个账号对每对版本在全站拥有一票。从任一版本、主题或场景进入，都在修改同一票。每对版本纳入过去 72 小时的全部有效票；若不足 10 票，取最近的 10 票或现有全部票。同基准版本在无人投票或平票时可参与，反对占多数时排除。个人排行优先采用本人的选择。
+选定计分版本后，可以查看估分来源。点赞允许两个版本用来估计彼此的缺分，点踩则屏蔽这对版本之间的估分。模型在计分版本上有实测分时，直接采用实测分。每个账号对每对版本在全站拥有一票。从任一版本、主题或场景进入，都在修改同一票。每对版本纳入过去 72 小时的全部有效票；若不足 10 票，取最近的 10 票或现有全部票。同基准版本在无人投票或平票时可参与，反对占多数时排除。个人排行优先采用本人的选择。
 
-选定计分版本后，点击高级配置底部的 **Add version**。按基准名或版本名搜索，选择版本即可投一张赞成票。选取器默认沿用评估项列表的排序，只列出其他基准的版本。近期样本中有赞成票时，两个版本都显示这项提名。最后一张赞成票撤回或退出样本后，两端都移除提名。同基准证据优先。公共排行采用外部来源前，按预测方向和运行设置留出模型实测做验证，平均绝对误差和均方根误差均须优于训练集目标分数中位数。个人排行有一个配对模型就可尝试。估分使用计分版本的权重，只有实测计入覆盖率。
+选定计分版本后，点击高级配置底部的 **Add source**。按基准名或版本名搜索。选择一个版本，即赞成在缺分时用它参与估分。选取器默认沿用评估项列表的排序，只列出其他基准的版本。近期样本中有赞成票时，两个版本都显示这个外部估分来源。最后一张赞成票撤回或退出样本后，两端都移除该来源。同基准证据优先。公共排行采用外部来源前，按预测方向和运行设置留出模型实测做验证，平均绝对误差和均方根误差均须优于训练集目标分数中位数。个人排行有一个配对模型就可尝试。估分使用计分版本的权重，只有实测计入覆盖率。
 树图、选择器和基准搜索中的主题引用统一使用主题图标及一级主题/场景分隔图标。
 只匹配一级主题时，其场景默认折叠。权重图标题显示当前选中分区；场景标签不再显示 Default。
 刷新成功后短暂显示“已更新”，随后隐藏，不再常驻时间戳。
@@ -567,8 +568,8 @@ AI Index 提供 **Version-based estimation**。缺少版本 A 的分数时，算
 直接配对要求至少一个其他模型在相同运行设置下同时测过来源版本和 A。算法从配对记录中估计版本间的协方差，样本少时对相关性做收缩，
 超出已观测范围时平滑减弱外推。拟合使用七轮期望最大化更新，先验相当于两个观测，相关系数为 0.70，尺度下限为 0.5 分。
 缺少直接配对时，模型的实测分可以经过同一基准的中间版本逐段换算到 A。每一段都需要相同运行设置下其他模型的配对实测，并遵守全站版本对投票。路径上的版本也都须获准为 A 估分。优先采用最短路径，路径等长时选择最薄弱一段配对模型更多的路径。
-实测分（含零分）优先。版本估分仍缺失时，搜索全树图中各加权基准的所有版本，把有实测分的版本逐步换算到目标版本。每一步的权重是支持率乘以 `n / (n + 2)`，其中 `n` 是相同运行设置下的配对模型数。跨基准连接须有提名，公众排名还须通过外部来源验证。获提名的树图外版本也可作为中间节点。每个来源选链路权重乘积最大的路径。各基准将权重分给可用来源版本，再乘路径权重并归一化，取换算分的加权平均。这类分数标记为树图估分。
-没有可用路径时，取其他模型在同一目标版本上的分数中位数，每个模型只计一次，样本包括实测分和前两层估分。没有同版样本时按有分数的权重重新归一化。模型须有实测分或经校准的估分才参与排名。覆盖率只计算实测结果。
+实测分（含零分）优先。版本估分仍缺失时，搜索全树图中各加权基准的所有版本，把有实测分的版本逐步换算到目标版本。每一步的权重是支持率乘以 `n / (n + 2)`，其中 `n` 是相同运行设置下的配对模型数。跨基准连接须在当前样本中有赞成票，公众排名还须通过外部来源验证。得到支持的树图外版本也可作为中间节点。每个来源选链路权重乘积最大的路径。各基准将权重分给可用来源版本，再乘路径权重并归一化，取换算分的加权平均。这类分数标记为树图估分。
+没有可用路径时，取其他模型在同一目标版本上的分数中位数，每个模型只计一次，样本包括实测分和前两层估分。三层都估不出来的项按原权重计零，明细和树图用单独的图标标出。模型须有实测分或经校准的估分才参与排名。覆盖率只计算实测结果。
 详见 [How BenchPoll works](https://benchpoll.com/how-it-works#rankings)。
 
 全站共用 `data-tooltip` 提示（悬浮、键盘聚焦或触屏长按）；纯说明按钮使用

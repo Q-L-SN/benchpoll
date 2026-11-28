@@ -129,13 +129,15 @@ function measureModelLabel(text) {
 function modelColumns(preview, width, count = preview.models.length, total = Math.max(count, preview.pagination?.total ?? count)) {
     const compact = compactModelLabels.matches, metrics = modelLabelMetrics();
     const parameters = preview.comparison?.keys?.some(key => key !== 'model');
-    let slot = 0;
-    if (parameters) for (const model of preview.models) {
+    let slot = 0, identityHeight = parameters ? metrics.identityHeight.compared : metrics.identityHeight.normal;
+    const projection = Math.sin(MODEL_LABEL_ANGLE * Math.PI / 180);
+    for (const model of preview.models) {
         const label = modelLabelLayout(comparisonDisplayParts(model, preview.comparison), measureModelLabel, metrics);
-        slot = Math.max(slot, label.height / Math.sin(MODEL_LABEL_ANGLE * Math.PI / 180) + 4);
+        slot = Math.max(slot, label.height / projection + 4);
+        identityHeight = Math.max(identityHeight, Math.ceil(label.projectedHeight + metrics.offset + 1));
     }
     const inset = parameters ? (compact ? 22 : 28) : (compact ? 18 : 22);
-    return columnLayout(width, count, total, Math.ceil(slot), inset, compact);
+    return { ...columnLayout(width, count, total, Math.ceil(slot), inset, compact), identityHeight };
 }
 
 const visibility = 'IntersectionObserver' in window ? new globalThis.IntersectionObserver(entries => {
@@ -662,10 +664,15 @@ function renderModel(model, preview, geometry, plotHeight, scoreScale, topicHref
     const barCenter = barLeft + geometry.barWidth / 2;
     name.style.cssText = `width:${labelLayout.width}px;height:${labelLayout.height}px;left:${barCenter - labelLayout.anchorX}px;top:${labelLayout.top}px;transform:rotate(-${MODEL_LABEL_ANGLE}deg)`;
     [...name.children].forEach((part, index) => {
-        part.dataset.lines = String(labelLayout.rows[index].lines);
-        part.style.setProperty('--th-label-lines', String(labelLayout.rows[index].lines));
-        part.style.height = `${labelLayout.rows[index].lines * metrics.lineHeight}px`;
+        const row = labelLayout.rows[index];
+        part.dataset.lines = String(row.lines);
+        part.style.height = `${row.lines * metrics.lineHeight}px`;
         const text = part.querySelector('span');
+        if (row.textLines) {
+            text.replaceChildren(...row.textLines.map(line => element('span', 'th-model-name-line', line)));
+            return;
+        }
+        part.style.setProperty('--th-label-lines', String(row.lines));
         text.replaceChildren(...text.textContent.split(/(\s+)/).filter(Boolean).map(word =>
             /^\s+$/.test(word) ? document.createTextNode(word) : element('span', 'th-label-word', word)));
     });
@@ -686,7 +693,7 @@ function appendModelPage(state, previous) {
     if (['weights', 'comparison', 'scoreScale'].some(key => preview[key] !== previous[key])
         || previous.models.some((model, index) => preview.models[index] !== model)) return false;
     const geometry = modelColumns(preview, state.visual.clientWidth);
-    if (['slot', 'visible', 'width', 'barWidth'].some(key => geometry[key] !== state.geometry[key])
+    if (['slot', 'visible', 'width', 'barWidth', 'identityHeight'].some(key => geometry[key] !== state.geometry[key])
         || state.renderHeight !== state.visual.clientHeight) return false;
     const track = state.scroll.querySelector('.th-model-track');
     if (track.children.length !== previous.models.length) return false;
@@ -733,7 +740,7 @@ function renderChart(state) {
     const frameWidth = view === 'weights' || !models.length ? state.visual.clientWidth : geometry.frameWidth;
     const frame = element('div', 'th-chart-frame'); frame.style.width = `${frameWidth}px`;
     const metrics = modelLabelMetrics();
-    state.identityHeight = preview.comparison?.keys?.some(key => key !== 'model') ? metrics.identityHeight.compared : metrics.identityHeight.normal;
+    state.identityHeight = geometry.identityHeight;
     frame.style.setProperty('--th-identity-height', `${state.identityHeight}px`);
     for (const [key, value] of Object.entries({ 'font-size': metrics.fontSize, 'line-height': metrics.lineHeight,
         'label-gap': metrics.gap, 'mark-size': metrics.markSize, 'mark-gap': metrics.markGap })) {

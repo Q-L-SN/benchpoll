@@ -8,12 +8,12 @@ export function createExternalVersionPicker({ trigger, scrollAnchor, onChoose })
     const panel = document.createElement('section');
     panel.id = 'external-version-picker';
     panel.className = 'bp-external-version-picker';
-    panel.setAttribute('aria-label', 'Choose an external version');
+    panel.setAttribute('aria-label', 'Add an external estimation source');
     panel.hidden = true;
     const content = document.createElement('div');
     content.className = 'bp-external-version-picker-content';
     const hint = document.createElement('p');
-    hint.textContent = 'Choose a version to support it. Select Add version again to close.';
+    hint.textContent = 'Sources only help estimate missing scores on the scoring version. Pick one to vote in favor. Select Add source again to close.';
     const search = document.createElement('input');
     search.type = 'search';
     search.placeholder = 'Search benchmarks or versions…';
@@ -22,7 +22,7 @@ export function createExternalVersionPicker({ trigger, scrollAnchor, onChoose })
     results.className = 'bp-external-version-results';
     const list = document.createElement('ul');
     list.setAttribute('role', 'list');
-    list.setAttribute('aria-label', 'Versions available to nominate');
+    list.setAttribute('aria-label', 'Available external estimation sources');
     const empty = document.createElement('p');
     empty.textContent = 'No matching versions.';
     empty.setAttribute('role', 'status');
@@ -53,7 +53,7 @@ export function createExternalVersionPicker({ trigger, scrollAnchor, onChoose })
             item.dataset.conditionId = String(version.conditionID);
             const action = configureAction(document.createElement('button'));
             action.type = 'button';
-            action.setAttribute('aria-label', `Nominate ${version.name}, ${version.versionLabel}`);
+            action.setAttribute('aria-label', `Add ${version.name}, ${version.versionLabel}, as an estimation source`);
             action.disabled = current.disabled;
             action.classList.add('bp-external-version-option');
             const identity = document.createElement('span');

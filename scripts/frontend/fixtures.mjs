@@ -123,6 +123,8 @@ export function workspace(state, body, { paginate = true } = {}) {
     }
     const category = [...(state.topics ?? [categories[0], ...categories[0].children]), ...(state.newTopics ?? [])]
         .find(item => item.ID === Number(body.categoryID)) ?? categories[0];
+    const isPrivate = state.isPrivate === true || category.isPrivate === true;
+    const isMine = state.authenticated && (isPrivate || category.isMine === true);
     const options = state.comparisonModels ? comparisonOptions(state.comparisonModels, body.comparison, state.comparisonFields ?? []) : null;
     const publicWeights = state.publicWeights ?? benchmarks.filter(item => item.publicWeight).map(item => ({ conditionID: item.conditionID, weightBasisPoints: item.publicWeight * 100 }));
     const publicEmpty = state.empty || publicWeights.length === 0;
@@ -146,8 +148,9 @@ export function workspace(state, body, { paginate = true } = {}) {
         estimationAlgorithm,
         authenticated: state.authenticated,
         userID: state.authenticated ? state.userID : null,
-        context: { ...(state.isPrivate ? { isPrivate: true } : {}), ID: 100 + category.ID, categoryID: category.ID, publicID: category.publicID,
-            categoryPath: category.path, categoryName: category.name, url: '/' + category.publicID, isOfficial: true,
+        context: { ...(isPrivate ? { isPrivate: true } : {}), ID: 100 + category.ID, categoryID: category.ID, publicID: category.publicID,
+            categoryPath: category.path, categoryName: category.name, url: '/' + category.publicID, isMine,
+            isOfficial: !isPrivate && (category.isOfficial ?? !isMine),
             favoriteCount: 12, isFavorited: false,
             description: category.description ?? `Compare models on ${category.name.toLowerCase()} tasks.`,
             creator: { name: 'BenchPoll', avatarURL: '/assets/benchpoll-mark.svg' },

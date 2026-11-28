@@ -195,7 +195,8 @@ body.th-home .bp-profile-editor input:focus { border-color: var(--bp-accent); ba
 .th-vendor-mark img { display: block; width: calc(var(--th-model-mark-size, 22px) - 2px); height: calc(var(--th-model-mark-size, 22px) - 2px); object-fit: contain; }
 .th-model-name { position: absolute; display: flex; flex-direction: column; gap: var(--th-model-label-gap, 1px); min-width: 0; color: #4b5562; font-size: var(--th-model-font-size, 10px); line-height: var(--th-model-line-height, 12px); text-align: right; transform-origin: top left; }
 .th-model-name > span { flex: 0 0 auto; overflow: hidden; }
-.th-model-name .bp-model-display-name { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: var(--th-label-lines, 1); overflow-wrap: normal; word-break: normal; hyphens: none; text-overflow: ellipsis; }
+.th-model-name .bp-model-display-name { display: block; overflow: visible; }
+.th-model-name-line { display: block; white-space: pre; }
 .th-model-name > [data-lines="1"] { white-space: nowrap; }
 .th-model-name .th-label-word { white-space: nowrap; display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; vertical-align: top; }
 .th-model-name .bp-model-display-parameter { display: flex; min-width: 0; align-items: start; justify-content: flex-end; gap: 3px; font-size: inherit; line-height: inherit; }

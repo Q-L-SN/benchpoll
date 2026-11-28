@@ -174,12 +174,33 @@ export function weightLayout(weights, width, height, view = 'default') {
         width: node.x1 - node.x0, height: node.y1 - node.y0 }));
 }
 
+const modelNameGraphemes = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+
+function wrapModelName(text, width, measure) {
+    if (measure(text) <= width) return [text];
+    const lines = [];
+    let line = '';
+    const append = part => {
+        if (line && measure(line + part) > width) { lines.push(line); line = ''; }
+        line += part;
+    };
+    for (const part of text.split(/(?<=[\s/-])/u)) {
+        if (measure(part) <= width) append(part);
+        else for (const { segment } of modelNameGraphemes.segment(part)) append(segment);
+    }
+    if (line) lines.push(line);
+    return lines;
+}
+
 export function modelLabelLayout(parts, measure = text => text.length * 6, metrics = MODEL_LABEL_METRICS.desktop) {
     const parameters = parts.some(part => part.kind === 'parameter');
     const baseWidth = Math.ceil(measure(parts.find(part => part.kind !== 'parameter')?.text ?? ''));
     const width = parameters ? metrics.maxWidth : baseWidth > metrics.maxWidth ? metrics.longWidth : Math.max(16, baseWidth);
-    const rows = parts.map(part => ({ lines: measure(part.text) > width - (part.kind === 'parameter' ? 15 : 0)
-        && /\s/.test(part.text.trim()) ? 2 : 1 }));
+    const rows = parts.map(part => {
+        if (part.kind === 'parameter') return { lines: measure(part.text) > width - 15 && /\s/.test(part.text.trim()) ? 2 : 1 };
+        const textLines = wrapModelName(part.text, width, measure);
+        return { lines: textLines.length, textLines };
+    });
     const height = rows.reduce((sum, row) => sum + row.lines * metrics.lineHeight, 0) + Math.max(0, rows.length - 1) * metrics.gap;
     return { width, height, rows, projectedWidth: width * labelCos + height * labelSin,
         projectedHeight: width * labelSin + height * labelCos, top: metrics.offset + width * labelSin,

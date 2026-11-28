@@ -6,24 +6,26 @@ export const FALLBACK_INFERENCE_METHOD = 'calibrated-fallback';
 export const JOINT_VERSION_METHOD = 'joint-versions';
 export const TREEMAP_ESTIMATION_METHOD = 'treemap-chain';
 export const PEER_MEDIAN_METHOD = 'peer-median';
+export const MISSING_SCORE_ZERO_METHOD = 'missing-score-zero';
 export const SUPPORTED_WEIGHT_POLICY = 'supported';
 
-export function fallbackInference(observedScore, coverageFraction, estimates, algorithm = DEFAULT_ESTIMATION_ALGORITHM, normalizeGaps = false) {
+export function fallbackInference(observedScore, coverageFraction, estimates, algorithm = DEFAULT_ESTIMATION_ALGORITHM) {
     const contributions = originalWeightContributions(observedScore, coverageFraction, estimates);
-    const { supportedFraction } = contributions;
-    if (normalizeGaps && supportedFraction > 0 && supportedFraction < 1) {
-        contributions.weightPolicy = SUPPORTED_WEIGHT_POLICY;
-        contributions.observedContribution /= supportedFraction;
-        contributions.inferredContribution /= supportedFraction;
-        contributions.unpenalizedScore = contributions.observedContribution + contributions.inferredContribution;
-    }
     return { method: FALLBACK_INFERENCE_METHOD, algorithm: normalizeEstimationAlgorithm(algorithm),
         ...contributions, totalScore: contributions.unpenalizedScore };
 }
 
 export function storedFallbackInference(observedScore, coverageFraction, estimates, algorithm = DEFAULT_ESTIMATION_ALGORITHM, weightPolicy) {
     if (weightPolicy === ORIGINAL_WEIGHT_POLICY) return fallbackInference(observedScore, coverageFraction, estimates, algorithm);
-    if (weightPolicy === SUPPORTED_WEIGHT_POLICY) return fallbackInference(observedScore, coverageFraction, estimates, algorithm, true);
+    if (weightPolicy === SUPPORTED_WEIGHT_POLICY) {
+        const trace = fallbackInference(observedScore, coverageFraction, estimates, algorithm);
+        const { supportedFraction } = trace;
+        if (supportedFraction <= 0 || supportedFraction >= 1) return trace;
+        const observedContribution = trace.observedContribution / supportedFraction;
+        const inferredContribution = trace.inferredContribution / supportedFraction;
+        const totalScore = observedContribution + inferredContribution;
+        return { ...trace, weightPolicy, observedContribution, inferredContribution, unpenalizedScore: totalScore, totalScore };
+    }
     if (weightPolicy !== undefined) throw new TypeError('Invalid fallback weight policy');
     if (algorithm !== DEFAULT_ESTIMATION_ALGORITHM && !isMissingInferenceMethod(`pairwise-${algorithm}`)) {
         throw new TypeError('Invalid archived estimation algorithm');

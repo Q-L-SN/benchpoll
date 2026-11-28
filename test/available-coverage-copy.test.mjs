@@ -1,4 +1,4 @@
-import { FALLBACK_INFERENCE_METHOD, TREEMAP_ESTIMATION_METHOD, PEER_MEDIAN_METHOD, SUPPORTED_WEIGHT_POLICY } from '../public/js/shared/fallback-inference.js';
+import { FALLBACK_INFERENCE_METHOD, TREEMAP_ESTIMATION_METHOD, PEER_MEDIAN_METHOD, MISSING_SCORE_ZERO_METHOD, SUPPORTED_WEIGHT_POLICY } from '../public/js/shared/fallback-inference.js';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
@@ -22,7 +22,7 @@ function summary(inference, coverage = .5, comparable = true, overrides = {}) {
         modelScoresSummary, modelScoresList: { append() {} },
         document: { createElement: () => ({ textContent: '', dataset: {}, append(...nodes) { this.textContent += nodes.map(node => node.textContent).join(' '); } }) },
         renderEstimate() {},
-        rankingNumber, isMissingInferenceMethod, FALLBACK_INFERENCE_METHOD, TREEMAP_ESTIMATION_METHOD, PEER_MEDIAN_METHOD,
+        rankingNumber, isMissingInferenceMethod, FALLBACK_INFERENCE_METHOD, TREEMAP_ESTIMATION_METHOD, PEER_MEDIAN_METHOD, MISSING_SCORE_ZERO_METHOD,
         SUPPORTED_WEIGHT_POLICY, syncExpand() {}, filterScores() {}, expansionNoun: ''
     });
     render({ lower: inference?.totalScore ?? null, coverage: coverage * 100,
@@ -40,10 +40,10 @@ function factorInference(raw, coverage, inferredFraction = 0) {
 
 test('brief help distinguishes calibrated estimates from measured weighted coverage', () => {
     assert.match(rankingGuide, /calibrated|paired measurements and eligible support/);
-    assert.match(rankingGuide, /divides each benchmark’s weight among usable sources and multiplies each share by its path weight/);
+    assert.match(rankingGuide, /divides each benchmark’s weight among usable sources, multiplies each share by its path weight/);
     assert.match(rankingGuide, /Coverage is the share of weight with measured results/);
     assert.match(rankingGuide, /on selected versions/);
-    assert.match(rankingGuide, /eligible versions of the same benchmark<\/a>, then nominated external versions/);
+    assert.match(rankingGuide, /eligible versions of the same benchmark<\/a>, then eligible external estimation sources/);
     assert.doesNotMatch(guide, /coverage factor|test algorithm|midpoint|Power 0\.35|experiment/i);
     assert.doesNotMatch(guide, /deduct(?:s|ion)?|2 points (?:for every|per) missing 10%|20\s*(?:points|\*)/i);
 });
@@ -51,7 +51,7 @@ test('brief help distinguishes calibrated estimates from measured weighted cover
 test('short score help explains unresolved gaps and direct-first evidence', () => {
     assert.match(rankingGuide, /each benchmark version’s scoring scale and direction/);
     assert.match(rankingGuide, /A direct score on a scoring version takes priority, including zero and negative scores/);
-    assert.match(rankingGuide, /The index averages over scored weight if gaps remain/);
+    assert.match(rankingGuide, /counts as zero at its original weight/);
     assert.match(rankingGuide, /Models need measured or calibrated evidence to rank/);
     assert.match(estimationGuide, /Versions of the same benchmark are eligible by default, including with no votes or a tie/);
     assert.match(estimationGuide, /eligible measured versions of the same benchmark/);
@@ -82,6 +82,9 @@ test('score details report version and treemap estimates separately from measure
     assert.match(text, /25\.00% uses calibrated version chains across the treemap/);
     assert.match(text, /How it works/);
     assert.doesNotMatch(text, /adjustment|fallback chains|left out|starts at 50/);
+    assert.match(summary({ ...inference, inferredFraction: 0, unresolvedFraction: .5, totalScore: 40 }, .5, true, {
+        inferredScores: [{ conditionID: 2, originalWeight: 50, estimationMethod: MISSING_SCORE_ZERO_METHOD }]
+    }), /50\.00% of the weight counts as zero/);
     const zero = summary({ ...inference, inferredFraction: 0, totalScore: 0, unresolvedFraction: 1 }, 0, false);
     assert.match(zero, /No qualifying ranking evidence/);
     assert.doesNotMatch(zero, /Index score 0/);

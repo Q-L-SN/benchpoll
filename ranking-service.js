@@ -18,7 +18,7 @@ import {
 import { normalizeAvailableInferenceVersion,
     AVAILABLE_INFERENCE_VERSION } from './public/js/shared/available-score.js';
 import { createFallbackCalibration } from './fallback-calibration.js';
-import { fallbackInference, PEER_MEDIAN_METHOD, SUPPORTED_WEIGHT_POLICY } from './public/js/shared/fallback-inference.js';
+import { fallbackInference, PEER_MEDIAN_METHOD, MISSING_SCORE_ZERO_METHOD } from './public/js/shared/fallback-inference.js';
 import { DEFAULT_ESTIMATION_ALGORITHM, normalizeEstimationAlgorithm } from './public/js/shared/estimation-algorithms.js';
 import { benchmarkVersionTieOrder, benchmarkEvaluationOrder } from './public/js/shared/benchmark-version-order.js';
 import { communityVersionComposition, expandCommunityVersions } from './public/js/shared/benchmark-version-choice.js';
@@ -136,16 +136,18 @@ async function resolveCategory(connection, requestedCategoryID, userID = null) {
     const category = rows[0];
     const categoryID = Number(category.ID);
     const isPrivate = category.owner_user_ID != null;
+    const isMine = userID != null && String(category.created_by_user_ID ?? category.owner_user_ID) === String(userID);
     const lineage = [{ ID: categoryID, name: category.name, position: Number(category.position ?? 0) }];
     return {
         ID: categoryID,
         publicID: Number(category.public_ID),
-        privateID: isPrivate || String(category.created_by_user_ID ?? '') === String(userID ?? '') ? category.private_ID ?? null : null,
+        privateID: isPrivate || isMine ? category.private_ID ?? null : null,
         description: category.description ?? '',
         creator: topicCreator(category),
         path: topicURL({ ...category, isPrivate }).slice(1),
         lineage,
         isPrivate,
+        isMine,
         isOfficial: Boolean(Number(category.is_official)),
         isLeaf: true
     };
@@ -815,7 +817,7 @@ export async function resolveRankingContext(connection, {
     const scene = await resolveTopicScene(connection, category, contextValues, { create, requireAllDimensions });
     if (scene) return {
         ...scene, categoryID: category.ID, categoryPath: category.path,
-        publicID: category.publicID, privateID: category.privateID, isOfficial: category.isOfficial,
+        publicID: category.publicID, privateID: category.privateID, isOfficial: category.isOfficial, isMine: category.isMine,
         categoryName: category.lineage.at(-1).name, description: sceneSummary({
             name: category.lineage.at(-1).name, description: category.description }, scene.scene),
         topicDescription: category.description, creator: category.creator,
@@ -834,7 +836,7 @@ export async function resolveRankingContext(connection, {
     return {
         ID: context.ID,
         categoryID: category.ID,
-        publicID: category.publicID, privateID: category.privateID, isOfficial: category.isOfficial,
+        publicID: category.publicID, privateID: category.privateID, isOfficial: category.isOfficial, isMine: category.isMine,
         categoryPath: category.path,
         categoryName: category.lineage.at(-1).name,
         description: category.description,
@@ -1083,7 +1085,7 @@ export function scoreModels(models, weightedEntries, totalBasisPoints, { fallbac
                             ...(automatic ? { selection: 'automatic' } : { familyConditionIDs: chain }), ...prediction,
                             weightBasisPoints: weight, originalWeight: weight / totalBasisPoints * 100 });
                     }
-                } else if (missingWeights && entry.conditionID > 0 && !excludedConditionIDs.has(entry.conditionID)) {
+                } else if (missingWeights && !excludedConditionIDs.has(entry.conditionID)) {
                     missingWeights.set(entry.conditionID, (missingWeights.get(entry.conditionID) ?? 0) + weight);
                 }
                 if (family.entries.length) fallbackResolutions.push({ primaryConditionID: entry.conditionID,
@@ -1100,6 +1102,7 @@ export function scoreModels(models, weightedEntries, totalBasisPoints, { fallbac
         if (missingWeights?.size && treemapPolicy) {
             calibration ??= createFallbackCalibration(models);
             for (const [conditionID, weightBasisPoints] of missingWeights) {
+                if (conditionID < 1) continue;
                 const prediction = calibration.predictTreemap(model, conditionID, treemapPolicy, comparisonScores, validateExternal);
                 if (!prediction) continue;
                 for (const source of prediction.sources) resultKeys.add(resultKey(source.sourceConditionID));
@@ -1118,23 +1121,23 @@ export function scoreModels(models, weightedEntries, totalBasisPoints, { fallbac
     return rows.map(row => {
         const { model, lower, upper, coveredBasisPoints, calibratedBasisPoints, resultKeys, estimatedTargets,
             fallbackResolutions, calculationScores, coverageByCondition, inferredScores, missingWeights } = row;
-        if (getMedian && missingWeights?.size && resultKeys.size) {
+        const zeroScores = [];
+        if (missingWeights && resultKeys.size) {
             for (const [conditionID, weightBasisPoints] of missingWeights) {
-                const estimate = getMedian(row, conditionID);
-                if (estimate) inferredScores.push({ conditionID, ...estimate, weightBasisPoints,
-                    originalWeight: weightBasisPoints / totalBasisPoints * 100, familyID: null });
+                const estimate = conditionID > 0 ? getMedian?.(row, conditionID) : null;
+                const score = { conditionID, weightBasisPoints, originalWeight: weightBasisPoints / totalBasisPoints * 100, familyID: null };
+                if (estimate) inferredScores.push({ ...score, ...estimate });
+                else zeroScores.push({ ...score, normalizedScore: 0, estimationMethod: MISSING_SCORE_ZERO_METHOD });
             }
         }
         const observedFraction = measuredFraction(coveredBasisPoints, totalBasisPoints);
         const availableInference = missingWeights ? fallbackInference(calculationScores.reduce((sum, score) =>
             sum + score.normalizedScore * (score.weightBasisPoints / coveredBasisPoints), 0), observedFraction,
         inferredScores.map(score => ({ normalizedScore: score.normalizedScore,
-            weightFraction: score.weightBasisPoints / totalBasisPoints })), estimationAlgorithm, true) : null;
-        const scoringBasisPoints = availableInference?.weightPolicy === SUPPORTED_WEIGHT_POLICY
-            ? totalBasisPoints * availableInference.supportedFraction : totalBasisPoints;
+            weightFraction: score.weightBasisPoints / totalBasisPoints })), estimationAlgorithm) : null;
         const availableScore = availableInference?.supportedFraction > 0 ? roundTo(availableInference.totalScore) : null;
-        const weightedScore = score => ({ ...score, effectiveWeight: score.weightBasisPoints / scoringBasisPoints * 100,
-            contribution: score.normalizedScore * (score.weightBasisPoints / scoringBasisPoints) });
+        const weightedScore = score => ({ ...score, effectiveWeight: score.weightBasisPoints / totalBasisPoints * 100,
+            contribution: score.normalizedScore * (score.weightBasisPoints / totalBasisPoints) });
         const response = {
             ID: model.ID,
             modelID: model.modelID,
@@ -1150,7 +1153,7 @@ export function scoreModels(models, weightedEntries, totalBasisPoints, { fallbac
             coverageFraction: observedFraction,
             coverageEntries: [...coverageByCondition.values()],
             availableInference,
-            inferredScores: inferredScores.map(weightedScore),
+            inferredScores: [...inferredScores, ...zeroScores].map(weightedScore),
             resultCount: resultKeys.size,
             fallbackUsageCount: estimatedTargets.size,
             fallbackCoverage: roundTo(calibratedBasisPoints / totalBasisPoints * 100),
@@ -1159,7 +1162,7 @@ export function scoreModels(models, weightedEntries, totalBasisPoints, { fallbac
             missingWeight: Math.max(0, totalBasisPoints - coveredBasisPoints) / totalBasisPoints * 100
         };
         if (deferMetadata) {
-            deferScoreMetadata(response, model.condition, calculationScores, scoringBasisPoints);
+            deferScoreMetadata(response, model.condition, calculationScores, totalBasisPoints);
         }
         return response;
     });

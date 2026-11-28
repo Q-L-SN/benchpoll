@@ -3,7 +3,7 @@ import test from 'node:test';
 import { comparisonOptions } from '../model-comparison.js';
 import { scoreComparison, scoreModels } from '../ranking-service.js';
 import { createVersionEstimationPlanner } from '../public/js/shared/version-estimation-policy.js';
-import { PEER_MEDIAN_METHOD, SUPPORTED_WEIGHT_POLICY, TREEMAP_ESTIMATION_METHOD } from '../public/js/shared/fallback-inference.js';
+import { PEER_MEDIAN_METHOD, MISSING_SCORE_ZERO_METHOD, TREEMAP_ESTIMATION_METHOD } from '../public/js/shared/fallback-inference.js';
 import { calibrationModel as model, pairedModels } from './helpers/fallback-pairs.mjs';
 
 const version = (conditionID, benchmarkID) => ({ conditionID, benchmarkID, name: `Benchmark ${benchmarkID}`, conditionName: `Version ${conditionID}` });
@@ -90,8 +90,8 @@ test('a nomination still needs paired data and public external validation at eve
         return scoreComparison(models, plan(entries, votes), 10000, { ...rules, validateExternal },
             comparisonOptions(models, { mode, keys: ['model'] }))[0];
     };
-    assert.equal(getScore([], false).availableInference.weightPolicy, SUPPORTED_WEIGHT_POLICY);
-    assert.equal(getScore([], false).inferredScores.some(score => score.conditionID === 1), false);
+    assert.equal(getScore([], false).availableInference.weightPolicy, 'original');
+    assert.equal(getScore([], false).inferredScores.find(score => score.conditionID === 1).estimationMethod, MISSING_SCORE_ZERO_METHOD);
     assert.equal(getScore(externalPeers, true).inferredScores.find(score => score.conditionID === 1).estimationMethod, TREEMAP_ESTIMATION_METHOD);
     assert.equal(getScore(externalPeers, true, 'matched').inferredScores.find(score => score.conditionID === 1).estimationMethod, TREEMAP_ESTIMATION_METHOD);
     assert.equal(getScore(externalPeers.slice(0, 1), true).inferredScores.find(score => score.conditionID === 1).estimationMethod, PEER_MEDIAN_METHOD);

@@ -72,6 +72,14 @@ try {
     const openEvaluation = page.getByRole('link', { name: 'Open evaluation', exact: true });
     assert.match(await openEvaluation.getAttribute('href'), /^\/\d+$/);
     assert.equal(fixture.state.created[0].topic.scenes[0].name, 'General');
+    const authoredCard = page.locator('.bp-profile-topic-card').filter({ has: openEvaluation });
+    await authoredCard.getByRole('button', { name: 'Edit topic', exact: true }).click();
+    const editPublic = page.getByRole('dialog', { name: 'Edit public topic', exact: true });
+    await editPublic.getByLabel('Name', { exact: true }).fill('Edited open evaluation');
+    await editPublic.getByRole('button', { name: 'Save changes' }).click();
+    await page.getByRole('link', { name: 'Edited open evaluation', exact: true }).waitFor();
+    assert.equal(fixture.state.created.length, 1);
+    assert.equal(fixture.state.created[0].topic.isPrivate, false);
 
     await page.setViewportSize({ width: 320, height: 760 });
     await page.getByRole('tab', { name: 'Configured topics, only you' }).click();
@@ -97,7 +105,7 @@ try {
     await editor.getByRole('button', { name: 'Create private topic' }).click();
     await editor.waitFor({ state: 'hidden' });
     assert.match(await page.getByRole('link', { name: 'Personal evaluation', exact: true }).getAttribute('href'), /^\/private\//);
-    assert.deepEqual(fixture.state.requests.filter(request => request.path === '/save_private_topic').map(request => request.body.isPrivate),
+    assert.deepEqual(fixture.state.requests.filter(request => request.path === '/save_private_topic' && request.body.categoryID == null).map(request => request.body.isPrivate),
         [false, false, false, true]);
     await page.setViewportSize({ width: 1440, height: 1000 });
 
@@ -141,7 +149,8 @@ try {
     await page.getByRole('heading', { name: 'Avery Chen' }).waitFor();
     assert.equal(await page.getByRole('tab', { name: 'Published topics', selected: true }).count(), 1);
     await page.getByRole('link', { name: 'Research', exact: true }).waitFor();
-    await openEvaluation.waitFor();
+    await page.getByRole('link', { name: 'Edited open evaluation', exact: true }).waitFor();
+    assert.equal(await page.getByRole('button', { name: 'Edit topic', exact: true }).count(), 0);
     assert.equal(await page.getByRole('link', { name: 'Private notebook' }).count(), 0);
     assert.equal(await page.getByRole('link', { name: 'Personal evaluation' }).count(), 0);
     assert.equal(await create.count(), 0);

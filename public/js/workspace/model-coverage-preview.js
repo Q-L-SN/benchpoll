@@ -1,7 +1,7 @@
 import { SVG_NS } from './constants.js';
 import { mergeBenchmarkWeights } from './expanded-weights.js';
 import { createPieRenderer } from './pie-renderer.js';
-import { JOINT_VERSION_METHOD, TREEMAP_ESTIMATION_METHOD, PEER_MEDIAN_METHOD } from '../shared/fallback-inference.js';
+import { JOINT_VERSION_METHOD, TREEMAP_ESTIMATION_METHOD, PEER_MEDIAN_METHOD, MISSING_SCORE_ZERO_METHOD } from '../shared/fallback-inference.js';
 
 const blockKey = entry => entry.conditionID < 0 ? 'unresolved' : `benchmark:${entry.benchmarkID ?? entry.conditionID}`;
 
@@ -27,20 +27,24 @@ export function buildModelCoverageEntries(entries, coverageEntries, versions = [
         if (!coverageByID.has(id) || !Number.isFinite(score.normalizedScore)) continue;
         const weight = score.weightBasisPoints ?? score.originalWeight / 100 * totalWeight;
         if (!Number.isFinite(weight) || weight <= 0) continue;
-        const estimate = estimatedByID.get(id) ?? { weight: 0, contribution: 0, versionWeight: 0, treemapWeight: 0, peerWeight: 0 };
+        const estimate = estimatedByID.get(id) ?? { weight: 0, contribution: 0, versionWeight: 0, treemapWeight: 0, peerWeight: 0, zeroWeight: 0 };
+        estimatedByID.set(id, estimate);
+        if (score.estimationMethod === MISSING_SCORE_ZERO_METHOD) {
+            estimate.zeroWeight += weight;
+            continue;
+        }
         estimate.weight += weight;
         estimate.contribution += weight * score.normalizedScore;
         if (score.estimationMethod === JOINT_VERSION_METHOD) estimate.versionWeight += weight;
         if (score.estimationMethod === TREEMAP_ESTIMATION_METHOD) estimate.treemapWeight += weight;
         if (score.estimationMethod === PEER_MEDIAN_METHOD) estimate.peerWeight += weight;
-        estimatedByID.set(id, estimate);
     }
     const totals = new Map();
     for (const entry of entries) {
         if (!(entry.weightBasisPoints > 0)) continue;
         const key = blockKey(entry), total = totals.get(key)
             ?? { covered: 0, contribution: 0, estimated: 0, estimatedContribution: 0,
-                versionWeight: 0, treemapWeight: 0, peerWeight: 0 };
+                versionWeight: 0, treemapWeight: 0, peerWeight: 0, zeroWeight: 0 };
         const adopted = coverageByID.get(entry.conditionID);
         // Repeated references to the same condition retain their proportional share.
         const covered = adopted && entry.conditionID > 0 ? entry.weightBasisPoints * adopted.coveredWeightBasisPoints / adopted.weightBasisPoints : 0;
@@ -54,6 +58,7 @@ export function buildModelCoverageEntries(entries, coverageEntries, versions = [
             total.versionWeight += share * estimate.versionWeight;
             total.treemapWeight += share * estimate.treemapWeight;
             total.peerWeight += share * estimate.peerWeight;
+            total.zeroWeight += share * estimate.zeroWeight;
         }
         totals.set(key, total);
     }
@@ -61,10 +66,11 @@ export function buildModelCoverageEntries(entries, coverageEntries, versions = [
         const total = totals.get(entry.isUnresolved ? 'unresolved' : blockKey(entry));
         const coveredWeightBasisPoints = total?.covered ?? 0;
         const estimatedWeightBasisPoints = total?.estimated ?? 0;
-        const scoredWeight = coveredWeightBasisPoints + estimatedWeightBasisPoints;
+        const zeroWeightBasisPoints = total?.zeroWeight ?? 0;
+        const scoredWeight = coveredWeightBasisPoints + estimatedWeightBasisPoints + zeroWeightBasisPoints;
         const contribution = (total?.contribution ?? 0) + (total?.estimatedContribution ?? 0);
         const unresolvedWeightBasisPoints = Math.max(0, entry.weightBasisPoints - scoredWeight);
-        return { ...entry, coveredWeightBasisPoints, estimatedWeightBasisPoints, unresolvedWeightBasisPoints,
+        return { ...entry, coveredWeightBasisPoints, estimatedWeightBasisPoints, zeroWeightBasisPoints, unresolvedWeightBasisPoints,
             versionEstimatedWeightBasisPoints: total?.versionWeight ?? 0,
             treemapEstimatedWeightBasisPoints: total?.treemapWeight ?? 0,
             peerEstimatedWeightBasisPoints: total?.peerWeight ?? 0,

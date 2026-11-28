@@ -111,7 +111,7 @@ test('graph resource bounds retain unresolved share and do not load unbounded ta
     assert.equal(result.entries[0].weightBasisPoints, 10000);
 });
 
-test('an unavailable reference stays unscored and the index uses the remaining evidence', () => {
+test('an unavailable reference counts as zero at its original weight', () => {
     const model = { ID: 1, modelID: 1, name: 'Model', condition: {},
         results: new Map([['10', { normalizedScore: 80 }]]) };
     const weights = [entry(10, 5000), entry(-20, 5000)];
@@ -125,8 +125,9 @@ test('an unavailable reference stays unscored and the index uses the remaining e
             predict() { predictions++; throw new Error('Do not infer a topic as a benchmark'); } } });
     assert.equal(predictions, 0);
     assert.equal(estimated.coverage, 50);
-    assert.equal(estimated.lower, 80);
-    assert.deepEqual(estimated.inferredScores, []);
+    assert.equal(estimated.lower, 40);
+    assert.deepEqual(estimated.inferredScores.map(score => [score.conditionID, score.estimationMethod, score.contribution]),
+        [[-20, 'missing-score-zero', 0]]);
 });
 
 test('public references preserve sub-basis-point shares and rounded zero references cannot create NaN', async () => {

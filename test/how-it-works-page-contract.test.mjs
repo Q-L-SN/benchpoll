@@ -82,7 +82,7 @@ test('Personal and Public copy explains saving weights and the shared public sam
     assert.match(personal, /Sign in to save your weights/);
     assert.match(personal, /marks unsaved changes/);
     const community = section('public');
-    assert.match(community, /Each person contributes one configuration, updated as they save edits/);
+    assert.match(community, /one saved configuration per person for the current topic or scene/);
     assert.match(community, /Another public topic contributes only through an explicit reference/);
     assert.match(community, /Private topics and their weights are visible only to their creator/);
     const sample = section('calculation-details');
@@ -99,8 +99,7 @@ test('topic references follow specific scenes and retain missing shares', () => 
     assert.match(references, /Personal indices use your saved weights there when available and otherwise use public weights/);
     assert.match(references, /Public topics can reference public topics and scenes\. Private topics can reference those and your other private topics/);
     assert.match(references, /multiplies weights along each path and adds the shares for each benchmark version/);
-    assert.match(references, /Pair votes apply across scenes/);
-    assert.match(references, /If references form a loop, BenchPoll includes the benchmark shares reached along repeated paths/);
+    assert.match(references, /If references form a loop, BenchPoll includes shares reached along repeated paths/);
     assert.match(references, /Empty or unavailable targets and loops with no path to benchmarks keep their missing weight/);
 });
 
@@ -124,11 +123,13 @@ test('score copy explains version shares, treemap estimates, peer medians and me
     assert.match(scores, /Matched comparisons calibrate each qualifying run separately/);
 });
 
-test('the guide explains sitewide pair votes and dynamic cross-benchmark nominations', () => {
+test('the guide explains votes and external sources for missing scores', () => {
     const sectionText = section('fallback');
-    for (const phrase of ['Scoring version', 'Estimation support', 'Either version opens the same sitewide vote',
+    for (const phrase of ['Scoring version', 'Estimate missing scores', 'The same sitewide vote applies in both directions',
+        'thumbs up allows each version to help estimate a missing score on the other', 'Thumbs down blocks that use',
         'last 72 hours', 'reach ten', 'Versions of the same benchmark are eligible by default',
-        'Your own vote takes priority', 'Add version', 'Search for a version from another benchmark', 'Both versions list the pair while its sample has at least one supporter']) {
+        'Your own vote takes priority', 'Add source', 'Select a version from another benchmark',
+        'only when a model has no measured score on the scoring version', 'Both versions list the pair while it has sampled support']) {
         assert.ok(sectionText.includes(phrase), phrase);
     }
 });
@@ -145,7 +146,7 @@ test('version estimation explains joint evidence, shrinkage, extrapolation and r
     assert.match(calibration, /the shortest path/);
     assert.match(calibration, /Best performance uses the highest qualifying run prediction/);
     assert.match(calibration, /Matched comparisons average predictions within each matched control setting/);
-    assert.match(calibration, /When same-benchmark versions cannot fill the gap, BenchPoll tries nominated external versions/);
+    assert.match(calibration, /When same-benchmark versions cannot fill the gap, BenchPoll tries eligible external estimation sources/);
 });
 
 test('publication and evidence copy includes settings, visibility and score contributions', () => {
@@ -210,14 +211,15 @@ test('the peer median uses other models on the target version without increasing
     assert.equal(available.lower, 77);
 });
 
-test('without peer scores an unscored slot leaves the negative evidence undiluted', () => {
+test('without peer scores an unscored slot counts as zero at its original weight', () => {
     const entries = [{ conditionID: 1, weightBasisPoints: 2500 }, { conditionID: 2, weightBasisPoints: 7500 }];
     const [row] = scoreModels([model(1, { 1: -20 })], entries, 10000, { scoreMode: 'available' });
     assert.equal(row.coverage, 25);
-    assert.deepEqual(row.inferredScores, []);
+    assert.deepEqual(row.inferredScores.map(score => [score.conditionID, score.estimationMethod, score.normalizedScore, score.effectiveWeight]),
+        [[2, 'missing-score-zero', 0, 75]]);
     assert.equal(row.availableInference.unresolvedFraction, .75);
-    assert.equal(row.availableInference.unpenalizedScore, -20);
-    assert.equal(row.lower, -20);
+    assert.equal(row.availableInference.unpenalizedScore, -5);
+    assert.equal(row.lower, -5);
     const missing = [model(2, { 3: 100 })];
     const [unranked] = scoreComparison(missing, entries, 10000, { scoreMode: 'available' },
         comparisonOptions(missing, { mode: 'best', keys: ['model'] }));
@@ -231,9 +233,10 @@ test('uncalibrated scores outside the treemap do not supply evidence for a treem
         for (const scoreMode of ['range', 'available']) {
             const [row] = scoreModels([model(1, { 1: 80, 3: value, 4: 90 })], plannedWeights, 10000, { scoreMode });
             assert.equal(row.coverage, 60);
-            assert.deepEqual([row.lower, row.upper], scoreMode === 'range' ? [48, 88] : [80, 80]);
+            assert.deepEqual([row.lower, row.upper], scoreMode === 'range' ? [48, 88] : [48, 48]);
             assert.deepEqual(row.calculationScores.map(score => score.conditionID), [1]);
-            assert.deepEqual(row.inferredScores, []);
+            assert.deepEqual(row.inferredScores.map(score => [score.conditionID, score.estimationMethod]),
+                scoreMode === 'range' ? [] : [[2, 'missing-score-zero']]);
         }
     }
 });

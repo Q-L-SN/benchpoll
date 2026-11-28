@@ -45,10 +45,10 @@ test('scores without an eligible estimate use the measured weight at its actual 
         results: new Map([['1', { normalizedScore: value, sampleCount: 1 }]]) }));
     const ranked = scoreModels(models, [{ conditionID: 1, weightBasisPoints: 5000 }, { conditionID: 2, weightBasisPoints: 5000 }], 10000,
         { scoreMode: 'available' }).sort((left, right) => right.lower - left.lower);
-    assert.deepEqual(ranked.map(row => [row.lower, row.upper]), [[150, 150], [-50, -50]]);
+    assert.deepEqual(ranked.map(row => [row.lower, row.upper]), [[75, 75], [-25, -25]]);
     const scale = modelScoreScale(ranked);
-    assert.equal(scale.min, -50);
-    assert.equal(scale.max, 150);
+    assert.equal(scale.min, -25);
+    assert.equal(scale.max, 75);
 });
 
 test('first-place bar scaling changes only display coordinates', () => {

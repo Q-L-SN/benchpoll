@@ -1,10 +1,12 @@
 import { createTopicCreator } from './topic-identity.js';
 import { createFavoriteButton, createConfiguredIndicator } from './topic-actions.js';
+import { createTopicEditButton } from './private-topic-editor.js';
 
 // A compact topic card for profile collections; all card state/actions use the
 // same controls as the homepage and workspace topic headers.
-export function createTopicCard(topic, { onError = () => {}, onFavoriteChange = () => {} } = {}) {
+export function createTopicCard(topic, { onError = () => {}, onFavoriteChange = () => {}, onEdit } = {}) {
     const card = document.createElement('article'); card.className = 'bp-profile-topic-card';
+    card.dataset.topicId = String(topic.ID);
     const heading = document.createElement('h2');
     const link = document.createElement('a'); link.textContent = topic.name;
     if (typeof topic.url === 'string' && /^\/(?!\/)[^\\\s]*$/.test(topic.url)) link.href = topic.url;
@@ -21,7 +23,14 @@ export function createTopicCard(topic, { onError = () => {}, onFavoriteChange = 
     const attribution = document.createElement('div'); attribution.className = 'bp-profile-topic-attribution';
     attribution.append(creator);
     const favorite = createFavoriteButton(topic, { onChange: onFavoriteChange, onError });
-    footer.append(attribution, favorite); card.append(heading, description, footer);
+    const header = document.createElement('header'); header.className = 'pf-topic-card-header';
+    header.append(heading);
+    if (onEdit) {
+        const edit = createTopicEditButton('Edit topic');
+        edit.addEventListener('click', () => onEdit(edit));
+        header.append(edit);
+    }
+    footer.append(attribution, favorite); card.append(header, description, footer);
     card.dispose = () => favorite.dispose?.();
     return card;
 }

@@ -7,7 +7,7 @@ import { scoreModels, scoreComparison } from '../ranking-service.js';
 import { rankModels } from '../ranking-pagination.js';
 import { comparisonOptions } from '../model-comparison.js';
 import { validateWorkspacePayload } from '../public/js/workspace/contracts.js';
-import { TREEMAP_ESTIMATION_METHOD, PEER_MEDIAN_METHOD, SUPPORTED_WEIGHT_POLICY } from '../public/js/shared/fallback-inference.js';
+import { TREEMAP_ESTIMATION_METHOD, PEER_MEDIAN_METHOD, MISSING_SCORE_ZERO_METHOD } from '../public/js/shared/fallback-inference.js';
 import { createFixtureState, weightedEntries, workspace } from '../scripts/frontend/fixtures.mjs';
 
 const close = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-8, `${actual} != ${expected}`);
@@ -21,13 +21,13 @@ function retiredTrace(row, method = PAIRWISE_COVERAGE_METHOD) {
     if (!row.availableInference) return row;
     const trace = row.availableInference;
     if (!trace.coverageFraction) return { ...row, availableInference: null };
-    const inferredScores = row.inferredScores.filter(score => ![TREEMAP_ESTIMATION_METHOD, PEER_MEDIAN_METHOD].includes(score.estimationMethod));
+    const inferredScores = row.inferredScores.filter(score => ![TREEMAP_ESTIMATION_METHOD, PEER_MEDIAN_METHOD, MISSING_SCORE_ZERO_METHOD].includes(score.estimationMethod));
     const supportedFraction = trace.coverageFraction + inferredScores.reduce((sum, score) => sum + score.originalWeight / 100, 0);
     const availableInference = availableResultInference(trace.observedScore, trace.coverageFraction,
         inferredScores.map(score => ({ normalizedScore: score.normalizedScore, weightFraction: score.originalWeight / 100 })),
         trace.percentile, trace.sourceCount, { method });
     const total = Math.round(availableInference.totalScore * 100) / 100;
-    const scale = (trace.weightPolicy === SUPPORTED_WEIGHT_POLICY ? trace.supportedFraction : 1) / supportedFraction;
+    const scale = 1 / supportedFraction;
     const archivedWeight = score => ({ ...score, effectiveWeight: score.effectiveWeight * scale,
         contribution: score.contribution * scale });
     return { ...row, availableInference, calculationScores: row.calculationScores.map(archivedWeight),
@@ -143,7 +143,7 @@ test('fresh legacy-version requests no longer select archived deduction algorith
         for (const availableInferenceVersion of [1, 2, 3, 4, 5, 6, 7, 8]) {
             const rows = scoreComparison(models, weights, 10000, { scoreMode: 'available', availableInferenceVersion },
                 comparisonOptions(models, { mode, keys: ['model'] }));
-            assert.deepEqual(rows.map(row => row.lower), [80, 60]);
+            assert.deepEqual(rows.map(row => row.lower), [40, 30]);
             assert.ok(rows.every(row => !Object.hasOwn(row.availableInference, 'coveragePenalty')));
         }
     }
@@ -172,10 +172,10 @@ test('workspace validation requires an accurate separate deduction and pre-deduc
 test('current help explains version-based estimates and full-weight gaps', () => {
     const read = path => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
     const guide = read('private/how-it-works.html');
-    assert.match(guide, /then nominated external versions/);
+    assert.match(guide, /then eligible external estimation sources/);
     assert.match(guide, /multiplies each share by its path weight/);
     assert.match(guide, /one measurement or earlier estimate per model/);
-    assert.match(guide, /The index averages over scored weight if gaps remain/);
+    assert.match(guide, /counts as zero at its original weight/);
     assert.doesNotMatch(guide, /coverage factor|coverage penalty|excluded from the average/i);
     const details = read('public/js/workspace/model-scores.js');
     assert.match(details, /calibrated version chains across the treemap/);

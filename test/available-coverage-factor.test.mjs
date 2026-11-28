@@ -92,9 +92,9 @@ test('archived factors adjust the combined score while new totals retain origina
     assert.equal(result.inferredContribution, 20);
     const entries = [...weights.map(entry => ({ ...entry, weightBasisPoints: 2500 })), { conditionID: 3, weightBasisPoints: 5000 }];
     const [row] = score([model(1, { 1: 100, 2: -80 })], entries);
-    assert.equal(row.availableInference.unpenalizedScore, 10);
-    assert.equal(row.lower, 10);
-    assert.deepEqual(row.calculationScores.map(item => item.contribution), [50, -40]);
+    assert.equal(row.availableInference.unpenalizedScore, 5);
+    assert.equal(row.lower, 5);
+    assert.deepEqual(row.calculationScores.map(item => item.contribution), [25, -20]);
 });
 
 test('weighted coverage, real zero and zero-weight versions retain their exact meaning', () => {
@@ -121,17 +121,17 @@ test('calibrated public shares support the point score while direct coverage sta
     const rule = { primaryConditionID: 1, familyID: 10, mode: 'ordered', entries: [{ conditionID: 3 }] };
     const [personal] = score(models, weights, { fallbackRules: [rule] });
     assert.equal(personal.coverage, 0);
-    close(personal.availableInference.totalScore, 70);
+    close(personal.availableInference.totalScore, 35);
     assert.equal(personal.inferredScores[0].normalizedScore, 70);
     const [shared] = score(models, weights, { fallbackScope: 'public', familyComposition: [
         { primaryConditionID: 1, families: [{ ...rule, weightBasisPoints: 6000 },
             { primaryConditionID: 1, familyID: null, entries: [], weightBasisPoints: 4000 }] }
     ] });
     assert.equal(shared.coverage, 0);
-    close(shared.availableInference.totalScore, 70);
+    close(shared.availableInference.totalScore, 35);
     close(shared.availableInference.inferredFraction, .5);
     assert.deepEqual(shared.inferredScores.map(row => [row.estimationMethod, row.originalWeight]),
-        [['joint-versions', 30], ['peer-median', 20]]);
+        [['joint-versions', 30], ['peer-median', 20], ['missing-score-zero', 50]]);
 });
 
 test('fully covered totals and Score range remain unchanged; no weighted evidence stays incomparable', () => {
@@ -177,8 +177,8 @@ test('all stale read versions and matched comparisons calculate original-weight 
     for (const mode of ['best', 'matched']) {
         for (const version of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) {
             const rows = score(models, weights, { availableInferenceVersion: version }, mode);
-            assert.deepEqual(rows.map(row => row.lower), [80, 60]);
-            assert.ok(rows.every(row => row.availableInference.weightPolicy === 'supported'));
+            assert.deepEqual(rows.map(row => row.lower), [40, 30]);
+            assert.ok(rows.every(row => row.availableInference.weightPolicy === 'original'));
         }
     }
     assert.equal(AVAILABLE_INFERENCE_VERSION, 13);
@@ -189,7 +189,7 @@ test('all stale read versions and matched comparisons calculate original-weight 
 test('rounding preserves finite extreme totals instead of overflowing them while forming a ranking', () => {
     const [row] = score([model(1, { 1: -1e308 })]);
     assert.ok(Number.isFinite(row.lower));
-    close(row.lower, -1e308);
+    close(row.lower, -5e307);
     assert.equal(JSON.parse(JSON.stringify(row)).lower, row.lower);
 });
 

@@ -105,6 +105,15 @@ for (const [engine, width] of [[chromium, 1440], [chromium, 390], [webkit, 390]]
         const request = workspace.state.requests.find(item => item.path === '/api/save_private_topic');
         assert.equal(request.body.isPrivate, false);
         assert.equal(request.body.scenes[0].name, 'General');
+        const createdTopic = workspace.state.newTopics[0];
+        await page.route('**/api/get_private_topic_editor', route => route.fulfill({ json: createdTopic }));
+        await page.locator('#benchmark-card[aria-busy="false"]').waitFor();
+        const editInWorkspace = page.locator('#bp-breadcrumb > .bp-topic-edit').and(page.getByRole('button', { name: 'Edit public topic', exact: true }));
+        await checkEditButton(editInWorkspace);
+        await editInWorkspace.click();
+        await checkEditor(publicEditor);
+        await publicEditor.getByRole('button', { name: 'Cancel', exact: true }).click();
+        await page.unroute('**/api/get_private_topic_editor');
 
         workspace.state.isPrivate = true;
         if (width < 760) await page.setViewportSize({ width: 320, height: 900 });

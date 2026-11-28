@@ -85,10 +85,10 @@ for (const [engine, width, height] of [[chromium, 1440, 900], [chromium, 320, 56
         const scoreDefault = settings.getByRole('button', { name: 'Use Default evaluation for scoring', exact: true });
         const scoreExperimental = settings.getByRole('button', { name: 'Use Experimental for scoring', exact: true });
         const opposeExtendedForDefault = settings.getByRole('button', {
-            name: 'Oppose mutual estimation between Default evaluation and Extended', exact: true
+            name: 'Block Default evaluation and Extended from estimating each other’s missing scores', exact: true
         });
         const supportExtendedForExperimental = settings.getByRole('button', {
-            name: 'Support mutual estimation between Experimental and Extended', exact: true
+            name: 'Allow Experimental and Extended to help estimate each other’s missing scores', exact: true
         });
         const row = conditionID => settings.locator(`.bp-version-choice-row[data-condition-id="${conditionID}"]`);
         const rateExtended = row(901).locator('.bp-estimation-rate');
@@ -223,10 +223,10 @@ for (const [engine, width, height] of [[chromium, 1440, 900], [chromium, 320, 56
         const search = card.locator('#benchmark-search');
         const settings = page.locator('#benchmark-settings');
         const dock = settings.locator('.bp-external-versions');
-        const nominate = dock.getByRole('button', { name: 'Nominate a version from another benchmark', exact: true });
+        const nominate = dock.getByRole('button', { name: 'Add source for missing scores', exact: true });
         const picker = settings.locator('#external-version-picker');
         const versionSearch = picker.getByRole('searchbox');
-        const results = picker.getByRole('list', { name: 'Versions available to nominate' });
+        const results = picker.getByRole('list', { name: 'Available external estimation sources' });
         const resultIDs = () => results.locator('li').evaluateAll(rows => rows.map(row => Number(row.dataset.conditionId)));
         const nominated = conditionID => dock.locator('[data-external-condition-id="' + conditionID + '"]');
         const chooseScoring = name => saveAfter(page, () => settings.getByRole('button', {
@@ -240,6 +240,21 @@ for (const [engine, width, height] of [[chromium, 1440, 900], [chromium, 320, 56
         assert.equal(await dock.isVisible(), false, 'An explicit scoring choice enables the dock');
         await chooseScoring('Default evaluation');
         await dock.waitFor();
+        if (width === 320) {
+            const fits = await nominate.evaluate(button => {
+                const label = button.querySelector('span');
+                const text = label.textContent;
+                label.textContent = 'Externe Schätzquelle hinzufügen';
+                const bounds = button.getBoundingClientRect();
+                const range = document.createRange();
+                range.selectNodeContents(label);
+                const lines = [...range.getClientRects()];
+                label.textContent = text;
+                return lines.length > 1 && lines.every(line => line.left >= bounds.left && line.right <= bounds.right
+                    && line.top >= bounds.top && line.bottom <= bounds.bottom);
+            });
+            assert.equal(fits, true, 'A longer translated label wraps inside the button');
+        }
         assert.equal(await nominate.getAttribute('aria-controls'), 'external-version-picker');
         assert.equal(await nominate.getAttribute('aria-expanded'), 'false');
         const bounds = () => dock.evaluate(node => {
@@ -277,7 +292,8 @@ for (const [engine, width, height] of [[chromium, 1440, 900], [chromium, 320, 56
         assert.equal(await card.locator('.bp-benchmark-row').count(), evaluationRows);
         assert.deepEqual((await resultIDs()).slice(0, 4), [2, 902, 3, 7]);
         assert.equal(await results.locator('li[data-condition-id="1101"]').count(), 0, 'Already nominated versions stay in the dock');
-        assert.match(await picker.textContent(), /Select Add version again to close/);
+        assert.match(await picker.textContent(), /Sources only help estimate missing scores on the scoring version/);
+        assert.match(await picker.textContent(), /Select Add source again to close/);
 
         await versionSearch.fill('variant');
         assert.deepEqual(await resultIDs(), [902]);
@@ -294,7 +310,7 @@ for (const [engine, width, height] of [[chromium, 1440, 900], [chromium, 320, 56
         const pair = { targetConditionID: 1, sourceConditionID: 902 };
         const savedWeights = structuredClone(fixture.state.personalEntries);
         const saveCount = fixture.state.requests.filter(request => request.path === '/api/save_personal_pie').length;
-        const choice = picker.getByRole('button', { name: 'Nominate Advanced reasoning, Variant', exact: true });
+        const choice = picker.getByRole('button', { name: 'Add Advanced reasoning, Variant, as an estimation source', exact: true });
         assert.deepEqual(await voteAfter(page, () => choice.click()), { ...pair, vote: 'support', nominate: true });
         await nominated(902).waitFor({ state: 'attached' });
         assert.equal(await nominated(902).locator('.bp-estimation-rate').textContent(), '100%');
@@ -323,12 +339,12 @@ test(`guest can edit and restore personal estimation votes ${built ? 'built' : '
     await page.locator('#weight-pie [data-object-id="1"]').click();
     await page.locator('#inline-fallback-toggle').click();
     const settings = page.locator('#benchmark-settings');
-    const support = settings.getByRole('button', { name: 'Support mutual estimation between Default evaluation and Extended', exact: true });
+    const support = settings.getByRole('button', { name: 'Allow Default evaluation and Extended to help estimate each other’s missing scores', exact: true });
     const scoreDefault = settings.getByRole('button', { name: 'Use Default evaluation for scoring', exact: true });
     assert.equal(await support.count(), 0);
     await scoreDefault.click();
-    assert.equal(await settings.getByRole('button', { name: /Nominate a version/ }).count(), 0);
-    assert.equal(await settings.getByRole('link', { name: 'Sign in to nominate a version' }).isVisible(), true);
+    assert.equal(await settings.getByRole('button', { name: 'Add source for missing scores', exact: true }).count(), 0);
+    assert.equal(await settings.getByRole('link', { name: 'Sign in to add a source' }).isVisible(), true);
     const preview = page.waitForResponse(response => response.url().endsWith('/api/get_weighted_workspace')
         && response.request().postDataJSON().previewPersonalPie?.estimationVotes?.some(item => item.targetConditionID === 1
             && item.sourceConditionID === 901 && item.vote === 'support'));
@@ -389,7 +405,7 @@ test(`removing and restoring a benchmark leaves sitewide pair votes intact ${bui
     assert.equal(restored.entries.find(entry => entry.conditionID === 901)?.weightBasisPoints, 6000);
     await page.locator('#weight-pie [data-object-id="901"]').click();
     await page.locator('#inline-fallback-toggle').click();
-    const reverseVote = page.getByRole('button', { name: 'Support mutual estimation between Extended and Default evaluation', exact: true });
+    const reverseVote = page.getByRole('button', { name: 'Allow Extended and Default evaluation to help estimate each other’s missing scores', exact: true });
     assert.equal(await reverseVote.getAttribute('aria-pressed'), 'true');
     await saveAfter(page, () => remove.click());
     await page.locator('#benchmark-search').fill('General knowledge');

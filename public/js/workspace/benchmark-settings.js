@@ -15,11 +15,12 @@ function node(tag, className, text) {
 }
 
 export const versionName = version => version.conditionName?.toLowerCase() === 'default' ? 'Default evaluation' : version.conditionName;
-const scoringHelp = 'Scoring shares are weighted by each person’s allocation to this benchmark.';
-const estimationHelp = 'Estimation support is the share of sitewide votes allowing these two versions to help estimate each other. '
-    + 'A source is eligible unless opposition exceeds support. Versions of the same benchmark are eligible by default. External versions appear while the pair has recent support.';
+const scoringHelp = 'A measured score on the scoring version always takes priority. Scoring shares are weighted by each person’s allocation to this benchmark.';
+const estimationHelp = 'The support percentage shows the share of sampled community votes in favor of using the two versions to estimate each other’s missing scores. '
+    + 'Versions of the same benchmark are eligible by default. A majority against blocks the pair. External sources appear while the pair has recent support.';
 const personalScoringHelp = 'Choose one scoring version. Select it again to follow the community.';
-const personalEstimationHelp = 'Your vote applies to this pair in both directions across all topics and scenes. '
+const personalEstimationHelp = 'Thumbs up allows the pair to help estimate missing scores. Thumbs down blocks that use. '
+    + 'Your vote applies in both directions across all topics and scenes and takes priority in your personal ranking. '
     + 'Select the same thumb again to clear your vote.';
 
 function percentage(points = 0) {
@@ -53,7 +54,7 @@ function statusText({ readOnly, entries, group }, active, target, estimationAvai
         return estimationAvailable ? 'Read-only. Choose a version to inspect its estimation sources.' : 'Read-only';
     }
     if (entries.length > 1) return 'Choose a scoring version to replace your saved version mix.';
-    if (target) return `Scoring with ${versionName(target)}. Select it again to follow the community.`;
+    if (target) return `Scoring with ${versionName(target)}. Votes only affect missing scores.`;
     if (active !== null) return 'Select it again to follow the community.';
     return group.isDefault ? 'Using the default scoring version.' : 'Following community scoring versions.';
 }
@@ -85,7 +86,7 @@ export function createBenchmarkSettings({ host, selectedHeader, getScope, getDat
     status.setAttribute('role', 'status');
     const heading = node('div', 'bp-version-choices-heading');
     const scoringHeading = node('div', 'bp-scoring-versions-heading');
-    const estimationHeading = node('span', 'bp-estimation-heading', 'Estimation support');
+    const estimationHeading = node('span', 'bp-estimation-heading', 'Estimate missing scores');
     const help = createAction({ label: 'About scoring versions and score estimation', icon: 'fa-regular fa-circle-question', iconOnly: true });
     scoringHeading.append(node('span', '', 'Scoring version'), help);
     heading.append(scoringHeading, estimationHeading);
@@ -98,22 +99,22 @@ export function createBenchmarkSettings({ host, selectedHeader, getScope, getDat
     external.setAttribute('aria-labelledby', 'external-versions-title');
     external.hidden = true;
     const externalHeading = node('header', 'bp-external-versions-heading');
-    const externalTitle = node('h4', '', 'External versions');
+    const externalTitle = node('h4', '', 'External estimation sources');
     externalTitle.id = 'external-versions-title';
     const externalList = node('ul', 'bp-version-choices');
     externalList.setAttribute('role', 'list');
-    externalList.setAttribute('aria-label', 'Nominated external versions');
+    externalList.setAttribute('aria-label', 'External estimation sources');
     const picker = node('button', 'bp-version-nomination');
     picker.type = 'button';
-    picker.setAttribute('aria-label', 'Nominate a version from another benchmark');
-    picker.append(icon('fa-solid fa-plus'), node('span', '', 'Add version'));
+    picker.setAttribute('aria-label', 'Add source for missing scores');
+    picker.append(icon('fa-solid fa-plus'), node('span', '', 'Add source'));
     const versionPicker = createExternalVersionPicker({ trigger: picker, scrollAnchor: host.closest('.bp-pie-card'), onChoose(source) {
         const current = data();
         const targetID = current && selectedScoringCondition(current.entries);
         return targetID != null && current.editable && !current.readOnly && current.authenticated && !current.busy
             && targetID === intent.externalTargetID && onVote(current.group, targetID, source.conditionID, 'support', true);
     } });
-    const login = node('a', '', 'Sign in to nominate a version');
+    const login = node('a', '', 'Sign in to add a source');
     login.href = '/github_login';
     externalHeading.append(externalTitle, picker, login);
     external.append(externalHeading, externalList);
@@ -223,11 +224,12 @@ export function createBenchmarkSettings({ host, selectedHeader, getScope, getDat
         return { row, choice, name, indicator, scores, share, estimation: null };
     }
 
-    function updateVote(button, vote, direction, count, pressed, disabled) {
+    function updateVote(button, vote, pair, count, pressed, disabled) {
         const { element, glyph, value } = button;
         const supporting = vote === 'support';
-        const label = `${supporting ? 'Support' : 'Oppose'} ${direction}`;
-        const description = `${count} community ${count === 1 ? 'vote' : 'votes'}.`;
+        const label = supporting ? `Allow ${pair} to help estimate each other’s missing scores`
+            : `Block ${pair} from estimating each other’s missing scores`;
+        const description = `${count} community ${count === 1 ? 'vote' : 'votes'}.${pressed ? ' Select again to clear your vote.' : ''}`;
         glyph.className = `fa-${pressed ? 'solid' : 'regular'} fa-thumbs-${supporting ? 'up' : 'down'}`;
         value.textContent = String(count);
         element.disabled = disabled;
@@ -268,21 +270,21 @@ export function createBenchmarkSettings({ host, selectedHeader, getScope, getDat
         const { panel, rate, support, oppose } = row.estimation;
         const { supportCount = 0, opposeCount = 0 } = counts ?? {};
         const total = supportCount + opposeCount;
-        const direction = `mutual estimation between ${versionName(target)} and ${source.externalName ?? versionName(source)}`;
+        const pair = `${versionName(target)} and ${source.externalName ?? versionName(source)}`;
         rate.hidden = total === 0;
         panel.hidden = readOnly && total === 0;
         if (total) {
             const share = percentage(supportCount / total * 10000);
             rate.textContent = share;
-            describe(rate, `${share} community support for ${direction}. ${supportCount} in support, ${opposeCount} opposed.`);
+            describe(rate, `${share} community support for using ${pair} to estimate each other’s missing scores. ${supportCount} in support, ${opposeCount} opposed.`);
         } else {
             rate.textContent = '';
             rate.removeAttribute('aria-label');
             delete rate.dataset.tooltip;
         }
         if (readOnly) return;
-        updateVote(support, 'support', direction, supportCount, vote === 'support', disabled);
-        updateVote(oppose, 'oppose', direction, opposeCount, vote === 'oppose', disabled);
+        updateVote(support, 'support', pair, supportCount, vote === 'support', disabled);
+        updateVote(oppose, 'oppose', pair, opposeCount, vote === 'oppose', disabled);
     }
 
     function refresh(primary, expanded) {

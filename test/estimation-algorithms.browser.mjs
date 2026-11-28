@@ -9,6 +9,47 @@ import { secondaryBenchmark, weightedEntries } from '../scripts/frontend/fixture
 const built = process.env.BP_TEST_BUILT === '1';
 const output = process.env.BP_ESTIMATION_OUTPUT ?? '/tmp/benchpoll-estimation-method';
 const engines = built ? [[chromium, 390]] : [[chromium, 1440], [chromium, 390], [chromium, 320], [webkit, 390]];
+
+for (const [engine, width] of built ? [[chromium, 390]] : [[chromium, 1440], [webkit, 390]]) {
+    test(`unresolved scores keep their weights and show a zero icon ${engine.name()} ${width}`, async t => {
+        const app = await startPreview({ communityVersions: true,
+            publicWeights: [{ conditionID: 1, weightBasisPoints: 1000 }, { conditionID: 2, weightBasisPoints: 9000 }],
+            comparisonModels: [calibrationModel(1, { 1: 80 }), calibrationModel(2, { 1: 0 })] });
+        const browser = await engine.launch({ headless: true });
+        t.after(async () => { await browser.close(); await app.close(); });
+        const page = await browser.newPage({ viewport: { width, height: 900 }, reducedMotion: 'reduce' });
+        if (built) await page.route(app.url + '/1', async route => route.fulfill({ contentType: 'text/html',
+            body: await readFile('private/home-built.html', 'utf8') }));
+        const initial = page.waitForResponse(response => response.url().endsWith('/api/get_weighted_workspace'));
+        await page.goto(app.url + '/1');
+        const { modelLeaderboards } = await (await initial).json();
+        const [scored, measuredZero] = modelLeaderboards.public;
+        assert.deepEqual([scored.lower, scored.coverage], [8, 10]);
+        assert.deepEqual([measuredZero.lower, measuredZero.coverage], [0, 10]);
+        assert.deepEqual(scored.calculationScores.map(score => [score.effectiveWeight, score.contribution]), [[10, 8]]);
+        assert.deepEqual(scored.inferredScores.map(score => [score.conditionID, score.estimationMethod, score.effectiveWeight, score.normalizedScore]),
+            [[2, 'missing-score-zero', 90, 0]]);
+        const row = page.locator('.bp-model-row').filter({ has: page.getByText('Model 1', { exact: true }) });
+        await row.waitFor({ state: 'attached' });
+        const checkIcon = async container => {
+            const tile = container.locator('[data-object-id="2"]');
+            assert.equal(await tile.locator('[data-zero-score]').textContent(), '0');
+            const badge = tile.locator('.bp-estimate-icon-link');
+            assert.equal(await badge.getAttribute('href'), '/how-it-works#missing-score-zero');
+            assert.equal(await badge.locator('text').textContent(), '\uf056');
+        };
+        if (width < 760) await page.locator('[data-mobile-panel="models"]').click();
+        else { await row.hover(); await checkIcon(page.locator('.bp-model-coverage-overlay')); }
+        await row.click();
+        const zero = page.locator('.bp-model-inferred-row[data-estimation-method="missing-score-zero"]');
+        await zero.waitFor();
+        assert.equal(await zero.locator('.bp-model-score-detail-value').textContent(), '0.00');
+        assert.match(await zero.innerText(), /90\.00% of total weight/);
+        assert.equal(await zero.locator('.fa-circle-minus').count(), 1);
+        if (width < 760) await checkIcon(page.locator('.bp-model-coverage-figure'));
+    });
+}
+
 for (const [engine, width] of engines) {
     test(`version-based estimation ${engine.name()} ${width} ${built ? 'built' : 'source'}`, { timeout: 60000 }, async t => {
         const app = await startPreview({ estimationSources: true, secondaryBenchmark: true });

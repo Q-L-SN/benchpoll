@@ -175,16 +175,20 @@ test('normal home columns show more complete models at phone, card and wide char
     assert.equal(columnLayout(1320, 25, 100).visible, 25, 'never create unloaded blank columns');
 });
 
-test('diagonal model identities keep short names unbroken and bound longer names', async () => {
+test('diagonal model identities keep short names unbroken and wrap longer names in full', async () => {
     const css = await readFile(new URL('../public/css/topics-home.css', import.meta.url), 'utf8');
     assert.match(css, /transform-origin: top left/);
     assert.match(css, /\[data-lines="1"\]\s*\{ white-space: nowrap;/);
     assert.match(css, /\.th-label-word\s*\{ white-space: nowrap;/);
     assert.doesNotMatch(css.match(/\.th-model-name[\s\S]*?\.th-visual\[data-view="weights"\]/)[0], /overflow-wrap: anywhere/);
-    for (const text of ['GPT-5', 'a'.repeat(14), 'a'.repeat(40), 'Claude Opus Thinking Extra Long']) {
+    assert.doesNotMatch(css.match(/\.th-model-name \.bp-model-display-name\s*\{[^}]+\}/)[0], /line-clamp|ellipsis/);
+    for (const text of ['GPT-5', 'deepseek-v4-flash-vision-exp', 'a'.repeat(40), 'Claude Opus Thinking Extra Long']) {
         const layout = modelLabelLayout([{ kind: 'model', text }]);
-        assert.equal(layout.rows[0].lines, text.length * 6 > MODEL_LABEL_METRICS.desktop.maxWidth && text.includes(' ') ? 2 : 1);
-        assert.ok(layout.projectedHeight + MODEL_LABEL_METRICS.desktop.offset <= MODEL_IDENTITY_HEIGHT.normal);
+        const { lines, textLines } = layout.rows[0];
+        assert.equal(textLines.join(''), text);
+        assert.ok(textLines.every(line => line.length * 6 <= layout.width));
+        assert.equal(lines === 1, text.length * 6 <= MODEL_LABEL_METRICS.desktop.maxWidth);
+        if (lines === 1) assert.ok(layout.projectedHeight + MODEL_LABEL_METRICS.desktop.offset <= MODEL_IDENTITY_HEIGHT.normal);
         const angle = 66 * Math.PI / 180;
         assert.ok(Math.abs(layout.anchorX - layout.width * Math.cos(angle) - layout.height / 2 * Math.sin(angle)) < 1e-9);
     }
@@ -192,7 +196,7 @@ test('diagonal model identities keep short names unbroken and bound longer names
         { kind: 'parameter', text: 'a'.repeat(100) }, { kind: 'parameter', text: 'a'.repeat(100) }]);
     assert.ok(compared.projectedHeight + MODEL_LABEL_METRICS.desktop.offset <= MODEL_IDENTITY_HEIGHT.compared);
     for (const metrics of Object.values(MODEL_LABEL_METRICS)) {
-        const label = modelLabelLayout([{ kind: 'model', text: 'A very long model name' },
+        const label = modelLabelLayout([{ kind: 'model', text: 'GPT-6.1 Sol' },
             { kind: 'parameter', text: 'Reasoning effort: maximum' },
             { kind: 'parameter', text: 'A long agent harness name' }], undefined, metrics);
         assert.ok(label.projectedHeight + metrics.offset <= metrics.identityHeight.compared);

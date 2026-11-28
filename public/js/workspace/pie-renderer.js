@@ -4,7 +4,7 @@ import { createPieLabelLayout, pieLabelContentBox } from './pie-label-layout.js?
 import { createWeightTreemapLayout, treemapHoverTransform } from './weight-treemap-layout.js';
 import '../shared/help-popover.js';
 import { isTopicReference, topicLabelText, topicLabelParts, renderTopicLabel, TOPIC_ICON_FONT } from '../shared/topic-label.js';
-import { JOINT_VERSION_METHOD, PEER_MEDIAN_METHOD, TREEMAP_ESTIMATION_METHOD } from '../shared/fallback-inference.js';
+import { JOINT_VERSION_METHOD, MISSING_SCORE_ZERO_METHOD, PEER_MEDIAN_METHOD, TREEMAP_ESTIMATION_METHOD } from '../shared/fallback-inference.js';
 import { estimationMethodDetails } from './estimation-method-help.js';
 
 const previewNumber = value => String(Number(value.toFixed(2)));
@@ -15,19 +15,21 @@ function coverageScore(tile) {
     const estimated = Number.isFinite(tile.estimatedNormalizedScore);
     const treemap = tile.treemapEstimatedWeightBasisPoints > 0;
     const peerMedian = tile.peerEstimatedWeightBasisPoints > 0;
+    const zero = tile.zeroWeightBasisPoints > 0;
     const methodIDs = [];
     if (tile.versionEstimatedWeightBasisPoints > 0) methodIDs.push(JOINT_VERSION_METHOD);
     if (treemap) methodIDs.push(TREEMAP_ESTIMATION_METHOD);
     if (peerMedian) methodIDs.push(PEER_MEDIAN_METHOD);
+    if (zero) methodIDs.push(MISSING_SCORE_ZERO_METHOD);
     const method = estimationMethodDetails(methodIDs);
     const gap = tile.unresolvedWeightBasisPoints / tile.weightBasisPoints > 1e-9;
-    const status = measured ? estimated ? 'mixed' : 'measured' : estimated ? 'estimated' : 'unresolved';
+    const status = measured ? estimated || zero ? 'mixed' : 'measured' : estimated ? 'estimated' : zero ? 'zero' : 'unresolved';
     if (status === 'unresolved') {
         const tooltip = 'No score available for this part of the treemap.';
         return { measured, status, value: '—', tooltip, description: tooltip };
     }
     const value = previewNumber(tile.availableNormalizedScore);
-    if (!gap && status !== 'mixed' && !treemap && !peerMedian) {
+    if (!gap && status !== 'mixed' && !treemap && !peerMedian && !zero) {
         return { measured, status, value, method, description: `${method?.label ?? (measured ? 'Measured score' : 'Estimated score')} ${value} / 100.` };
     }
     const share = weight => `${previewNumber(weight / tile.weightBasisPoints * 100)}%`;
@@ -36,6 +38,7 @@ function coverageScore(tile) {
     if (estimated) parts.push(`Estimated score ${previewNumber(tile.estimatedNormalizedScore)} on ${share(tile.estimatedWeightBasisPoints)} of the weight.`);
     if (treemap) parts.push(`Treemap estimate on ${share(tile.treemapEstimatedWeightBasisPoints)} of the weight.`);
     if (peerMedian) parts.push(`Peer median on ${share(tile.peerEstimatedWeightBasisPoints)} of the weight.`);
+    if (zero) parts.push(`Missing score counted as zero on ${share(tile.zeroWeightBasisPoints)} of the weight.`);
     if (gap) parts.push(`The remaining ${share(tile.unresolvedWeightBasisPoints)} has no score.`);
     const tooltip = parts.join(' ');
     return { measured, status, value, method, treemap, peerMedian, tooltip, description: `Weighted score ${value} / 100. ${tooltip}` };
@@ -247,6 +250,7 @@ export function createPieRenderer({ state, pieSvg, pieHoverTooltip, orderedPieEn
                         'text-anchor': row.align ?? (row.clipped ? 'start' : 'middle'),
                         ...(scoreRow && score.measured ? { 'data-adopted-score': true } : {}),
                         ...(scoreRow && score.status === 'estimated' ? { 'data-estimated-score': true } : {}),
+                        ...(scoreRow && score.status === 'zero' ? { 'data-zero-score': true } : {}),
                         ...(scoreRow && score.status === 'unresolved' ? { 'data-unresolved-score': true } : {}),
                         ...(row.clipped ? { mask: `url(#${node.mask.id})` } : {}) });
                     text.textContent = row.text;

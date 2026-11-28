@@ -76,16 +76,17 @@ test('long-chain storage batches SQL parameters and preserves the global positio
     assert.deepEqual(parseFamilyRows(stored)[0].entries, entries);
 });
 
-test('a supported backup supplies a calibrated score while an unsupported target remains unscored', () => {
+test('a supported backup supplies a calibrated score while an unsupported target counts as zero', () => {
     const entries = [{ conditionID: 1, weightBasisPoints: 7000 }, { conditionID: 4, weightBasisPoints: 3000 }];
     const models = [model([[2, 80], [3, 99]]), ...pairedModels(1, 2, 80, -5, null)];
     const rules = { fallbackRules: [rule(1, [2, 3])] };
     const [range] = scoreModels(models, entries, 10000, rules);
     const [available] = scoreModels(models, entries, 10000, { ...rules, scoreMode: 'available' });
     assert.deepEqual([range.lower, range.upper, range.coverage], [0, 100, 0]);
-    assert.equal(available.lower, 75);
+    assert.equal(available.lower, 52.5);
     assert.deepEqual(available.inferredScores.map(row => [row.conditionID, row.sourceConditionID, row.originalWeight]),
-        [[1, 2, 70]]);
+        [[1, 2, 70], [4, undefined, 30]]);
+    assert.equal(available.inferredScores[1].estimationMethod, 'missing-score-zero');
     assert.deepEqual(available.calculationScores, []);
 });
 

@@ -1,5 +1,5 @@
 import { FALLBACK_INFERENCE_METHOD, JOINT_VERSION_METHOD, TREEMAP_ESTIMATION_METHOD, PEER_MEDIAN_METHOD,
-    SUPPORTED_WEIGHT_POLICY, storedFallbackInference } from '../shared/fallback-inference.js';
+    MISSING_SCORE_ZERO_METHOD, SUPPORTED_WEIGHT_POLICY, storedFallbackInference } from '../shared/fallback-inference.js';
 import { FALLBACK_RULE_MODE } from './constants.js';
 import { expandCommunityVersions } from '../shared/benchmark-version-choice.js';
 import { familyKey, resolvedFamilyConditionIDs } from '../shared/benchmark-families.js';
@@ -245,6 +245,12 @@ function validTreemapEstimate(score) {
 function validPredictionSource(score, inference, chain, pairwise) {
     if (chain && [ORIGINAL_WEIGHT_POLICY, SUPPORTED_WEIGHT_POLICY].includes(inference.weightPolicy)) {
         if (score.estimationMethod === TREEMAP_ESTIMATION_METHOD) return validTreemapEstimate(score);
+        if (score.estimationMethod === MISSING_SCORE_ZERO_METHOD) {
+            return inference.weightPolicy === ORIGINAL_WEIGHT_POLICY && score.familyID === null && score.normalizedScore === 0
+                && Number.isFinite(score.weightBasisPoints) && score.weightBasisPoints > 0
+                && Object.keys(score).every(key => ['conditionID', 'normalizedScore', 'familyID', 'estimationMethod',
+                    'weightBasisPoints', 'originalWeight', 'effectiveWeight', 'contribution'].includes(key));
+        }
         if (score.estimationMethod === PEER_MEDIAN_METHOD) {
             return score.familyID === null && Number.isSafeInteger(score.referenceCount) && score.referenceCount > 0
                 && Object.keys(score).every(key => ['conditionID', 'normalizedScore', 'familyID', 'referenceCount', 'estimationMethod',
@@ -298,8 +304,9 @@ function requireRankedModel(value, path, scoreMode) {
         }
     });
     const inferredScores = requireWorkspaceArray(model.inferredScores, `${path}.inferredScores`);
+    const estimatedScores = inferredScores.filter(score => score.estimationMethod !== MISSING_SCORE_ZERO_METHOD);
     let traceScore = model.lower;
-    const evidence = scores.length > 0 || inferredScores.length > 0;
+    const evidence = scores.length > 0 || estimatedScores.length > 0;
     const originalWeights = model.availableInference?.weightPolicy === ORIGINAL_WEIGHT_POLICY;
     const currentWeights = originalWeights || model.availableInference?.weightPolicy === SUPPORTED_WEIGHT_POLICY;
     if (scoreMode === 'available' && (evidence || currentWeights)) {
@@ -312,19 +319,22 @@ function requireRankedModel(value, path, scoreMode) {
         const missingOnly = isMissingInferenceMethod(inference.method);
         const pairwise = missingOnly || [PAIRWISE_INFERENCE_METHOD, PAIRWISE_COVERAGE_METHOD, PAIRWISE_COVERAGE_FACTOR_METHOD,
             PAIRWISE_RATIONAL_COVERAGE_FACTOR_METHOD, PAIRWISE_ORIGINAL_WEIGHT_METHOD].includes(inference.method);
+        let zeroWeight = 0;
         inferredScores.forEach((score, index) => {
-            if (!Number.isSafeInteger(score.conditionID) || score.conditionID < 1
+            const zero = score.estimationMethod === MISSING_SCORE_ZERO_METHOD;
+            if (!Number.isSafeInteger(score.conditionID) || score.conditionID === 0 || score.conditionID < 0 && !zero
                 || !Number.isFinite(score.normalizedScore)
                 || !validPredictionSource(score, inference, chain, pairwise)
                 || !Number.isFinite(score.originalWeight) || score.originalWeight <= 0 || score.originalWeight > 100 + 1e-6
                 || !Number.isFinite(score.effectiveWeight) || score.effectiveWeight <= 0 || score.effectiveWeight > 100 + 1e-6
                 || !Number.isFinite(score.contribution) || Math.abs(score.contribution - score.normalizedScore * (score.effectiveWeight / 100)) > .000001
                 || (score.familyID !== null && (!Number.isSafeInteger(score.familyID) || score.familyID < 1))) {
-                throw invalidWorkspaceResponse(`${path}.inferredScores[${index}]`, 'must describe an estimate, not an observed score');
+                throw invalidWorkspaceResponse(`${path}.inferredScores[${index}]`, 'must describe a missing-score calculation');
             }
+            if (zero) zeroWeight += score.originalWeight;
         });
         let expected;
-        const estimates = inferredScores.map(score => ({ normalizedScore: score.normalizedScore, weightFraction: score.originalWeight / 100 }));
+        const estimates = estimatedScores.map(score => ({ normalizedScore: score.normalizedScore, weightFraction: score.originalWeight / 100 }));
         try { expected = chain ? storedFallbackInference(inference.observedScore, inference.coverageFraction, estimates,
             inference.algorithm, inference.weightPolicy)
             : storedAvailableResultInference(inference.observedScore, inference.coverageFraction, estimates,
@@ -337,7 +347,7 @@ function requireRankedModel(value, path, scoreMode) {
                 throw invalidWorkspaceResponse(`${path}.availableInference.${key}`, 'must match the missing-score estimate');
             }
         }
-        if (!scores.length && inferredScores.length && inferredScores.every(score => score.estimationMethod === PEER_MEDIAN_METHOD)) {
+        if (!scores.length && estimatedScores.length && estimatedScores.every(score => score.estimationMethod === PEER_MEDIAN_METHOD)) {
             throw invalidWorkspaceResponse(`${path}.inferredScores`, 'must contain evidence from the ranked model');
         }
         const denominator = originalWeights ? 1 : chain ? inference.supportedFraction
@@ -346,6 +356,7 @@ function requireRankedModel(value, path, scoreMode) {
             : Math.abs(inference.totalScore - model.lower) <= .011 && model.lower === model.upper;
         if (Math.abs(inference.coverageFraction * 100 - model.coverage) > 0.011
             || !consistentScore
+            || zeroWeight > inference.unresolvedFraction * 100 + .000001
             || Math.abs(scores.reduce((sum, score) => sum + score.contribution, 0) - inference.observedContribution) > .000001
             || Math.abs(scores.reduce((sum, score) => sum + score.effectiveWeight, 0) - inference.coverageFraction / denominator * 100) > .000001
             || inferredScores.some(score => Math.abs(score.effectiveWeight - score.originalWeight / denominator) > .000001)) {

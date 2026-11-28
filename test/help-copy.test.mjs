@@ -66,7 +66,7 @@ test('short explanations name current navigation and preserve practical scoring 
     assert.match(guide, /effort or harness to rank settings separately/);
     assert.match(guide, /best qualifying score per test/);
     assert.match(guide, /Missing settings stay in an unknown group/);
-    assert.match(guide, /The index averages over scored weight if gaps remain/);
+    assert.match(guide, /counts as zero at its original weight/);
 });
 
 test('contribution instructions distinguish pending requests, public data and run settings', () => {

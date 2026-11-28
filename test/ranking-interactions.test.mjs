@@ -86,9 +86,9 @@ test('a calibrated sibling retains its original share and leaves the score range
     assert.deepEqual([range.lower, range.upper, range.missingWeight], [0, 100, 100]);
     assert.deepEqual(range.calculationScores, []);
     const [available] = scoreModels([model, ...peers], entries, 10000, { scoreMode: 'available' });
-    assert.equal(available.lower, 70);
-    assert.deepEqual([available.inferredScores[0].originalWeight, available.inferredScores[0].effectiveWeight], [80, 100]);
-    assert.deepEqual(available.inferredScores.map(row => row.estimationMethod), ['joint-versions']);
+    assert.equal(available.lower, 56);
+    assert.deepEqual([available.inferredScores[0].originalWeight, available.inferredScores[0].effectiveWeight], [80, 80]);
+    assert.deepEqual(available.inferredScores.map(row => row.estimationMethod), ['joint-versions', 'missing-score-zero']);
     assert.ok(Math.abs(available.availableInference.unresolvedFraction - .2) < 1e-9);
 });
 

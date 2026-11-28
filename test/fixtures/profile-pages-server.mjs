@@ -106,19 +106,27 @@ export async function startProfilePagesFixture({ viewerID = '10', port = 0 } = {
     API.post('/save_user_profile', sameOrigin, auth, requireAccountWriteOwner, async (req, res) => res.json(await saveUserProfile(db, req.user.ID, req.body)));
     API.post('/get_privacy_status', (_req, res) => res.json({ authenticated: Boolean(state.viewerID), userID: state.viewerID, accepted: true,
         isSenior: false, privateCategoryResearch: false, csrfToken: 'fixture-csrf', versions: LEGAL_VERSIONS, operator: { displayName: 'Fixture operator', identityPending: false } }));
+    API.post('/get_private_topic_editor', auth, (req, res) => {
+        const record = state.created.find(({ topic, owner }) => owner === req.user.ID && topic.ID === req.body.categoryID);
+        return record ? res.json(record.topic) : res.status(404).json({ error: 'private_topic_not_found' });
+    });
     API.post('/save_private_topic', sameOrigin, auth, requireAccountWriteOwner, (req, res) => {
         const { csrfToken, ...body } = req.body;
         if (csrfToken !== 'fixture-csrf' || !req.get('Idempotency-Key')) return res.status(403).json({ error: 'invalid_csrf_token' });
-        const draft = normalizePrivateTopicEdit(body), isPrivate = draft.isPrivate !== false;
+        const draft = normalizePrivateTopicEdit(body);
         const owner = req.user.ID;
+        const record = state.created.find(({ topic, owner: author }) => author === owner && topic.ID === draft.categoryID);
+        if (draft.categoryID !== null && !record) return res.status(404).json({ error: 'private_topic_not_found' });
+        const isPrivate = record?.topic.isPrivate ?? draft.isPrivate !== false;
         const publicCount = Number(owner === '10') + state.created.filter(item => item.owner === owner && !item.topic.isPrivate).length;
-        if (!isPrivate && publicCount >= 3) return res.status(409).json({ error: 'public_topic_limit' });
-        const ID = 100 + state.created.length, privateID = `ProfileFixture${ID}`, url = isPrivate ? `/private/${privateID}` : `/${ID}`;
-        const scenes = draft.scenes.map((scene, index) => ({ ...scene, ID: ID * 100 + index + 1, name: scene.name,
+        if (!record && !isPrivate && publicCount >= 3) return res.status(409).json({ error: 'public_topic_limit' });
+        const ID = record?.topic.ID ?? 100 + state.created.length, privateID = `ProfileFixture${ID}`, url = isPrivate ? `/private/${privateID}` : `/${ID}`;
+        const scenes = draft.scenes.map((scene, index) => ({ ...scene, ID: scene.ID ?? ID * 100 + index + 1, name: scene.name,
             isDefault: scene.key === draft.defaultSceneKey, url: `${url}/${index + 1}` }));
         const topic = { ID, categoryID: ID, publicID: ID, privateID, url, name: draft.name, description: draft.description,
             isPrivate, isMine: true, isOfficial: false, favoriteCount: 0, isFavorited: false, scenes, editRevision: 'a'.repeat(64) };
-        state.created.push({ owner, topic });
+        if (record) record.topic = topic;
+        else state.created.push({ owner, topic });
         res.json(topic);
     });
     API.post('/get_device_count', auth, (_req, res) => res.json({ deviceCount: 2 }));

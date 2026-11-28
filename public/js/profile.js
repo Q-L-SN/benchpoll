@@ -90,6 +90,7 @@ function renderProfile(data) {
     if (!publicProfileID(profile?.publicID) || !Array.isArray(data.tabs)) throw new Error('Invalid profile.');
     const discussion = { key: 'discussion', label: 'Discussion' };
     const tabs = [...data.tabs, discussion];
+    const ownCreated = isSelf ? tabs.find(tab => tab.key === 'created') : null;
     const ownFavorites = isSelf ? tabs.find(tab => tab.key === 'favorites') : null;
     let activeTab;
     if (viewerID !== null) pageAccountWriteScope.bind(viewerID);
@@ -118,13 +119,25 @@ function renderProfile(data) {
         createTopic.type = 'button';
         createTopic.setAttribute('aria-haspopup', 'dialog');
         createTopic.prepend(icon('plus'));
-        const created = tabs.find(tab => tab.key === 'created');
         topicEditor = createPrivateTopicEditor({
-            onSaved(topic) {
+            onSaved(topic, { created = false } = {}) {
                 if (blocked) return;
-                if (!created.topics.some(item => item.ID === topic.ID)) created.topics.push(topic);
-                selectTab(created);
-                status.textContent = topic.isPrivate ? `${topic.name} created.` : `${topic.name} published.`;
+                for (const tab of data.tabs) {
+                    const index = tab.topics.findIndex(item => item.ID === topic.ID);
+                    if (index !== -1) tab.topics[index] = { ...tab.topics[index], ...topic };
+                }
+                if (created && !ownCreated.topics.some(item => item.ID === topic.ID)) ownCreated.topics.push(topic);
+                selectTab(created ? ownCreated : activeTab);
+                if (!created) panel.querySelector(`[data-topic-id="${topic.ID}"] .bp-topic-edit`)?.focus({ preventScroll: true });
+                const action = created ? topic.isPrivate ? 'created' : 'published' : 'saved';
+                status.textContent = `${topic.name} ${action}.`;
+            },
+            onDeleted({ categoryID }) {
+                if (blocked) return;
+                for (const tab of data.tabs) tab.topics = tab.topics.filter(topic => topic.ID !== categoryID);
+                selectTab(activeTab);
+                createTopic.focus({ preventScroll: true });
+                status.textContent = 'Topic deleted.';
             }
         });
         createTopic.addEventListener('click', () => void topicEditor.open(null, createTopic));
@@ -159,10 +172,14 @@ function renderProfile(data) {
         }
         const topics = selected === ownFavorites ? selected.topics.filter(topic => topic.isFavorited) : selected.topics;
         for (const topic of topics) {
-            const card = createTopicCard(topic, { onError: (_error, message) => {
-                status.textContent = viewerID === null ? 'Sign in to favorite a topic.' : message;
-                if (viewerID === null) status.append(' ', link('/login', 'Sign in'));
-            } });
+            const editable = isSelf && (selected === ownCreated || topic.isMine === true) && topic.isOfficial !== true;
+            const card = createTopicCard(topic, {
+                onEdit: editable ? trigger => void topicEditor.open(topic.ID, trigger) : undefined,
+                onError(_error, message) {
+                    status.textContent = viewerID === null ? 'Sign in to favorite a topic.' : message;
+                    if (viewerID === null) status.append(' ', link('/login', 'Sign in'));
+                }
+            });
             cards.push(card); panel.append(card);
         }
         if (!topics.length) panel.append(element('p', 'pf-empty', {

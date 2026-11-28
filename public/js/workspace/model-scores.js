@@ -1,4 +1,4 @@
-import { FALLBACK_INFERENCE_METHOD, TREEMAP_ESTIMATION_METHOD, PEER_MEDIAN_METHOD, SUPPORTED_WEIGHT_POLICY } from '../shared/fallback-inference.js';
+import { FALLBACK_INFERENCE_METHOD, TREEMAP_ESTIMATION_METHOD, PEER_MEDIAN_METHOD, MISSING_SCORE_ZERO_METHOD, SUPPORTED_WEIGHT_POLICY } from '../shared/fallback-inference.js';
 import { setLoading } from '../shared/loading.js';
 import { postJSON } from '../shared/http.js';
 import { isMissingInferenceMethod } from '../shared/estimation-algorithms.js';
@@ -457,6 +457,7 @@ export function createModelScoresView({ state, modelScoresDialog, modelScoresTit
     function renderEstimate(row, score) {
         const treemap = score.estimationMethod === TREEMAP_ESTIMATION_METHOD;
         const peerMedian = score.estimationMethod === PEER_MEDIAN_METHOD;
+        const zero = score.estimationMethod === MISSING_SCORE_ZERO_METHOD;
         const method = estimationMethodDetails([score.estimationMethod]);
         if (method) row.dataset.estimationMethod = score.estimationMethod;
         const summary = document.createElement('div');
@@ -487,9 +488,10 @@ export function createModelScoresView({ state, modelScoresDialog, modelScoresTit
         aggregate.append(label, value, contribution);
         summary.append(identity, aggregate);
         row.append(summary);
-        if (peerMedian) {
+        if (peerMedian || zero) {
             const explanation = document.createElement('small');
-            explanation.textContent = `Median from ${score.referenceCount} other ${score.referenceCount === 1 ? 'model' : 'models'} on this version.`;
+            explanation.textContent = zero ? 'All three estimation methods left this score missing.'
+                : `Median from ${score.referenceCount} other ${score.referenceCount === 1 ? 'model' : 'models'} on this version.`;
             identity.append(explanation);
             return;
         }
@@ -571,7 +573,10 @@ export function createModelScoresView({ state, modelScoresDialog, modelScoresTit
             if (treemapWeight > 0) sentences.push(`${treemapWeight.toFixed(2)}% uses calibrated version chains across the treemap.`);
             if (peerWeight > 0) sentences.push(`${peerWeight.toFixed(2)}% uses peer medians on the target versions.`);
             if (inference.unresolvedFraction > 0 && model.comparable !== false) {
-                sentences.push(`${(inference.unresolvedFraction * 100).toFixed(2)}% of the weight has no score. The index uses the scored weight.`);
+                const weight = (inference.unresolvedFraction * 100).toFixed(2);
+                sentences.push(inference.weightPolicy === SUPPORTED_WEIGHT_POLICY
+                    ? `${weight}% of the weight has no score. The index uses the scored weight.`
+                    : `${weight}% of the weight counts as zero because the scores are still missing.`);
             }
             if (sentences.length) {
                 const detail = document.createElement('p');
@@ -730,7 +735,7 @@ export function createModelScoresView({ state, modelScoresDialog, modelScoresTit
                 const row = document.createElement('div'); row.className = 'bp-model-score-detail-row bp-model-inferred-row';
                 row.dataset.conditionId = String(score.conditionID);
                 modelScoresList.append(row);
-                if (Array.isArray(score.sources) || score.estimationMethod === PEER_MEDIAN_METHOD) {
+                if (Array.isArray(score.sources) || score.estimationMethod === PEER_MEDIAN_METHOD || score.estimationMethod === MISSING_SCORE_ZERO_METHOD) {
                     renderEstimate(row, score);
                     continue;
                 }
