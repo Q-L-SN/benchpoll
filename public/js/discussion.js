@@ -229,7 +229,7 @@ async function openDiscussion(url, trigger = null, { allCategories = false, navi
 }
 document.addEventListener('click', event => {
     const link = event.target.closest('a[href]');
-    if (!link || event.defaultPrevented || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || event.button !== 0) return;
+    if (typeof link?.href !== 'string' || event.defaultPrevented || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || event.button !== 0) return;
     const url = new URL(link.href);
     if (url.origin !== location.origin || url.searchParams.get('discussion') !== '1') return;
     event.preventDefault();

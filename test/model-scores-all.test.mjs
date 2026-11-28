@@ -135,7 +135,7 @@ test('coverage summaries use reported before and after scores across supported m
         [5, 'pairwise-anchored-rational-coverage-factor'], [6, 'future-coverage-adjustment']]) {
         const text = calculationSummary({ version, method, inferredFraction: .5, unresolvedFraction: 0,
             unpenalizedScore: 80, coverageFactor: .5, appliedFactor: .5, totalScore: 40 });
-        assert.match(text, /Index score 40; measured results cover 50% of the weight/);
+        assert.match(text, /Index score 40\. Measured results cover 50% of the weight/);
         assert.match(text, /Before adjustment: 80/);
         assert.match(text, /After adjustment: 40/);
         assert.doesNotMatch(text, /Coverage factor:|deduction|2 minus/);

@@ -62,7 +62,6 @@ body.is-showcase .bp-model-bar-chart { --chart-plot-height: max(120px, min(240px
 body.is-showcase .bp-model-chart-columns { padding-left: 48px; }
 body.is-showcase .bp-model-column-value { color: #fff; font-size: min(13px, calc(var(--model-score-budget) / var(--model-score-characters, 4))); font-weight: 750; }
 body.is-showcase .bp-column-known.is-empty .bp-model-column-value { background: var(--model-column-color); padding: 3px; color: #fff; }
-body.is-showcase .bp-model-chart-legend { padding-top: 0; }
 body.is-showcase .bp-model-card { overflow: visible; }
 body.is-showcase .bp-model-toolbar { padding-left: 0; }
 body.is-showcase .bp-pie-mode-row { padding: 0 0 6px; }
@@ -150,7 +149,6 @@ body.is-showcase .bp-showcase-stage, body.is-showcase .bp-workspace-grid { will-
     body.is-showcase .bp-model-column-name.bp-comparison-entry-label { width: 116px; font-size: 10px; top: 36px; }
     body.is-showcase .bp-model-column-name .bp-model-display-name { font-size: 10px; }
     body.is-showcase .bp-model-column-value { font-size: min(11px, calc(var(--model-score-budget) / var(--model-score-characters, 4))); }
-    body.is-showcase .bp-model-chart-legend { gap: 10px; padding: 0 0 0 25px; font-size: 10px; }
     .bp-showcase-footer { min-height: 56px; padding-inline: 20px; font-size: 11px; }
     .bp-showcase-outro { top: 24%; }
     .bp-showcase-outro h2 { font-size: 44px; }
@@ -199,7 +197,6 @@ body.is-showcase .bp-showcase-stage, body.is-showcase .bp-workspace-grid { will-
     body.is-showcase .bp-model-column-name.bp-comparison-entry-label { width: 94px; font-size: 10px; top: 36px; }
     body.is-showcase .bp-model-column-name .bp-model-display-name { font-size: 10px; }
     body.is-showcase .bp-model-bar-chart { padding-top: 0; }
-    body.is-showcase .bp-model-chart-legend { padding-block: 0; font-size: 10px; }
 }
 @supports (height: 1cqh) {
     body.is-showcase .bp-right-workspace { container-type: size; }

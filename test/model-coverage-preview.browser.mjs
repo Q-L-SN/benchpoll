@@ -59,7 +59,7 @@ async function setup(t, width = 1360) {
         const { mergeBenchmarkWeights } = await import('/js/workspace/expanded-weights.js');
         const { createModelScoresView } = await import('/js/workspace/model-scores.js');
         const state = { authenticated: false, userID: null, mode: 'public', categoryID: 1, selectedContextValues: {},
-            scoreMode: 'available', selectedObjectID: -10, selectedFamilyKey: 'original', workspaceView: 'focus', topicsExpanded: false,
+            selectedObjectID: -10, selectedFamilyKey: 'original', workspaceView: 'focus', topicsExpanded: false,
             loadSequence: 1, rankingVersion: 1, comparison: { keys: ['model'], fields: [] },
             limits: { totalBasisPoints: 10000 }, pieOrderByObjectID: new Map([[11, 0], [21, 1], [31, 2]]),
             visualPieWeights: new Map(), visualPieEntries: new Map(), pieAnimationFrame: null,
@@ -151,7 +151,9 @@ test('desktop row hover expands and merges coverage, preserves label typography,
             sameSize: score.getAttribute('font-size') === weight.getAttribute('font-size'),
             sameWeight: score.getAttribute('font-weight') === weight.getAttribute('font-weight'),
             distinctColor: getComputedStyle(score).fill !== getComputedStyle(weight).fill,
-            interactive: Boolean(svg.querySelector('[tabindex], [role="button"]')), selected: window.coverageQA.state.selectedObjectID };
+            editable: Boolean(svg.querySelector('[role="button"]')),
+            estimateLinks: svg.querySelectorAll('a.bp-estimate-icon-link').length,
+            selected: window.coverageQA.state.selectedObjectID };
     });
     assert.equal(preview.count, 3);
     assert.equal(preview.faded, true);
@@ -162,7 +164,8 @@ test('desktop row hover expands and merges coverage, preserves label typography,
     assert.equal(preview.sameSize, true);
     assert.equal(preview.sameWeight, true);
     assert.equal(preview.distinctColor, true);
-    assert.equal(preview.interactive, false);
+    assert.equal(preview.editable, false);
+    assert.equal(preview.estimateLinks, 1);
     assert.equal(preview.selected, -10);
     await page.screenshot({ path: `${output}/desktop-coverage.png` });
     await page.mouse.move(1200, 800);
@@ -179,7 +182,6 @@ test('desktop tooltips distinguish unscored tiles from measured and estimated ze
     const page = await setup(t);
     await page.evaluate(() => {
         const qa = window.coverageQA;
-        qa.state.scoreMode = 'available';
         qa.modelA.inferredScores = [{ conditionID: 21, normalizedScore: 0, originalWeight: 30 }];
     });
     await page.locator('#row-a').hover();
@@ -199,11 +201,6 @@ test('desktop tooltips distinguish unscored tiles from measured and estimated ze
     await page.waitForSelector('.bp-model-coverage-overlay', { state: 'detached' });
     await page.locator('#weight-pie [data-object-id="31"]').click();
     assert.equal(await page.evaluate(() => window.coverageQA.selectedTile), 31);
-    await page.evaluate(() => { window.coverageQA.state.scoreMode = 'range'; });
-    await page.locator('#row-a').hover();
-    const rangeTile = page.locator('.bp-model-coverage-overlay [data-object-id="21"]');
-    assert.equal(await rangeTile.locator('[data-unresolved-score]').textContent(), '0');
-    assert.equal(await rangeTile.getAttribute('data-tooltip'), 'No measurement. Counts as 0 at the lower end and 100 at the upper end.');
 });
 
 test('out of order coverage requests, pointer leave and context changes cannot paint stale previews', async t => {
@@ -243,7 +240,7 @@ test('actual list and chart rows bind previews and expose coverage help only on 
             condition: { scoreFields: [] }, comparable: true }));
         Object.assign(qa.state, { workspaceDisplay: 'leaderboard', modelLeaderboards: { public: models },
             rankingPageLoading: { public: false }, rankingPageError: { public: null },
-            rankingPagination: { snapshotID: 'coverage-fixture', public: { hasMore: false } }, scoreMode: 'available' });
+            rankingPagination: { snapshotID: 'coverage-fixture', public: { hasMore: false } } });
         qa.bound = 0; qa.cleaned = 0;
         qa.list = createModelListView({ state: qa.state, modelRows: host.querySelector('#actual-model-rows'),
             openApprovedModelResults: qa.view.openApprovedModelResults, onNeedMore() {},
@@ -334,7 +331,7 @@ test('320px evidence retains every source and both contributions when a target i
     });
     const tile = page.locator('.bp-model-coverage-figure [data-object-id="21"]');
     assert.equal(await tile.locator('[data-estimated-score]').textContent(), '73.33');
-    assert.equal(await tile.getAttribute('aria-label'), 'Beta test. Estimated score 73.33 / 100.');
+    assert.equal(await tile.getAttribute('aria-label'), 'Beta test. Version estimate 73.33 / 100.');
     const rows = page.locator('.bp-model-inferred-row[data-condition-id="21"]');
     assert.equal(await rows.count(), 2);
     const first = rows.nth(0), second = rows.nth(1);

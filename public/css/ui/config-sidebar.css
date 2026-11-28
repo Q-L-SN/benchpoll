@@ -112,7 +112,7 @@ body.bp-home #config-sidebar-toggle > .bp-sidebar-toggle-direction { flex-basis:
         transition: transform 300ms cubic-bezier(.2, .7, .2, 1), visibility 0s 300ms;
     }
     .bp-home .bp-workspace { width: min(1640px, calc(100vw - var(--bp-sidebar-width))); max-width: 100%; margin-inline: auto; }
-    .bp-home .bp-page-heading { align-items: center; min-height: 40px; padding-top: 0; margin-bottom: 12px; }
+    .bp-home .bp-page-heading { align-items: center; min-height: 40px; padding-top: 0; }
     .bp-home .bp-page-heading h1 { font-size: 26px; line-height: 32px; }
     .bp-home #workspace-brand-slot {
         display: flex;

@@ -206,14 +206,14 @@ test('mobile header and explicit panel navigation keep every workspace available
     assert.match(styles, /\.bp-context-actions\s*\{[^}]*flex-wrap:\s*wrap[^}]*overflow:\s*visible/s);
 });
 
-test('model leaderboard is fixed to lower-bound ranking without a visible bound control', () => {
+test('model leaderboard ranks by a single score without a visible bound control', () => {
     const headStart = html.indexOf('<div class="bp-model-head"');
     const head = html.slice(headStart, html.indexOf('</div>', headStart) + '</div>'.length);
     assert.match(head, /class="bp-model-score-heading">Score</);
     assert.doesNotMatch(head, /Lower|Upper|bound-toggle|fa-right-left/);
     assert.doesNotMatch(workspace, /state\.bound|boundToggle/);
     assert.match(rankingPages, /Number\(right\.lower\) - Number\(left\.lower\)/);
-    assert.match(workspace, /const selectedScore = Number\(model\.lower\)/);
+    assert.match(workspace, /scoreValue\.textContent = comparable \? rankingNumber\(model\.lower\)/);
     assert.match(styles, /\.bp-model-score-heading\s*\{/);
     assert.match(styles, /\.bp-score-track\s*\{[^}]*grid-row:\s*2/s);
 });

@@ -233,7 +233,7 @@ for (const repetition of [1, 2]) {
             });
             try {
                 await new Promise(resolve => { server = app.listen(0, '127.0.0.1', resolve); });
-                const body = '{"categoryID":1,"scoreMode":"range"}';
+                const body = '{"categoryID":1}';
                 client = request({ hostname: '127.0.0.1', port: server.address().port, method: 'POST', path: '/get_weighted_workspace',
                     headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) } }, res => {
                     let data = ''; res.setEncoding('utf8'); res.on('data', value => { data += value; });

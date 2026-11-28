@@ -162,7 +162,6 @@ body.th-home .bp-profile-editor input:focus { border-color: var(--bp-accent); ba
 .th-model:focus-visible { outline-offset: -2px; }
 .th-model-plot { position: relative; min-height: 0; border-bottom: 1px solid #cdd2da; }
 .th-model-bar { position: absolute; bottom: 0; width: var(--th-bar-width); background: var(--th-vendor-color); border-radius: 5px 5px 0 0; }
-.th-model-range { position: absolute; bottom: 0; width: var(--th-bar-width); background: #929eac; border-radius: 5px 5px 0 0; }
 .th-model-score { position: absolute; top: 50%; left: 0; width: 100%; transform: translateY(-50%); color: #fff; font-size: 12px; line-height: 16px; text-align: center; white-space: nowrap; font-weight: 700; }
 .th-model-score.is-outside { top: auto; z-index: 2; width: auto; transform: translateX(-50%); color: #28313e; text-align: center; }
 .th-model-identity { position: relative; min-width: 0; padding-top: var(--th-model-mark-gap, 5px); }

@@ -35,7 +35,7 @@ test('a restricted primary does not block saving an independent version or its c
         VALUES (?, 1, 4, ?, 'https://example.test/independent', 'vendor_official', '{}', '[]')`, [ID, ID * 15]);
     const topic = await createPublicTopic(db, 'Available versions');
     const categoryID = topic.ID;
-    const read = () => getRankingWorkspace(db, { categoryID, userID: '42', scoreMode: 'range' });
+    const read = () => getRankingWorkspace(db, { categoryID, userID: '42' });
     const initial = await read();
     const page = createRankingPager().create(initial);
     validateWorkspacePayload(page);
@@ -83,7 +83,7 @@ test('real MySQL saves abstention, recalculates inherited versions, and expands 
         { conditionID: 4, weightBasisPoints: 5000 }]), error => error.body?.error === 'pie_benchmark_version_conflict');
     await save('42', [{ conditionID: 1, weightBasisPoints: 10000, followCommunityVersion: true }]);
     await save('43', [{ conditionID: 4, weightBasisPoints: 10000 }]);
-    const read = () => getRankingWorkspace(db, { categoryID: topic.ID, userID: '42', scoreMode: 'range' });
+    const read = () => getRankingWorkspace(db, { categoryID: topic.ID, userID: '42' });
     const first = await read();
     validateWorkspacePayload(createRankingPager().create(first));
     assert.equal(first.personalPie.entries[0].followCommunityVersion, true);
@@ -99,7 +99,7 @@ test('real MySQL saves abstention, recalculates inherited versions, and expands 
     const contextID = changed.context.ID;
     await save('42', [{ conditionID: -contextID, weightBasisPoints: 10000 }], 0, reference.ID);
     await save('43', [{ conditionID: 4, weightBasisPoints: 10000 }], 2);
-    const nested = await getRankingWorkspace(db, { categoryID: reference.ID, userID: '42', scoreMode: 'range' });
+    const nested = await getRankingWorkspace(db, { categoryID: reference.ID, userID: '42' });
     validateWorkspacePayload(createRankingPager().create(nested));
     assert.deepEqual(nested.personalPie.effectiveEntries.map(entry => entry.conditionID), [4]);
     assert.deepEqual(nested.modelLeaderboards.personal.map(model => model.lower).sort((a, b) => a - b), scores);

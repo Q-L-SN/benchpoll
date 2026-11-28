@@ -37,15 +37,15 @@ test('sidebar defaults to collapsed without writing or replacing any saved boole
 
 test('version-based estimation uses calibrated scores and keeps retired coverage controls hidden', () => {
     assert.equal(AVAILABLE_INFERENCE_VERSION, 13);
+    assert.match(topics, /availableInferenceVersion:\s*AVAILABLE_INFERENCE_VERSION/);
+    assert.match(read('public/js/shared/http.js'), /rankingReadBody\(url, body\)/);
     for (const source of [topics, workspace]) {
-        assert.match(source, /import \{ AVAILABLE_INFERENCE_VERSION \} from '\.\/shared\/available-score\.js'/);
-        assert.match(source, /availableInferenceVersion\s*[:=]\s*AVAILABLE_INFERENCE_VERSION/);
         assert.doesNotMatch(source, /readCoveragePenalty|coveragePenaltyVersion|mountCoveragePenaltyControl|coveragePenaltyControl/);
     }
     for (const html of [home, configuration]) assert.doesNotMatch(html, /coverage-experiment|coverage-penalty|Power 0\.35/);
     assert.doesNotMatch(read('public/css/ui/topic-identity.css'), /coverage-experiment/);
-    assert.match(configuration, /Nominated external versions can supply an estimate/);
-    assert.match(read('private/how-it-works.html'), /<strong>treemap estimate<\/strong> searches all versions of weighted benchmarks/);
+    assert.doesNotMatch(configuration, /Estimation method|Score range/);
+    assert.match(read('private/how-it-works.html'), /searches all versions of other weighted benchmarks/);
 });
 
 test('creation offers private and public visibility while edits use the separate visibility action', () => {

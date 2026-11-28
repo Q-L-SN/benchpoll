@@ -1,4 +1,3 @@
-import { estimationRequest, normalizeEstimationAlgorithm } from '../public/js/shared/estimation-algorithms.js';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
@@ -87,7 +86,7 @@ function createHarness(t, { reconcile = false, realHTTP = false } = {}) {
     // immutable requested scene, independently of retired context query syntax.
     const payload = (body, phase) => validateWorkspacePayload(withRecoveryScenes(workspace(fixture, body),
         reconcile && phase === 'base' ? { scene: recoveryScene.standard } : body.contextValues), { initialMode: body.initialMode });
-    const globals = { estimationRequest, normalizeEstimationAlgorithm,
+    const globals = {
         ...constants, state, structuredClone, URL, URLSearchParams, Map, Set, Date, Number, guestDrafts, pieRecovery,
         workspaceLoadFailed: false, comparisonProfileFailure: null, comparisonProfileLoadError: '',
         comparisonProfilesReady: Promise.resolve(true), pendingFallbackSave: false,
@@ -202,19 +201,18 @@ const comparisonErrors = ['comparison_keys_unavailable', 'invalid_comparison_fil
 for (let repetition = 1; repetition <= 2; repetition++) {
     const run = (name, callback) => test(`${name} (${repetition})`, { timeout: 2000 }, callback);
 
-    run('reconciliation and preview use immutable category/context/comparison/mode/score/URL snapshots', async t => {
+    run('reconciliation and preview use immutable category/context/comparison/mode/URL snapshots', async t => {
         const h = createHarness(t, { reconcile: true });
-        h.state.scoreMode = 'range';
         const loading = h.load();
         await flush();
-        Object.assign(h.state, { categoryID: 2, selectedContextValues: { scene: recoveryScene.standard }, scoreMode: 'available', mode: 'public' });
+        Object.assign(h.state, { categoryID: 2, selectedContextValues: { scene: recoveryScene.standard }, mode: 'public' });
         h.state.comparisonRequest.keys.push('field:1');
         h.location.search = '?sort=later'; h.location.pathname = '/2/1';
         await h.respond(0);
         assert.equal(h.requests.length, 2, 'The originally captured numeric-route scene still requires reconciliation.');
         assert.equal(h.contextSearches[0], '?sort=initial', 'Reconciliation reads the original search snapshot after navigation.');
         const expected = { categoryID: 1, contextValues: { scene: recoveryScene.extended },
-            comparison: { mode: 'best', keys: ['model'], filters: [] }, scoreMode: 'range', initialMode: 'personal' };
+            comparison: { mode: 'best', keys: ['model'], filters: [] }, initialMode: 'personal' };
         for (const [key, value] of Object.entries(expected)) assert.deepEqual(plain(h.requests[1].body[key]), value, key);
         await h.respond(1);
         assert.equal(h.requests.length, 3);

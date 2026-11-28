@@ -15,9 +15,7 @@ test('the UI inventory has five primitives rather than one component per old ski
 
 test('workspace switches retain measured segmented geometry alongside the sidebar collection picker', () => {
     const html = read('private/home.html');
-    for (const name of ['bp-mode-switch', 'bp-scoring-switch']) {
-        assert.match(html, new RegExp(`class="[^"]*${name}[^>]+data-ui-component="segmented"`));
-    }
+    assert.match(html, /class="[^"]*bp-mode-switch[^>]+data-ui-component="segmented"/);
     assert.match(html, /<button id="sidebar-topic-collection"[^>]+aria-controls="sidebar-collection-options"/);
     assert.doesNotMatch(read('public/js/navigation/collection-picker.js'), /mountCustomSelect/);
     const code = read('public/js/shared/ui-components.js');

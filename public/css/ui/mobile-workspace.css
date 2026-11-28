@@ -10,9 +10,9 @@
         padding: 12px 12px 0;
     }
     .bp-home:not(.is-showcase) .bp-workspace > :not(.bp-workspace-grid) { flex-shrink: 0; }
-    .bp-home:not(.is-showcase) .bp-page-heading { min-height: 0; margin-bottom: 4px; }
+    .bp-home:not(.is-showcase) .bp-page-heading { min-height: 0; }
     .bp-home:not(.is-showcase) .bp-page-heading h1 { font-size: 28px; line-height: 1.25; }
-    .bp-home:not(.is-showcase) .bp-context-row { display: flex; position: relative; top: auto; margin-bottom: 4px; }
+    .bp-home:not(.is-showcase) .bp-context-row { display: flex; position: relative; top: auto; }
     .bp-home:not(.is-showcase) .bp-scene-strip { margin-bottom: 10px; }
     .bp-home:not(.is-showcase) .bp-workspace-grid {
         display: flex; flex-direction: row; flex: 1 1 0; align-items: stretch; gap: 0;
@@ -111,15 +111,9 @@
     }
     .bp-home:not(.is-showcase) .bp-model-controls::-webkit-scrollbar { display: none; }
     .bp-home:not(.is-showcase) .bp-model-controls :is(.bp-model-toolbar, .bp-scoring-toolbar) { display: contents; }
-    .bp-home:not(.is-showcase) .bp-model-controls .bp-scoring-switch { order: 1; flex: 0 0 auto; margin-right: 36px; }
-    body.bp-home:not(.is-showcase) .bp-model-controls .bp-scoring-switch.bp-ui-segmented[data-ui-component="segmented"] > button[aria-pressed] {
-        flex: 0 0 auto; width: auto; min-height: 44px; padding-inline: 9px; font-size: 12px; white-space: nowrap;
-    }
-    .bp-home:not(.is-showcase) .bp-model-controls .bp-scoring-switch [data-score-mode] > span { display: inline; }
-    .bp-home:not(.is-showcase) .bp-model-controls .bp-scoring-switch .bp-score-mode-icon { display: none; }
-    .bp-home:not(.is-showcase) .bp-model-controls .bp-quick-comparison { order: 2; flex: 0 0 auto; }
-    .bp-home:not(.is-showcase) .bp-model-controls .bp-model-search { order: 3; flex: 0 0 auto; }
-    .bp-home:not(.is-showcase) .bp-model-controls #contribute-data-button { order: 4; flex: 0 0 auto; width: auto; padding: 0 10px; white-space: nowrap; }
+    .bp-home:not(.is-showcase) .bp-model-controls .bp-quick-comparison,
+    .bp-home:not(.is-showcase) .bp-model-controls .bp-model-search { flex: 0 0 auto; }
+    .bp-home:not(.is-showcase) .bp-model-controls #contribute-data-button { order: 1; flex: 0 0 auto; width: auto; padding: 0 10px; white-space: nowrap; }
     .bp-home:not(.is-showcase) #contribute-data-button > span { display: inline; }
     .bp-home:not(.is-showcase) .bp-model-controls.has-overflow-end { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 16px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 16px), transparent); }
     .bp-home:not(.is-showcase) .bp-model-controls.has-overflow-start { -webkit-mask-image: linear-gradient(to right, transparent, #000 16px); mask-image: linear-gradient(to right, transparent, #000 16px); }

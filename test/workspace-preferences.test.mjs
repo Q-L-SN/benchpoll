@@ -1,10 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readWorkspacePreferences, writeWorkspacePreferences } from '../public/js/workspace/preferences.js';
-import { createWorkspaceState } from '../public/js/workspace/state.js';
 
 const storageKey = 'benchpoll-workspace-preferences-v1';
-const defaults = { mode: 'public', personalFallbackExpanded: false, benchmarkSettingsExpanded: false, scoreMode: 'available' };
+const defaults = { mode: 'public', personalFallbackExpanded: false, benchmarkSettingsExpanded: false };
 
 function memoryStorage(initialValue = null) {
     const values = new Map(initialValue === null ? [] : [[storageKey, initialValue]]);
@@ -14,37 +13,9 @@ function memoryStorage(initialValue = null) {
     };
 }
 
-test('new workspace state and absent preferences both default to Estimated score', () => {
-    const state = createWorkspaceState();
-    assert.equal(state.scoreMode, 'available');
-    assert.equal(state.scoreMode, readWorkspacePreferences(memoryStorage()).scoreMode);
-});
-
-test('both explicitly saved scoring modes survive preference reads and writes', () => {
-    for (const scoreMode of ['range', 'available']) {
-        const preferences = { ...defaults, mode: 'personal', personalFallbackExpanded: true, scoreMode };
-        const storage = memoryStorage(JSON.stringify(preferences));
-        assert.deepEqual(readWorkspacePreferences(storage), preferences);
-        assert.equal(writeWorkspacePreferences(readWorkspacePreferences(storage), storage), true);
-        assert.deepEqual(JSON.parse(storage.getItem(storageKey)), preferences);
-        assert.deepEqual(readWorkspacePreferences(storage), preferences);
-    }
-});
-
-test('invalid scoring preferences default to Estimated score without discarding other valid fields', () => {
-    for (const scoreMode of [undefined, null, '', 'RANGE', 'AVAILABLE', 'other', true, false, 0, 1, [], {}]) {
-        const preferences = { mode: 'personal', personalFallbackExpanded: true, scoreMode };
-        const expected = { ...defaults, mode: 'personal', personalFallbackExpanded: true };
-        const storage = memoryStorage(JSON.stringify(preferences));
-        assert.deepEqual(readWorkspacePreferences(storage), expected);
-        assert.equal(writeWorkspacePreferences(preferences, storage), true);
-        assert.deepEqual(JSON.parse(storage.getItem(storageKey)), expected);
-    }
-});
-
 test('workspace preferences preserve personal fallback expansion while switching modes through a round trip', () => {
     const storage = memoryStorage();
-    const preferences = { ...defaults, mode: 'personal', personalFallbackExpanded: true, scoreMode: 'available' };
+    const preferences = { ...defaults, mode: 'personal', personalFallbackExpanded: true };
     assert.equal(writeWorkspacePreferences(preferences, storage), true);
     assert.deepEqual(readWorkspacePreferences(storage), preferences);
 
@@ -128,12 +99,13 @@ test('invalid modes and non-boolean visibility values never become active prefer
     }
 });
 
-test('scoring mode owns chart scaling and obsolete fillTopBar preferences are discarded', () => {
-    const storage = memoryStorage(JSON.stringify({ scoreMode: 'available', fillTopBar: true }));
-    assert.deepEqual(readWorkspacePreferences(storage), { ...defaults, scoreMode: 'available' });
-    assert.deepEqual(readWorkspacePreferences(memoryStorage(JSON.stringify({ scoreMode: 'other', fillTopBar: 'true' }))), defaults);
-    assert.equal(writeWorkspacePreferences({ scoreMode: 'available', fillTopBar: true }, storage), true);
-    assert.deepEqual(JSON.parse(storage.getItem(storageKey)), { ...defaults, scoreMode: 'available' });
+test('obsolete scoring preferences are discarded while weight preferences survive', () => {
+    const legacy = { mode: 'personal', scoreMode: 'range', fillTopBar: true };
+    const storage = memoryStorage(JSON.stringify(legacy));
+    const expected = { ...defaults, mode: 'personal' };
+    assert.deepEqual(readWorkspacePreferences(storage), expected);
+    assert.equal(writeWorkspacePreferences(legacy, storage), true);
+    assert.deepEqual(JSON.parse(storage.getItem(storageKey)), expected);
 });
 
 test('obsolete version-grouping preferences are discarded on read and write', () => {

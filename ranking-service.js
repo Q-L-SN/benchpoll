@@ -1503,8 +1503,7 @@ async function readRankingSnapshot(db, build, signal, rankingCache) {
 }
 
 export async function getRankingWorkspace(db, options = {}) {
-    const scoreMode = options.scoreMode ?? 'available';
-    if (!['range', 'available'].includes(scoreMode)) {
+    if ((options.scoreMode ?? 'available') !== 'available') {
         throw { status: 400, body: { error: 'invalid_score_mode' } };
     }
     const availableInferenceVersion = currentInferenceVersion(options.availableInferenceVersion);
@@ -1513,16 +1512,15 @@ export async function getRankingWorkspace(db, options = {}) {
         ? null
         : normalizePreviewPersonalPie(options.previewPersonalPie);
     return readRankingSnapshot(db, connection => buildRankingWorkspace(connection,
-        { ...options, scoreMode, availableInferenceVersion, estimationAlgorithm, previewPersonalPie }), options.signal, options.rankingCache);
+        { ...options, availableInferenceVersion, estimationAlgorithm, previewPersonalPie }), options.signal, options.rankingCache);
 }
 
 // Proposal trials have no persisted context or electorate. References resolve only public weights.
 export async function getProposalRankingWorkspace(db, snapshot, options = {}) {
-    const scoreMode = options.scoreMode ?? 'available';
-    if (!['range', 'available'].includes(scoreMode)) throw requestError(400, 'invalid_score_mode');
+    if ((options.scoreMode ?? 'available') !== 'available') throw requestError(400, 'invalid_score_mode');
     const previewPersonalPie = normalizePreviewPersonalPie({ entries: snapshot.entries, estimationVotes: snapshot.estimationVotes ?? [] });
     return readRankingSnapshot(db, connection => buildRankingWorkspace(connection, {
-        proposalName: snapshot.name, userID: null, previewPersonalPie, scoreMode,
+        proposalName: snapshot.name, userID: null, previewPersonalPie,
         availableInferenceVersion: currentInferenceVersion(options.availableInferenceVersion),
         comparison: options.comparison, jsonMemberMetadata: true
     }), options.signal, options.rankingCache);
@@ -1533,7 +1531,6 @@ async function buildRankingWorkspace(db, {
     contextValues = {},
     userID = null,
     comparison = null,
-    scoreMode = 'available',
     availableInferenceVersion = AVAILABLE_INFERENCE_VERSION,
     estimationAlgorithm = DEFAULT_ESTIMATION_ALGORITHM,
     previewPersonalPie = null,
@@ -1613,10 +1610,10 @@ async function buildRankingWorkspace(db, {
     const publicExpanded = await expandedFor('public', publicDisplayWeights);
     const personalScoringEntries = personalExpanded?.scoringEntries ?? personalVersionEntries;
     const publicScoringEntries = publicExpanded?.scoringEntries ?? publicVersionEntries;
-    const treemapPolicies = scoreMode === 'available' ? {
+    const treemapPolicies = {
         personal: planEstimates.treemap(personalScoringEntries, ballots.community, personalEstimationVotes),
         public: planEstimates.treemap(publicScoringEntries, ballots.community)
-    } : {};
+    };
     const evaluationConditions = [...conditions, ...referenceTargets.filter(target =>
         context.isPrivate || !target.isPrivate).map(referenceCondition)];
     const globalWeights = await loadGlobalConditionWeights(db);
@@ -1654,7 +1651,7 @@ async function buildRankingWorkspace(db, {
             new Map(group.comparisonScores.map(score => [Number(score.conditionID), score]))]))) : null;
     // Both pies share joint fits for identical target, settings and eligible measured sources.
     const fallbackCalibration = createFallbackCalibration(models);
-    const scoringOptions = { scoreMode, availableInferenceVersion, estimationAlgorithm, fallbackCalibration,
+    const scoringOptions = { scoreMode: 'available', availableInferenceVersion, estimationAlgorithm, fallbackCalibration,
         comparisonScoreIndexes, jsonMemberMetadata, excludedConditionIDs };
     const calculate = async (scope, entries, total) => {
         const treemapPolicy = treemapPolicies[scope];
@@ -1663,7 +1660,7 @@ async function buildRankingWorkspace(db, {
         if (!jsonMemberMetadata || !preparedGroups) return build();
         // A ballot edit may change either a direct source or a link between two unweighted versions.
         const key = JSON.stringify([normalizeUserID(userID), context.categoryID, context.contextValues,
-            scope, comparisonKey, scoreMode, availableInferenceVersion, estimationAlgorithm, entries, total, treemapPolicy?.cacheKey]);
+            scope, comparisonKey, availableInferenceVersion, estimationAlgorithm, entries, total, treemapPolicy?.cacheKey]);
         return cachedRankingCalculation(db, key, build);
     };
     const personalRanking = await calculate('personal', personalScoringEntries, PIE_TOTAL_BASIS_POINTS);
@@ -1678,7 +1675,7 @@ async function buildRankingWorkspace(db, {
     };
 
     return {
-        scoreMode,
+        scoreMode: 'available',
         estimationAlgorithm,
         authenticated: Boolean(userID),
         userID: normalizeUserID(userID),
@@ -1816,12 +1813,8 @@ async function savePersonalPieAttempt(db, {
     entries,
     fallbackRules,
     estimationVotes,
-    comparison = null,
-    scoreMode = 'available'
+    comparison = null
 }) {
-    if (!['range', 'available'].includes(scoreMode)) {
-        throw requestError(400, 'invalid_score_mode');
-    }
     const normalizedUserID = normalizeUserID(userID);
     const normalizedCategoryID = parseSafeInteger(categoryID, { minimum: 1 });
     const revision = parseSafeInteger(expectedRevision);

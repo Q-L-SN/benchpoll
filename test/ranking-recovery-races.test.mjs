@@ -1,4 +1,3 @@
-import { estimationRequest, normalizeEstimationAlgorithm } from '../public/js/shared/estimation-algorithms.js';
 import assert from 'node:assert/strict';
 import test, { after } from 'node:test';
 import { readFile } from 'node:fs/promises';
@@ -107,7 +106,7 @@ async function createHarness(version = before ? 'before' : 'current') {
             pending.push(task);
         }
     });
-    const globals = { estimationRequest, normalizeEstimationAlgorithm,
+    const globals = {
         state, structuredClone, console, Map, Set, Date, Number, chartWeightMode,
         workspaceLoadFailed: false, comparisonProfileFailure: null, comparisonProfileLoadError: '',
         comparisonProfilesReady: Promise.resolve(true), pendingFallbackSave: false,

@@ -106,7 +106,7 @@ test('crawler previews are public-only, bounded, deduplicated and do not block o
     assert.equal(await service.snapshot({ ...topic, ID: 60 }, null), null);
     assert.deepEqual(await Promise.all([first, duplicate, second]), [null, null, null]);
     assert.equal(calls.length, 2);
-    assert.deepEqual(calls[0], { categoryID: 54, sceneID: 101, scoreMode: 'available', reasoning: false, harness: false });
+    assert.deepEqual(calls[0], { categoryID: 54, sceneID: 101, reasoning: false, harness: false });
     pending.forEach(resolve => resolve(snapshot));
     await new Promise(resolve => setImmediate(resolve));
     const third = service.snapshot({ ...topic, ID: 60 }, null);

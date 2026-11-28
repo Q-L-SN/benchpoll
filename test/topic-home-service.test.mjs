@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { normalizeTopicPreview, topicPreviewComparison, serializeTopicPreviewModels, createTopicHomeService } from '../topic-home-service.js';
 import { comparisonDisplayParts } from '../public/js/shared/comparison-display.js';
 
-test('home previews default to Estimated score and forbid configuration or arbitrary filters', () => {
-    assert.equal(normalizeTopicPreview({ categoryID: 54 }).scoreMode, 'available');
+test('home previews reject score ranges, weight configuration and arbitrary filters', () => {
+    assert.equal(normalizeTopicPreview({ categoryID: 54 }).categoryID, 54);
     for (const body of [{ categoryID: 54, weights: [] }, { categoryID: 54, importFrom: 2 },
         { categoryID: 54, reasoning: 'yes' }, { categoryID: 54, offset: 25 }, { categoryID: '54' }]) {
         assert.throws(() => normalizeTopicPreview(body));
@@ -85,7 +85,8 @@ test('public previews coalesce loads, never resolve the viewer personal pie, and
     assert.equal(page.models[0].ID, 26);
     assert.equal(f.owners.at(-1), null);
     await assert.rejects(f.service.preview('99', { categoryID: 55, snapshotID, offset: 25 }), error => error.status === 410);
-    await assert.rejects(f.service.preview('99', { categoryID: 54, scoreMode: 'range', snapshotID, offset: 25 }), error => error.status === 410);
+    await assert.rejects(f.service.preview('99', { categoryID: 54, scoreMode: 'range', snapshotID, offset: 25 }),
+        error => error.status === 400 && error.body?.error === 'invalid_score_mode');
     f.service.invalidate(54);
     await f.service.preview(null, { categoryID: 54 });
     assert.equal(f.builds(), 2);

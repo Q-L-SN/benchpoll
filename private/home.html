@@ -237,14 +237,29 @@
                 </style>
                 <nav class="bp-search-navigation" aria-label="About BenchPoll"><a class="bp-brand" href="/"><img class="bp-brand-lockup" src="/assets/benchpoll-logo.svg" alt="BenchPoll" width="155" height="32"></a><a href="/how-it-works">How it works</a><details class="bp-search-more"><summary aria-label="More"><i class="fa-solid fa-ellipsis" aria-hidden="true"></i></summary><div><a href="/">Topics</a><a href="/terms">Terms</a><a href="/privacy">Privacy</a><a href="/cookies">Cookies</a></div></details></nav>
             </noscript>
-            <header class="bp-page-heading">
-                <button id="config-sidebar-toggle" class="bp-config-sidebar-toggle bp-quiet-action" type="button" aria-label="Hide topics sidebar" data-tooltip="Hide topics sidebar" aria-expanded="true" aria-controls="config-sidebar"><i class="fa-solid fa-table-columns" aria-hidden="true"></i><i class="fa-solid fa-chevron-left bp-sidebar-toggle-direction" aria-hidden="true"></i></button>
-                <div class="bp-heading-stack">
-                <div id="workspace-brand-slot" class="bp-workspace-brand-slot"></div>
-                <div class="bp-heading-topic-row">
-                <!--bp:topic-identity--><h1 id="workspace-headline" class="bp-heading-copy"><span id="bp-breadcrumb" class="bp-breadcrumb"></span></h1><!--/bp:topic-identity-->
-                <!--bp:topic-summary--><p id="workspace-topic-summary" class="bp-workspace-topic-summary" hidden></p><!--/bp:topic-summary-->
-                </div>
+            <header class="bp-workspace-header">
+                <div class="bp-workspace-heading-content">
+                    <div class="bp-page-heading">
+                        <button id="config-sidebar-toggle" class="bp-config-sidebar-toggle bp-quiet-action" type="button" aria-label="Hide topics sidebar" data-tooltip="Hide topics sidebar" aria-expanded="true" aria-controls="config-sidebar"><i class="fa-solid fa-table-columns" aria-hidden="true"></i><i class="fa-solid fa-chevron-left bp-sidebar-toggle-direction" aria-hidden="true"></i></button>
+                        <div class="bp-heading-stack">
+                            <div id="workspace-brand-slot" class="bp-workspace-brand-slot"></div>
+                            <div class="bp-heading-topic-row">
+                                <!--bp:topic-identity--><h1 id="workspace-headline" class="bp-heading-copy"><span id="bp-breadcrumb" class="bp-breadcrumb"></span></h1><!--/bp:topic-identity-->
+                                <!--bp:topic-summary--><p id="workspace-topic-summary" class="bp-workspace-topic-summary" hidden></p><!--/bp:topic-summary-->
+                            </div>
+                        </div>
+                    </div>
+                    <section class="bp-context-row" aria-label="Current ranking context">
+                        <div class="bp-context-actions">
+                            <a id="discussion-entry" class="bp-discussion-entry bp-quiet-action" href="/?discussion=1" aria-controls="discussion-panel" aria-expanded="false" data-tooltip="Discussions in this topic">
+                                <i class="fa-regular fa-comments" aria-hidden="true"></i><span data-discussion-count>Discussions</span>
+                            </a>
+                            <span id="workspace-topic-creator" class="bp-topic-creator-slot" hidden></span>
+                            <button id="workspace-refresh" class="bp-square-button" type="button" aria-label="Refresh data" data-tooltip="Refresh data">
+                                <i class="fa-solid fa-rotate" aria-hidden="true"></i>
+                            </button>
+                        </div>
+                    </section>
                 </div>
                 <div class="bp-config-header-account">
                     <a id="back-to-topics" class="bp-config-account bp-quiet-action" href="/" aria-label="Home" data-tooltip="Home"><i class="fa-solid fa-house" aria-hidden="true"></i></a>
@@ -252,17 +267,6 @@
                     <button id="header-login-button" class="bp-config-account bp-quiet-action" type="button" aria-label="Sign in with GitHub" data-tooltip="Sign in with GitHub"><i class="fa-brands fa-github" aria-hidden="true"></i></button>
                 </div>
             </header>
-            <section class="bp-context-row" aria-label="Current ranking context">
-                <div class="bp-context-actions">
-                    <a id="discussion-entry" class="bp-discussion-entry bp-quiet-action" href="/?discussion=1" aria-controls="discussion-panel" aria-expanded="false" data-tooltip="Discussions in this topic">
-                        <i class="fa-regular fa-comments" aria-hidden="true"></i><span data-discussion-count>Discussions</span>
-                    </a>
-                    <span id="workspace-topic-creator" class="bp-topic-creator-slot" hidden></span>
-                    <button id="workspace-refresh" class="bp-square-button" type="button" aria-label="Refresh data" data-tooltip="Refresh data">
-                        <i class="fa-solid fa-rotate" aria-hidden="true"></i>
-                    </button>
-                </div>
-            </section>
 
                 <p id="last-updated" class="bp-last-updated" aria-live="polite" hidden></p>
                 <!--bp:scenes--><section id="bp-template-strip" class="bp-scene-strip" aria-label="Topic scenes" hidden></section><!--/bp:scenes-->
@@ -430,11 +434,6 @@
                         </a>
                     </div>
                     <div class="bp-scoring-toolbar">
-                        <div class="bp-scoring-switch" role="group" aria-label="Missing benchmark scores" data-ui-component="segmented" data-mode="available">
-                            <button type="button" data-score-mode="available" aria-pressed="true" aria-label="Estimated score" data-tooltip="Estimated score"><i class="fa-solid fa-wand-magic-sparkles bp-score-mode-icon" aria-hidden="true"></i><span>Estimated score</span></button>
-                            <button type="button" data-score-mode="range" aria-pressed="false" aria-label="Score range" data-tooltip="Score range"><i class="fa-solid fa-arrows-left-right bp-score-mode-icon" aria-hidden="true"></i><span>Score range</span></button>
-                            <button class="bp-scoring-help bp-help-trigger" type="button" aria-label="About missing scores" data-help-text="Estimated score fills gaps with version estimates, then calibrated treemap paths, then the median of other models on the same version. Score range uses 0 and 100 for missing measurements."><i class="fa-regular fa-circle-question" aria-hidden="true"></i></button>
-                        </div>
                         <div class="bp-quick-comparison" role="group" aria-label="Compare separately">
                             <button class="bp-comparison-icon" type="button" data-quick-comparison="reasoning" aria-label="Compare reasoning effort separately" data-tooltip="Compare reasoning effort separately" aria-pressed="false" disabled><i class="fa-solid fa-brain" aria-hidden="true"></i></button>
                             <button class="bp-comparison-icon" type="button" data-quick-comparison="harness" aria-label="Compare harnesses separately" data-tooltip="Compare harnesses separately" aria-pressed="false" disabled><i class="fa-solid fa-puzzle-piece" aria-hidden="true"></i></button>
@@ -444,11 +443,6 @@
                         <div id="ranking-model-search" class="bp-model-search"></div>
                         <span id="ranking-coverage-index" class="bp-evidence-count" tabindex="0" role="img" hidden><i class="fa-solid fa-chart-pie" aria-hidden="true"></i><span data-coverage-value aria-hidden="true"></span></span>
                     </div>
-                    </div>
-                    <div id="estimation-method-control" class="bp-estimation-method">
-                        <label for="estimation-algorithm">Estimation method</label>
-                        <select id="estimation-algorithm" aria-label="Estimation method"></select>
-                        <button type="button" class="bp-help-trigger" aria-label="About the estimation method" data-help-text="Related versions predict missing scores together. Nominated external versions can supply an estimate when the same benchmark provides none. Remaining gaps use calibrated treemap paths or peer medians on the target version."><i class="fa-regular fa-circle-question" aria-hidden="true"></i></button>
                     </div>
                     <div class="bp-model-head" aria-hidden="true">
                         <span>#</span>

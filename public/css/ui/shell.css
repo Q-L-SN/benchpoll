@@ -449,14 +449,3 @@ body.bp-home  {
 @media (prefers-reduced-motion: reduce) {
     .taxonomy-tracked.taxonomy-open :is(.bp-sidebar, .bp-taxonomy-scrim) { transition: none; }
 }
-/* An explicit per-tab experiment, separate from the horizontally scrolling ranking toolbar. */
-.bp-estimation-method { display: flex; align-items: center; gap: 8px; padding: 8px 10px 12px; color: var(--bp-muted); font-size: 12px; }
-.bp-estimation-method[hidden] { display: none; }
-.bp-estimation-method label { flex: 0 0 auto; }
-.bp-estimation-method select { min-width: 0; max-width: 270px; flex: 1 1 auto; min-height: 36px; font: inherit; color: var(--bp-ink); }
-.bp-estimation-method .bp-ui-select { min-width: 0; max-width: 270px; flex: 1 1 auto; }
-.bp-estimation-method .bp-help-trigger { flex: 0 0 auto; border: 0; background: transparent; }
-@media (max-width: 760px) {
-    .bp-estimation-method label, .bp-estimation-method .bp-ui-select-trigger > i:first-child { display: none; }
-}
-@media print { .bp-estimation-method { display: none; } }

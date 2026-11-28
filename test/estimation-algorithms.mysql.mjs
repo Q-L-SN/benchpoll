@@ -7,11 +7,11 @@ import { saveEstimationVote } from '../estimation-ballots.js';
 import { createTopic } from '../topic-service.js';
 import { savePersonalPie, getRankingWorkspace } from '../ranking-service.js';
 import { createRankingReadCache } from '../ranking-read-cache.js';
-import { DEFAULT_ESTIMATION_ALGORITHM, ESTIMATION_ALGORITHMS } from '../public/js/shared/estimation-algorithms.js';
+import { DEFAULT_ESTIMATION_ALGORITHM } from '../public/js/shared/estimation-algorithms.js';
 import { createRankingPager } from '../ranking-pagination.js';
 import { validateWorkspacePayload } from '../public/js/workspace/contracts.js';
 
-test('actual workspace reads offer one estimation method and preserve the saved weights', async t => {
+test('workspace reads use the current estimator and preserve the saved weights', async t => {
     const db = await createLifecycleDatabase(); t.after(() => db.close());
     const { pool } = db; await seedLifecycleEvidence(pool);
     const topic = await savePrivateTopic(pool, '42', { name: 'Estimation sample', description: 'Review an unresolved measurement.',
@@ -21,10 +21,9 @@ test('actual workspace reads offer one estimation method and preserve the saved 
     await pool.execute('DELETE FROM benchmark_results WHERE model_ID = 1 AND benchmark_condition_ID = 2');
     const [before] = await pool.query('SELECT * FROM personal_pies');
     const rankingCache = createRankingReadCache();
-    const read = options => getRankingWorkspace(pool, { userID: '42', categoryID: topic.ID, scoreMode: 'available',
+    const read = options => getRankingWorkspace(pool, { userID: '42', categoryID: topic.ID,
         comparison: { mode: 'best', keys: ['model'] }, rankingCache, jsonMemberMetadata: true, ...options });
     const subject = workspace => workspace.modelLeaderboards.personal.find(model => model.modelID === 1);
-    assert.deepEqual(ESTIMATION_ALGORITHMS.map(method => method.ID), [DEFAULT_ESTIMATION_ALGORITHM]);
     for (const options of [{}, { estimationAlgorithm: DEFAULT_ESTIMATION_ALGORITHM }, { rankingCache: null }]) {
         const result = await read(options);
         assert.equal(result.estimationAlgorithm, DEFAULT_ESTIMATION_ALGORITHM);
@@ -38,8 +37,7 @@ test('actual workspace reads offer one estimation method and preserve the saved 
     }
     await assert.rejects(read({ estimationAlgorithm: 'missing-rational' }), error => error.body?.error === 'invalid_estimation_algorithm');
     assert.ok(rankingCache.stats.entries > 0);
-    const partial = subject(await read({ scoreMode: 'range' }));
-    assert.deepEqual([partial.lower, partial.upper, partial.coverage], [40, 90, 50]);
+    await assert.rejects(read({ scoreMode: 'range' }), error => error.body?.error === 'invalid_score_mode');
     const [after] = await pool.query('SELECT * FROM personal_pies');
     assert.deepEqual(after, before);
 });

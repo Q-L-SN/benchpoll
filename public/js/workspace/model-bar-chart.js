@@ -8,10 +8,9 @@ export { modelBarColor, modelBarTextColor };
 export function columnGeometry(model, scale) {
     const position = value => Math.max(0, Math.min(100, scale.position(value)));
     const base = position(scale.barStart);
-    const lower = position(model.lower), upper = position(model.upper);
+    const score = position(model.lower);
     return {
-        known: { bottom: Math.min(base, lower), height: Math.abs(lower - base) },
-        uncertain: { bottom: Math.min(base, lower), height: Math.max(base, upper) - Math.min(base, lower) },
+        known: { bottom: Math.min(base, score), height: Math.abs(score - base) },
         zero: position(0)
     };
 }
@@ -37,10 +36,11 @@ export function modelChartNeedsMore(container) {
 }
 
 export function captureModelColumns(container) {
-    return new Map([...container.querySelectorAll('.bp-model-column')].map(column => [column.dataset.modelKey, {
-        left: column.getBoundingClientRect().left,
-        bars: [...column.querySelectorAll('.bp-column-known, .bp-column-uncertain')].map(bar => ({ bottom: bar.style.bottom, height: bar.style.height }))
-    }]));
+    return new Map([...container.querySelectorAll('.bp-model-column')].map(column => {
+        const { style } = column.querySelector('.bp-column-known');
+        return [column.dataset.modelKey, { left: column.getBoundingClientRect().left,
+            bar: { bottom: style.bottom, height: style.height } }];
+    }));
 }
 
 export function animateModelColumns(container, previous) {
@@ -51,9 +51,8 @@ export function animateModelColumns(container, previous) {
         if (!old) { column.animate([{ opacity: .3 }, { opacity: 1 }], options); continue; }
         const dx = old.left - column.getBoundingClientRect().left;
         if (Math.abs(dx) > 1) column.animate([{ transform: `translateX(${dx}px)` }, { transform: 'translateX(0)' }], options);
-        [...column.querySelectorAll('.bp-column-known, .bp-column-uncertain')].forEach((bar, index) => {
-            bar.animate([old.bars[index], { bottom: bar.style.bottom, height: bar.style.height }], options);
-        });
+        const bar = column.querySelector('.bp-column-known');
+        bar.animate([old.bar, { bottom: bar.style.bottom, height: bar.style.height }], options);
     }
 }
 
@@ -98,15 +97,11 @@ export function renderModelBarChart({ container, models, state, scale, showVendo
         const value = document.createElement('strong'); value.className = 'bp-model-column-value';
         value.textContent = comparable ? rankingNumber(model.lower) : '-';
         value.style.setProperty('--model-score-characters', value.textContent.length);
-        for (const kind of ['uncertain', 'known']) {
-            const bar = document.createElement('span'); bar.className = `bp-column-${kind}`;
-            bar.style.bottom = `${comparable ? geometry[kind].bottom : 0}%`;
-            bar.style.height = `${comparable ? geometry[kind].height : 0}%`; plot.append(bar);
-            if (kind === 'known') {
-                bar.classList.toggle('is-empty', !comparable || geometry.known.height === 0);
-                bar.append(value);
-            }
-        }
+        const bar = document.createElement('span'); bar.className = 'bp-column-known';
+        bar.style.bottom = `${comparable ? geometry.known.bottom : 0}%`;
+        bar.style.height = `${comparable ? geometry.known.height : 0}%`;
+        bar.classList.toggle('is-empty', !comparable || geometry.known.height === 0);
+        bar.append(value); plot.append(bar);
         if (scale.min < 0) {
             const zero = document.createElement('span'); zero.className = 'bp-column-zero';
             zero.style.bottom = `${geometry.zero}%`; plot.append(zero);
@@ -126,14 +121,6 @@ export function renderModelBarChart({ container, models, state, scale, showVendo
     });
     if (reuse) return scroll;
     scroll.append(columns); figure.append(axis, scroll); container.append(figure);
-    if (state.scoreMode === 'range' && models.some(model => model.comparable !== false && model.upper > model.lower)) {
-        const legend = document.createElement('div'); legend.className = 'bp-model-chart-legend';
-        for (const text of ['Measured total', 'Possible total']) {
-            const item = document.createElement('span'); const swatch = document.createElement('i'); swatch.setAttribute('aria-hidden', 'true');
-            item.append(swatch, text); legend.append(item);
-        }
-        container.append(legend);
-    }
     scroll.scrollLeft = initialScrollLeft;
     let previousOffset = scroll.scrollLeft;
     scroll.addEventListener('scroll', () => {

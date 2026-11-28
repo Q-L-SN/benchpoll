@@ -8,7 +8,7 @@ const styles = readFileSync(new URL('../public/css/ui/workspace-redesign.css', i
 
 test('the workspace stacks its brand, topic heading and actual summary without layout controls', () => {
     assert.doesNotMatch(html, /AGI needs a public standard|id="agi-promo"/);
-    const heading = html.match(/<header class="bp-page-heading">[\s\S]*?<\/header>/)?.[0];
+    const heading = html.match(/<header class="bp-workspace-header">[\s\S]*?<\/header>/)?.[0];
     assert.ok(heading);
     assert.match(heading, /id="workspace-brand-slot"[\s\S]*<h1 id="workspace-headline"[\s\S]*<p id="workspace-topic-summary"[^>]*hidden><\/p>/);
     assert.match(heading, /<h1 id="workspace-headline"[^>]*><span id="bp-breadcrumb"/);

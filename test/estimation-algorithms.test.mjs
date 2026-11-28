@@ -2,9 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { calibrationModel as model, pairedModels } from './helpers/fallback-pairs.mjs';
 import { availableResultInference, storedAvailableResultInference } from '../public/js/shared/available-score.js';
-import { ESTIMATION_ALGORITHMS, normalizeEstimationAlgorithm } from '../public/js/shared/estimation-algorithms.js';
+import { normalizeEstimationAlgorithm } from '../public/js/shared/estimation-algorithms.js';
 import { PEER_MEDIAN_METHOD, SUPPORTED_WEIGHT_POLICY } from '../public/js/shared/fallback-inference.js';
-import { readEstimationPreference, writeEstimationPreference } from '../public/js/workspace/preferences.js';
 import { scoreModels, scoreComparison, getRankingWorkspace } from '../ranking-service.js';
 import { comparisonOptions, groupComparisonModels } from '../model-comparison.js';
 import { createFixtureState, weightedEntries, workspace } from '../scripts/frontend/fixtures.mjs';
@@ -229,18 +228,16 @@ test('ranking pages validate original contributions, estimates and fully unresol
     assert.ok(page.items.length > 0);
 });
 
-test('exactly one live method is available and retired requests fail before database access', async () => {
-    assert.deepEqual(ESTIMATION_ALGORITHMS.map(item => [item.ID, item.label]), [['current', 'Version-based estimation']]);
+test('retired scoring requests fail before database access', async () => {
+    const db = { getConnection() { throw new Error('Database must not be read'); } };
+    await assert.rejects(getRankingWorkspace(db, { scoreMode: 'range' }),
+        error => error.status === 400 && error.body.error === 'invalid_score_mode');
     const rejected = ['missing-raw', 'missing-rational', 'missing-linear', 'missing-sqrt', 'missing-midpoint', null, '', 'mean-percentile', {}, 1];
     for (const estimationAlgorithm of rejected) {
         assert.throws(() => normalizeEstimationAlgorithm(estimationAlgorithm));
-        await assert.rejects(getRankingWorkspace({ getConnection() { throw new Error('Database must not be read'); } }, { estimationAlgorithm }),
+        await assert.rejects(getRankingWorkspace(db, { estimationAlgorithm }),
             error => error.status === 400 && error.body.error === 'invalid_estimation_algorithm');
     }
     assert.throws(() => scoreModels([], [weight(1, 10000)], 10000, { estimationAlgorithm: 'missing-midpoint' }),
         error => error.status === 400 && error.body.error === 'invalid_estimation_algorithm');
-    assert.equal(readEstimationPreference({ getItem: () => 'missing-midpoint' }), 'current');
-    const values = new Map(), storage = { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) };
-    assert.equal(writeEstimationPreference('current', storage), true);
-    assert.equal(readEstimationPreference(storage), 'current');
 });

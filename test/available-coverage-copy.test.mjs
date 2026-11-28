@@ -40,21 +40,19 @@ function factorInference(raw, coverage, inferredFraction = 0) {
 
 test('brief help distinguishes calibrated estimates from measured weighted coverage', () => {
     assert.match(rankingGuide, /calibrated|paired measurements and eligible support/);
-    assert.match(rankingGuide, /using benchmark weights, vote shares and paired-model counts/);
+    assert.match(rankingGuide, /divides each benchmark’s weight among usable sources and multiplies each share by its path weight/);
     assert.match(rankingGuide, /Coverage is the share of weight with measured results/);
     assert.match(rankingGuide, /on selected versions/);
-    assert.match(rankingGuide, /Version-based estimation/);
+    assert.match(rankingGuide, /eligible versions of the same benchmark<\/a>, then nominated external versions/);
     assert.doesNotMatch(guide, /coverage factor|test algorithm|midpoint|Power 0\.35|experiment/i);
     assert.doesNotMatch(guide, /deduct(?:s|ion)?|2 points (?:for every|per) missing 10%|20\s*(?:points|\*)/i);
 });
 
-test('short score help preserves range endpoints, unresolved gaps and direct-first evidence', () => {
-    assert.match(rankingGuide, /same qualifying measurements, converted using each test’s score range and direction/);
+test('short score help explains unresolved gaps and direct-first evidence', () => {
+    assert.match(rankingGuide, /each benchmark version’s scoring scale and direction/);
     assert.match(rankingGuide, /A direct score on a scoring version takes priority, including zero and negative scores/);
-    assert.match(rankingGuide, /uses 0 at the lower end and 100 at the upper end for missing measurements/);
-    assert.match(rankingGuide, /Both ends use the measured scores where available\. Models rank by the lower end/);
-    assert.match(rankingGuide, /With no peer score, the index uses the scored weight/);
-    assert.match(rankingGuide, /Models without direct or calibrated evidence stay unranked/);
+    assert.match(rankingGuide, /The index averages over scored weight if gaps remain/);
+    assert.match(rankingGuide, /Models need measured or calibrated evidence to rank/);
     assert.match(estimationGuide, /Versions of the same benchmark are eligible by default, including with no votes or a tie/);
     assert.match(estimationGuide, /eligible measured versions of the same benchmark/);
     assert.match(estimationGuide, /fits eligible measured versions of the same benchmark together/);
@@ -69,7 +67,7 @@ test('model details display archived before and after scores', () => {
     assert.match(text, /How it works/);
     assert.doesNotMatch(text, /Coverage factor:|Coverage formula:|5c\/|2 minus|Power|experiment/);
     const worked = summary(factorInference(68, .6, .4), .6);
-    assert.match(worked, /Index score 60; measured results cover 60% of the weight/);
+    assert.match(worked, /Index score 60\. Measured results cover 60% of the weight/);
     assert.match(worked, /Before adjustment: 68/);
     assert.match(worked, /After adjustment: 60/);
 });
@@ -79,7 +77,7 @@ test('score details report version and treemap estimates separately from measure
         unresolvedFraction: 0, unpenalizedScore: 53, totalScore: 53 };
     const text = summary(inference, .5, true, { inferredScores: [{ originalWeight: 25, conditionID: 1, sources: [] },
         { estimationMethod: TREEMAP_ESTIMATION_METHOD, originalWeight: 25, conditionID: 2, sources: [] }] });
-    assert.match(text, /measured results cover 50% of the weight/);
+    assert.match(text, /Measured results cover 50% of the weight/);
     assert.match(text, /25\.00% of the weight uses estimates from related benchmark versions/);
     assert.match(text, /25\.00% uses calibrated version chains across the treemap/);
     assert.match(text, /How it works/);
@@ -91,7 +89,7 @@ test('score details report version and treemap estimates separately from measure
 
 test('negative scores retain their before and after values without algorithm details', () => {
     const text = summary(factorInference(-20, .25), .25);
-    assert.match(text, /Index score -28; measured results cover 25% of the weight/);
+    assert.match(text, /Index score -28\. Measured results cover 25% of the weight/);
     assert.match(text, /75\.00% of the weight has no measurement or estimate and is left out of the average/);
     assert.match(text, /Before adjustment: -20/);
     assert.match(text, /After adjustment: -28/);
@@ -115,7 +113,7 @@ test('adjustment details match ranked two-decimal precision at integer-rounding 
     for (const [raw, endpoint, expected] of [[49.499, 49.5, '50'], [-49.499, -49.5, '-50'],
         [49.494, 49.49, '49'], [-49.494, -49.49, '-49']]) {
         const text = summary(factorInference(raw, 1), 1, true, { lower: endpoint });
-        assert.ok(text.includes(`Index score ${expected};`));
+        assert.ok(text.includes(`Index score ${expected}.`));
         assert.ok(text.includes(`Before adjustment: ${expected}`));
         assert.ok(text.includes(`After adjustment: ${expected}`));
     }
@@ -134,11 +132,8 @@ test('old v3 deduction summaries and v1/v2 summaries remain supported', () => {
     }
 });
 
-test('range summaries show both endpoints and do not present the lower end as a point estimate', () => {
-    const text = summary(null, .4, true, { lower: 32, upper: 92 });
-    assert.match(text, /Score range 32 to 92; measured results cover 40% of the weight/);
-    assert.match(text, /Measured results stay fixed/);
-    assert.match(text, /Models rank by the lower end/);
-    assert.doesNotMatch(text, /Index score|Coverage factor|whole index/);
-    assert.doesNotMatch(summary(null, 0, false, { lower: 0, upper: 100 }), /Score range|Models rank/);
+test('summaries show a single index score and measured coverage', () => {
+    const text = summary(null, .4, true, { lower: 32, upper: 32 });
+    assert.match(text, /Index score 32\. Measured results cover 40% of the weight/);
+    assert.doesNotMatch(summary(null, 0, false), /Index score|Measured results cover/);
 });

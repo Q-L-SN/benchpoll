@@ -20,7 +20,7 @@ export function createReferenceCoverage({ request, getScope }) {
             active++; controllers.add(controller);
             request({ categoryID: target.categoryID, ...(target.sceneID == null ? {} : { sceneID: target.sceneID }),
                 mode: targetMode(target),
-                scoreMode: 'range', reasoning: false, harness: false }, { signal: controller.signal })
+                reasoning: false, harness: false }, { signal: controller.signal })
                 .then(payload => {
                     if (!Number.isFinite(payload.totalCoverageIndex) || payload.totalCoverageIndex < 0) throw new Error('Invalid coverage index');
                     return { value: payload.totalCoverageIndex, time: Date.now() };

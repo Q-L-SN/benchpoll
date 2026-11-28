@@ -13,6 +13,7 @@ import { validateRankingPagePayload } from '../public/js/workspace/contracts.js'
 import { createBenchmarkFallbackCatalogue } from '../public/js/workspace/benchmark-fallback-catalogue.js';
 import { captureRankingResume } from '../public/js/shared/ranking-resume.js';
 import { comparisonProfileKey } from '../public/js/shared/comparison-profile-key.js';
+import { fallbackInference } from '../public/js/shared/fallback-inference.js';
 
 export const root = fileURLToPath(new URL('../', import.meta.url));
 export const policy = Object.freeze({ capacity: 12, ttlMs: 15 * 60 * 1000, queryCache: 32, pageSizes: RANKING_PAGE_SIZE });
@@ -33,7 +34,7 @@ const inspectedFiles = [
 ];
 const sha256 = value => createHash('sha256').update(value).digest('hex');
 
-export function fixture({ benchmarks = 83, models = 76, families = 17, entrances = [1], owner = 'fixture' } = {}) {
+export function fixture({ benchmarks = 83, models = 76, families = 17, entrances = [1], owner = 'fixture', scoreMode = 'range' } = {}) {
     const rows = Array.from({ length: benchmarks }, (_, index) => ({
         ID: index + 1, benchmarkID: index + 1, conditionID: index + 1,
         name: `Benchmark ${index + 1}`, conditionName: 'default', conditionKey: 'default',
@@ -59,13 +60,14 @@ export function fixture({ benchmarks = 83, models = 76, families = 17, entrances
             const ID = index + 1;
             const lower = 100 - index / Math.max(1, models);
             return { ID, name: `${owner} ${mode} Model ${ID}`, comparable: true, lower, upper: lower,
-                coverage: 100, missingWeight: 0, availableInference: null, inferredScores: [],
+                coverage: 100, missingWeight: 0, inferredScores: [],
+                availableInference: scoreMode === 'available' ? fallbackInference(lower, 1, []) : null,
                 calculationScores: [{ conditionID: 1, normalizedScore: lower, effectiveWeight: 100,
                     contribution: lower, fallbackFor: null, memberIDs: [ID], memberWeights: [{ ID, weight: 1 }],
                     memberEvidence: [{ ID, hash: sha256(`synthetic:${owner}:${mode}:${ID}`) }] }] };
         });
     }
-    return { scoreMode: 'range', benchmarks: rows, context: { categoryID: 1, contextValues: {} },
+    return { scoreMode, benchmarks: rows, context: { categoryID: 1, contextValues: {} },
         personalPie: { entries: [], fallbackRules: [] },
         modelLeaderboards: { personal: modelRows('personal'), public: modelRows('public') } };
 }
@@ -515,9 +517,9 @@ export async function recoveryCycleScenario(ownerCount, list = 'public', rounds 
     const records = [];
     for (let owner = 1; owner <= ownerCount; owner++) {
         const userID = `owner-${owner}`;
-        const data = fixture({ owner: userID, benchmarks: 337, models: 401 });
+        const data = fixture({ owner: userID, benchmarks: 337, models: 401, scoreMode: 'available' });
         const first = pager.create(data, { userID });
-        const state = { loading: false, loadSequence: 0, mode: 'public', scoreMode: 'range', benchmarks: first.benchmarks,
+        const state = { loading: false, loadSequence: 0, mode: 'public', benchmarks: first.benchmarks,
             rankingPagination: first.rankingPagination, modelLeaderboards: first.modelLeaderboards,
             rankingPageSequence: { public: 0, benchmarks: 0, benchmarkOther: 0, benchmarkLow: 0 },
             rankingPageLoading: {}, rankingPageError: {}, benchmarkDetailsByID: new Map() };

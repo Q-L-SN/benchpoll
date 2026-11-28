@@ -56,7 +56,7 @@ export function fixtureModels(body) {
         const groupName = [body.reasoning ? `Reasoning effort=${index % 2 ? 'max' : 'high'}` : '',
             body.harness ? `Harness=${index % 2 ? 'Mini-SWE-Agent 2026.10 long harness name' : 'Agent v2'}` : '', name].filter(Boolean).join(' / ');
         return { modelID: index + 1, rank: index + 1, name: groupName, modelName: name, vendorSlug, vendorName, logoKey: vendorSlug,
-            lower, upper: body.scoreMode === 'range' ? Math.min(100, lower + 14) : lower,
+            lower, upper: lower,
             coverage: 87.4, comparable: true, comparisonIdentity: JSON.stringify(identity) };
     });
 }
@@ -154,6 +154,7 @@ export async function startTopicsPreview(options = {}) {
                     return send(200, state.profile);
                 }
                 if (url.pathname === '/api/get_topic_preview') {
+                    if ((body.scoreMode ?? 'available') !== 'available') return send(400, { error: 'invalid_score_mode' });
                     state.active++; state.maxActive = Math.max(state.active, state.maxActive);
                     let ended = false;
                     const end = () => { if (!ended) { ended = true; state.active--; record.ended = Date.now(); } };
@@ -162,7 +163,7 @@ export async function startTopicsPreview(options = {}) {
                     if (response.destroyed) return;
                     const failures = state.failures.get(body.categoryID) ?? 0;
                     if (failures > 0) { state.failures.set(body.categoryID, failures - 1); return send(503, { error: 'fixture_preview_failure' }); }
-                    const key = `${body.categoryID}:${body.scoreMode}:${body.reasoning}:${body.harness}:${body.availableInferenceVersion ?? 4}`;
+                    const key = `${body.categoryID}:${body.reasoning}:${body.harness}:${body.availableInferenceVersion ?? 4}`;
                     const revision = state.previewRevisions.get(body.categoryID) ?? 0;
                     const snapshotID = `snapshot:${key}${revision ? ':v' + revision : ''}`;
                     const override = state.previewOverrides.get(body.categoryID) ?? {};
@@ -177,13 +178,13 @@ export async function startTopicsPreview(options = {}) {
                     return send(200, result);
                 }
                 if (url.pathname === '/api/search_home_models') {
-                    const args = { ...body, categoryID: 54, scoreMode: 'available' };
+                    const args = { ...body, categoryID: 54 };
                     const models = (state.previewOverrides.get(54) ?? {}).models ?? fixtureModels(args);
                     return send(200, { items: searchRankedModels(models, comparison(args), body.query) });
                 }
                 if (url.pathname === '/api/locate_topic_model') {
                     const models = (state.previewOverrides.get(body.categoryID) ?? {}).models ?? fixtureModels(body);
-                    const key = `${body.categoryID}:${body.scoreMode}:${body.reasoning}:${body.harness}:${body.availableInferenceVersion ?? 4}`;
+                    const key = `${body.categoryID}:${body.reasoning}:${body.harness}:${body.availableInferenceVersion ?? 4}`;
                     const revision = state.previewRevisions.get(body.categoryID) ?? 0;
                     const snapshotID = `snapshot:${key}${revision ? ':v' + revision : ''}`;
                     if (body.snapshotID !== snapshotID) return send(410, { error: 'ranking_snapshot_expired' });

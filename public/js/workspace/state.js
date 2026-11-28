@@ -1,5 +1,4 @@
 import { createEditHistory } from './edit-history.js';
-import { AVAILABLE_INFERENCE_VERSION } from '../shared/available-score.js?v=coverage-factor-20261019';
 
 // Every workspace owns its maps, timers, and snapshots.
 export function createWorkspaceState() {
@@ -18,9 +17,6 @@ export function createWorkspaceState() {
         sceneID: null,
         contextID: null,
         mode: 'public',
-        scoreMode: 'available',
-        estimationAlgorithm: 'current',
-        availableInferenceVersion: AVAILABLE_INFERENCE_VERSION,
         personalFallbackExpanded: false,
         benchmarkSettingsExpanded: false,
         topicsExpanded: false,

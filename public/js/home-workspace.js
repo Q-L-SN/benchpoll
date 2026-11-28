@@ -15,9 +15,7 @@ import {
     TOUCH_WEIGHT_BASIS_POINTS_PER_PIXEL, WORKSPACE_LOAD_RETRY_DELAYS_MS, FALLBACK_RULE_MODE
 } from './workspace/constants.js';
 import { createWorkspaceState } from './workspace/state.js?v=fallback-controls-20261009';
-import { readWorkspacePreferences, writeWorkspacePreferences, readEstimationPreference } from './workspace/preferences.js?v=fallback-controls-20261009';
-import { estimationRequest, normalizeEstimationAlgorithm } from './shared/estimation-algorithms.js';
-import { createEstimationControl } from './workspace/estimation-control.js';
+import { readWorkspacePreferences, writeWorkspacePreferences } from './workspace/preferences.js?v=fallback-controls-20261009';
 import { validateWorkspacePayload, validateRankingPagePayload } from './workspace/contracts.js?v=review-evidence-20261008';
 import {
     cloneEntries, cloneFallbackRules, clonePersonalPieSnapshot,
@@ -60,7 +58,6 @@ import { BENCHMARK_GROUPS, benchmarkConditionGroup } from './shared/benchmark-co
 import { captureRankingResume } from './shared/ranking-resume.js';
 import { createToast } from './shared/toast.js';
 import { createTopicCreator } from './shared/topic-identity.js';
-import { AVAILABLE_INFERENCE_VERSION } from './shared/available-score.js';
 import { readHomeModelFocusIntent, consumeHomeModelFocusURL, withHomeFocusComparison,
     createHomeModelFocus, createModelFocusNotice } from './workspace/model-focus.js';
 import { createModelSearch } from './shared/model-search.js';
@@ -95,8 +92,6 @@ const benchmarkSearch = document.getElementById('benchmark-search');
 const benchmarkSearchClear = document.getElementById('benchmark-search-clear');
 const benchmarkPersonalPin = document.getElementById('benchmark-personal-pin');
 const modelRows = document.getElementById('model-rows');
-const scoreModeButtons = [...document.querySelectorAll('[data-score-mode]')];
-const scoringSwitch = document.querySelector('.bp-scoring-switch');
 const modeSwitch = document.querySelector('.bp-mode-switch');
 const personalModeButton = document.getElementById('pie-mode-personal');
 const publicModeButton = document.getElementById('pie-mode-public');
@@ -315,39 +310,10 @@ function loadVisibleBenchmarkPage() {
     if (group && shouldLoadMore(benchmarkRows)) void loadNextRankingPage('benchmarks', group);
 }
 Object.assign(state, readWorkspacePreferences());
-state.estimationAlgorithm = readEstimationPreference();
-state.availableInferenceVersion = AVAILABLE_INFERENCE_VERSION;
 state.workspaceDisplay = 'standard';
 const homeModelFocusIntent = readHomeModelFocusIntent(window.location.href);
-if (homeModelFocusIntent?.valid) {
-    state.mode = homeModelFocusIntent.mode;
-    state.scoreMode = homeModelFocusIntent.scoreMode;
-}
+if (homeModelFocusIntent?.valid) state.mode = homeModelFocusIntent.mode;
 if (homeModelFocusIntent) consumeHomeModelFocusURL();
-const estimationControl = createEstimationControl(document.getElementById('estimation-method-control'));
-function renderScoringControls() {
-    scoreModeButtons.forEach(button => button.setAttribute('aria-pressed', String(button.dataset.scoreMode === state.scoreMode)));
-    scoringSwitch.dataset.mode = state.scoreMode;
-    estimationControl.render(state);
-}
-renderScoringControls();
-let scoreModeChangeID = 0;
-scoreModeButtons.forEach(button => button.addEventListener('click', async () => {
-    const requestedMode = button.dataset.scoreMode;
-    const changeID = ++scoreModeChangeID;
-    const adjustmentsSaved = await finishPendingWeightAdjustments();
-    const pieSaved = adjustmentsSaved && await flushPendingPersonalPieSave();
-    if (changeID !== scoreModeChangeID) return;
-    if (!pieSaved) {
-        setStatus('Your weight change was not saved. Try switching modes again.');
-        return;
-    }
-    if (state.scoreMode === requestedMode) return;
-    state.scoreMode = requestedMode;
-    writeWorkspacePreferences(state);
-    renderScoringControls();
-    void loadWeightedWorkspace({ preserveUndo: true });
-}));
 state.comparisonRequest = null;
 state.comparisonNeedsSelection = false;
 state.comparisonPending = false;
@@ -1072,8 +1038,7 @@ function invalidateRankingPages() {
 
 let rankingRecovery = null;
 function rankingRecoveryScope() {
-    return JSON.stringify([workspaceContextFingerprint(), state.userID, state.mode, state.scoreMode, state.availableInferenceVersion,
-        state.estimationAlgorithm, state.personalRevision, state.personalEditVersion,
+    return JSON.stringify([workspaceContextFingerprint(), state.userID, state.mode, state.personalRevision, state.personalEditVersion,
         comparisonProfileKey(state.comparisonRequest ?? { mode: 'best', keys: ['model'], filters: [] }),
         currentBenchmarkFilters()]);
 }
@@ -1125,7 +1090,7 @@ async function loadNextRankingPage(list, group = 'primary') {
             ...(list === 'benchmarks' ? { group } : {}),
             query: list === 'benchmarks' ? benchmarkSearch.value.trim() : '',
             pinPersonal: list === 'benchmarks' ? state.pinPersonalBenchmarks : false
-        }), { list, offset, group, scoreMode: state.scoreMode,
+        }), { list, offset, group, scoreMode: 'available',
             grouping: !state.versionComposition && benchmarkSearch.value.trim() ? 'versions' : 'flat' });
         if (!isCurrent()) return;
         if (list === 'benchmarks') {
@@ -2665,8 +2630,6 @@ function applyServerWorkspace(payload, {
         lowCoverageExpanded = false;
         otherConditionsExpanded = false;
     }
-    state.scoreMode = payload.scoreMode;
-    renderScoringControls();
     state.benchmarks = payload.benchmarks.map(object => ({ ...object }));
     state.benchmarkDetailsByID = new Map(state.benchmarks.filter(object => !object.isFamily).map(object => [Number(object.ID), object]));
     for (const version of state.versionComposition?.flatMap(group => group.versions) ?? []) {
@@ -2798,9 +2761,6 @@ async function loadWeightedWorkspace({ resetTemplates = false, retryAttempt = 0,
     const requestedPinPersonal = state.pinPersonalBenchmarks;
     const requestedCategoryID = state.categoryID;
     const requestedComparison = structuredClone(state.comparisonRequest);
-    const requestedScoreMode = state.scoreMode;
-    const requestedInferenceVersion = state.availableInferenceVersion;
-    const requestedAlgorithm = normalizeEstimationAlgorithm(state.estimationAlgorithm);
     const requestedMode = state.mode;
     const requestedURLSearch = window.location.search;
     const resume = !resetTemplates && pageRecovery?.snapshotID && pageRecovery.snapshotID === state.rankingPagination?.snapshotID
@@ -2808,13 +2768,9 @@ async function loadWeightedWorkspace({ resetTemplates = false, retryAttempt = 0,
     let verifiedReadOwner;
     const requestWorkspace = async body => {
         const payload = validateWorkspacePayload(await postJSON('/api/get_weighted_workspace', {
-            ...body, availableInferenceVersion: requestedInferenceVersion,
-            ...estimationRequest(requestedAlgorithm),
+            ...body,
             ...comparisonControls.requestOptions?.(), ...(resume ? { rankingResume: resume } : {})
         }, { timeoutMs: 60000 }), { resume, initialMode: body.initialMode });
-        if (normalizeEstimationAlgorithm(payload.estimationAlgorithm) !== requestedAlgorithm) {
-            throw Object.assign(new Error('The ranking did not use the selected test algorithm. Please retry.'), { status: 422 });
-        }
         if (verifiedReadOwner === undefined) verifiedReadOwner = payload.userID;
         else if (payload.userID !== verifiedReadOwner) throw accountWriteError();
         return payload;
@@ -2824,7 +2780,6 @@ async function loadWeightedWorkspace({ resetTemplates = false, retryAttempt = 0,
             categoryID: requestedCategoryID,
             contextValues: requestedContextValues,
             comparison: requestedComparison,
-            scoreMode: requestedScoreMode,
             initialMode: requestedMode,
             benchmarkQuery: requestedBenchmarkQuery,
             pinPersonal: requestedPinPersonal
@@ -2846,7 +2801,6 @@ async function loadWeightedWorkspace({ resetTemplates = false, retryAttempt = 0,
                     categoryID: requestedCategoryID,
                     contextValues: resolvedContextValues,
                     comparison: requestedComparison,
-                    scoreMode: requestedScoreMode,
                     initialMode: requestedMode,
                     benchmarkQuery: requestedBenchmarkQuery,
                     pinPersonal: requestedPinPersonal
@@ -2869,7 +2823,6 @@ async function loadWeightedWorkspace({ resetTemplates = false, retryAttempt = 0,
                     categoryID: payload.context.categoryID,
                     contextValues: payload.context.contextValues,
                     comparison: requestedComparison,
-                    scoreMode: requestedScoreMode,
                     previewPersonalPie: estimationVoting ? { entries: guestDraft.entries, fallbackRules: [],
                         ...(!payload.authenticated ? { estimationVotes: guestEstimationVotes(payload.versionComposition, payload.externalEstimationPairs) }
                             : !recoveryRecord ? { estimationVotes: mergeGuestVotes(payload.personalPie.estimationVotes, payload.versionComposition, payload.externalEstimationPairs) } : {}) } : guestDraft,
@@ -2969,9 +2922,6 @@ async function previewGuestPersonalPie({ checkpoint = true } = {}) {
                         categoryID: state.categoryID,
                         contextValues: state.selectedContextValues,
                         comparison: state.comparisonRequest,
-                        scoreMode: state.scoreMode,
-                        availableInferenceVersion: state.availableInferenceVersion,
-                        ...estimationRequest(state.estimationAlgorithm),
                         previewPersonalPie: { ...portablePersonalPie(), ...(state.estimationVoting ? { estimationVotes: state.personalEstimationVotes } : {}) },
                         initialMode: state.mode,
                         ...requestedBenchmarkFilters
@@ -3154,15 +3104,13 @@ async function persistPersonalPie({ forceSave = false } = {}) {
                 }
                 const editVersion = state.personalEditVersion;
                 const requestedBenchmarkFilters = currentBenchmarkFilters();
-                const presentation = JSON.stringify([state.mode, state.scoreMode, state.availableInferenceVersion, state.estimationAlgorithm, state.comparisonRequest]);
+                const presentation = JSON.stringify([state.mode, state.comparisonRequest]);
                 setStatus('');
                 state.personalRankingError = '';
                 renderModels();
                 try {
                     state.savePromise = postJSON('/api/get_weighted_workspace', { categoryID, contextValues,
-                        comparison: state.comparisonRequest, scoreMode: state.scoreMode,
-                        availableInferenceVersion: state.availableInferenceVersion,
-                        ...estimationRequest(state.estimationAlgorithm),
+                        comparison: state.comparisonRequest,
                         initialMode: state.mode, ...requestedBenchmarkFilters }, { timeoutMs: 60000 });
                     const payload = validateWorkspacePayload(await state.savePromise);
                     if (payload.userID !== expectedUserID || state.userID !== expectedUserID) throw accountWriteError();
@@ -3174,7 +3122,7 @@ async function persistPersonalPie({ forceSave = false } = {}) {
                     if (state.userID !== expectedUserID) throw accountWriteError();
                     if (contextFingerprint !== workspaceContextFingerprint()) return true;
                     if (editVersion !== state.personalEditVersion) { state.personalSavePending = true; continue; }
-                    if (presentation !== JSON.stringify([state.mode, state.scoreMode, state.availableInferenceVersion, state.estimationAlgorithm, state.comparisonRequest])) continue;
+                    if (presentation !== JSON.stringify([state.mode, state.comparisonRequest])) continue;
                     applyServerWorkspace(payload, { preserveUndo: true, personalSave: true });
                     state.personalIsDraft = false;
                     setStatus('');
@@ -3189,7 +3137,7 @@ async function persistPersonalPie({ forceSave = false } = {}) {
                         setStatus(state.personalRankingError); renderAll(); return false;
                     }
                     if (editVersion !== state.personalEditVersion) { state.personalSavePending = true; continue; }
-                    if (presentation !== JSON.stringify([state.mode, state.scoreMode, state.availableInferenceVersion, state.estimationAlgorithm, state.comparisonRequest])) continue;
+                    if (presentation !== JSON.stringify([state.mode, state.comparisonRequest])) continue;
                     state.personalRankingError = 'Your pie is saved. The ranking could not be updated.';
                     setStatus('Saved. Ranking update failed.');
                     renderAll();

@@ -171,12 +171,11 @@ test('workspace validation requires an accurate separate deduction and pre-deduc
 
 test('current help explains version-based estimates and full-weight gaps', () => {
     const read = path => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
-    assert.match(read('private/home.html'), /Nominated external versions can supply an estimate/);
     const guide = read('private/how-it-works.html');
-    assert.match(guide, /Version-based estimation/);
-    assert.match(guide, /using benchmark weights, vote shares and paired-model counts/);
-    assert.match(guide, /including earlier estimates/);
-    assert.match(guide, /uses 0 at the lower end and 100 at the upper end for missing measurements/);
+    assert.match(guide, /then nominated external versions/);
+    assert.match(guide, /multiplies each share by its path weight/);
+    assert.match(guide, /one measurement or earlier estimate per model/);
+    assert.match(guide, /The index averages over scored weight if gaps remain/);
     assert.doesNotMatch(guide, /coverage factor|coverage penalty|excluded from the average/i);
     const details = read('public/js/workspace/model-scores.js');
     assert.match(details, /calibrated version chains across the treemap/);

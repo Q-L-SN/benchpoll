@@ -60,20 +60,10 @@ test('weight bars sort weights first, then primary, coverage and stable IDs with
     assert.deepEqual(rows, before);
 });
 
-test('column heights preserve score range and zero baseline', () => {
-    const model = { lower: 60, upper: 80 };
+test('the leading model fills its column', () => {
+    const model = { lower: 60, upper: 60 };
     const scale = modelScoreScale([model], { min: 0, max: 100 });
-    assert.deepEqual(columnGeometry(model, scale), { known: { bottom: 0, height: 60 }, uncertain: { bottom: 0, height: 80 }, zero: 0 });
-});
-
-test('the gray background always contains the colored column, including signed and zero scores', () => {
-    for (const model of [{ lower: 0, upper: 90 }, { lower: 60, upper: 80 }, { lower: -40, upper: -10 },
-        { lower: -30, upper: 40 }, { lower: 70, upper: 70 }]) {
-        const { known, uncertain } = columnGeometry(model, modelScoreScale([model], { min: -50, max: 100 }));
-        assert.equal(uncertain.bottom, known.bottom);
-        assert.ok(uncertain.height >= known.height);
-        assert.ok(known.height >= 0);
-    }
+    assert.deepEqual(columnGeometry(model, scale), { known: { bottom: 0, height: 100 }, zero: 0 });
 });
 
 test('horizontal pagination starts only close to the end of an overflowing chart', () => {
@@ -87,15 +77,16 @@ test('horizontal pagination starts only close to the end of an overflowing chart
     chart.scrollLeft = 50; assert.equal(modelChartNeedsMore(container), true);
 });
 
-test('column charts support negative and crossing-zero scores', () => {
-    const model = { lower: -25, upper: 25 };
-    const scale = modelScoreScale([model], { min: -50, max: 50 });
-    assert.deepEqual(columnGeometry(model, scale), { known: { bottom: 25, height: 25 }, uncertain: { bottom: 25, height: 50 }, zero: 50 });
+test('the scale positions negative and zero scores below a positive leader', () => {
+    const [leader, zero, negative] = [{ lower: 50 }, { lower: 0 }, { lower: -25 }];
+    const scale = modelScoreScale([leader, zero, negative], { min: -50, max: 50 });
+    assert.deepEqual(columnGeometry(negative, scale), { known: { bottom: 0, height: 25 }, zero: 50 });
+    assert.deepEqual(columnGeometry(zero, scale), { known: { bottom: 0, height: 50 }, zero: 50 });
 });
 
 test('Estimated score retains the existing leader-relative visual scale', () => {
     const models = [{ lower: 80, upper: 80 }, { lower: 40, upper: 40 }];
-    const scale = modelScoreScale(models, { min: 0, max: 100 }, { fillTopBar: true });
+    const scale = modelScoreScale(models, { min: 0, max: 100 });
     assert.equal(columnGeometry(models[0], scale).known.height, 100);
     assert.equal(columnGeometry(models[1], scale).known.height, 50);
 });

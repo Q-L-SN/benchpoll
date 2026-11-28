@@ -30,8 +30,7 @@ export function normalizeTopicPreview(body) {
     const sceneID = body.sceneID == null ? null : topicID(body.sceneID);
     const mode = body.mode ?? null;
     if (mode !== null && !['personal', 'public'].includes(mode)) fail(400, 'invalid_topic_mode');
-    const scoreMode = body.scoreMode ?? 'available';
-    if (!['available', 'range'].includes(scoreMode)) fail(400, 'invalid_score_mode');
+    if ((body.scoreMode ?? 'available') !== 'available') fail(400, 'invalid_score_mode');
     let availableInferenceVersion;
     try { availableInferenceVersion = normalizeAvailableInferenceVersion(body.availableInferenceVersion); }
     catch { fail(400, 'invalid_available_inference_version'); }
@@ -43,7 +42,7 @@ export function normalizeTopicPreview(body) {
     if (body.snapshotID !== undefined && (typeof body.snapshotID !== 'string'
         || !/^[0-9a-f-]{36}$/.test(body.snapshotID))) fail(400, 'invalid_ranking_snapshot');
     if (offset > 0 && !body.snapshotID) fail(400, 'ranking_snapshot_required');
-    return { categoryID, sceneID, mode, scoreMode, availableInferenceVersion, reasoning: body.reasoning === true, harness: body.harness === true,
+    return { categoryID, sceneID, mode, availableInferenceVersion, reasoning: body.reasoning === true, harness: body.harness === true,
         snapshotID: body.snapshotID, offset };
 }
 
@@ -103,7 +102,7 @@ export function createTopicHomeService({ db, rankingCache, now = () => Date.now(
         if (topic.isPrivate && mode === 'public') fail(400, 'private_topic_has_no_public_index');
         const owner = mode === 'personal' ? userID : null;
         if (options.sceneID !== null && !(topic.scenes ?? []).some(scene => scene.ID === options.sceneID)) fail(404, 'topic_scene_not_found');
-        const signature = JSON.stringify([options.categoryID, options.sceneID, mode, owner, options.scoreMode, options.reasoning, options.harness, options.availableInferenceVersion]);
+        const signature = JSON.stringify([options.categoryID, options.sceneID, mode, owner, options.reasoning, options.harness, options.availableInferenceVersion]);
         prune();
         if (options.snapshotID) {
             const scope = scopes.get(options.snapshotID);
@@ -133,7 +132,7 @@ export function createTopicHomeService({ db, rankingCache, now = () => Date.now(
             const comparison = topicPreviewComparison(fields, options);
             const workspace = await loadWorkspace(db, { categoryID: options.categoryID,
                 contextValues: options.sceneID === null ? {} : { scene: String(options.sceneID) },
-                scoreMode: options.scoreMode, comparison, userID: owner, rankingCache,
+                comparison, userID: owner, rankingCache,
                 availableInferenceVersion: options.availableInferenceVersion, jsonMemberMetadata: true });
             const topicIDs = [...new Set([options.categoryID, ...(workspace.benchmarks ?? []).filter(row => row.type === 'topic').map(row => row.categoryID).filter(ID => Number.isSafeInteger(ID) && ID > 0)])];
             await authorizeTopics(db, userID, topicIDs);

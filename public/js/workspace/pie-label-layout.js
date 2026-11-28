@@ -21,19 +21,18 @@ export function createPieLabelLayout(measure) {
         return lines.length <= maximum ? lines : null;
     }
 
-    function layout({ name, version = '', percent, width, height, fontFamily, topic = false }) {
+    function layout({ name, version = '', percent, width, height, fontFamily, topic = false, percentExtraWidth = 0 }) {
         const { width: innerWidth, height: innerHeight } = pieLabelContentBox(width, height);
         if (innerWidth < 4 || innerHeight < 17) return { mode: 'hidden', rows: [] };
         const names = topic ? measure(name, 13, 600, fontFamily).width <= innerWidth ? [name] : null
             : wrapped(name, innerWidth, 13, 600, fontFamily);
+        const percentWidth = size => measure(percent, size, 750, fontFamily).width + percentExtraWidth;
         let rows, mode;
-        if (!names || names.length * 17 + 27 > innerHeight
-            || measure(percent, 18, 750, fontFamily).width > innerWidth) {
-            const largePercent = innerHeight >= 44 && measure(percent, 18, 750, fontFamily).width <= innerWidth;
+        if (!names || names.length * 17 + 27 > innerHeight || percentWidth(18) > innerWidth) {
+            const largePercent = innerHeight >= 44 && percentWidth(18) <= innerWidth;
             const size = largePercent ? 18 : 15, lineHeight = largePercent ? 27 : 19;
-            if (innerHeight < 17 + lineHeight || measure(percent, size, 750, fontFamily).width > innerWidth) {
-                const percentWidth = measure(percent, 15, 750, fontFamily).width;
-                const nameWidth = innerWidth - percentWidth - 8;
+            if (innerHeight < 17 + lineHeight || percentWidth(size) > innerWidth) {
+                const nameWidth = innerWidth - percentWidth(15) - 8;
                 if (innerHeight >= 17 && nameWidth >= Math.min(32, measure(name, 13, 600, fontFamily).width)) {
                     const y = (height - 17) / 2 + 15;
                     return { mode: 'inline', rows: [

@@ -17,6 +17,7 @@ import { configureAction, createAction, mountSegmentedControl, mountDisclosureCh
 import { rankingNumber } from '../shared/ranking-number.js';
 import { comparisonValueEligible, fieldKey, matchesValueFilters } from '../shared/score-fields.js';
 import { AA_DISPLAY_RESTRICTION, hasAADisplayRestriction } from '../shared/aa-ranking-policy.js';
+import { estimationMethodDetails } from './estimation-method-help.js';
 
 const AA_ALL_SCORES_MESSAGE = 'Artificial Analysis benchmarks and scores are hidden to respect their data-use terms.';
 
@@ -166,9 +167,9 @@ export function createModelScoresView({ state, modelScoresDialog, modelScoresTit
     closed.observe(modelScoresDialog, { attributes: true, attributeFilter: ['hidden'] });
     const scoreContext = () => {
         const comparison = state.comparison ?? state.comparisonRequest;
-        return JSON.stringify([state.categoryID, state.selectedContextValues, state.mode, state.scoreMode,
+        return JSON.stringify([state.categoryID, state.selectedContextValues, state.mode,
             state.rankingVersion, state.rankingPagination?.snapshotID, comparison?.mode, comparison?.keys, comparison?.filters,
-            state.estimationAlgorithm, state.availableInferenceVersion, state.mode === 'personal' && state.personalRankingDirty]);
+            state.mode === 'personal' && state.personalRankingDirty]);
     };
     function readGuard(sequence, model) {
         const { authenticated, userID, loadSequence } = state;
@@ -456,7 +457,8 @@ export function createModelScoresView({ state, modelScoresDialog, modelScoresTit
     function renderEstimate(row, score) {
         const treemap = score.estimationMethod === TREEMAP_ESTIMATION_METHOD;
         const peerMedian = score.estimationMethod === PEER_MEDIAN_METHOD;
-        if (treemap || peerMedian) row.dataset.estimationMethod = score.estimationMethod;
+        const method = estimationMethodDetails([score.estimationMethod]);
+        if (method) row.dataset.estimationMethod = score.estimationMethod;
         const summary = document.createElement('div');
         summary.className = 'bp-model-estimate-summary';
         const identity = document.createElement('div');
@@ -466,8 +468,17 @@ export function createModelScoresView({ state, modelScoresDialog, modelScoresTit
         identity.append(score.conditionID < 0 ? 'Unresolved topic weight' : estimateVersionLink(score.conditionID), weight);
         const aggregate = document.createElement('div');
         aggregate.className = 'bp-model-score-aggregate';
-        const label = document.createElement('small');
-        label.textContent = treemap ? 'Treemap estimate' : peerMedian ? 'Peer median' : 'Estimated score';
+        const label = document.createElement(method ? 'a' : 'small');
+        if (method) {
+            label.className = 'bp-model-estimate-method';
+            label.href = method.href;
+            label.dataset.tooltip = method.tooltip;
+            label.setAttribute('aria-label', `${method.label}. How it works`);
+            const icon = document.createElement('i');
+            icon.className = `fa-solid ${method.icon}`;
+            icon.setAttribute('aria-hidden', 'true');
+            label.append(icon, method.label);
+        } else label.textContent = 'Estimated score';
         const value = document.createElement('strong');
         value.className = 'bp-model-score-detail-value';
         value.textContent = score.normalizedScore.toFixed(2);
@@ -532,13 +543,8 @@ export function createModelScoresView({ state, modelScoresDialog, modelScoresTit
             figure.setAttribute('aria-label', 'Benchmark scores used in this ranking');
             const stage = document.createElement('div');
             const caption = document.createElement('figcaption');
-            const hasTreemapEstimate = model.inferredScores?.some(score => score.estimationMethod === TREEMAP_ESTIMATION_METHOD);
-            const hasPeerMedian = model.inferredScores?.some(score => score.estimationMethod === PEER_MEDIAN_METHOD);
-            caption.textContent = state.scoreMode === 'range'
-                ? 'Scores are out of 100 and show the lower end of the range. Faded zeros mark unmeasured results.'
-                : 'Scores are out of 100. Faded tiles mark missing measurements.';
-            if (hasTreemapEstimate) caption.textContent += ' Dashed outlines mark treemap estimates.';
-            if (hasPeerMedian) caption.textContent += ' Dotted outlines mark peer medians.';
+            caption.textContent = 'Scores are out of 100. Faded tiles mark missing measurements.';
+            if (model.inferredScores?.some(score => score.estimationMethod)) caption.textContent += ' Tap an estimate icon to read about the method.';
             figure.append(stage, caption);
             modelScoresList.append(figure);
             coverageView = coveragePreview.renderInto(stage, model);
@@ -547,15 +553,8 @@ export function createModelScoresView({ state, modelScoresDialog, modelScoresTit
 
     function renderCalculationResults(model) {
         const { calculationScores: scores, inferredScores = [] } = model;
-        const range = !model.availableInference && Number.isFinite(model.upper) && model.upper !== model.lower;
         modelScoresSummary.textContent = model.comparable === false ? 'No qualifying ranking evidence for these weights and settings.'
-            : `${range ? `Score range ${rankingNumber(model.lower)} to ${rankingNumber(model.upper)}` : `Index score ${rankingNumber(model.lower)}`}; measured results cover ${rankingNumber(model.coverage)}% of the weight.`;
-        if (range && model.comparable !== false) {
-            const detail = document.createElement('p');
-            detail.className = 'bp-model-inference-summary';
-            detail.textContent = 'Missing results count as 0 at the lower end and 100 at the upper end. Measured results stay fixed. Models rank by the lower end.';
-            modelScoresSummary.append(detail);
-        }
+            : `Index score ${rankingNumber(model.lower)}. Measured results cover ${rankingNumber(model.coverage)}% of the weight.`;
         const inference = model.availableInference;
         const calibrated = inference?.method === FALLBACK_INFERENCE_METHOD;
         const currentWeights = inference?.weightPolicy === 'original' || inference?.weightPolicy === SUPPORTED_WEIGHT_POLICY;

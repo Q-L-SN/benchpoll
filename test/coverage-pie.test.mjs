@@ -42,8 +42,8 @@ test('invalid or out-of-range values cannot create invalid pie styles', () => {
     }
 });
 
-test('only comparable Estimated-score rows receive the pie and no visible coverage text', () => {
-    assert.match(source, /if \(comparable && state\.scoreMode === 'available'\) \{\s*const coverage = createCoveragePie\(model\.coverage\)/);
+test('only comparable rows receive the pie and no visible coverage text', () => {
+    assert.match(source, /if \(comparable\) \{\s*const coverage = createCoveragePie\(model\.coverage\)/);
     assert.match(source, /row\.setAttribute\('aria-label', `\$\{row\.getAttribute\('aria-label'\)\}\. \$\{coverage\.dataset\.tooltip\}`\)/);
     assert.doesNotMatch(source, /% covered|coverage\.textContent/);
     const rule = read('public/css/ui/workspace.css').match(/\.bp-model-coverage \{([^}]+)\}/)?.[1];

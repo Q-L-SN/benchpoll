@@ -131,7 +131,7 @@ export function createHomeModelFocus({ intent, state, rows, view, request, showR
     let pageGeneration = 0;
     let edgeFrame = null;
     const scope = () => JSON.stringify([state.loadSequence, state.categoryID, state.selectedContextValues,
-        state.userID, state.mode, state.scoreMode, state.comparisonRequest, state.rankingPagination?.snapshotID]);
+        state.userID, state.mode, state.comparisonRequest, state.rankingPagination?.snapshotID]);
 
     function releaseAutomaticFocus({ blur = false } = {}) {
         const row = automaticFocus;
@@ -211,7 +211,7 @@ export function createHomeModelFocus({ intent, state, rows, view, request, showR
             return;
         }
         const focusMode = state.contextIsPrivate ? 'personal' : intent.mode;
-        if (state.mode !== focusMode || state.scoreMode !== intent.scoreMode) {
+        if (state.mode !== focusMode) {
             cancel();
             return;
         }
@@ -233,7 +233,7 @@ export function createHomeModelFocus({ intent, state, rows, view, request, showR
                         { signal: controller.signal, timeoutMs: 15000, requireJSON: true });
                     if (!isCurrent()) return;
                     validateModelLocatePayload(result, { snapshotID, list, targetModel: intent.targetModel,
-                        scoreMode: state.scoreMode, total: state.rankingPagination[list].total });
+                        scoreMode: 'available', total: state.rankingPagination[list].total });
                     if (!result.found) {
                         pending = false;
                         showRanking();
@@ -249,7 +249,7 @@ export function createHomeModelFocus({ intent, state, rows, view, request, showR
                             const adjacent = await Promise.all(offsets.map(async value => ({ offset: value,
                                 page: validateRankingPagePayload(await request('/api/get_ranking_page', { snapshotID, list, offset: value },
                                     { signal: controller.signal, timeoutMs: 15000, requireJSON: true }),
-                                { list, offset: value, scoreMode: state.scoreMode }) })));
+                                { list, offset: value, scoreMode: 'available' }) })));
                             if (!isCurrent()) return;
                             const pages = [{ offset, page }, ...adjacent].sort((a, b) => a.offset - b.offset);
                             if (pages.some(item => item.page.total !== page.total)) throw new TypeError('Ranking page changed');
@@ -308,7 +308,7 @@ export function createHomeModelFocus({ intent, state, rows, view, request, showR
             const page = validateRankingPagePayload(await request('/api/get_ranking_page', {
                 snapshotID: previous.snapshotID, list: previous.list, offset
             }, { signal: controller.signal, timeoutMs: 15000, requireJSON: true }),
-            { list: previous.list, offset, scoreMode: state.scoreMode });
+            { list: previous.list, offset, scoreMode: 'available' });
             if (token !== pageGeneration || current !== scope() || controller.signal.aborted) return;
             if (page.items.length !== Math.min(RANKING_PAGE_SIZE[previous.list], previous.total - offset)
                 || page.total !== previous.total) throw new TypeError('Ranking page changed');
@@ -343,7 +343,7 @@ export function createHomeModelFocus({ intent, state, rows, view, request, showR
         reveal, cancel, loadPage,
         start(targetModel) {
             cancel();
-            intent = { valid: true, targetModel, mode: state.mode, scoreMode: state.scoreMode, centered: true };
+            intent = { valid: true, targetModel, mode: state.mode, centered: true };
             pending = true;
             return reveal();
         },

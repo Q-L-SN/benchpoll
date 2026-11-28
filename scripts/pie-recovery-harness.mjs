@@ -1,4 +1,3 @@
-import { estimationRequest, normalizeEstimationAlgorithm } from '../public/js/shared/estimation-algorithms.js';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { readFile } from 'node:fs/promises';
@@ -57,7 +56,7 @@ export async function createPieRecoveryHarness({ sourceRoot = '.', ownerID = '7'
     const recovery = createPersonalPieRecovery({ state, guestDrafts, getStorage: () => storage, snapshot: () => api.portable() });
     const saveButton = { listeners: {}, addEventListener: (type, callback) => { saveButton.listeners[type] = callback; } };
     const discardButton = { listeners: {}, addEventListener: (type, callback) => { discardButton.listeners[type] = callback; } };
-    const globals = { estimationRequest, normalizeEstimationAlgorithm, state, ...weights, ...identity, ...estimationVotes, ...guestBallots,
+    const globals = { state, ...weights, ...identity, ...estimationVotes, ...guestBallots,
         portableFamilyEntry, comparisonProfileKey, readRankingContext, chartWeightMode, topicReferenceError, selectedScoringCondition,
         isTopicReference, mergeBenchmarkWeights, recordProfileVisit() {},
         guestDrafts, pieRecovery: recovery, Number, Date, Map, Set, structuredClone, console: { error() {}, warn() {} },

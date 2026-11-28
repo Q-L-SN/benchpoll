@@ -223,14 +223,13 @@ test('measured parameter slots reduce whole-column count, capped by available wi
     assert.deepEqual(columnLayout(330, 25, 37, -1), columnLayout(330, 25, 37));
 });
 
-test('both range and known bar endpoints stay below 65%, sharing a finite baseline', () => {
+test('score bars stay within 65% of their plot height', () => {
     assert.equal(MAX_BAR_RATIO, .65);
     for (const height of [142, 182]) for (const score of [-10, 0, 3, 50, 100, 120]) {
         const geometry = barGeometry({ lower: score, upper: score + 25 }, { min: 0, max: 100 }, height);
         assert.ok(geometry.known >= 0 && geometry.known <= height * .65);
-        assert.ok(geometry.upper >= geometry.known && geometry.upper <= height * .65);
     }
-    assert.equal(barGeometry({ lower: 20, upper: 50, comparable: false }, null, 100).upper, 0);
+    assert.equal(barGeometry({ lower: 20, comparable: false }, null, 100).known, 0);
     assert.ok(Number.isFinite(barGeometry({ lower: 20, upper: 50 }, { min: NaN, max: NaN }, 100).known));
 });
 
@@ -251,37 +250,33 @@ test('available bars use the leader as 100% of the 65% chart envelope, without c
         const models = [leader, leader / 2, 0].map((lower, index) => ({ modelID: index + 1, lower, upper: lower }));
         const preview = { models, scoreScale: { min: -10, max: 200 } };
         const original = structuredClone(models);
-        const scale = modelBarScale(preview, 'available');
+        const scale = modelBarScale(preview);
         assert.deepEqual(scale, { min: 0, max: leader });
         assert.equal(barGeometry(models[0], scale, 200).known, 130);
         if (leader / 2 > 0) assert.equal(barGeometry(models[1], scale, 200).known, 65);
         assert.equal(barGeometry(models[2], scale, 200).known, 0);
         assert.deepEqual(models, original, 'display scaling must not change actual model scores');
-        assert.equal(modelBarScale(preview, 'range'), preview.scoreScale, 'range keeps its absolute scale');
     }
-    const model = { lower: 71, upper: 85 };
-    assert.deepEqual(barGeometry(model, modelBarScale({ models: [model], scoreScale: { min: 0, max: 100 } }, 'range'), 200),
-        { known: 92.3, upper: 110.5, comparable: true });
 });
 
 test('relative bar scaling handles absent, invalid, zero and nonpositive leaders without inventing scores', () => {
-    const unavailable = [{ lower: 99, upper: 99, comparable: false }, { lower: NaN, upper: 90 }, { lower: 80, upper: Infinity }];
+    const unavailable = [{ lower: 99, comparable: false }, { lower: NaN }, { lower: Infinity }];
     for (const models of [[], unavailable, [{ lower: 0, upper: 0 }], [{ lower: -10, upper: -10 }]]) {
-        const scale = modelBarScale({ models }, 'available');
+        const scale = modelBarScale({ models });
         assert.deepEqual(scale, { min: 0, max: 1 });
         for (const model of models) assert.equal(barGeometry(model, scale, 200).known, 0);
     }
     const models = [...unavailable, { lower: 40, upper: 40 }];
-    assert.equal(barGeometry(models.at(-1), modelBarScale({ models }, 'available'), 200).known, 130);
+    assert.equal(barGeometry(models.at(-1), modelBarScale({ models }), 200).known, 130);
 });
 
 test('relative bar scaling stays anchored to the ranking leader across paging and resets with a fresh snapshot', () => {
     const previous = { topicID: 54, models: [{ modelID: 1, lower: 40, upper: 40 }], scoreScale: { min: 0, max: 100 } };
     const merged = mergePreview(previous, { topicID: 54, models: [{ modelID: 2, lower: 20, upper: 20 }] }, true);
-    assert.deepEqual(modelBarScale(merged, 'available'), modelBarScale(previous, 'available'));
-    assert.equal(barGeometry(merged.models[1], modelBarScale(merged, 'available'), 200).known, 65);
+    assert.deepEqual(modelBarScale(merged), modelBarScale(previous));
+    assert.equal(barGeometry(merged.models[1], modelBarScale(merged), 200).known, 65);
     const fresh = mergePreview(merged, { topicID: 54, models: [{ modelID: 2, lower: 20, upper: 20 }] });
-    assert.equal(barGeometry(fresh.models[0], modelBarScale(fresh, 'available'), 200).known, 130);
+    assert.equal(barGeometry(fresh.models[0], modelBarScale(fresh), 200).known, 130);
 });
 
 test('selectable tile theme, top exposure/fade and full unmasked weights are explicit', async () => {
@@ -368,15 +363,15 @@ test('collections intersect authorized metadata, account flags and account-scope
 test('model links preserve public and private identity paths with the exact ranking focus contract', () => {
     const identity = JSON.stringify([['model', true, 12], ['field:2', true, 'A & B / test']]);
     const href = modelTargetURL('/81/2?source=home&mode=personal#results', { modelID: 12, comparisonIdentity: identity },
-        { scoreMode: 'range', reasoning: true, harness: false });
+        { reasoning: true, harness: false });
     const url = new URL(href, 'https://fixture.local');
     assert.equal(url.pathname, '/81/2'); assert.equal(url.hash, '#results');
     assert.deepEqual(Object.fromEntries(url.searchParams), { source: 'home', mode: 'public', focusModel: identity,
-        scoreMode: 'range', compareReasoning: '1', compareHarness: '0' });
-    const fallback = new URL(modelTargetURL('/private/FixturePrivate8', { modelID: '34' }, { scoreMode: 'available', reasoning: false, harness: true }, true), url);
+        compareReasoning: '1', compareHarness: '0' });
+    const fallback = new URL(modelTargetURL('/private/FixturePrivate8', { modelID: '34' }, { reasoning: false, harness: true }, true), url);
     assert.equal(fallback.searchParams.get('focusModel'), '34'); assert.equal(fallback.searchParams.get('compareHarness'), '1');
     assert.equal(fallback.searchParams.get('mode'), 'personal');
-    assert.deepEqual(readHomeModelFocusIntent(fallback.href), { valid: true, targetModel: '34', scoreMode: 'available', mode: 'personal',
+    assert.deepEqual(readHomeModelFocusIntent(fallback.href), { valid: true, targetModel: '34', mode: 'personal',
         comparison: { reasoning: false, harness: true }, keys: ['model'] });
     assert.equal(modelTargetURL('/topic', {}, {}), null);
     assert.equal(modelTargetURL('/topic', { modelID: Number.MAX_SAFE_INTEGER + 1 }, {}), null);
@@ -564,12 +559,10 @@ test('full home weights retain topic references, missing IDs, Other members and 
     }
 });
 
-test('range is one complete neutral upper column behind the unchanged vendor-color known column', async () => {
+test('cards render one vendor-colored bar per model', async () => {
     const css = await readFile(new URL('../public/css/topics-home.css', import.meta.url), 'utf8');
     const source = await readFile(new URL('../public/js/topics-home.js', import.meta.url), 'utf8');
-    assert.match(css, /\.th-model-range\s*\{[^}]*bottom: 0;[^}]*background: #929eac;/s);
-    assert.doesNotMatch(css.match(/\.th-model-range\s*\{([^}]+)\}/)?.[1], /vendor-color|opacity/);
+    assert.doesNotMatch(css, /\.th-model-range/);
     assert.match(css, /\.th-model-bar\s*\{[^}]*bottom: 0;[^}]*background: var\(--th-vendor-color\)/s);
-    assert.ok(source.indexOf('plot.append(range)') < source.indexOf('plot.append(known)'));
-    assert.match(source, /height:\$\{bar\.upper\}px/);
+    assert.match(source, /height:\$\{bar\.known\}px/);
 });

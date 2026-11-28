@@ -1,7 +1,6 @@
 import { basicComparisonOptions, readComparisonSettings } from './workspace/comparison-settings.js';
 import { canonicalAccountID } from './shared/account-identity.js';
-import { readWorkspacePreferences, readEstimationPreference } from './workspace/preferences.js';
-import { estimationRequest } from './shared/estimation-algorithms.js';
+import { readWorkspacePreferences } from './workspace/preferences.js';
 import { rankingReadBody } from './shared/available-score.js?v=coverage-factor-20261019';
 import { readHomeModelFocusIntent } from './workspace/model-focus-target.js';
 
@@ -59,8 +58,7 @@ export function startHomeReads(target, { fetch = target.fetch.bind(target), ttlM
         const preference = preferences();
         workspaceStarted = true;
         start('/api/get_weighted_workspace', { categoryID: ID, contextValues,
-            comparison, scoreMode: focusIntent?.valid ? focusIntent.scoreMode : preference.scoreMode,
-            ...estimationRequest(readEstimationPreference()),
+            comparison,
             initialMode: focusIntent?.valid ? focusIntent.mode : preference.mode,
             ...(focusIntent?.valid ? { homeComparison: { ...focusIntent.comparison } } : {}),
             benchmarkQuery: '', pinPersonal: false });

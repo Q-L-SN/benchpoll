@@ -11,14 +11,6 @@ const html = await readFile(new URL('../private/home.html', import.meta.url), 'u
 const links = [...html.matchAll(/<link\s+rel="([^"]+)"\s+href="([^"]+)"[^>]*>/g)]
     .map(([, rel, href]) => ({ rel, href }));
 
-test('missing-score help explains eligible versions, unresolved weight, and measured ranges', () => {
-    const help = html.match(/<button class="bp-scoring-help[^>]*data-help-text="([^"]+)"/)?.[1];
-    assert.ok(help);
-    assert.match(help, /Estimated score fills gaps with version estimates/);
-    assert.match(help, /then calibrated treemap paths, then the median of other models on the same version/);
-    assert.match(help, /Score range uses 0 and 100 for missing measurements/);
-});
-
 test('homepage preload hints exactly match reachable module URL identities without executing new modules', async () => {
     const hints = links.filter(link => link.rel === 'modulepreload').map(link => link.href);
     assert.equal(new Set(hints).size, hints.length);

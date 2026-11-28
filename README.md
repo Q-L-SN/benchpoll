@@ -236,7 +236,7 @@ to the matching comparison in the workspace, including paginated results.
 Home uses a fixed light, hatched treemap and neutral outlined topic surfaces.
 Model paging controls appear at the sides of each preview when available.
 
-The AI Index offers **Version-based estimation**. Direct scores take priority.
+The AI Index uses version-based estimation for missing measurements. Direct scores take priority.
 For a missing version A, directly paired sibling versions jointly predict A on its own scale. A pair needs
 at least one other model measured on both versions under identical run settings. A regularized covariance
 fit learns the relationships between versions from the available paired data and softens extrapolation
@@ -254,8 +254,7 @@ weight across usable source versions. BenchPoll multiplies these shares by path 
 normalizes them to average the converted scores. If no path is available, the peer median uses one
 score per other model on the same target version, including version and treemap estimates. With no
 peer score, the index normalizes the scored weight. Models need direct or calibrated evidence to rank.
-Only measurements add coverage. Score range assigns
-0 at the lower end and 100 at the upper end for missing measurements. See
+Only measurements add coverage. See
 [How BenchPoll works](https://benchpoll.com/how-it-works#rankings).
 
 Shared tooltips use `data-tooltip` (hover, keyboard focus or touch long-press);
@@ -570,7 +569,6 @@ AI Index 提供 **Version-based estimation**。缺少版本 A 的分数时，算
 缺少直接配对时，模型的实测分可以经过同一基准的中间版本逐段换算到 A。每一段都需要相同运行设置下其他模型的配对实测，并遵守全站版本对投票。路径上的版本也都须获准为 A 估分。优先采用最短路径，路径等长时选择最薄弱一段配对模型更多的路径。
 实测分（含零分）优先。版本估分仍缺失时，搜索全树图中各加权基准的所有版本，把有实测分的版本逐步换算到目标版本。每一步的权重是支持率乘以 `n / (n + 2)`，其中 `n` 是相同运行设置下的配对模型数。跨基准连接须有提名，公众排名还须通过外部来源验证。获提名的树图外版本也可作为中间节点。每个来源选链路权重乘积最大的路径。各基准将权重分给可用来源版本，再乘路径权重并归一化，取换算分的加权平均。这类分数标记为树图估分。
 没有可用路径时，取其他模型在同一目标版本上的分数中位数，每个模型只计一次，样本包括实测分和前两层估分。没有同版样本时按有分数的权重重新归一化。模型须有实测分或经校准的估分才参与排名。覆盖率只计算实测结果。
-在分数区间模式下，缺分项的下限计 0 分，上限计 100 分。
 详见 [How BenchPoll works](https://benchpoll.com/how-it-works#rankings)。
 
 全站共用 `data-tooltip` 提示（悬浮、键盘聚焦或触屏长按）；纯说明按钮使用

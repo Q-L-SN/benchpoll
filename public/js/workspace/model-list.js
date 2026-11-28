@@ -24,21 +24,21 @@ export function modelRankingEmptyMessage(state) {
     return 'No measured results match these weights yet. Add another evaluation item or contribute scores.';
 }
 
-export function modelScoreScale(models, fixedScale = null, { fillTopBar = false } = {}) {
+export function modelScoreScale(models, fixedScale = null) {
     let min = fixedScale?.min ?? 0;
     let max = fixedScale?.max ?? 100;
     for (const model of models) {
         if (model.comparable === false) continue;
-        if (!Number.isFinite(model.lower) || !Number.isFinite(model.upper) || model.lower > model.upper) {
-            throw new TypeError('Model score intervals must be finite and ordered');
+        if (!Number.isFinite(model.lower)) {
+            throw new TypeError('Model scores must be finite');
         }
         if (!fixedScale) {
             min = Math.min(min, model.lower);
-            max = Math.max(max, model.upper);
+            max = Math.max(max, model.lower);
         }
     }
     const leader = models.find(model => model.comparable !== false && Number.isFinite(model.lower));
-    const leaderFillsTrack = fillTopBar && leader && leader.lower > min;
+    const leaderFillsTrack = leader && leader.lower > min;
     if (leaderFillsTrack) max = leader.lower;
     // Halving first also keeps the mapping finite for very large opposite endpoints.
     const position = value => (value / 2 - min / 2) / (max / 2 - min / 2) * 100;
@@ -111,9 +111,9 @@ export function createModelListView({ state, modelRows, openApprovedModelResults
         const models = focused?.items ?? state.modelLeaderboards[state.mode] ?? [];
         const showVendorMarks = (state.comparison ?? state.comparisonRequest ?? { keys: ['model'] }).keys.includes('model');
         const charts = state.workspaceDisplay === 'charts';
-        const scope = JSON.stringify([state.categoryID, state.selectedContextValues, state.mode, state.scoreMode, state.workspaceDisplay,
+        const scope = JSON.stringify([state.categoryID, state.selectedContextValues, state.mode, state.workspaceDisplay,
             focused?.snapshotID]);
-        renderRankingStatus(JSON.stringify([state.categoryID, state.selectedContextValues, state.mode, state.scoreMode]));
+        renderRankingStatus(JSON.stringify([state.categoryID, state.selectedContextValues, state.mode]));
         const pending = state.loading || state.comparisonPending || state.mode === 'personal' && state.personalRankingDirty;
         // Keep the last calculation intact until a current response supplies its replacement.
         if (renderedScope === scope && renderedModels === models && pending
@@ -207,9 +207,8 @@ export function createModelListView({ state, modelRows, openApprovedModelResults
             }
             return;
         }
-        const fillTopBar = state.scoreMode === 'available';
         const scaleModels = focused ? [...(state.modelLeaderboards[state.mode] ?? []).slice(0, 1), ...models] : models;
-        const scale = modelScoreScale(scaleModels, state.rankingPagination?.modelScales?.[state.mode], { fillTopBar });
+        const scale = modelScoreScale(scaleModels, state.rankingPagination?.modelScales?.[state.mode]);
         if (charts) {
             renderModelBarChart({ container: modelRows, models, state, scale, showVendorMarks,
                 onActivate: openApprovedModelResults, onNeedMore: focused ? () => {} : onNeedMore,
@@ -222,7 +221,6 @@ export function createModelListView({ state, modelRows, openApprovedModelResults
             const existing = renderedRows.get(key);
             if (reusable && existing) { previousRow = existing.row; return; }
             const comparable = model.comparable !== false;
-            const selectedScore = Number(model.lower);
 
             const row = document.createElement('div');
             row.className = 'bp-model-row';
@@ -248,47 +246,33 @@ export function createModelListView({ state, modelRows, openApprovedModelResults
             const track = document.createElement('span');
             track.className = 'bp-score-track';
             track.style.setProperty('--score-vendor-color', modelBarColor(model));
-            const relative = fillTopBar && comparable;
-            row.classList.toggle('is-leader-relative', relative);
-            track.classList.toggle('is-leader-relative', relative);
-            track.setAttribute('aria-label', !comparable ? 'No qualifying index score' : state.scoreMode === 'available'
+            row.classList.toggle('is-leader-relative', comparable);
+            track.classList.toggle('is-leader-relative', comparable);
+            track.setAttribute('aria-label', comparable
                 ? `Estimated score ${rankingNumber(model.lower)}. Measured coverage ${rankingNumber(model.coverage)}%. Chart scale ${rankingNumber(scale.min)} to ${rankingNumber(scale.max)}.`
-                : `Score range ${rankingNumber(model.lower)} to ${rankingNumber(model.upper)}. Chart scale ${rankingNumber(scale.min)} to ${rankingNumber(scale.max)}.`);
+                : 'No qualifying index score');
             const position = value => Math.max(0, Math.min(100, scale.position(value)));
-            const lowerPosition = comparable ? position(model.lower) : 0;
-            const upperPosition = comparable ? position(model.upper) : 0;
+            const scorePosition = comparable ? position(model.lower) : 0;
             const startPosition = position(scale.barStart);
-            track.classList.toggle('bp-score-negative-range', !fillTopBar && model.lower < 0 && model.upper > model.lower);
+            const fillStart = Math.min(startPosition, scorePosition);
+            const fillEnd = Math.max(startPosition, scorePosition);
             const known = document.createElement('span');
             known.className = 'bp-score-known';
-            known.style.left = `${Math.min(startPosition, lowerPosition)}%`;
-            known.style.width = `${Math.abs(lowerPosition - startPosition)}%`;
-            const uncertain = document.createElement('span');
-            uncertain.className = 'bp-score-uncertain';
-            uncertain.style.left = `${lowerPosition}%`;
-            uncertain.style.width = `${Math.max(0, upperPosition - lowerPosition)}%`;
+            known.style.left = `${fillStart}%`;
+            known.style.width = `${fillEnd - fillStart}%`;
             const fill = document.createElement('span');
             fill.className = 'bp-score-fill';
-            const fillStart = Math.min(startPosition, lowerPosition);
-            const fillEnd = Math.max(startPosition, upperPosition);
-            // Clip the combined fill, not each segment, so their join stays continuous.
             fill.style.clipPath = `inset(0 ${100 - fillEnd}% 0 ${fillStart}% round 3px)`;
             fill.style.transformOrigin = `${fillStart}% center`;
-            // The gray bed fills the rounded orange cap without changing score endpoints.
-            if (comparable && model.lower >= 0 && upperPosition > lowerPosition && lowerPosition > startPosition) {
-                const bed = document.createElement('span');
-                bed.className = 'bp-score-range-base';
-                fill.append(bed);
-            }
-            fill.append(known, uncertain);
+            fill.append(known);
             track.append(fill);
 
             const score = document.createElement('span');
             score.className = 'bp-model-score';
             const scoreValue = document.createElement('span');
-            scoreValue.textContent = comparable ? rankingNumber(selectedScore) : 'No data';
+            scoreValue.textContent = comparable ? rankingNumber(model.lower) : 'No data';
             score.append(scoreValue);
-            if (comparable && state.scoreMode === 'available') {
+            if (comparable) {
                 const coverage = createCoveragePie(model.coverage);
                 identity.append(coverage);
                 row.setAttribute('aria-label', `${row.getAttribute('aria-label')}. ${coverage.dataset.tooltip}`);
@@ -310,7 +294,7 @@ export function createModelListView({ state, modelRows, openApprovedModelResults
             row.addEventListener('keydown', activate);
             row.append(rank, identity, track);
             if (comparable) {
-                mountBarEndpointLabel(track, score, Math.max(startPosition, lowerPosition), Math.min(startPosition, lowerPosition));
+                mountBarEndpointLabel(track, score, fillEnd, fillStart);
                 track.removeAttribute('data-tooltip');
             }
             else row.append(score);

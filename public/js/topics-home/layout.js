@@ -35,7 +35,6 @@ export function modelTargetURL(href, model, filters, isPrivate = false) {
     if (!href || !focus) return null;
     const url = new URL(href, 'https://home.invalid');
     url.searchParams.set('focusModel', focus);
-    url.searchParams.set('scoreMode', filters.scoreMode === 'range' ? 'range' : 'available');
     url.searchParams.set('compareReasoning', filters.reasoning ? '1' : '0');
     url.searchParams.set('compareHarness', filters.harness ? '1' : '0');
     url.searchParams.set('mode', isPrivate ? 'personal' : 'public');
@@ -223,11 +222,9 @@ export function columnLayout(availableWidth, loadedCount, totalCount = loadedCou
         barWidth: Math.min(slot, Math.max(compact ? 22 : 24, Math.min(44, Math.floor(slot * .76)))) };
 }
 
-export function modelBarScale(preview, scoreMode) {
-    if (scoreMode === 'range') return preview.scoreScale;
+export function modelBarScale(preview) {
     // Keep the full ranking's leader as the anchor when later pages are appended.
-    const leader = preview.models.find(model => model.comparable !== false
-        && Number.isFinite(model.lower) && Number.isFinite(model.upper));
+    const leader = preview.models.find(model => model.comparable !== false && Number.isFinite(model.lower));
     return { min: 0, max: leader?.lower > 0 ? leader.lower : 1 };
 }
 
@@ -237,7 +234,6 @@ export function barGeometry(model, scoreScale, plotHeight) {
     const span = max - min;
     const project = value => Math.max(0, Math.min(1, Number.isFinite(span) ? (value - min) / span
         : (value / 2 - min / 2) / (max / 2 - min / 2))) * plotHeight * MAX_BAR_RATIO;
-    const comparable = model.comparable !== false && Number.isFinite(model.lower) && Number.isFinite(model.upper);
-    return { known: comparable ? project(model.lower) : 0,
-        upper: comparable ? project(Math.max(model.lower, model.upper)) : 0, comparable };
+    const comparable = model.comparable !== false && Number.isFinite(model.lower);
+    return { known: comparable ? project(model.lower) : 0, comparable };
 }

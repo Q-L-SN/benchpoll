@@ -7,13 +7,13 @@ import { FEATURED_TOPIC_ID, topicURL } from '../public/js/shared/topics.js';
 const tick = () => new Promise(resolve => setImmediate(resolve));
 const topicPath = topicURL(FEATURED_TOPIC_ID, 'Language models');
 const body = { categoryID: FEATURED_TOPIC_ID, contextValues: {}, comparison: { mode: 'best', keys: ['model'], filters: [] },
-    scoreMode: 'available', initialMode: 'public', benchmarkQuery: '', pinPersonal: false };
+    initialMode: 'public', benchmarkQuery: '', pinPersonal: false };
 test('named scene startup waits for resolved scene identity instead of speculating on the default', async () => {
     const requests = [];
     const target = { location: { pathname: '/intelligence/real-time' }, addEventListener() {},
         document: { querySelector: () => ({ content: String(FEATURED_TOPIC_ID), dataset: { guest: 'true' } }) } };
     const reads = startHomeReads(target, { settings: () => ({ basic: body.comparison }),
-        preferences: () => ({ scoreMode: 'available', mode: 'public' }), fetch: async (url, options) => {
+        preferences: () => ({ mode: 'public' }), fetch: async (url, options) => {
             requests.push({ url, body: options.body && JSON.parse(options.body) });
             if (url === '/api/get_user_profile') return new Response(null, { status: 204 });
             return Response.json({ currentCategoryID: FEATURED_TOPIC_ID, contextValues: { scene: '20' } });
@@ -42,28 +42,19 @@ function fixture(extra = {}) {
     return { reads, calls, listeners, target };
 }
 
-test('initial scoring switch puts the selected Estimated score choice before Score range', () => {
-    const html = readFileSync(new URL('../private/home.html', import.meta.url), 'utf8');
-    const controls = html.match(/<div class="bp-scoring-switch"[^>]*>[\s\S]*?<\/div>/)?.[0];
-    assert.ok(controls);
-    assert.match(controls, /data-mode="available"/);
-    const choices = [...controls.matchAll(/<button\b[^>]*data-score-mode="([^"]+)"[^>]*aria-pressed="([^"]+)"[^>]*>[\s\S]*?<span>([^<]+)<\/span><\/button>/g)]
-        .map(([, mode, pressed, label]) => ({ mode, pressed, label }));
-    assert.deepEqual(choices, [
-        { mode: 'available', pressed: 'true', label: 'Estimated score' },
-        { mode: 'range', pressed: 'false', label: 'Score range' }
-    ]);
+test('topic cards and the workspace use a single estimator without score selectors', () => {
+    for (const path of ['../private/home.html', '../private/index.html']) {
+        const html = readFileSync(new URL(path, import.meta.url), 'utf8');
+        assert.doesNotMatch(html, /data-score-mode|topics-score-toggle|estimation-method-control/);
+    }
 });
 
-test('startup reads real preferences for both boot paths and reuses the matching scoring request', async () => {
+test('startup reads weight preferences without restoring a retired scoring mode', async () => {
     const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'sessionStorage');
     try {
         for (const bootstrap of [undefined, { content: String(FEATURED_TOPIC_ID), dataset: { guest: 'true' } }]) {
-            for (const [stored, scoreMode] of [
-                [null, 'available'], ['{', 'available'], ['{}', 'available'],
-                ['{"scoreMode":"invalid"}', 'available'],
-                ['{"scoreMode":"available"}', 'available'], ['{"scoreMode":"range"}', 'range']
-            ]) {
+            for (const [stored, initialMode] of [[null, 'public'], ['{', 'public'],
+                ['{"scoreMode":"range","mode":"personal"}', 'personal']]) {
                 let preferenceReads = 0;
                 Object.defineProperty(globalThis, 'sessionStorage', { configurable: true, value: {
                     getItem(key) {
@@ -78,11 +69,9 @@ test('startup reads real preferences for both boot paths and reuses the matching
                     assert.equal(preferenceReads, 1);
                     const rankings = calls.filter(call => call.url === '/api/get_weighted_workspace');
                     assert.equal(rankings.length, 1);
-                    assert.equal(JSON.parse(rankings[0].options.body).scoreMode, scoreMode);
-                    assert.equal(reads.take('/api/get_weighted_workspace', {
-                        ...body, scoreMode: scoreMode === 'available' ? 'range' : 'available'
-                    }), null);
-                    assert.ok(await reads.take('/api/get_weighted_workspace', { ...body, scoreMode }));
+                    assert.equal(JSON.parse(rankings[0].options.body).scoreMode, undefined);
+                    assert.equal(reads.take('/api/get_weighted_workspace', { ...body, initialMode, scoreMode: 'range' }), null);
+                    assert.ok(await reads.take('/api/get_weighted_workspace', { ...body, initialMode }));
                 } finally { reads.stop(); }
             }
         }
@@ -139,14 +128,14 @@ test('both startup boot paths capture Home intent before URL cleanup and reuse t
             let settingsReads = 0;
             const { reads, calls, target } = fixture({ bootstrap, location,
                 settings() { settingsReads++; return { basic: { mode: 'best', keys: ['model', 'field:1'], filters: [] } }; },
-                preferences: () => ({ mode: mode === 'public' ? 'personal' : 'public', scoreMode: 'available' }) });
+                preferences: () => ({ mode: mode === 'public' ? 'personal' : 'public' }) });
             try {
                 target.location.href = `https://benchpoll.test${topicPath}`;
                 await tick(); await tick();
                 const rankings = calls.filter(call => call.url === '/api/get_weighted_workspace');
                 assert.equal(rankings.length, 1);
                 assert.equal(settingsReads, 0, 'A Home comparison must not read saved comparison controls');
-                const request = { ...body, scoreMode: 'range', initialMode: mode,
+                const request = { ...body, initialMode: mode,
                     comparison: { mode: 'best', keys: ['field:20', 'field:30', 'model'], filters: [] },
                     homeComparison: { reasoning: true, harness: true } };
                 const actual = JSON.parse(rankings[0].options.body);
@@ -165,7 +154,7 @@ test('invalid Home intent cannot change speculative workspace preferences', asyn
     try {
         await tick(); await tick();
         const request = JSON.parse(calls.find(call => call.url === '/api/get_weighted_workspace').options.body);
-        assert.equal(request.scoreMode, 'available');
+        assert.equal(request.scoreMode, undefined);
         assert.equal(request.initialMode, 'public');
         assert.equal(request.homeComparison, undefined);
         assert.ok(await reads.take('/api/get_weighted_workspace', body));

@@ -141,7 +141,7 @@ export function discoveryText(topics, origin) {
 
 BenchPoll is a community-weighted AI model ranking platform. Participants choose benchmark and topic weights to define what matters in an AI index. Explore public rankings by topic and scene, inspect the evidence, or build a personal index.
 
-Public or personal weights determine the contribution of each benchmark. Estimated scores use direct measurements, estimates from eligible versions and calibrated chains across weighted benchmarks. Paired model measurements calibrate those estimates. Other models’ median score on the target version fills gaps that calibration cannot cover. Coverage counts direct measurements on the weighted versions. Score range uses 0 and 100 for missing measurements and holds measured scores fixed. Topic references expand into benchmark weights before scores are calculated. Scores depend on the selected topic, scene, weights and comparison settings.
+Public or personal weights determine the contribution of each benchmark. The AI Index uses direct measurements, estimates from eligible versions and calibrated chains across weighted benchmarks. Paired model measurements calibrate those estimates. Other models’ median score on the target version fills gaps that calibration cannot cover. Coverage counts direct measurements on the weighted versions. Topic references expand into benchmark weights before scores are calculated. Scores depend on the selected topic, scene, weights and comparison settings.
 
 ## Methodology and evidence
 - ${link('How BenchPoll works', '/how-it-works')}
@@ -184,7 +184,7 @@ export function createSearchPresentation({ origin, loadTopics, loadPreview, now 
             if (activePreviews >= 2) return null;
             activePreviews++;
             job = Promise.resolve().then(() => loadPreview({ categoryID: topic.ID, sceneID: scene?.ID ?? null,
-                scoreMode: 'available', reasoning: false, harness: false })).catch(() => null)
+                reasoning: false, harness: false })).catch(() => null)
                 .finally(() => {
                     activePreviews--;
                     if (previewJobs.get(key) === job) previewJobs.delete(key);

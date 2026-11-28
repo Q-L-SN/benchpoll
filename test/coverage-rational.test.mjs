@@ -5,7 +5,6 @@ import { coverageMultiplier } from '../public/js/shared/coverage-penalty.js';
 import { availableResultInference, storedAvailableResultInference, AVAILABLE_INFERENCE_VERSION, normalizeAvailableInferenceVersion, PAIRWISE_COVERAGE_FACTOR_METHOD, PAIRWISE_RATIONAL_COVERAGE_FACTOR_METHOD } from '../public/js/shared/available-score.js';
 import { scoreModels } from '../ranking-service.js';
 import { createTopicHomeService, normalizeTopicPreview } from '../topic-home-service.js';
-import { createWorkspaceState } from '../public/js/workspace/state.js';
 import { validateWorkspacePayload } from '../public/js/workspace/contracts.js';
 import { createFixtureState, workspace } from '../scripts/frontend/fixtures.mjs';
 
@@ -56,7 +55,6 @@ test('the live score trace fills missing weight when there is evidence and leave
 test('coverage has no preference API and all supported stale request versions upgrade to the current version', () => {
     assert.deepEqual(Object.keys(coveragePenalty).sort(), ['RATIONAL_COVERAGE_A', 'coverageMultiplier']);
     assert.equal(AVAILABLE_INFERENCE_VERSION, 13);
-    assert.equal(createWorkspaceState().availableInferenceVersion, 13);
     assert.equal(normalizeAvailableInferenceVersion(), 13);
     for (const version of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]) assert.equal(normalizeAvailableInferenceVersion(version), 13);
     for (const version of [0, 14, '5', null, NaN]) assert.throws(() => normalizeAvailableInferenceVersion(version));

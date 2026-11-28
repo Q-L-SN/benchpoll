@@ -185,12 +185,14 @@ export async function startPreview({ port = 0, ...options } = {}) {
                 }
                 case '/api/load_benchmarks_and_subcategories': return send(200, { subcategories: categories[0].children });
                 case '/api/get_weighted_workspace':
+                    if ((body.scoreMode ?? 'available') !== 'available') return send(400, { error: 'invalid_score_mode' });
                     await delay(state.workspaceDelay);
                     if (state.workspaceFailure) return send(state.workspaceFailure, { error: 'fixture_workspace_failure' });
                     if (body.homeComparison !== undefined) body.comparison = topicPreviewComparison(state.comparisonFields ?? [], normalizeHomeComparison(body.homeComparison));
-                    return send(200, workspace(state, body));
+                    return send(200, workspace(state, { ...body, scoreMode: 'available' }));
                 case '/api/get_topic_preview': {
-                    const data = workspace(state, { ...body, contextValues: body.sceneID ? { scene: String(body.sceneID) } : {} }, { paginate: false });
+                    if ((body.scoreMode ?? 'available') !== 'available') return send(400, { error: 'invalid_score_mode' });
+                    const data = workspace(state, { ...body, scoreMode: 'available', contextValues: body.sceneID ? { scene: String(body.sceneID) } : {} }, { paginate: false });
                     const mode = body.mode ?? 'public';
                     return send(200, { totalCoverageIndex: data[`${mode}Pie`].coverageIndex });
                 }

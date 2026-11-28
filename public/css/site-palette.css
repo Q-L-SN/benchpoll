@@ -24,7 +24,6 @@
     --bp-sidebar: #f0f2f5;
     --bp-hover: #f5f6f9;
     --bp-selected: #fff2e8;
-    --bp-uncertain: #d7d9df;
     --bp-track: #eceef1;
     --bp-logo-primary: #444d57;
     --bp-logo-secondary: #ff892f;
@@ -159,7 +158,6 @@ body.censor-page-body .tab-count { background: var(--bp-fill); color: #fff; }
 .bp-home .bp-benchmark-row.after-personal-pinned { border-color: var(--bp-line-strong); }
 .bp-home .bp-benchmark-personal-pin[aria-pressed="true"] { color: var(--bp-purple); }
 .bp-home .bp-score-known { background: var(--bp-score-fill); }
-.bp-home .bp-score-uncertain { background: var(--bp-uncertain); }
 .bp-home :is(.bp-model-rows, .bp-benchmark-rows, .bp-taxonomy, .discussion-scroll) { scrollbar-color: #d4d8e0 transparent; }
 .bp-home :is(.bp-add-personal, .bp-error-state button) { color: var(--bp-purple); border-color: var(--bp-line-strong); background: var(--bp-purple-soft); }
 .bp-home .bp-inline-fallback-chart { background: var(--bp-surface-soft); }

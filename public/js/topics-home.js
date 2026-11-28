@@ -34,7 +34,7 @@ const siteNavigation = mountSiteActions($('.th-header-links'), { accountID: 'top
 const grid = $('#topics-grid');
 const listStatus = $('#topics-status');
 const announcement = $('#topics-announcement');
-const filters = { scoreMode: 'available', reasoning: false, harness: false, availableInferenceVersion: AVAILABLE_INFERENCE_VERSION };
+const filters = { reasoning: false, harness: false, availableInferenceVersion: AVAILABLE_INFERENCE_VERSION };
 const cards = new Map();
 const scenesDialog = $('#topic-scenes-dialog'), scenesGrid = $('#topic-scenes-grid');
 let openSceneTopicID = null;
@@ -648,11 +648,6 @@ function renderModel(model, preview, geometry, plotHeight, scoreScale, topicHref
     const known = element('span', 'th-model-bar');
     known.style.cssText = `left:${barLeft}px;height:${bar.known}px`;
     known.dataset.scoreHeight = String(bar.known);
-    if (filters.scoreMode === 'range' && bar.upper > bar.known) {
-        const range = element('span', 'th-model-range');
-        range.style.cssText = `left:${barLeft}px;height:${bar.upper}px`;
-        range.dataset.scoreHeight = String(bar.upper); plot.append(range);
-    }
     if (outside) {
         score.classList.add('is-outside'); score.style.left = `${barLeft + geometry.barWidth / 2}px`;
         score.style.bottom = `${bar.known + 3}px`;
@@ -677,8 +672,7 @@ function renderModel(model, preview, geometry, plotHeight, scoreScale, topicHref
     const mark = createOrganizationMark(model, 'th-vendor-mark');
     mark.style.transform = `translateX(${barCenter - geometry.slot / 2}px)`;
     identity.append(mark, name);
-    const scoreText = !bar.comparable ? 'No comparable score' : filters.scoreMode === 'range'
-        ? `Score range ${label} to ${rankingNumber(model.upper)}` : `Score ${label}`;
+    const scoreText = bar.comparable ? `Score ${label}` : 'No comparable score';
     const description = `${model.modelName || model.name}\n${scoreText}\n${Math.floor(model.coverage ?? 0)}% benchmark coverage`;
     if (!href) column.setAttribute('role', 'img');
     column.setAttribute('aria-label', `${href ? 'Open ' : ''}${description.replaceAll('\n', '. ')}`);
@@ -701,7 +695,7 @@ function appendModelPage(state, previous) {
     // Clear WebKit's constrained end snap target before extending the scroll range.
     scroll.style.scrollSnapType = 'none';
     void scroll.offsetWidth;
-    const scoreScale = modelBarScale(preview, filters.scoreMode);
+    const scoreScale = modelBarScale(preview);
     track.append(...preview.models.slice(previous.models.length).map(model => renderModel(model, preview, geometry, state.visual.clientHeight - state.identityHeight - 1, scoreScale, canonicalTopicURL(state.topic), state.topic.isPrivate)));
     syncModelEdges(state);
     if (Math.abs(scroll.scrollLeft - offset) > .5) scroll.scrollLeft = offset;
@@ -759,7 +753,7 @@ function renderChart(state) {
         const track = element('div', 'th-model-track');
         track.style.setProperty('--th-slot', `${geometry.slot}px`);
         track.style.setProperty('--th-bar-width', `${geometry.barWidth}px`);
-        const scoreScale = modelBarScale(preview, filters.scoreMode);
+        const scoreScale = modelBarScale(preview);
         track.append(...models.map(model => renderModel(model, preview, geometry, plotHeight, scoreScale, canonicalTopicURL(state.topic), state.topic.isPrivate)));
         scroll.append(track); frame.append(scroll);
         state.scroll = scroll;
@@ -1238,16 +1232,6 @@ const privateTopicEditor = createPrivateTopicEditor({
 });
 $('#new-private-topic').addEventListener('click', event => void privateTopicEditor.open(null, event.currentTarget));
 
-$('#topics-score-toggle').addEventListener('click', event => {
-    filters.scoreMode = filters.scoreMode === 'available' ? 'range' : 'available';
-    const range = filters.scoreMode === 'range';
-    event.currentTarget.setAttribute('aria-pressed', String(range));
-    event.currentTarget.dataset.tooltip = range ? 'Switch to estimated score' : 'Switch to score range';
-    event.currentTarget.setAttribute('aria-label', event.currentTarget.dataset.tooltip);
-    event.currentTarget.querySelector('span').textContent = range ? 'Score range' : 'Estimated score';
-    resizeFilterIsland();
-    resetFilters();
-});
 for (const control of document.querySelectorAll('[data-comparison]')) control.addEventListener('click', () => {
     const key = control.dataset.comparison; filters[key] = !filters[key];
     control.setAttribute('aria-pressed', String(filters[key])); resetFilters();
@@ -1255,7 +1239,6 @@ for (const control of document.querySelectorAll('[data-comparison]')) control.ad
 $('#topics-view-toggle').addEventListener('click', event => {
     view = view === 'default' ? 'weights' : 'default';
     const weights = view === 'weights';
-    $('#topics-score-toggle').hidden = weights;
     event.currentTarget.setAttribute('aria-pressed', String(weights));
     event.currentTarget.dataset.tooltip = weights ? 'Switch to default view' : 'Switch to benchmark weights';
     event.currentTarget.setAttribute('aria-label', event.currentTarget.dataset.tooltip);

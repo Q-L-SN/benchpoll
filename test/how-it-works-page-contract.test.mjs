@@ -38,7 +38,7 @@ test('homepage How it works control navigates to a page instead of opening a dia
 test('Home navigation belongs to the configuration page rather than the guide', () => {
     assert.doesNotMatch(guide, /Back to topics/i);
     assert.match(home, /id="back-to-topics"[^>]*class="[^"]*bp-quiet-action[^\"]*"[^>]*href="\/"/);
-    const heading = home.match(/<header class="bp-page-heading">[\s\S]*?<\/header>/)[0];
+    const heading = home.match(/<header class="bp-workspace-header">[\s\S]*?<\/header>/)[0];
     assert.match(heading, /<a id="back-to-topics"[^>]*aria-label="Home"[^>]*><i class="fa-solid fa-house"[^>]*><\/i><\/a>\s*<button id="header-user-profile"/);
     assert.match(home, /id="workspace-topic-summary"/);
 });
@@ -71,7 +71,6 @@ test('topics and scenes lead to the public index, search and evidence', () => {
     assert.match(topics, /recent favorites carrying more weight/);
     assert.match(topics, /Open a model to see its results and sources/);
     assert.match(topics, /Filters apply to every ranking card/);
-    assert.match(topics, /<strong>Estimated score<\/strong> is the default/);
 });
 
 test('Personal and Public copy explains saving weights and the shared public sample', () => {
@@ -89,7 +88,7 @@ test('Personal and Public copy explains saving weights and the shared public sam
     const sample = section('calculation-details');
     assert.match(sample, /all nonempty configurations updated for the topic or scene in the past 72 hours/);
     assert.match(sample, /If fewer than 10 qualify, it uses the latest 10 or as many as exist/);
-    assert.match(sample, /The same sample determines community scoring version shares and estimation vote counts/);
+    assert.match(sample, /The same sample determines community scoring version shares/);
 });
 
 test('topic references follow specific scenes and retain missing shares', () => {
@@ -105,19 +104,20 @@ test('topic references follow specific scenes and retain missing shares', () => 
     assert.match(references, /Empty or unavailable targets and loops with no path to benchmarks keep their missing weight/);
 });
 
-test('score copy explains version shares, treemap estimates, score range and measured coverage', () => {
+test('score copy explains version shares, treemap estimates, peer medians and measured coverage', () => {
     const scores = section('rankings');
-    assert.match(scores, /same qualifying measurements, converted using each test’s score range and direction/);
+    assert.match(scores, /each benchmark version’s scoring scale and direction/);
     assert.match(scores, /A direct score on a scoring version takes priority, including zero and negative scores/);
-    assert.match(scores, /using benchmark weights, vote shares and paired-model counts/);
-    assert.match(scores, /peer median<\/strong> uses other models’ scores on the same version, including earlier estimates/);
+    assert.match(scores, /path with the highest product of link weights/);
+    assert.match(scores, /support rate times [^<]*<span class="hi-formula"><var>n<\/var> \/ \(<var>n<\/var> \+ 2\)/);
+    assert.match(scores, /divides each benchmark’s weight among usable sources/);
+    assert.match(scores, /median of other models’ scores on the target version, using one measurement or earlier estimate per model/);
     assert.match(scores, /<var>W<\/var> × Σ\(<var>p<sub>a<\/sub><\/var> <var>s<sub>a<\/sub><\/var>\)/);
-    assert.match(scores, /The version shares add up to 100%/);
-    assert.match(scores, /uses 0 at the lower end and 100 at the upper end for missing measurements/);
-    assert.match(scores, /Both ends use the measured scores where available\. Models rank by the lower end/);
+    assert.match(scores, /sum to 100%/);
+    assert.doesNotMatch(scores, /Score range|lower end|upper end/);
     assert.match(scores, /Coverage is the share of weight with measured results<\/strong> on selected versions/);
     assert.match(scores, /A faded tile in the score preview marks a missing measurement/);
-    assert.match(scores, /Models without direct or calibrated evidence stay unranked/);
+    assert.match(scores, /Models need measured or calibrated evidence to rank/);
     assert.match(scores, /effort or harness to rank settings separately/);
     assert.match(scores, /best qualifying score per test/);
     assert.match(scores, /Missing settings stay in an unknown group/);

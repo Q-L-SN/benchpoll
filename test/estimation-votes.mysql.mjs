@@ -234,9 +234,6 @@ test('SQL workspaces sample sitewide ballots per pair and jointly fit eligible m
     assert.equal(secondary.publicPie.participantCount, 10);
     assert.deepEqual(secondary.communityEstimationVotes, sampledVotes);
     checkEstimate(modelOne(secondary.modelLeaderboards.public), target, withoutPrecise, withoutPreciseScore, 1);
-    const range = modelOne((await read({ userID: '42', scoreMode: 'range' })).modelLeaderboards.personal);
-    assert.deepEqual([range.lower, range.upper, range.coverage, range.inferredScores], [11, 91, 20, []]);
-
     const guest = await read({ previewPersonalPie: { entries, estimationVotes: [support(target, preciseSource)] } });
     checkEstimate(modelOne(guest.modelLeaderboards.personal), target, sources, jointScore, .6);
     checkEstimate(modelOne(guest.modelLeaderboards.public), target, withoutPrecise, withoutPreciseScore, .6);

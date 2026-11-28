@@ -1070,7 +1070,7 @@ g[data-object-id]:hover .bp-pie-slice-lift  {
     border-radius: 3px;
 }
 
-.bp-score-known, .bp-score-uncertain, .bp-score-range-base  {
+.bp-score-known {
     position: absolute;
     top: 0;
     height: 100%;
@@ -1087,27 +1087,12 @@ g[data-object-id]:hover .bp-pie-slice-lift  {
     background: #5e8560;
     z-index: 1;
 }
-.bp-score-range-base { inset: 0; width: 100%; background: var(--bp-uncertain, #cddbbf); }
 
 
 @media (prefers-reduced-motion: reduce) {
     .bp-score-fill { animation: none; }
     .bp-mode-switch::before, .bp-mode-option { transition: none; }
     .bp-template-menu { transition: none; }
-}
-
-.bp-score-uncertain  {
-    background: #cddbbf;
-}
-
-/* Negative contributions and missing-score ranges may overlap; keep both visible. */
-.bp-score-negative-range .bp-score-known {
-    top: 50%;
-    height: 50%;
-}
-
-.bp-score-negative-range .bp-score-uncertain {
-    height: 50%;
 }
 
 .bp-model-score  {
@@ -1139,7 +1124,6 @@ g[data-object-id]:hover .bp-pie-slice-lift  {
 .bp-bar-endpoint-label[data-bar-label-overflow="true"] { opacity: 0; }
 .bp-model-row.has-inline-score .bp-model-name-wrap { grid-column: 2 / -1; flex-wrap: nowrap; }
 .bp-score-track > .bp-model-score { color: white; font-size: 13px; }
-.bp-score-negative-range > .bp-model-score { top: 75%; }
 body .bp-bar-endpoint-label[data-bar-label-overflow="true"][data-bar-label-fallback="outside"] { opacity: 1; transform: translate(0, -50%); color: #111; text-align: left; }
 .bp-model-coverage { display: inline-block; flex: 0 0 16px; width: 16px; height: 16px; border-radius: 50%; background: conic-gradient(var(--bp-muted) var(--coverage-share, 0%), var(--bp-line) 0); }
 

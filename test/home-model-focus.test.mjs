@@ -7,6 +7,7 @@ import { normalizeModelFocusTarget, findModelFocusIndex, markModelFocusTarget,
     findRenderedModelFocus } from '../public/js/workspace/model-focus-target.js';
 import { readComparisonSettings, writeComparisonSettings } from '../public/js/workspace/comparison-settings.js';
 import { createModelListView } from '../public/js/workspace/model-list.js';
+import { fallbackInference } from '../public/js/shared/fallback-inference.js';
 
 const identity = ID => JSON.stringify([['model', true, ID]]);
 const intentFor = (target = identity(72), extra = '') => readHomeModelFocusIntent(
@@ -24,17 +25,17 @@ function harness({ target = identity(72), reduced = false, request, manualFrame 
     const models = Array.from({ length: 120 }, (_, index) => ({
         ID: index + 1, modelID: index + 1, comparisonIdentity: identity(index + 1), name: `Model ${index + 1}`,
         lower: 120 - index, upper: 120 - index, coverage: 100, missingWeight: 0, comparable: true,
-        inferredScores: [], availableInference: null, calculationScores: [{ conditionID: 1,
+        inferredScores: [], availableInference: fallbackInference(120 - index, 1, []), calculationScores: [{ conditionID: 1,
             normalizedScore: 120 - index, effectiveWeight: 100, contribution: 120 - index,
             fallbackFor: null, memberIDs: [index + 1], memberWeights: [{ ID: index + 1, weight: 1 }],
             memberEvidence: [{ ID: index + 1, hash: 'a'.repeat(64) }] }]
     }));
     const pager = createRankingPager();
-    const initial = pager.create({ scoreMode: 'range', benchmarks: [], personalPie: { entries: [] },
+    const initial = pager.create({ scoreMode: 'available', benchmarks: [], personalPie: { entries: [] },
         modelLeaderboards: { public: isPrivate ? [] : models, personal: isPrivate ? models : [] } },
     { initialMode: isPrivate ? 'personal' : 'public' });
     const state = { loadSequence: 1, loading: false, comparisonPending: false, categoryID: 1, mode: isPrivate ? 'personal' : 'public',
-        scoreMode: 'range', userID: null, selectedContextValues: {}, contextIsPrivate: isPrivate,
+        userID: null, selectedContextValues: {}, contextIsPrivate: isPrivate,
         comparisonRequest: { mode: 'best', keys: ['model'], filters: [] },
         rankingPagination: initial.rankingPagination, modelLeaderboards: initial.modelLeaderboards };
     const requests = [], messages = [], frames = [], timers = new Map(), timeouts = [];
@@ -116,7 +117,7 @@ test('a search jump loads both neighboring pages so a page-boundary result can b
 test('Home focus parses explicit comparison intent and removes only its one-shot URL parameters', () => {
     const target = JSON.stringify([['field:20', true, 201], ['model', true, 301]]);
     const intent = intentFor(target, '&compareReasoning=1&compareHarness=0');
-    assert.deepEqual(intent, { valid: true, targetModel: target, scoreMode: 'range', mode: 'public',
+    assert.deepEqual(intent, { valid: true, targetModel: target, mode: 'public',
         comparison: { reasoning: true, harness: false }, keys: ['field:20', 'model'] });
     let replaced;
     const win = { location: { href: `https://benchpoll.test/language-models?context_budget=fast&discussion=1&focusModel=${encodeURIComponent(target)}&scoreMode=range&compareReasoning=1&compareHarness=0&mode=public#model-card` },
@@ -142,7 +143,7 @@ test('lazy focus styles use the public root, including when the importer lives i
 
 test('invalid or repeated focus parameters are rejected instead of changing ranking preferences', () => {
     for (const query of ['focusModel=', 'focusModel=0', 'focusModel=-3', 'focusModel=1&focusModel=2',
-        'focusModel=1&scoreMode=bad', 'focusModel=1&compareHarness=true', 'focusModel=1&compareReasoning=',
+        'focusModel=1&compareHarness=true', 'focusModel=1&compareReasoning=',
         'focusModel=1&mode=invalid', 'focusModel=1&mode=public&mode=public']) {
         assert.deepEqual(readHomeModelFocusIntent(`https://benchpoll.test/topic?${query}`), { valid: false });
     }
@@ -368,12 +369,12 @@ test('changed snapshot scope and stale locate results are discarded without chan
 
 test('wrong-target, wrong-snapshot and malformed target pages are rejected', () => {
     const h = harness();
-    const args = { snapshotID: h.state.rankingPagination.snapshotID, list: 'public', targetModel: identity(72), scoreMode: 'range', total: 120 };
+    const args = { snapshotID: h.state.rankingPagination.snapshotID, list: 'public', targetModel: identity(72), scoreMode: 'available', total: 120 };
     const result = h.pager.locateModel(args);
     assert.equal(validateModelLocatePayload(result, args), result);
     for (const override of [{ snapshotID: 'bad' }, { list: 'personal' }, { targetModel: identity(73) },
         { targetOffset: 70 }, { offset: 49 }, { page: { ...result.page, total: 121 } },
-        { found: false }, { page: { ...result.page, scoreMode: 'available' } }]) {
+        { found: false }, { page: { ...result.page, scoreMode: 'range' } }]) {
         assert.throws(() => validateModelLocatePayload({ ...result, ...override }, args));
     }
     h.controller.destroy();

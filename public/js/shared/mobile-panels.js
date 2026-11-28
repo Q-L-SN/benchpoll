@@ -180,7 +180,7 @@ export function initializeMobilePanels(workspace) {
         }
     });
     for (const [selector, variable] of [['.bp-benchmark-toolbar', '--bp-evaluation-toolbar-height'],
-        ['.bp-model-controls', '--bp-index-toolbar-height'], ['#estimation-test-control', '--bp-estimation-toolbar-height']]) {
+        ['.bp-model-controls', '--bp-index-toolbar-height']]) {
         const element = workspace.querySelector(selector);
         if (element) { element.dataset.stickyHeight = variable; stickySizes.observe(element); }
     }

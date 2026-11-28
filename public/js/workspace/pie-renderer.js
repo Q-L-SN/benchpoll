@@ -4,24 +4,31 @@ import { createPieLabelLayout, pieLabelContentBox } from './pie-label-layout.js?
 import { createWeightTreemapLayout, treemapHoverTransform } from './weight-treemap-layout.js';
 import '../shared/help-popover.js';
 import { isTopicReference, topicLabelText, topicLabelParts, renderTopicLabel, TOPIC_ICON_FONT } from '../shared/topic-label.js';
+import { JOINT_VERSION_METHOD, PEER_MEDIAN_METHOD, TREEMAP_ESTIMATION_METHOD } from '../shared/fallback-inference.js';
+import { estimationMethodDetails } from './estimation-method-help.js';
 
 const previewNumber = value => String(Number(value.toFixed(2)));
+const ESTIMATE_BADGE_WIDTH = 19;
 
-function coverageScore(tile, range) {
+function coverageScore(tile) {
     const measured = Number.isFinite(tile.adoptedNormalizedScore);
     const estimated = Number.isFinite(tile.estimatedNormalizedScore);
     const treemap = tile.treemapEstimatedWeightBasisPoints > 0;
     const peerMedian = tile.peerEstimatedWeightBasisPoints > 0;
+    const methodIDs = [];
+    if (tile.versionEstimatedWeightBasisPoints > 0) methodIDs.push(JOINT_VERSION_METHOD);
+    if (treemap) methodIDs.push(TREEMAP_ESTIMATION_METHOD);
+    if (peerMedian) methodIDs.push(PEER_MEDIAN_METHOD);
+    const method = estimationMethodDetails(methodIDs);
     const gap = tile.unresolvedWeightBasisPoints / tile.weightBasisPoints > 1e-9;
     const status = measured ? estimated ? 'mixed' : 'measured' : estimated ? 'estimated' : 'unresolved';
-    const value = status === 'unresolved' && !range ? '—' : previewNumber(range ? tile.rankingNormalizedScore : tile.availableNormalizedScore);
     if (status === 'unresolved') {
-        const tooltip = range ? 'No measurement. Counts as 0 at the lower end and 100 at the upper end.'
-            : 'No score available for this part of the treemap.';
-        return { measured, status, value, tooltip, description: range ? `Score ${value} / 100. ${tooltip}` : tooltip };
+        const tooltip = 'No score available for this part of the treemap.';
+        return { measured, status, value: '—', tooltip, description: tooltip };
     }
+    const value = previewNumber(tile.availableNormalizedScore);
     if (!gap && status !== 'mixed' && !treemap && !peerMedian) {
-        return { measured, status, value, description: `${measured ? 'Measured' : 'Estimated'} score ${value} / 100.` };
+        return { measured, status, value, method, description: `${method?.label ?? (measured ? 'Measured score' : 'Estimated score')} ${value} / 100.` };
     }
     const share = weight => `${previewNumber(weight / tile.weightBasisPoints * 100)}%`;
     const parts = [];
@@ -29,13 +36,12 @@ function coverageScore(tile, range) {
     if (estimated) parts.push(`Estimated score ${previewNumber(tile.estimatedNormalizedScore)} on ${share(tile.estimatedWeightBasisPoints)} of the weight.`);
     if (treemap) parts.push(`Treemap estimate on ${share(tile.treemapEstimatedWeightBasisPoints)} of the weight.`);
     if (peerMedian) parts.push(`Peer median on ${share(tile.peerEstimatedWeightBasisPoints)} of the weight.`);
-    if (gap) parts.push(range ? `The remaining ${share(tile.unresolvedWeightBasisPoints)} is unmeasured and spans 0 to 100.`
-        : `The remaining ${share(tile.unresolvedWeightBasisPoints)} has no score.`);
+    if (gap) parts.push(`The remaining ${share(tile.unresolvedWeightBasisPoints)} has no score.`);
     const tooltip = parts.join(' ');
-    return { measured, status, value, treemap, peerMedian, tooltip, description: `${range ? 'Lower-end' : 'Weighted'} score ${value} / 100. ${tooltip}` };
+    return { measured, status, value, method, treemap, peerMedian, tooltip, description: `Weighted score ${value} / 100. ${tooltip}` };
 }
 
-export function createPieRenderer({ state, pieSvg, pieHoverTooltip, orderedPieEntries, currentPieEntries, selectedObjectIndex, renderInlineFallback, fallbackRuleFor, publicFallbackRuleFor, onSelect, getPreview = () => null, autoSelect = () => false, coveragePreview = false, coverageMode = 'available', focusCoverage = false }) {
+export function createPieRenderer({ state, pieSvg, pieHoverTooltip, orderedPieEntries, currentPieEntries, selectedObjectIndex, renderInlineFallback, fallbackRuleFor, publicFallbackRuleFor, onSelect, getPreview = () => null, autoSelect = () => false, coveragePreview = false, focusCoverage = false }) {
     const measure = document.createElement('canvas').getContext('2d');
     const labelMetrics = new Map();
     const labelLayout = createPieLabelLayout(metricsOf);
@@ -134,6 +140,25 @@ export function createPieRenderer({ state, pieSvg, pieHoverTooltip, orderedPieEn
         return node;
     }
 
+    function drawEstimationBadge(node, method, x, y, size, inner) {
+        if (!node.badge) {
+            const link = element('a', { class: 'bp-estimate-icon-link', tabindex: 0, 'data-help-action': 'follow' });
+            const hit = element('rect', { rx: 4, 'aria-hidden': 'true' });
+            const icon = element('text', { 'font-family': TOPIC_ICON_FONT, 'font-size': 11, 'font-weight': 900,
+                'text-anchor': 'middle', 'dominant-baseline': 'central', 'aria-hidden': 'true' });
+            link.append(hit, icon);
+            node.lift.append(link);
+            node.badge = { link, hit, icon };
+        }
+        const { link, hit, icon } = node.badge;
+        const height = Math.min(22, inner.height);
+        const top = clamp(y - size / 3 - height / 2, inner.y, inner.y + inner.height - height);
+        attributesOf(link, { href: method.href, 'aria-label': `${method.label}. How it works`, 'data-tooltip': method.tooltip });
+        attributesOf(hit, { x, y: top, width: ESTIMATE_BADGE_WIDTH, height });
+        attributesOf(icon, { x: x + ESTIMATE_BADGE_WIDTH / 2, y: top + height / 2 });
+        if (icon.textContent !== method.glyph) icon.textContent = method.glyph;
+    }
+
     function draw(tiles, preview = false) {
         const mode = preview ? 'public' : state.mode;
         const desired = new Set(tiles.map(tile => Number(tile.conditionID)));
@@ -157,7 +182,7 @@ export function createPieRenderer({ state, pieSvg, pieHoverTooltip, orderedPieEn
             const hasFallback = Boolean(fallback?.entries?.length || fallback?.families?.some(
                 family => family.weightBasisPoints > 0 && family.entries?.length));
             const percent = Number(tile.weightBasisPoints) / state.limits.totalBasisPoints * 100;
-            const score = coveragePreview ? coverageScore(tile, coverageMode === 'range') : null;
+            const score = coveragePreview ? coverageScore(tile) : null;
             const value = score?.value ?? `${Math.round(percent)}%`;
             const name = benchmarkAccessibleName(tile);
             const description = score ? `${name}. ${score.description}`
@@ -190,11 +215,21 @@ export function createPieRenderer({ state, pieSvg, pieHoverTooltip, orderedPieEn
             const inner = { ...contentBox, x: tile.x + contentBox.x, y: tile.y + contentBox.y };
             attributesOf(node.clipRect, inner);
             const topic = isTopicReference(tile);
+            const badgeWidth = score?.method ? ESTIMATE_BADGE_WIDTH : 0;
             const label = labelLayout.layout({ name: topic ? topicLabelText(tile) : tile.name, topic,
-                percent: value, width: tile.width, height: tile.height, fontFamily });
-            if (coveragePreview && label.mode === 'truncated' && metricsOf(value, 15, 750, fontFamily).width <= inner.width) {
-                label.mode = 'score';
-                label.rows = [{ kind: 'percent', text: value, size: 15, weight: 750, y: (tile.height - 17) / 2 + 15 }];
+                percent: value, width: tile.width, height: tile.height, fontFamily, percentExtraWidth: badgeWidth });
+            if (coveragePreview && label.mode === 'truncated') {
+                const size = (badgeWidth ? [15, 12] : [15]).find(size => metricsOf(value, size, 750, fontFamily).width + badgeWidth <= inner.width);
+                if (size) {
+                    label.mode = 'score';
+                    label.rows = [{ kind: 'percent', text: value, size, weight: 750, y: (tile.height + size) / 2 - 1 }];
+                }
+            }
+            const showsMethod = Boolean(score?.method && label.rows.some(row => row.kind === 'percent'));
+            if (coveragePreview) node.group.setAttribute('role', showsMethod ? 'group' : 'img');
+            if (!showsMethod && node.badge) {
+                node.badge.link.remove();
+                node.badge = null;
             }
             const nameBox = { ...inner, width: label.rows.find(row => row.kind === 'name')?.clipWidth ?? inner.width };
             attributesOf(node.mask, nameBox);
@@ -224,8 +259,17 @@ export function createPieRenderer({ state, pieSvg, pieHoverTooltip, orderedPieEn
                     attributesOf(labelNode, { x: inner.x, y: tile.y + row.y - row.size, width: nameBox.width, height: 17 });
                     return;
                 }
-                attributesOf(labelNode, { x: row.align === 'end' ? inner.x + inner.width
-                    : row.align === 'start' || row.clipped ? inner.x : tile.x + tile.width / 2, y: tile.y + row.y });
+                const withBadge = showsMethod && row.kind === 'percent';
+                const extra = withBadge ? badgeWidth : 0;
+                const right = row.align === 'end';
+                const x = right ? inner.x + inner.width - extra
+                    : row.align === 'start' || row.clipped ? inner.x : tile.x + (tile.width - extra) / 2;
+                const y = tile.y + row.y;
+                attributesOf(labelNode, { x, y });
+                if (withBadge) {
+                    const badgeX = right ? x : x + metricsOf(row.text, row.size, row.weight, fontFamily).width / 2;
+                    drawEstimationBadge(node, score.method, badgeX, y, row.size, inner);
+                }
             });
         });
         raiseActive();

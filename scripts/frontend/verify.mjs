@@ -465,79 +465,26 @@ try {
         assert.equal(await page.locator('.bp-model-row').count(), 50, 'Do not fetch off-screen model pages');
     }, { rankingStress: true, browser: { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true } });
     for (const width of [1440, 390]) {
-        await check(`dynamic model score scale ${width}`, async ({ app, page }) => {
-            await page.route('**/api/get_weighted_workspace', async route => {
-                const response = await route.fetch();
-                const data = await response.json();
-                const bounds = [[120, 150], [-50, 80], [30, 200]];
-                data.modelLeaderboards.public = data.modelLeaderboards.public.slice(0, 3)
-                    .map((model, i) => ({ ...model, lower: bounds[i][0], upper: bounds[i][1],
-                        calculationScores: model.calculationScores.map(score => ({ ...score,
-                            normalizedScore: bounds[i][0] * 100 / model.coverage,
-                            contribution: bounds[i][0] * score.effectiveWeight / model.coverage })) }))
-                    .sort((left, right) => right.lower - left.lower)
-                    .map((model, index) => ({ ...model, rank: index + 1 }));
-                data.modelLeaderboards.public[0].fallbackUsageCount = 1;
-                data.rankingPagination.public = { total: 3, nextOffset: 3, hasMore: false };
-                data.rankingPagination.modelScales.public = { min: -50, max: 200 };
-                await route.fulfill({ response, json: data });
-            });
+        const rankingModels = [120, 30, -50].map((score, index) => ({
+            ID: index + 1, modelID: index + 1, modelName: `Model ${index + 1}`, name: `Model ${index + 1}`,
+            vendor: 'Example', condition: { parameters: {} },
+            results: new Map(Array.from({ length: 7 }, (_, condition) => [String(condition + 1), { normalizedScore: score }]))
+        }));
+        await check(`estimated ranking with signed scores ${width}`, async ({ app, page }) => {
             await home(page, app);
-            assert.equal(await page.locator('.bp-model-fallback-badge, #model-rows .fa-code-branch').count(), 0, 'No branch badges in the model leaderboard');
-            assert.match(await page.locator('.bp-model-row').first().getAttribute('title'), /Fallback used for 1 benchmark/);
+            if (width === 390) await page.locator('[data-mobile-panel="models"]').click();
             const rows = await page.locator('.bp-model-row').evaluateAll(elements => elements.map(row => ({
                 score: row.querySelector('.bp-model-score').textContent,
-                knownLeft: parseFloat(row.querySelector('.bp-score-known').style.left),
-                knownWidth: parseFloat(row.querySelector('.bp-score-known').style.width),
-                rangeLeft: parseFloat(row.querySelector('.bp-score-uncertain').style.left),
-                rangeWidth: parseFloat(row.querySelector('.bp-score-uncertain').style.width)
+                width: parseFloat(row.querySelector('.bp-score-known').style.width)
             })));
-            assert.equal(await page.locator('.bp-score-zero').count(), 0, 'Score bars omit per-row zero-reference lines');
+            assert.equal(await page.locator('.bp-score-zero, .bp-score-uncertain, [data-score-mode]').count(), 0);
             assert.deepEqual(rows.map(row => row.score), ['120', '30', '-50']);
-            const expected = [[20, 48, 68, 12], [20, 12, 32, 68], [0, 20, 0, 52]];
-            rows.forEach((row, i) => {
-                [row.knownLeft, row.knownWidth, row.rangeLeft, row.rangeWidth].forEach((value, j) => assert.ok(Math.abs(value - expected[i][j]) < 1e-8));
-                assert.ok(row.rangeLeft + row.rangeWidth <= 100);
-            });
-            if (width === 390) await page.locator('[data-mobile-panel="models"]').click();
+            const widths = [100, 80 / 170 * 100, 0];
+            rows.forEach((row, i) => assert.ok(Math.abs(row.width - widths[i]) < .001));
+            assert.equal(await page.locator('.bp-model-row .bp-model-coverage').count(), 3);
             await noOverflow(page);
-            await page.screenshot({ path: output + `dynamic-model-scale-${width}.png`, fullPage: true });
-            if (width === 1440) {
-                await page.locator('#pie-mode-personal').click();
-                await pieMode(page, 'personal');
-                assert.equal(await page.locator('.bp-score-zero').count(), 0, 'Personal score bars also omit zero-reference lines');
-            }
-        }, { browser: { viewport: { width, height: 1000 } } });
-    }
-    for (const width of [1440, 390]) {
-        await check(`available-score factor penalizes sparse results and fills the leading bar ${width}`, async ({ app, page }) => {
-            await home(page, app);
-            if (width === 390) await page.locator('[data-mobile-panel="models"]').click();
-            const names = () => page.locator('.bp-model-row .bp-model-name').allTextContents();
-            assert.equal((await names())[0], 'Full');
-            await page.locator('[data-score-mode="available"]').click();
-            await until(async () => await page.locator('[data-score-mode="available"]').getAttribute('aria-pressed') === 'true'
-                && await page.locator('.bp-model-row').first().locator('.bp-score-known').evaluate(item => parseFloat(item.style.width)) === 100,
-            'Available mode did not apply its relative bar scale');
-            assert.equal((await names())[0], 'Full');
-            assert.equal(await page.locator('.bp-model-row').first().locator('.bp-model-score').innerText(), '70');
-            assert.equal(await page.locator('.bp-model-row').first().locator('.bp-model-coverage').getAttribute('role'), 'img');
-            assert.equal(await page.locator('.bp-model-row').first().locator('.bp-model-coverage').textContent(), '');
-            assert.match(await page.locator('.bp-model-row').filter({ has: page.locator('.bp-model-name', { hasText: /^Partial$/ }) }).locator('.bp-model-score').innerText(), /^48\b/);
-            assert.equal(await page.locator('.bp-model-row').first().locator('.bp-score-known').evaluate(item => parseFloat(item.style.width)), 100);
-            assert.equal(await page.locator('#model-first-bar-full').count(), 0);
-            await page.locator('[data-score-mode="range"]').click();
-            await until(async () => (await names())[0] === 'Full', 'Range mode did not restore the original order');
-            assert.equal(await page.locator('.bp-model-row').first().locator('.bp-score-known').evaluate(item => parseFloat(item.style.width)), 70);
-            await noOverflow(page);
-            if (width === 390) await page.screenshot({ path: output + 'available-score-mobile.png', fullPage: true });
-        }, { comparisonModels: [
-            { ID: 1, modelID: 1, modelName: 'Partial', name: 'Partial', vendor: 'Example', vendorSlug: 'openai', condition: { parameters: {} },
-                results: new Map([['1', { normalizedScore: 95 }]]) },
-            { ID: 2, modelID: 2, modelName: 'Full', name: 'Full', vendor: 'Example', vendorSlug: 'openai', condition: { parameters: {} },
-                results: new Map([['1', { normalizedScore: 70 }], ['2', { normalizedScore: 70 }], ['3', { normalizedScore: 70 }],
-                    ['4', { normalizedScore: 70 }], ['5', { normalizedScore: 70 }], ['6', { normalizedScore: 70 }], ['7', { normalizedScore: 70 }]]) }
-        ], browser: { viewport: { width, height: 844 } } });
+            await page.screenshot({ path: output + `estimated-model-scale-${width}.png`, fullPage: true });
+        }, { comparisonModels: rankingModels, browser: { viewport: { width, height: 1000 } } });
     }
     await check('batch scores submit shared URL without any provider fields', async ({ app, page }) => {
         await page.goto(`${app.url}/contribute?mode=benchmark_result`);

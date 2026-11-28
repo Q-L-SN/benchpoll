@@ -11,9 +11,8 @@ const guide = read('private/how-it-works.html');
 
 test('short homepage hints explain the immediate choice without a calculation essay', () => {
     const hints = [...home.matchAll(/data-help-text="([^"]+)"/g)].map(match => match[1]);
-    assert.equal(hints.length, 3);
+    assert.equal(hints.length, 1);
     assert.match(home, /id="inline-fallback-add-benchmark"[^>]*data-help-text=/);
-    assert.match(home, /aria-label="About missing scores"[^>]*data-help-text=/);
     assert.doesNotMatch(home, /id="agi-promo"/);
     for (const hint of hints) {
         assert.ok(words(hint) <= 32, hint);
@@ -67,7 +66,7 @@ test('short explanations name current navigation and preserve practical scoring 
     assert.match(guide, /effort or harness to rank settings separately/);
     assert.match(guide, /best qualifying score per test/);
     assert.match(guide, /Missing settings stay in an unknown group/);
-    assert.match(guide, /uses 0 at the lower end and 100 at the upper end for missing measurements/);
+    assert.match(guide, /The index averages over scored weight if gaps remain/);
 });
 
 test('contribution instructions distinguish pending requests, public data and run settings', () => {

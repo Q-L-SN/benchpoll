@@ -7,9 +7,8 @@ export function readHomeModelFocusIntent(input) {
     try {
         if (HOME_MODEL_FOCUS_PARAMS.some(key => url.searchParams.getAll(key).length > 1)) throw new TypeError();
         const targetModel = normalizeModelFocusTarget(url.searchParams.get('focusModel'));
-        const scoreMode = url.searchParams.get('scoreMode') ?? 'available';
         const mode = url.searchParams.get('mode') ?? 'public';
-        if (!['available', 'range'].includes(scoreMode) || !['public', 'personal'].includes(mode)) throw new TypeError();
+        if (!['public', 'personal'].includes(mode)) throw new TypeError();
         const comparison = {};
         for (const [query, key] of [['compareReasoning', 'reasoning'], ['compareHarness', 'harness']]) {
             const value = url.searchParams.get(query);
@@ -23,7 +22,7 @@ export function readHomeModelFocusIntent(input) {
                 && part.length === 3 && (part[0] === 'model' || /^field:[1-9]\d*$/.test(part[0])))
                 && identity.some(part => part[0] === 'model')) keys = [...new Set(identity.map(part => part[0]))];
         } catch { /* Numeric IDs and opaque identities do not carry comparison keys. */ }
-        return { valid: true, targetModel, scoreMode, mode, comparison, keys };
+        return { valid: true, targetModel, mode, comparison, keys };
     } catch { return { valid: false }; }
 }
 

@@ -18,13 +18,13 @@ test('expanded benchmark blocks retain their full weights when only partially me
     assert.equal(blocks[0].coveredWeightBasisPoints, 3500);
     assert.equal(blocks[0].coverage, 70);
     assert.equal(blocks[0].adoptedNormalizedScore, (60 * 2000 + 90 * 1500) / 3500);
-    assert.equal(blocks[0].rankingNormalizedScore, 51);
+    assert.equal(blocks[0].availableNormalizedScore, blocks[0].adoptedNormalizedScore);
     assert.equal(blocks[1].adoptedNormalizedScore, 0, 'a measured zero is covered');
     assert.equal(blocks[1].unresolvedWeightBasisPoints, 0);
     assert.equal(blocks[1].coverage, 100);
     assert.equal(blocks[2].isUnresolved, true);
     assert.equal(blocks[2].adoptedNormalizedScore, null);
-    assert.equal(blocks[2].rankingNormalizedScore, 0);
+    assert.equal(blocks[2].availableNormalizedScore, null);
     assert.equal(blocks[2].coverage, 0);
     assert.deepEqual({ entries, coverage }, before, 'presentation never rewrites the ranking inputs');
 });
@@ -53,7 +53,7 @@ test('uncovered blocks use only estimates from this ranking', () => {
     assert.equal(block.adoptedNormalizedScore, null);
     assert.equal(block.estimatedNormalizedScore, null);
     assert.equal(block.coverage, 0);
-    assert.equal(block.rankingNormalizedScore, 0);
+    assert.equal(block.availableNormalizedScore, null);
     assert.equal(block.unresolvedWeightBasisPoints, 10000);
     assert.equal(buildModelCoverageEntries([entry(11, 1, 10000)], undefined), null);
 });
@@ -70,8 +70,8 @@ test('estimated blocks combine scoped target estimates, including supported zero
     const blocks = buildModelCoverageEntries(entries, coverage, [], estimates);
     assert.deepEqual(blocks.map(b => [b.benchmarkID, b.coverage, b.adoptedNormalizedScore, b.estimatedNormalizedScore]),
         [[2, 0, null, 0], [1, 0, null, 40]]);
-    assert.deepEqual(blocks.map(b => [b.estimatedWeightBasisPoints, b.unresolvedWeightBasisPoints, b.rankingNormalizedScore]),
-        [[6000, 0, 0], [3000, 1000, 30]]);
+    assert.deepEqual(blocks.map(b => [b.estimatedWeightBasisPoints, b.unresolvedWeightBasisPoints, b.availableNormalizedScore]),
+        [[6000, 0, 0], [3000, 1000, 40]]);
 });
 
 test('merged benchmarks combine measured, estimated, and unresolved slices at their original weights', () => {
@@ -79,7 +79,7 @@ test('merged benchmarks combine measured, estimated, and unresolved slices at th
     const coverage = [adopted(11, 4000, 4000, 80), adopted(12, 2000, 0, null), adopted(13, 4000, 0, null)];
     const [block] = buildModelCoverageEntries(entries, coverage, [], [{ conditionID: 12, normalizedScore: 70, weightBasisPoints: 2000 }]);
     assert.equal(block.coverage, 40);
-    assert.equal(block.rankingNormalizedScore, 46);
+    assert.equal(block.availableNormalizedScore, 460 / 6);
     assert.equal(block.unresolvedWeightBasisPoints, 4000);
 });
 
@@ -92,15 +92,15 @@ test('malformed adopted summaries cannot produce fabricated coverage', () => {
     }
 });
 
-test('preview context changes for account, ranking, scene, version, algorithm and comparison changes', () => {
+test('preview context changes for account, ranking, scene and comparison changes', () => {
     const state = { authenticated: true, userID: 1, categoryID: 2, selectedContextValues: { scene: 7 }, mode: 'personal',
-        scoreMode: 'available', loadSequence: 1, rankingVersion: 2, rankingPagination: { snapshotID: 'one' },
-        comparison: { keys: ['model'] }, estimationAlgorithm: 'rational', availableInferenceVersion: 1,
+        loadSequence: 1, rankingVersion: 2, rankingPagination: { snapshotID: 'one' },
+        comparison: { keys: ['model'] },
         loading: false, comparisonPending: false, personalRankingDirty: false };
     const initial = modelCoverageContext(state);
     for (const patch of [{ userID: 2 }, { mode: 'public' }, { categoryID: 3 }, { selectedContextValues: { scene: 9 } },
         { loadSequence: 2 }, { rankingVersion: 3 }, { rankingPagination: { snapshotID: 'two' } },
-        { comparison: { keys: ['field:1'] } }, { estimationAlgorithm: 'other' }, { personalRankingDirty: true }]) {
+        { comparison: { keys: ['field:1'] } }, { personalRankingDirty: true }]) {
         assert.notEqual(modelCoverageContext({ ...state, ...patch }), initial);
     }
 });

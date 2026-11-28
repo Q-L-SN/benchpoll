@@ -44,12 +44,12 @@ test('total coverage includes all models before pagination and counts 100 percen
             loadFields: async () => [], loadWorkspace: async () => ({ context: { contextValues: {} },
                 comparison: { keys: ['model'], fields: [], availableKeys: ['model'] }, publicPie: { entries: [], coverageIndex },
                 modelLeaderboards: { public: models } }) });
-        const result = await service.preview(null, { categoryID: 54, scoreMode: 'range' });
+        const result = await service.preview(null, { categoryID: 54 });
         assert.equal(result.models.length, 25);
         assert.equal(result.pagination.total, 30);
         assert.equal(result.coverageIndex, coverageIndex, 'The precise pie aggregate is preserved instead of recomputing rounded model coverage');
         assert.equal(result.totalCoverageIndex, coverageIndex);
-        const next = await service.preview(null, { categoryID: 54, scoreMode: 'range', snapshotID: result.pagination.snapshotID, offset: 25 });
+        const next = await service.preview(null, { categoryID: 54, snapshotID: result.pagination.snapshotID, offset: 25 });
         assert.equal(next.models.length, 5);
         assert.equal(next.models.at(-1).ID, 30);
         assert.equal(next.models.at(-1).coverage, 100, 'Coverage includes the final model beyond the first page');

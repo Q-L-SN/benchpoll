@@ -17,6 +17,9 @@
 .bp-model-coverage-treemap .is-treemap-estimate.is-peer-median .bp-weight-tile { stroke-dasharray: 4 2 1 2; }
 .bp-model-coverage-treemap .is-uncovered:is(.is-treemap-estimate, .is-peer-median) .bp-weight-tile { opacity: 1; fill-opacity: .24; }
 .bp-model-coverage-treemap [data-adopted-score] { fill: var(--bp-coverage-score, #583493); }
+.bp-estimate-icon-link { fill: var(--bp-ink); pointer-events: auto; cursor: pointer; }
+.bp-estimate-icon-link rect { fill: transparent; }
+.bp-estimate-icon-link:hover rect, .bp-estimate-icon-link:focus-visible rect { fill: var(--bp-line); }
 .bp-model-coverage-treemap [tabindex]:focus-visible .bp-weight-tile { stroke: var(--bp-ink); stroke-width: 2px; opacity: 1; }
 .bp-model-coverage-figure { display: none; }
 .bp-model-coverage-unavailable { padding: 24px 12px; color: var(--bp-muted); font-size: 12px; }
@@ -63,8 +66,9 @@
 .bp-model-score-aggregate { display: grid; gap: 3px; text-align: right; font-variant-numeric: tabular-nums; }
 .bp-model-score-aggregate small, .bp-model-score-aggregate span { color: var(--bp-muted); font-size: 10px; }
 .bp-model-score-aggregate span { white-space: nowrap; }
-.bp-model-inferred-row[data-estimation-method] .bp-model-score-aggregate small { justify-self: end; padding: 2px 6px; border-radius: 4px; background: var(--bp-purple-soft); color: var(--bp-accent); font-weight: 700; }
-.bp-model-inferred-row[data-estimation-method="peer-median"] .bp-model-score-aggregate small { background: var(--bp-line); color: var(--bp-text); }
+.bp-model-estimate-method { display: inline-flex; align-items: center; justify-self: end; gap: 5px; padding: 3px 5px;
+    border-radius: 4px; color: var(--bp-text); font-size: 11px; font-weight: 600; white-space: nowrap; text-decoration: none; }
+.bp-model-estimate-method:hover, .bp-model-estimate-method:focus-visible { background: var(--bp-line); color: var(--bp-ink); }
 .bp-model-score-detail-value { color: var(--bp-ink); font-size: 24px; font-weight: 650; }
 .bp-model-estimate-summary, .bp-model-estimate-sources { grid-column: 1 / -1; min-width: 0; }
 .bp-model-estimate-summary { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 8px 20px; }

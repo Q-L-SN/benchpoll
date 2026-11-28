@@ -19,9 +19,9 @@ test('the actual root introduces the directory directly, without the retired pre
     assert.doesNotMatch(await read('private/home.html'), /id="showcase-trigger"|bp-showcase-stage/);
 });
 
-test('Estimated score is the default and score and view modes use separate toggles', async () => {
+test('the directory offers comparison and chart display controls', async () => {
     const html = await read('private/index.html');
-    assert.match(html, /id="topics-score-toggle"[^>]*aria-pressed="false"[^>]*><i class="fa-solid fa-arrow-right-arrow-left"[^>]*><\/i><span>Estimated score<\/span>/);
+    assert.doesNotMatch(html, /topics-score-toggle|Score range/);
     assert.match(html, /data-comparison="reasoning"[^>]*aria-pressed="false"[^>]*><i class="fa-solid fa-brain"/);
     assert.match(html, /data-comparison="harness"[^>]*aria-pressed="false"[^>]*><i class="fa-solid fa-puzzle-piece"/);
     assert.match(html, /id="topics-view-toggle"[^>]*aria-pressed="false"[^>]*><i class="fa-solid fa-arrow-right-arrow-left"/);
@@ -51,7 +51,7 @@ test('fixed-height directory cards leave room above the score bars for weights',
     for (const height of [141, 181, 185]) {
         const bars = barGeometry({ lower: 100, upper: 100 }, { min: 0, max: 100 }, height);
         assert.equal(bars.known, height * .65);
-        assert.ok(Math.abs(height - bars.upper - height * .35) < 1e-10);
+        assert.ok(Math.abs(height - bars.known - height * .35) < 1e-10);
     }
 });
 

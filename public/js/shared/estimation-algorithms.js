@@ -2,18 +2,10 @@ import { coverageMultiplier } from './coverage-penalty.js';
 
 export const DEFAULT_ESTIMATION_ALGORITHM = 'current';
 export const ORIGINAL_WEIGHT_POLICY = 'original';
-export const ESTIMATION_ALGORITHMS = Object.freeze([
-    { ID: DEFAULT_ESTIMATION_ALGORITHM, label: 'Version-based estimation',
-        description: 'Related versions predict missing scores together. Nominated external versions can supply an estimate when the same benchmark provides none. Remaining gaps use calibrated treemap paths or peer medians on the target version.' }
-].map(Object.freeze));
 const retiredAlgorithms = new Set(['missing-raw', 'missing-rational', 'missing-linear', 'missing-sqrt', 'missing-midpoint']);
 export function normalizeEstimationAlgorithm(value = DEFAULT_ESTIMATION_ALGORITHM) {
     if (value !== DEFAULT_ESTIMATION_ALGORITHM) throw new TypeError('Invalid estimation algorithm');
     return DEFAULT_ESTIMATION_ALGORITHM;
-}
-export function estimationRequest(algorithm = DEFAULT_ESTIMATION_ALGORITHM) {
-    normalizeEstimationAlgorithm(algorithm);
-    return {};
 }
 export const isMissingInferenceMethod = method => typeof method === 'string' && method.startsWith('pairwise-')
     && retiredAlgorithms.has(method.slice('pairwise-'.length));

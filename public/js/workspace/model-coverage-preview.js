@@ -1,7 +1,7 @@
 import { SVG_NS } from './constants.js';
 import { mergeBenchmarkWeights } from './expanded-weights.js';
 import { createPieRenderer } from './pie-renderer.js';
-import { TREEMAP_ESTIMATION_METHOD, PEER_MEDIAN_METHOD } from '../shared/fallback-inference.js';
+import { JOINT_VERSION_METHOD, TREEMAP_ESTIMATION_METHOD, PEER_MEDIAN_METHOD } from '../shared/fallback-inference.js';
 
 const blockKey = entry => entry.conditionID < 0 ? 'unresolved' : `benchmark:${entry.benchmarkID ?? entry.conditionID}`;
 
@@ -27,9 +27,10 @@ export function buildModelCoverageEntries(entries, coverageEntries, versions = [
         if (!coverageByID.has(id) || !Number.isFinite(score.normalizedScore)) continue;
         const weight = score.weightBasisPoints ?? score.originalWeight / 100 * totalWeight;
         if (!Number.isFinite(weight) || weight <= 0) continue;
-        const estimate = estimatedByID.get(id) ?? { weight: 0, contribution: 0, treemapWeight: 0, peerWeight: 0 };
+        const estimate = estimatedByID.get(id) ?? { weight: 0, contribution: 0, versionWeight: 0, treemapWeight: 0, peerWeight: 0 };
         estimate.weight += weight;
         estimate.contribution += weight * score.normalizedScore;
+        if (score.estimationMethod === JOINT_VERSION_METHOD) estimate.versionWeight += weight;
         if (score.estimationMethod === TREEMAP_ESTIMATION_METHOD) estimate.treemapWeight += weight;
         if (score.estimationMethod === PEER_MEDIAN_METHOD) estimate.peerWeight += weight;
         estimatedByID.set(id, estimate);
@@ -38,7 +39,8 @@ export function buildModelCoverageEntries(entries, coverageEntries, versions = [
     for (const entry of entries) {
         if (!(entry.weightBasisPoints > 0)) continue;
         const key = blockKey(entry), total = totals.get(key)
-            ?? { covered: 0, contribution: 0, estimated: 0, estimatedContribution: 0, treemapWeight: 0, peerWeight: 0 };
+            ?? { covered: 0, contribution: 0, estimated: 0, estimatedContribution: 0,
+                versionWeight: 0, treemapWeight: 0, peerWeight: 0 };
         const adopted = coverageByID.get(entry.conditionID);
         // Repeated references to the same condition retain their proportional share.
         const covered = adopted && entry.conditionID > 0 ? entry.weightBasisPoints * adopted.coveredWeightBasisPoints / adopted.weightBasisPoints : 0;
@@ -49,6 +51,7 @@ export function buildModelCoverageEntries(entries, coverageEntries, versions = [
             const share = entry.weightBasisPoints / adopted.weightBasisPoints;
             total.estimated += share * estimate.weight;
             total.estimatedContribution += share * estimate.contribution;
+            total.versionWeight += share * estimate.versionWeight;
             total.treemapWeight += share * estimate.treemapWeight;
             total.peerWeight += share * estimate.peerWeight;
         }
@@ -62,12 +65,12 @@ export function buildModelCoverageEntries(entries, coverageEntries, versions = [
         const contribution = (total?.contribution ?? 0) + (total?.estimatedContribution ?? 0);
         const unresolvedWeightBasisPoints = Math.max(0, entry.weightBasisPoints - scoredWeight);
         return { ...entry, coveredWeightBasisPoints, estimatedWeightBasisPoints, unresolvedWeightBasisPoints,
+            versionEstimatedWeightBasisPoints: total?.versionWeight ?? 0,
             treemapEstimatedWeightBasisPoints: total?.treemapWeight ?? 0,
             peerEstimatedWeightBasisPoints: total?.peerWeight ?? 0,
             coverage: Math.min(100, coveredWeightBasisPoints / entry.weightBasisPoints * 100),
             adoptedNormalizedScore: coveredWeightBasisPoints > 0 ? total.contribution / coveredWeightBasisPoints : null,
             estimatedNormalizedScore: estimatedWeightBasisPoints > 0 ? total.estimatedContribution / estimatedWeightBasisPoints : null,
-            rankingNormalizedScore: contribution / entry.weightBasisPoints,
             availableNormalizedScore: scoredWeight > 0 ? contribution / scoredWeight : null };
     });
 }
@@ -75,8 +78,8 @@ export function buildModelCoverageEntries(entries, coverageEntries, versions = [
 export function modelCoverageContext(state) {
     const comparison = state.comparison ?? state.comparisonRequest;
     return JSON.stringify([state.authenticated, state.userID, state.categoryID, state.selectedContextValues,
-        state.mode, state.scoreMode, state.loadSequence, state.rankingVersion, state.rankingPagination?.snapshotID,
-        comparison?.mode, comparison?.keys, comparison?.filters, state.estimationAlgorithm, state.availableInferenceVersion,
+        state.mode, state.loadSequence, state.rankingVersion, state.rankingPagination?.snapshotID,
+        comparison?.mode, comparison?.keys, comparison?.filters,
         state.workspaceView, state.workspaceDisplay, state.topicsExpanded,
         state.loading, state.comparisonPending, state.mode === 'personal' && state.personalRankingDirty]);
 }
@@ -115,8 +118,7 @@ export function createModelCoveragePreview({ state, pieSvg, getExpandedEntries, 
         watch();
         function render(resolved) {
             if (!current()) return false;
-            const estimates = state.scoreMode === 'available' ? resolved?.inferredScores : undefined;
-            const entries = buildModelCoverageEntries(getExpandedEntries(), resolved?.coverageEntries, getVersions(), estimates);
+            const entries = buildModelCoverageEntries(getExpandedEntries(), resolved?.coverageEntries, getVersions(), resolved?.inferredScores);
             if (!entries) return unavailable();
             const svg = document.createElementNS(SVG_NS, 'svg');
             svg.classList.add('bp-model-coverage-treemap');
@@ -130,7 +132,7 @@ export function createModelCoveragePreview({ state, pieSvg, getExpandedEntries, 
             renderer = createPieRenderer({ state: previewState, pieSvg: svg,
                 orderedPieEntries: values => values, currentPieEntries: () => entries, selectedObjectIndex: () => -1,
                 renderInlineFallback() {}, fallbackRuleFor: () => null, publicFallbackRuleFor: () => null,
-                autoSelect: () => false, coveragePreview: true, coverageMode: state.scoreMode, focusCoverage });
+                autoSelect: () => false, coveragePreview: true, focusCoverage });
             renderer.renderPie();
             return true;
         }
@@ -178,7 +180,9 @@ export function createModelCoveragePreview({ state, pieSvg, getExpandedEntries, 
         active = handle;
         container.addEventListener('pointerenter', () => clearTimeout(leaveTimer));
         container.addEventListener('pointerleave', clear);
-        container.addEventListener('click', clear);
+        container.addEventListener('click', event => {
+            if (!event.target.closest('a[href]')) clear();
+        });
         // Synchronous DTOs are already rendered when mount returns.
         void handle.ready.then(ready => {
             if (ready && active === handle) {
